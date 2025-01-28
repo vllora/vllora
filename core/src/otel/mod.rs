@@ -305,7 +305,8 @@ impl TraceService for TraceServiceImpl {
                         .and_then(|v| Some(v.as_str()?.to_owned()));
 
                     if tenant_id.is_none() {
-                        tracing::error!(
+                        tracing::debug!(
+                            target: "otel",
                             "No tenant id found in span {} with attributes: {:#?}",
                             span.name,
                             attributes

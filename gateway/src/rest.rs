@@ -8,6 +8,8 @@ use actix_web::{
     App, HttpServer,
 };
 use futures::{future::try_join, Future, TryFutureExt};
+use langdb_core::database::clickhouse::ClickhouseHttp;
+use langdb_core::database::DatabaseTransportClone;
 use langdb_core::handler::chat::create_chat_completion;
 use langdb_core::handler::embedding::embeddings_handler;
 use langdb_core::handler::image::create_image;
@@ -23,6 +25,8 @@ use thiserror::Error;
 use crate::config::Config;
 use crate::cost::DummyCostCalculator;
 use crate::otel::DummyTraceWritterTransport;
+use langdb_core::otel::database::DatabaseSpanWritter;
+use langdb_core::otel::SpanWriterTransport;
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 #[serde(crate = "serde")]
@@ -64,12 +68,16 @@ impl ApiServer {
         .run()
         .map_err(ServerError::Actix);
 
-        let writer = DummyTraceWritterTransport {};
+        let writer = match self.config.clickhouse {
+            Some(c) => {
+                let client = ClickhouseHttp::root().with_url(&c.url).clone_box();
+                Box::new(DatabaseSpanWritter::new(client)) as Box<dyn SpanWriterTransport>
+            }
+            None => Box::new(DummyTraceWritterTransport {}) as Box<dyn SpanWriterTransport>,
+        };
 
-        let trace_service = TraceServiceServer::new(TraceServiceImpl::new(
-            Arc::new(TraceMap::new()),
-            Box::new(writer),
-        ));
+        let trace_service =
+            TraceServiceServer::new(TraceServiceImpl::new(Arc::new(TraceMap::new()), writer));
         let tonic_server = tonic::transport::Server::builder().add_service(trace_service);
         let tonic_fut = tonic_server
             .serve("[::]:4317".parse().unwrap())

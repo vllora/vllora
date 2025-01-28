@@ -116,6 +116,11 @@ impl ClickhouseHttp {
         }
     }
 
+    pub fn with_url(&mut self, url: &str) -> &mut Self {
+        self.url = url.to_string();
+        self
+    }
+
     pub fn root() -> Self {
         Self::default()
     }

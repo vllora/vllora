@@ -8,9 +8,16 @@ pub struct RestConfig {
     pub cors_allowed_origins: Vec<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone, Default)]
+#[serde(crate = "serde")]
+pub struct ClickhouseConfig {
+    pub url: String,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Config {
     pub rest: RestConfig,
+    pub clickhouse: Option<ClickhouseConfig>,
 }
 
 impl Default for RestConfig {
