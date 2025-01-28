@@ -119,11 +119,12 @@ RUST_LOG=info cargo run     # For standard logs
 
 ## License
 
+This project is released under the [Elastic License 2.0](./LICENSE.md). See the license file for more information.
 
 
 ## Roadmap
 
-- [ ] Include License (Apache2)
+- [x] Include License (Apache2)
 - [ ] clickhouse config + traces
 - [ ] Provide example docker-compose (simple / full (clickhouse + redis))
 - [ ] cost control
