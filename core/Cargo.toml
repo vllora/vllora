@@ -63,11 +63,16 @@ opentelemetry-proto = { version = "0.7.0", features = [
   "trace",
   "with-serde",
 ] }
+openssh = { version = "0.11.5", optional = true }
+clickhouse = { version = "0.11.6", git = "https://github.com/v3g42/clickhouse.rs.git", features = [
+  "uuid",
+], optional = true }
+tokio-util = { version = "0.7.11", optional = true }
 
 [dependencies.openssl]
 version = "0.10"
 features = ["vendored"]
 
 [features]
-default = []
-local = []
+default = ["database"]
+database = ["dep:openssh", "dep:clickhouse", "dep:tokio-util"]

@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::types::provider::{InferenceModelProvider, ModelPrice};
 
-use std::collections::HashMap;
 use std::str::FromStr;
 
 /// OpenAI Completion Models
@@ -253,16 +252,9 @@ impl Limits {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct ImagePrice {
-    pub by_type: Option<HashMap<String, HashMap<String, f64>>>,
-    pub mp_price: Option<f64>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct InferenceProvider {
     pub provider: InferenceModelProvider,
     pub model_name: String,
-    #[serde(skip_serializing)]
     pub endpoint: Option<String>,
 }
 
@@ -278,5 +270,4 @@ pub struct ModelDefinition {
     pub r#type: ModelType,
     pub limits: Limits,
     pub description: String,
-    pub image_price: Option<ImagePrice>,
 }

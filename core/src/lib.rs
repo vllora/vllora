@@ -1,3 +1,5 @@
+#[cfg(feature = "database")]
+pub mod database;
 pub mod embed_mod;
 pub mod error;
 pub mod events;
