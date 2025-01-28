@@ -1,3 +1,6 @@
+#[cfg(feature = "database")]
+pub mod database;
+
 use crate::types::GatewayTenant;
 use std::collections::HashMap;
 use std::str::FromStr;
