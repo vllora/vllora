@@ -3,7 +3,6 @@ use super::openai_spec_client::openai_spec_client;
 use super::tools::Tool;
 use super::types::ModelEvent;
 use super::ModelInstance;
-use crate::events::SPAN_OPENAI_SPEC;
 use crate::model::async_trait;
 use crate::model::OpenAIModel;
 use crate::types::credentials::ApiKeyCredentials;
@@ -55,7 +54,6 @@ impl OpenAISpecModel {
             tools,
             output_schema,
             Some(client),
-            Some(SPAN_OPENAI_SPEC.to_string()),
         )?;
 
         Ok(Self { openai_model })

@@ -85,12 +85,10 @@ pub struct OpenAIModel {
     client: Client<OpenAIConfig>,
     tools: Arc<HashMap<String, Box<dyn Tool>>>,
     output_schema: Option<Value>,
-    #[allow(dead_code)]
-    span_name: String,
     credentials_ident: CredentialsIdent,
 }
+
 impl OpenAIModel {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         params: OpenAiModelParams,
         credentials: Option<&ApiKeyCredentials>,
@@ -99,7 +97,6 @@ impl OpenAIModel {
         tools: HashMap<String, Box<dyn Tool>>,
         output_schema: Option<Value>,
         client: Option<Client<OpenAIConfig>>,
-        span_name: Option<String>,
     ) -> Result<Self, ModelError> {
         Ok(Self {
             params,
@@ -108,7 +105,6 @@ impl OpenAIModel {
             client: client.unwrap_or(openai_client(credentials)?),
             tools: Arc::new(tools),
             output_schema,
-            span_name: span_name.unwrap_or(SPAN_OPENAI.to_string()),
             credentials_ident: credentials
                 .map(|_c| CredentialsIdent::Own)
                 .unwrap_or(CredentialsIdent::Langdb),
@@ -188,6 +184,10 @@ impl OpenAIModel {
 
         if let Some(top_logprobs) = model_params.top_logprobs {
             builder.top_logprobs(top_logprobs);
+        }
+
+        if let Some(user) = &model_params.user {
+            builder.user(user.clone());
         }
 
         if let Some(schema) = &self.output_schema {

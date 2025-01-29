@@ -107,7 +107,6 @@ pub async fn init_completion_model_instance(
                 tools,
                 output_schema.clone(),
                 None,
-                None,
             )
             .map_err(|_| ToolError::CredentialsError("Openai".into()))?,
             definition,

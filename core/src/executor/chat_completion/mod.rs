@@ -12,6 +12,7 @@ use crate::types::gateway::CompletionModelUsage;
 use actix_web::{HttpMessage, HttpRequest};
 use either::Either::{self, Left, Right};
 use futures::Stream;
+use uuid::Uuid;
 
 use crate::{
     model::types::ModelEventType,
@@ -63,7 +64,10 @@ pub async fn execute(
     let llm_model = find_model_by_full_name(&request.model, provided_models)?;
     request.model = llm_model.inference_provider.model_name.clone();
 
-    let user_id = uuid::Uuid::new_v4();
+    let user: String = request
+        .user
+        .as_ref()
+        .map_or(Uuid::new_v4().to_string(), |v| v.clone());
 
     let key_credentials = req.extensions().get::<Credentials>().cloned();
 
@@ -137,7 +141,7 @@ pub async fn execute(
         messages.push(MessageMapper::map_completions_message_to_langdb_message(
             message,
             &request.model,
-            &user_id.to_string(),
+            &user.to_string(),
         )?);
     }
     let (tx, mut rx) = tokio::sync::mpsc::channel::<Option<ModelEvent>>(1000);

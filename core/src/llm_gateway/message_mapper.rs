@@ -81,7 +81,7 @@ impl MessageMapper {
     pub fn map_completions_message_to_langdb_message(
         message: &ChatCompletionMessage,
         model_name: &str,
-        user_id: &str,
+        user: &str,
     ) -> Result<Message, GatewayError> {
         let content = if let Some(content) = &message.content {
             match content {
@@ -146,7 +146,7 @@ impl MessageMapper {
         Ok(Message {
             model_name: model_name.to_string(),
             thread_id: None,
-            user_id: user_id.to_string(),
+            user_id: user.to_string(),
             content_type: MessageContentType::Text,
             content: content.clone(),
             content_array: content_array?,
