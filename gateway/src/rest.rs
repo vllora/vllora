@@ -21,6 +21,7 @@ use langdb_core::types::gateway::CostCalculator;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use thiserror::Error;
+use tokio::signal;
 
 use crate::config::Config;
 use crate::cost::DummyCostCalculator;
@@ -78,10 +79,13 @@ impl ApiServer {
 
         let trace_service =
             TraceServiceServer::new(TraceServiceImpl::new(Arc::new(TraceMap::new()), writer));
-        let tonic_server = tonic::transport::Server::builder().add_service(trace_service);
-        let tonic_fut = tonic_server
-            .serve("[::]:4317".parse().unwrap())
-            .map_err(ServerError::Tonic);
+        let tonic_server = tonic::transport::Server::builder()
+            .add_service(trace_service)
+            .serve_with_shutdown("[::]:4317".parse().unwrap(), async {
+                signal::ctrl_c().await.expect("failed to listen for ctrl+c");
+            });
+
+        let tonic_fut = tonic_server.map_err(ServerError::Tonic);
         Ok(try_join(server, tonic_fut).map_ok(|_| ()))
     }
 

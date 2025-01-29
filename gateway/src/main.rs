@@ -25,6 +25,8 @@ pub enum CliError {
     YamlError(#[from] serde_yaml::Error),
     #[error(transparent)]
     JsonError(#[from] serde_json::Error),
+    #[error(transparent)]
+    ServerError(#[from] rest::ServerError),
 }
 
 #[actix_web::main]
@@ -52,7 +54,7 @@ async fn main() -> Result<(), CliError> {
         cli::Commands::Serve => {
             let models = load_models(false).await?;
             let api_server = ApiServer::new(config);
-            let api_result = api_server.start(models).await.unwrap().await;
+            let api_result = api_server.start(models).await?.await;
             if let Err(e) = api_result {
                 eprintln!("API Server Error: {:?}", e);
             }
