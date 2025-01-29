@@ -128,6 +128,17 @@ cargo run
 
 The gateway will now be running with full analytics and logging capabilities, storing data in ClickHouse.
 
+## Using MCP Tools
+```
+curl http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o-mini",
+    "messages": [{"role": "user", "content": "Ping the server using the tool and return the response"}],
+    "mcp_servers": [{"server_url": "http://localhost:3004"}]
+  }'
+```
+
 ## Development
 
 ### Project Structure

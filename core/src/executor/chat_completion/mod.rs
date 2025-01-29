@@ -6,9 +6,10 @@ use std::sync::Arc;
 
 use crate::llm_gateway::message_mapper::MessageMapper;
 use crate::llm_gateway::provider::Provider;
+use crate::model::mcp::get_mcp_tools;
 use crate::model::tools::{GatewayTool, Tool};
 use crate::model::types::ModelEvent;
-use crate::types::gateway::CompletionModelUsage;
+use crate::types::gateway::{ChatCompletionRequestWithTools, CompletionModelUsage};
 use actix_web::{HttpMessage, HttpRequest};
 use either::Either::{self, Left, Right};
 use futures::Stream;
@@ -22,9 +23,7 @@ use crate::{
             CompletionModelDefinition, CompletionModelParams, ExecutionOptions, InputArgs, Model,
             ModelTool, ModelTools, ModelType, Prompt,
         },
-        gateway::{
-            ChatCompletionDelta, ChatCompletionRequest, ChatCompletionResponse, CostCalculator,
-        },
+        gateway::{ChatCompletionDelta, ChatCompletionResponse, CostCalculator},
     },
 };
 use tracing::Span;
@@ -38,7 +37,7 @@ use crate::handler::{CallbackHandlerFn, ModelEventWithDetails};
 use crate::GatewayApiError;
 
 pub async fn execute(
-    mut request: ChatCompletionRequest,
+    request: ChatCompletionRequestWithTools,
     callback_handler: &CallbackHandlerFn,
     req: HttpRequest,
     provided_models: &AvailableModels,
@@ -61,6 +60,37 @@ pub async fn execute(
     let span = Span::current();
     let tags = extract_tags(&req)?;
 
+    let mut request_tools = vec![];
+    let mut tools_map = HashMap::new();
+    if let Some(tools) = &request.request.tools {
+        for tool in tools {
+            request_tools.push(ModelTool {
+                name: tool.function.name.clone(),
+                description: tool.function.description.clone(),
+                passed_args: vec![],
+            });
+
+            tools_map.insert(
+                tool.function.name.clone(),
+                Box::new(GatewayTool { def: tool.clone() }) as Box<dyn Tool>,
+            );
+        }
+    }
+
+    let mcp_tools = match &request.mcp_servers {
+        Some(tools) => get_mcp_tools(tools).await?,
+        None => Vec::new(),
+    };
+
+    for server_tools in mcp_tools {
+        for tool in server_tools.tools {
+            tools_map.insert(tool.name(), Box::new(tool.clone()) as Box<dyn Tool>);
+            request_tools.push(tool.into());
+        }
+    }
+
+    let mut request = request.request.clone();
+
     let llm_model = find_model_by_full_name(&request.model, provided_models)?;
     request.model = llm_model.inference_provider.model_name.clone();
 
@@ -74,16 +104,7 @@ pub async fn execute(
     let engine =
         Provider::get_completion_engine_for_model(&llm_model, &request, key_credentials.clone())?;
 
-    let tools = ModelTools(request.tools.as_ref().map_or(vec![], |tools| {
-        tools
-            .iter()
-            .map(|tool| ModelTool {
-                name: tool.function.name.clone(),
-                description: tool.function.description.clone(),
-                passed_args: vec![],
-            })
-            .collect()
-    }));
+    let tools = ModelTools(request_tools);
 
     let db_model = Model {
         name: request.model.clone(),
@@ -111,19 +132,6 @@ pub async fn execute(
         tools,
         db_model: db_model.clone(),
     };
-
-    let tools_map: HashMap<String, Box<(dyn Tool + 'static)>> =
-        request.tools.as_ref().map_or_else(HashMap::new, |tools| {
-            tools
-                .iter()
-                .map(|tool| {
-                    (
-                        tool.function.name.clone(),
-                        Box::new(GatewayTool { def: tool.clone() }) as Box<dyn Tool>,
-                    )
-                })
-                .collect()
-        });
 
     let model = crate::model::init_completion_model_instance(
         completion_model_definition.clone(),

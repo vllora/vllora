@@ -4,6 +4,10 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use thiserror::Error;
 
+use crate::model::tools::Tool;
+
+use super::engine::ModelTool;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatCompletionRequest {
     pub model: String,
@@ -44,6 +48,57 @@ pub struct ChatCompletionRequest {
     pub tool_choice: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream_options: Option<StreamOptions>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatCompletionRequestWithTools {
+    #[serde(flatten)]
+    pub request: ChatCompletionRequest,
+    #[serde(skip_serializing_if = "Option::is_none", alias = "tools")]
+    pub mcp_servers: Option<Vec<McpDefinition>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ToolsFilter {
+    All,
+    Selected(Vec<ToolSelector>),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolSelector {
+    pub name: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpDefinition {
+    #[serde(default = "default_tools_filter")]
+    pub actions_filter: ToolsFilter,
+    pub server_url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServerTools {
+    pub definition: McpDefinition,
+    pub tools: Vec<McpTool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpTool(pub async_mcp::types::Tool, pub McpDefinition);
+// Helper functions for serde defaults
+fn default_tools_filter() -> ToolsFilter {
+    ToolsFilter::All
+}
+
+impl From<McpTool> for ModelTool {
+    fn from(val: McpTool) -> Self {
+        ModelTool {
+            name: val.name(),
+            description: Some(val.description()),
+            passed_args: vec![],
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

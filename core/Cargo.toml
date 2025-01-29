@@ -19,7 +19,7 @@ chrono = { version = "0.4.38", features = ["serde"] }
 async-trait = "0.1.82"
 thiserror = "1.0.59"
 async-openai = { git = "https://github.com/v3g42/async-openai.git" }
-futures = "0.3.30"
+futures = "0.3"
 
 serde_with = { version = "3.8.1", features = ["json"] }
 validator = { version = "0.18", features = ["derive"] }
@@ -47,7 +47,7 @@ secrecy = { version = "0.8.0", features = ["serde"] }
 actix-web = "4"
 tonic = "0.12.0"
 dashmap = "6.0.1"
-bytes = { version = "1.6.0", features = ["serde"] }
+bytes = { version = "1.7.1", features = ["serde"] }
 either = "1.13.0"
 tracing = { version = "0.1.40", features = ["log", "valuable"] }
 tracing-subscriber = { version = "0.3.0", features = [
@@ -68,8 +68,11 @@ clickhouse = { version = "0.11.6", git = "https://github.com/v3g42/clickhouse.rs
   "uuid",
 ], optional = true }
 tokio-util = { version = "0.7.11", optional = true }
-redis = { version = "0.27.2", features = ["connection-manager", "tokio-comp"], optional = true }
-
+redis = { version = "0.27.2", features = [
+  "connection-manager",
+  "tokio-comp",
+], optional = true }
+async-mcp = "0.0.3"
 [dependencies.openssl]
 version = "0.10"
 features = ["vendored"]

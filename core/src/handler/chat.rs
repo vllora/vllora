@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use crate::executor::chat_completion::execute;
+use crate::types::gateway::ChatCompletionRequestWithTools;
 use crate::types::gateway::CompletionModelUsage;
 use crate::GatewayError;
 use actix_web::{web, HttpRequest, HttpResponse};
@@ -10,8 +11,8 @@ use futures::StreamExt;
 use futures::TryStreamExt;
 
 use crate::types::gateway::{
-    ChatCompletionChunk, ChatCompletionChunkChoice, ChatCompletionDelta, ChatCompletionRequest,
-    ChatCompletionUsage, CostCalculator,
+    ChatCompletionChunk, ChatCompletionChunkChoice, ChatCompletionDelta, ChatCompletionUsage,
+    CostCalculator,
 };
 use opentelemetry::trace::TraceContextExt as _;
 use tokio::sync::broadcast;
@@ -28,7 +29,7 @@ use super::can_execute_llm_for_request;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn create_chat_completion(
-    request: web::Json<ChatCompletionRequest>,
+    request: web::Json<ChatCompletionRequestWithTools>,
     callback_handler: web::Data<CallbackHandlerFn>,
     traces: web::Data<TraceMap>,
     req: HttpRequest,
@@ -54,10 +55,11 @@ pub async fn create_chat_completion(
 
     let callback_handler = callback_handler.get_ref().clone();
 
-    let model_name = request.model.clone();
+    let request = request.into_inner();
+    let model_name = request.request.model.clone();
 
     let response = execute(
-        request.into_inner(),
+        request,
         &callback_handler,
         req.clone(),
         &provided_models,

@@ -34,6 +34,7 @@ pub mod executor;
 pub mod gemini;
 pub mod image_generation;
 pub mod langdb_open;
+pub mod mcp;
 pub mod openai;
 pub mod openai_spec_client;
 pub mod tools;
