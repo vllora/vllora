@@ -27,26 +27,6 @@ rest:
   cors_allowed_origins:
     - "http://localhost:3000"
     - "http://127.0.0.1:3000"
-
-models:
-  - model: "gpt-4"
-    model_provider: "openai"
-    inference_provider:
-      provider: "openai"
-      model_name: "gpt-4"
-    price:
-      input_price: 0.00003
-      output_price: 0.00006
-    input_formats:
-      - text
-    output_formats:
-      - text
-    capabilities:
-      - tools
-    type: completions
-    limits:
-      max_context_size: 8000
-    description: "GPT-4 is a large language model that can understand and generate human-like text"
 ```
 
 3. Set up environment variables:
@@ -125,7 +105,7 @@ This project is released under the [Elastic License 2.0](./LICENSE.md). See the 
 ## Roadmap
 
 - [x] Include License (Apache2)
-- [ ] clickhouse config + traces
+- [x] clickhouse config + traces
 - [ ] Provide example docker-compose (simple / full (clickhouse + redis))
 - [ ] cost control
 - [ ] rate limiting (redis configuration)

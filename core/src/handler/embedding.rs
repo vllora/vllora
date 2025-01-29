@@ -2,6 +2,8 @@ use crate::executor::embeddings::handle_embeddings_invoke;
 use crate::types::credentials::Credentials;
 use actix_web::{web, HttpResponse};
 use actix_web::{HttpMessage, HttpRequest};
+use tracing::Span;
+use tracing_futures::Instrument;
 
 use crate::types::gateway::{
     CreateEmbeddingRequest, CreateEmbeddingResponse, EmbeddingData, EmbeddingUsage,
@@ -24,12 +26,23 @@ pub async fn embeddings_handler(
     let llm_model = find_model_by_full_name(&request.model, &available_models)?;
     let key_credentials = req.extensions().get::<Credentials>().cloned();
 
+    let span = Span::or_current(tracing::info_span!(
+        target: "langdb::user_tracing::api_invoke",
+        "api_invoke",
+        request = tracing::field::Empty,
+        response = tracing::field::Empty,
+        error = tracing::field::Empty,
+        message_id = tracing::field::Empty,
+    ));
+    span.record("request", &serde_json::to_string(&request)?);
+
     let result = handle_embeddings_invoke(
         request,
         callback_handler.get_ref(),
         &llm_model,
         key_credentials.as_ref(),
     )
+    .instrument(span)
     .await?;
 
     let data = result
