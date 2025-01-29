@@ -270,6 +270,9 @@ pub struct CompletionTokensDetails {
 pub enum CostCalculatorError {
     #[error("Calcualtion error: {0}")]
     CalculationError(String),
+
+    #[error("Model not found")]
+    ModelNotFound,
 }
 
 #[derive(Serialize, Debug)]

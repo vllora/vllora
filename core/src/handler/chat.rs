@@ -24,6 +24,8 @@ use crate::handler::CallbackHandlerFn;
 use crate::otel::{trace_id_uuid, TraceMap};
 use crate::GatewayApiError;
 
+use super::can_execute_llm_for_request;
+
 #[allow(clippy::too_many_arguments)]
 pub async fn create_chat_completion(
     request: web::Json<ChatCompletionRequest>,
@@ -33,6 +35,8 @@ pub async fn create_chat_completion(
     provided_models: web::Data<AvailableModels>,
     cost_calculator: web::Data<Box<dyn CostCalculator>>,
 ) -> Result<HttpResponse, GatewayApiError> {
+    can_execute_llm_for_request(&req).await?;
+
     let span = Span::or_current(tracing::info_span!(
         target: "langdb::user_tracing::api_invoke",
         "api_invoke",

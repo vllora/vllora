@@ -9,6 +9,7 @@ pub mod llm_gateway;
 pub mod model;
 pub mod models;
 pub mod otel;
+pub mod pricing;
 pub mod types;
 
 use crate::error::GatewayError;
@@ -18,6 +19,12 @@ use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
 use serde_json::json;
 use thiserror::Error;
+
+#[cfg(feature = "redis")]
+pub use redis;
+
+#[cfg(feature = "redis")]
+pub mod usage;
 
 pub type GatewayResult<T> = Result<T, GatewayError>;
 
@@ -37,6 +44,9 @@ pub enum GatewayApiError {
 
     #[error(transparent)]
     ModelError(#[from] model::error::ModelError),
+
+    #[error("Token usage limit exceeded")]
+    TokenUsageLimit,
 }
 
 impl actix_web::error::ResponseError for GatewayApiError {
@@ -58,6 +68,7 @@ impl actix_web::error::ResponseError for GatewayApiError {
             GatewayApiError::CustomError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             GatewayApiError::CostCalculatorError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             GatewayApiError::ModelError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            GatewayApiError::TokenUsageLimit => StatusCode::BAD_REQUEST,
         }
     }
 }

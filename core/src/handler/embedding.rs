@@ -13,7 +13,7 @@ use crate::handler::AvailableModels;
 use crate::handler::CallbackHandlerFn;
 use crate::GatewayApiError;
 
-use super::find_model_by_full_name;
+use super::{can_execute_llm_for_request, find_model_by_full_name};
 
 pub async fn embeddings_handler(
     request: web::Json<CreateEmbeddingRequest>,
@@ -21,6 +21,7 @@ pub async fn embeddings_handler(
     callback_handler: web::Data<CallbackHandlerFn>,
     req: HttpRequest,
 ) -> Result<HttpResponse, GatewayApiError> {
+    can_execute_llm_for_request(&req).await?;
     let request = request.into_inner();
     let available_models = models.into_inner();
     let llm_model = find_model_by_full_name(&request.model, &available_models)?;

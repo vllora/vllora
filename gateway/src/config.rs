@@ -18,6 +18,33 @@ pub struct ClickhouseConfig {
 pub struct Config {
     pub rest: RestConfig,
     pub clickhouse: Option<ClickhouseConfig>,
+    pub redis: Option<RedisConfig>,
+    pub cost_control: Option<CostControl>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct CostControl {
+    pub daily: Option<f64>,
+    pub monthly: Option<f64>,
+    pub total: Option<f64>,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
+#[serde(crate = "serde", deny_unknown_fields)]
+pub struct RedisConfig {
+    #[serde(default = "default_redis_url")]
+    pub url: String,
+}
+impl Default for RedisConfig {
+    fn default() -> Self {
+        RedisConfig {
+            url: default_redis_url(),
+        }
+    }
+}
+
+fn default_redis_url() -> String {
+    std::env::var("REDIS_URL").unwrap_or("redis://localhost:6379".to_string())
 }
 
 impl Default for RestConfig {

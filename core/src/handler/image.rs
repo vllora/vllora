@@ -10,6 +10,7 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use tracing::Span;
 use tracing_futures::Instrument;
 
+use super::can_execute_llm_for_request;
 use super::extract_tags;
 use super::find_model_by_full_name;
 
@@ -20,6 +21,8 @@ pub async fn create_image(
     cost_calculator: web::Data<Box<dyn CostCalculator>>,
     callback_handler: web::Data<CallbackHandlerFn>,
 ) -> Result<HttpResponse, GatewayApiError> {
+    can_execute_llm_for_request(&req).await?;
+
     let request = request.into_inner();
     let available_models = models.into_inner();
     let llm_model = find_model_by_full_name(&request.model, &available_models)?;

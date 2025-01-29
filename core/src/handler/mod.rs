@@ -9,7 +9,9 @@ use crate::models::ModelDefinition;
 use crate::types::engine::Model;
 use crate::GatewayApiError;
 use actix_web::HttpRequest;
-use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, sync::Arc};
+use tokio::sync::Mutex;
 
 #[derive(Debug)]
 pub struct AvailableModels(pub Vec<ModelDefinition>);
@@ -101,4 +103,112 @@ impl ModelEventWithDetails {
     pub fn new(event: ModelEvent, model: Model) -> Self {
         Self { event, model }
     }
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DollarUsage {
+    pub daily: f64,
+    pub daily_limit: Option<f64>,
+    pub monthly: f64,
+    pub monthly_limit: Option<f64>,
+    pub total: f64,
+    pub total_limit: Option<f64>,
+}
+
+#[async_trait::async_trait]
+pub trait LimitCheck {
+    async fn can_execute_llm(
+        &mut self,
+        tenant_name: &str,
+        project_id: &str,
+    ) -> Result<bool, Box<dyn std::error::Error>>;
+    async fn get_usage(
+        &self,
+        tenant_name: &str,
+        project_id: &str,
+    ) -> Result<DollarUsage, Box<dyn std::error::Error>>;
+}
+
+#[derive(Clone)]
+pub struct LimitCheckWrapper {
+    pub checkers: Vec<Arc<Mutex<dyn LimitCheck>>>,
+}
+
+impl LimitCheckWrapper {
+    pub async fn can_execute_llm(
+        &self,
+        tenant_name: &str,
+        project_id: &str,
+    ) -> Result<bool, Box<dyn std::error::Error>> {
+        for checker in &self.checkers {
+            let mut checker = checker.lock().await;
+
+            if !checker.can_execute_llm(tenant_name, project_id).await? {
+                return Ok(false);
+            }
+        }
+
+        Ok(true)
+    }
+
+    pub async fn get_usage(
+        &self,
+        tenant_name: &str,
+        project_id: &str,
+    ) -> Result<DollarUsage, Box<dyn std::error::Error>> {
+        let first_checker = self
+            .checkers
+            .first()
+            .expect("At least one checker is defined");
+        let checker = first_checker.lock().await;
+        checker.get_usage(tenant_name, project_id).await
+    }
+}
+
+impl Default for LimitCheckWrapper {
+    fn default() -> Self {
+        Self {
+            checkers: vec![Arc::new(Mutex::new(DefaultLimitCheck))],
+        }
+    }
+}
+pub struct DefaultLimitCheck;
+
+#[async_trait::async_trait]
+impl LimitCheck for DefaultLimitCheck {
+    async fn can_execute_llm(
+        &mut self,
+        _tenant_name: &str,
+        _project_id: &str,
+    ) -> Result<bool, Box<dyn std::error::Error>> {
+        Ok(true)
+    }
+
+    async fn get_usage(
+        &self,
+        _tenant_name: &str,
+        _project_id: &str,
+    ) -> Result<DollarUsage, Box<dyn std::error::Error>> {
+        unimplemented!()
+    }
+}
+
+impl LimitCheckWrapper {
+    pub fn new(checkers: Vec<Arc<Mutex<dyn LimitCheck>>>) -> Self {
+        Self { checkers }
+    }
+}
+
+pub(crate) async fn can_execute_llm_for_request(req: &HttpRequest) -> Result<(), GatewayApiError> {
+    let limit_checker = req.app_data::<Option<LimitCheckWrapper>>();
+    if let Some(Some(l)) = limit_checker {
+        let can_execute = l
+            .can_execute_llm("default", "")
+            .await
+            .map_err(|e| GatewayApiError::CustomError(e.to_string()))?;
+        if !can_execute {
+            return Err(GatewayApiError::TokenUsageLimit);
+        }
+    }
+
+    Ok(())
 }
