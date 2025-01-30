@@ -259,7 +259,6 @@ dependencies = [
  "async-trait",
  "base64 0.22.1",
  "bytemuck",
- "bytes",
  "chrono",
  "clap",
  "dashmap",

@@ -26,6 +26,8 @@ pub use redis;
 #[cfg(feature = "redis")]
 pub mod usage;
 
+pub use bytes;
+
 pub type GatewayResult<T> = Result<T, GatewayError>;
 
 #[derive(Error, Debug)]

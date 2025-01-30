@@ -39,7 +39,6 @@ secrecy = { version = "0.8.0", features = ["serde"] }
 actix-web = "4"
 tonic = "0.12.0"
 dashmap = "6.0.1"
-bytes = { version = "1.6.0", features = ["serde"] }
 either = "1.13.0"
 tracing = { version = "0.1.40", features = ["log", "valuable"] }
 tracing-subscriber = { version = "0.3.0", features = [
