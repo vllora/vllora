@@ -54,7 +54,7 @@ pub struct ChatCompletionRequest {
 pub struct ChatCompletionRequestWithTools {
     #[serde(flatten)]
     pub request: ChatCompletionRequest,
-    #[serde(skip_serializing_if = "Option::is_none", alias = "tools")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub mcp_servers: Option<Vec<McpDefinition>>,
 }
 
@@ -82,7 +82,7 @@ pub enum McpServerType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpDefinition {
     #[serde(default = "default_tools_filter")]
-    pub actions_filter: ToolsFilter,
+    pub filter: ToolsFilter,
     pub server_url: String,
     #[serde(default)]
     pub r#type: McpServerType,

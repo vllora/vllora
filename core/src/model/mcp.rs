@@ -73,7 +73,7 @@ pub async fn get_mcp_tools(mcp_servers: &[McpDefinition]) -> Result<Vec<ServerTo
         let total_tools = tools.len();
 
         // Filter tools based on actions_filter if specified
-        match &def.actions_filter {
+        match &def.filter {
             ToolsFilter::All => {
                 tracing::info!("Loading all {} tools from {}", total_tools, def.server_url);
             }
