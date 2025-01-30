@@ -1,6 +1,8 @@
 pub mod chat;
 pub mod embedding;
 pub mod image;
+#[cfg(feature = "redis")]
+pub mod middleware;
 pub mod models;
 
 use crate::error::GatewayError;

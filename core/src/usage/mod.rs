@@ -6,6 +6,12 @@ use redis::{aio::ConnectionManager, FromRedisValue, ToRedisArgs};
 pub mod connection_manager;
 
 use chrono::Datelike;
+use chrono::Timelike;
+
+pub fn get_hour_key(company_id: &str, key: &str) -> String {
+    let hour = Utc::now().date_naive().format("%Y-%m-%d%h");
+    format!("{company_id}:{key}:{hour}")
+}
 
 pub fn get_daily_key(company_id: &str, key: &str) -> String {
     let today = Utc::now().date_naive().format("%Y-%m-%d");
@@ -22,6 +28,7 @@ pub fn get_total_key(company_id: &str, key: &str) -> String {
 }
 
 pub enum LimitPeriod {
+    Hour,
     Day,
     Month,
     Total,
@@ -30,6 +37,17 @@ pub enum LimitPeriod {
 impl LimitPeriod {
     pub fn get_seconds_until_refresh(&self) -> Option<i64> {
         match self {
+            LimitPeriod::Hour => {
+                // Calculate seconds until end of hour
+                let now = Utc::now();
+                let next_hour = (now + chrono::Duration::hours(1))
+                    .with_minute(0)
+                    .unwrap()
+                    .with_second(0)
+                    .unwrap()
+                    .naive_utc();
+                Some((next_hour - now.naive_utc()).num_seconds())
+            }
             LimitPeriod::Day => {
                 // Calculate seconds until end of day
                 let now = Utc::now();
@@ -57,6 +75,7 @@ impl LimitPeriod {
 
     pub fn get_key(&self, identifier: &str, key: &str) -> String {
         match self {
+            LimitPeriod::Hour => get_hour_key(identifier, key),
             LimitPeriod::Day => get_daily_key(identifier, key),
             LimitPeriod::Month => get_monthly_key(identifier, key),
             LimitPeriod::Total => get_total_key(identifier, key),

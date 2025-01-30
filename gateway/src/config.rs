@@ -1,3 +1,4 @@
+use langdb_core::handler::middleware::rate_limit::RateLimiting;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -20,6 +21,7 @@ pub struct Config {
     pub clickhouse: Option<ClickhouseConfig>,
     pub redis: Option<RedisConfig>,
     pub cost_control: Option<CostControl>,
+    pub rate_limit: Option<RateLimiting>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]

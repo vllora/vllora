@@ -13,6 +13,7 @@ use langdb_core::database::DatabaseTransportClone;
 use langdb_core::handler::chat::create_chat_completion;
 use langdb_core::handler::embedding::embeddings_handler;
 use langdb_core::handler::image::create_image;
+use langdb_core::handler::middleware::rate_limit::{RateLimitMiddleware, RateLimiting};
 use langdb_core::handler::models::list_gateway_models;
 use langdb_core::handler::{AvailableModels, CallbackHandlerFn, LimitCheckWrapper};
 use langdb_core::models::ModelDefinition;
@@ -98,11 +99,13 @@ impl ApiServer {
             let cors = Self::get_cors(CorsOptions::Permissive);
             Self::create_app_entry(
                 cors,
+                redis_manager.clone().unwrap(),
                 trace_senders_inner.clone(),
                 models.clone(),
                 callback.clone(),
                 cost_calculator.clone(),
                 limit_checker.clone(),
+                self.config.rate_limit.clone(),
             )
         })
         .bind((self.config.rest.host.as_str(), self.config.rest.port))?
@@ -129,13 +132,16 @@ impl ApiServer {
         Ok(try_join(server, tonic_fut).map_ok(|_| ()))
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn create_app_entry(
         cors: Cors,
+        redis_manager: langdb_core::redis::aio::ConnectionManager,
         trace_senders: Arc<TraceMap>,
         models: Vec<ModelDefinition>,
         callback: CallbackHandlerFn,
         cost_calculator: GatewayCostCalculator,
         limit_checker: Option<LimitCheckWrapper>,
+        rate_limit: Option<RateLimiting>,
     ) -> App<
         impl ServiceFactory<
             ServiceRequest,
@@ -145,6 +151,7 @@ impl ApiServer {
             Error = actix_web::Error,
         >,
     > {
+        let redis_manager = Mutex::new(redis_manager);
         let app = App::new();
 
         app.wrap(Logger::default())
@@ -156,7 +163,10 @@ impl ApiServer {
                     .app_data(Data::new(AvailableModels(models)))
                     .app_data(Data::new(
                         Box::new(cost_calculator) as Box<dyn CostCalculator>
-                    )),
+                    ))
+                    .app_data(Data::new(redis_manager))
+                    .app_data(rate_limit)
+                    .wrap(RateLimitMiddleware),
             )
             .wrap(cors)
     }

@@ -166,8 +166,8 @@ This project is released under the [Elastic License 2.0](./LICENSE.md). See the 
 - [x] Include License (Apache2)
 - [x] clickhouse config + traces
 - [x] Provide example docker-compose (simple / full (clickhouse + redis))
-- [ ] cost control
-- [ ] rate limiting (redis configuration)
+- [x] cost control
+- [x] rate limiting (redis configuration)
 - [ ] cargo install / curl -sH install
 - [ ] CI/CD for ubuntu / mac silicon
 - [ ] postman 
