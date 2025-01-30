@@ -1,9 +1,9 @@
 use std::{collections::HashMap, time::Duration};
 
 use async_mcp::{
-    client::ClientBuilder,
+    client::{Client, ClientBuilder},
     protocol::RequestOptions,
-    transport::{ClientSseTransport, Transport},
+    transport::{ClientHttpTransport, ClientSseTransport, ClientWsTransport, Transport},
     types::{CallToolRequest, CallToolResponse, ToolResponseContent, ToolsListResponse},
 };
 use serde_json::json;
@@ -15,15 +15,42 @@ use crate::{
 
 use super::error::ModelError;
 
+pub async fn get_client(
+    mcp_server: &McpDefinition,
+) -> Result<Client<ClientHttpTransport>, ModelError> {
+    let transport = match mcp_server.r#type {
+        crate::types::gateway::McpServerType::Sse => {
+            let mut transport = ClientSseTransport::builder(mcp_server.server_url.clone());
+            for (k, v) in &mcp_server.headers {
+                transport = transport.with_header(k.to_string(), v.to_string());
+            }
+            let transport = transport.build();
+            transport
+                .open()
+                .await
+                .map_err(|e| ModelError::CustomError(e.to_string()))?;
+
+            ClientHttpTransport::Sse(transport)
+        }
+        crate::types::gateway::McpServerType::Ws => {
+            let mut transport = ClientWsTransport::builder(mcp_server.server_url.clone());
+            for (k, v) in &mcp_server.headers {
+                transport = transport.with_header(k.to_string(), v.to_string());
+            }
+            let transport = transport.build();
+            transport
+                .open()
+                .await
+                .map_err(|e| ModelError::CustomError(e.to_string()))?;
+            ClientHttpTransport::Ws(transport)
+        }
+    };
+    Ok(ClientBuilder::new(transport).build())
+}
 pub async fn get_mcp_tools(mcp_servers: &[McpDefinition]) -> Result<Vec<ServerTools>, ModelError> {
     // Create futures for each server
     let futures = mcp_servers.iter().map(|def| async move {
-        let transport = ClientSseTransport::new(def.server_url.clone());
-        transport
-            .open()
-            .await
-            .map_err(|e| ModelError::CustomError(e.to_string()))?;
-        let client = ClientBuilder::new(transport).build();
+        let client: Client<ClientHttpTransport> = get_client(def).await?;
 
         // Start the client
         let client_clone = client.clone();
@@ -114,12 +141,7 @@ pub async fn execute_mcp_tool(
     let params = serde_json::to_value(request)?;
 
     tracing::debug!("Starting tool client");
-    let transport = ClientSseTransport::new(def.server_url.clone());
-    transport
-        .open()
-        .await
-        .map_err(|e| ModelError::CustomError(e.to_string()))?;
-    let client = ClientBuilder::new(transport).build();
+    let client: Client<ClientHttpTransport> = get_client(def).await?;
 
     // Start the client
     let client_clone = client.clone();

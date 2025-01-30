@@ -71,11 +71,23 @@ pub struct ToolSelector {
     pub description: Option<String>,
 }
 
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum McpServerType {
+    #[default]
+    Sse,
+    Ws,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpDefinition {
     #[serde(default = "default_tools_filter")]
     pub actions_filter: ToolsFilter,
     pub server_url: String,
+    #[serde(default)]
+    pub r#type: McpServerType,
+    #[serde(default)]
+    pub headers: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
