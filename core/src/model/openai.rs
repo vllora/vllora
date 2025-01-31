@@ -152,7 +152,7 @@ impl OpenAIModel {
 
     fn build_request(
         &self,
-        messages: &Vec<ChatCompletionRequestMessage>,
+        messages: &[ChatCompletionRequestMessage],
         stream: bool,
     ) -> GatewayResult<CreateChatCompletionRequest> {
         let mut chat_completion_tools: Vec<ChatCompletionTool> = vec![];
@@ -211,7 +211,7 @@ impl OpenAIModel {
 
         builder
             .model(model_params.model.as_ref().unwrap())
-            .messages(messages.clone())
+            .messages(messages)
             .stream(stream);
         if !self.tools.is_empty() {
             builder
@@ -327,7 +327,8 @@ impl OpenAIModel {
         unreachable!();
     }
 
-    async fn execute_inner(&self, 
+    async fn execute_inner(
+        &self,
         span: Span,
         messages: Vec<ChatCompletionRequestMessage>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
@@ -411,7 +412,7 @@ impl OpenAIModel {
                     .await
                     .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
-                    return Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
+                    Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
                         role: "assistant".to_string(),
                         content: content.map(ChatCompletionContent::Text),
                         tool_calls: Some(
@@ -420,9 +421,7 @@ impl OpenAIModel {
                                 .map(|tool_call| ToolCall {
                                     id: tool_call.id.clone(),
                                     r#type: match tool_call.r#type {
-                                        ChatCompletionToolType::Function => {
-                                            "function".to_string()
-                                        }
+                                        ChatCompletionToolType::Function => "function".to_string(),
                                     },
                                     function: crate::types::gateway::FunctionCall {
                                         name: tool_call.function.name.clone(),
@@ -432,7 +431,7 @@ impl OpenAIModel {
                                 .collect(),
                         ),
                         ..Default::default()
-                    }));
+                    }))
                 } else {
                     let mut messages: Vec<ChatCompletionRequestMessage> =
                         vec![ChatCompletionRequestMessage::Assistant(
@@ -441,19 +440,15 @@ impl OpenAIModel {
                                 .build()
                                 .map_err(custom_err)?,
                         )];
-                    let result_tool_calls = Self::handle_tool_calls(
-                        tool_calls.iter(),
-                        &self.tools,
-                        tx,
-                        tags.clone(),
-                    )
-                    .instrument(tools_span.clone())
-                    .await;
+                    let result_tool_calls =
+                        Self::handle_tool_calls(tool_calls.iter(), &self.tools, tx, tags.clone())
+                            .instrument(tools_span.clone())
+                            .await;
                     messages.extend(result_tool_calls);
 
                     let conversation_messages = [input_messages, messages].concat();
 
-                    return Ok(InnerExecutionResult::NextCall(conversation_messages));
+                    Ok(InnerExecutionResult::NextCall(conversation_messages))
                 }
             }
 
@@ -478,21 +473,21 @@ impl OpenAIModel {
                     .await
                     .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
-                    return Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
+                    Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
                         role: "assistant".to_string(),
                         content: Some(ChatCompletionContent::Text(content.to_string())),
                         ..Default::default()
-                    }));
+                    }))
                 } else {
-                    return Err(custom_err("no finish reason").into());
+                    Err(custom_err("no finish reason").into())
                 }
             }
             _ => {
                 let err = Self::handle_finish_reason(finish_reason);
 
-                return Err(err);
+                Err(err)
             }
-        };
+        }
     }
 
     async fn execute(
@@ -509,7 +504,7 @@ impl OpenAIModel {
         while let Some(messages) = openai_calls.pop() {
             let input = serde_json::to_string(&messages)?;
             let span = tracing::info_span!(target: target!("chat"), SPAN_OPENAI, input = input, output = field::Empty, error = field::Empty, usage = field::Empty, ttft = field::Empty, tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value());
-            
+
             if retries == 0 {
                 return Err(ModelError::MaxRetriesReached.into());
             } else {
@@ -575,7 +570,7 @@ impl OpenAIModel {
         .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
         let request = self.build_request(&input_messages, true)?;
-            
+
         let stream = self
             .client
             .chat()
@@ -583,7 +578,7 @@ impl OpenAIModel {
             .await
             .map_err(ModelError::OpenAIApi)?;
         let (finish_reason, tool_calls, usage) = self
-            .process_stream(stream, &tx)
+            .process_stream(stream, tx)
             .instrument(span.clone())
             .await?;
 
@@ -627,7 +622,9 @@ impl OpenAIModel {
                 tools_span.follows_from(span.id());
 
                 if tool.stop_at_call() {
-                    return Ok(InnerExecutionResult::Finish(ChatCompletionMessage {..Default::default()}));
+                    Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
+                        ..Default::default()
+                    }))
                 } else {
                     let mut messages: Vec<ChatCompletionRequestMessage> =
                         vec![ChatCompletionRequestMessage::Assistant(
@@ -636,28 +633,22 @@ impl OpenAIModel {
                                 .build()
                                 .map_err(custom_err)?,
                         )];
-                    let result_tool_calls = Self::handle_tool_calls(
-                        tool_calls.iter(),
-                        &self.tools,
-                        &tx,
-                        tags.clone(),
-                    )
-                    .instrument(tools_span.clone())
-                    .await;
+                    let result_tool_calls =
+                        Self::handle_tool_calls(tool_calls.iter(), &self.tools, tx, tags.clone())
+                            .instrument(tools_span.clone())
+                            .await;
                     messages.extend(result_tool_calls);
 
                     let conversation_messages = [input_messages, messages].concat();
                     tracing::trace!("New messages: {conversation_messages:?}");
-                    
+
                     Ok(InnerExecutionResult::NextCall(conversation_messages))
                 }
             }
-            other => {
-                Err(Self::handle_finish_reason(Some(other)))
-            }
+            other => Err(Self::handle_finish_reason(Some(other))),
         }
     }
-    
+
     async fn execute_stream(
         &self,
         input_messages: Vec<ChatCompletionRequestMessage>,
@@ -675,14 +666,17 @@ impl OpenAIModel {
             } else {
                 retries -= 1;
             }
-            
+
             let input = serde_json::to_string(&input_messages)?;
             let span = tracing::info_span!(target: target!("chat"), SPAN_OPENAI, input = input, output = field::Empty, error = field::Empty, usage = field::Empty, ttft = field::Empty, tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value());
-            
-            match self.execute_stream_inner(span, input_messages, tx, tags.clone()).await? {
+
+            match self
+                .execute_stream_inner(span, input_messages, tx, tags.clone())
+                .await?
+            {
                 InnerExecutionResult::Finish(_) => {
                     break;
-                },
+                }
                 InnerExecutionResult::NextCall(messages) => {
                     openai_calls.push(messages);
                     continue;
@@ -762,8 +756,7 @@ impl ModelInstance for OpenAIModel {
     ) -> GatewayResult<ChatCompletionMessage> {
         let conversational_messages =
             self.construct_messages(input_variables, previous_messages.clone())?;
-        self.execute(conversational_messages, &tx, tags)
-            .await
+        self.execute(conversational_messages, &tx, tags).await
     }
 
     async fn stream(
@@ -775,7 +768,7 @@ impl ModelInstance for OpenAIModel {
     ) -> GatewayResult<()> {
         let conversational_messages =
             self.construct_messages(input_variables, previous_messages.clone())?;
-        
+
         self.execute_stream(conversational_messages, &tx, tags)
             .await
     }

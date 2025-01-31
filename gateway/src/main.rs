@@ -40,7 +40,10 @@ async fn main() -> Result<(), CliError> {
     let cli = cli::Cli::parse();
     let config = Config::load(&cli.config);
 
-    match cli.command.unwrap_or(cli::Commands::Serve) {
+    match cli
+        .command
+        .unwrap_or(cli::Commands::Serve(cli::ServeArgs::default()))
+    {
         cli::Commands::Update { force } => {
             println!("Updating models{}...", if force { " (forced)" } else { "" });
             let models = load_models(true).await?;
@@ -54,8 +57,9 @@ async fn main() -> Result<(), CliError> {
             run::table::pretty_print_models(models);
             Ok(())
         }
-        cli::Commands::Serve => {
+        cli::Commands::Serve(serve_args) => {
             let models = load_models(false).await?;
+            let config = config.apply_cli_overrides(&cli::Commands::Serve(serve_args));
             let api_server = ApiServer::new(config);
             let api_result = api_server.start(models).await?.await;
             if let Err(e) = api_result {

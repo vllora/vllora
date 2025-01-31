@@ -99,7 +99,7 @@ impl ApiServer {
             let cors = Self::get_cors(CorsOptions::Permissive);
             Self::create_app_entry(
                 cors,
-                redis_manager.clone().unwrap(),
+                redis_manager.clone(),
                 trace_senders_inner.clone(),
                 models.clone(),
                 callback.clone(),
@@ -135,7 +135,7 @@ impl ApiServer {
     #[allow(clippy::too_many_arguments)]
     fn create_app_entry(
         cors: Cors,
-        redis_manager: langdb_core::redis::aio::ConnectionManager,
+        redis_manager: Option<langdb_core::redis::aio::ConnectionManager>,
         trace_senders: Arc<TraceMap>,
         models: Vec<ModelDefinition>,
         callback: CallbackHandlerFn,
@@ -151,12 +151,16 @@ impl ApiServer {
             Error = actix_web::Error,
         >,
     > {
-        let redis_manager = Mutex::new(redis_manager);
         let app = App::new();
+
+        let mut service = Self::attach_gateway_routes(web::scope("/v1"));
+        if let Some(redis_manager) = redis_manager {
+            service = service.app_data(Data::new(Mutex::new(redis_manager)));
+        }
 
         app.wrap(Logger::default())
             .service(
-                Self::attach_gateway_routes(web::scope("/v1"))
+                service
                     .app_data(limit_checker)
                     .app_data(Data::new(callback))
                     .app_data(web::Data::from(trace_senders.clone()))
@@ -164,7 +168,6 @@ impl ApiServer {
                     .app_data(Data::new(
                         Box::new(cost_calculator) as Box<dyn CostCalculator>
                     ))
-                    .app_data(Data::new(redis_manager))
                     .app_data(rate_limit)
                     .wrap(RateLimitMiddleware),
             )

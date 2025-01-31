@@ -1,0 +1,22 @@
+rest:
+  host: "127.0.0.1"
+  port: 8080
+  cors_allowed_origins:
+    - "http://localhost:3000"
+    - "http://127.0.0.1:3000"
+
+# clickhouse:
+#   url: http://localhost:8123
+
+# redis:
+#   url: redis://localhost:6379
+
+# cost_control:
+#   daily: 10
+#   monthly: 100
+#   total: 1000
+
+# rate_limit:
+#   hourly: 100
+#   daily: 1000
+#   monthly: 10000
