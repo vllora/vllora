@@ -11,16 +11,16 @@ use super::{
     Tool,
 };
 use serde_json::Value;
-use tracing::{Instrument, Span};
+use tracing::Span;
 
-macro_rules! target {
-    () => {
-        "langdb::user_tracing::models"
-    };
-    ($subtgt:literal) => {
-        concat!("langdb::user_tracing::models::", $subtgt)
-    };
-}
+// macro_rules! target {
+//     () => {
+//         "langdb::user_tracing::models"
+//     };
+//     ($subtgt:literal) => {
+//         concat!("langdb::user_tracing::models::", $subtgt)
+//     };
+// }
 
 pub(crate) async fn handle_tool_call(
     tool_use: &ModelToolCall,
@@ -31,14 +31,14 @@ pub(crate) async fn handle_tool_call(
     let tool_name = tool_use.tool_name.clone();
     let arguments = tool_use.input.clone();
     let arguments_value = serde_json::from_str::<HashMap<String, Value>>(&arguments)?;
-    let span = tracing::info_span!(
-        target: target!("tool"),
-        crate::events::SPAN_TOOL,
-        tool_name = tool_name,
-        arguments = arguments.to_string(),
-        output = tracing::field::Empty,
-        error = tracing::field::Empty,
-    );
+    // let span = tracing::info_span!(
+    //     target: target!("tool"),
+    //     crate::events::SPAN_TOOL,
+    //     tool_name = tool_name,
+    //     arguments = arguments.to_string(),
+    //     output = tracing::field::Empty,
+    //     error = tracing::field::Empty,
+    // );
     let tool = tools
         .get(&tool_name)
         .ok_or(GatewayError::CustomError(format!(
@@ -76,6 +76,6 @@ pub(crate) async fn handle_tool_call(
         .map_err(|e| GatewayError::CustomError(e.to_string()))?;
         result
     }
-    .instrument(span.or_current())
+    // .instrument(span.or_current())
     .await
 }

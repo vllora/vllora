@@ -57,7 +57,9 @@ pub async fn stream_chunks(
     tokio::spawn(
         async move {
             let (tx, mut rx) = tokio::sync::mpsc::channel(100);
-            let result_fut = model.stream(input_variables, tx, messages, tags);
+            let result_fut = model
+                .stream(input_variables, tx, messages, tags)
+                .instrument(Span::current());
 
             let forward_fut = async {
                 let mut assistant_msg = String::new();

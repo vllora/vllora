@@ -58,6 +58,11 @@ macro_rules! target {
     };
 }
 
+enum InnerExecutionResult {
+    Finish(ChatCompletionMessage),
+    NextCall(Vec<ChatCompletionRequestMessage>),
+}
+
 fn custom_err(e: impl ToString) -> ModelError {
     ModelError::CustomError(e.to_string())
 }
@@ -147,7 +152,7 @@ impl OpenAIModel {
 
     fn build_request(
         &self,
-        messages: Vec<ChatCompletionRequestMessage>,
+        messages: &Vec<ChatCompletionRequestMessage>,
         stream: bool,
     ) -> GatewayResult<CreateChatCompletionRequest> {
         let mut chat_completion_tools: Vec<ChatCompletionTool> = vec![];
@@ -322,187 +327,202 @@ impl OpenAIModel {
         unreachable!();
     }
 
+    async fn execute_inner(&self, 
+        span: Span,
+        messages: Vec<ChatCompletionRequestMessage>,
+        tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
+        tags: HashMap<String, String>,
+    ) -> GatewayResult<InnerExecutionResult> {
+        let call = self.build_request(&messages, false)?;
+        let input_messages = call.messages.clone();
+        tx.send(Some(ModelEvent::new(
+            &span,
+            ModelEventType::LlmStart(LLMStartEvent {
+                provider_name: SPAN_OPENAI.to_string(),
+                model_name: self.params.model.clone().unwrap_or_default(),
+                input: serde_json::to_string(&input_messages)?,
+            }),
+        )))
+        .await
+        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+
+        let response = async move {
+            let result = self.client.chat().create(call).await;
+            let _ = result
+                .as_ref()
+                .map(|response| serde_json::to_value(response).unwrap())
+                .as_ref()
+                .map(JsonValue)
+                .record();
+            let response = result.map_err(custom_err)?;
+
+            let span = Span::current();
+            span.record("output", serde_json::to_string(&response)?);
+            if let Some(ref usage) = response.usage {
+                span.record(
+                    "usage",
+                    JsonValue(&serde_json::to_value(usage).unwrap()).as_value(),
+                );
+            }
+            Ok::<_, GatewayError>(response)
+        }
+        .instrument(span.clone().or_current())
+        .await?;
+
+        let choices = response.choices;
+        if choices.is_empty() {
+            return Err(custom_err("No Choices").into());
+        }
+        // always take 1 since we put n = 1 in request
+        let first_choice = choices[0].to_owned();
+        let finish_reason = first_choice.finish_reason;
+        match finish_reason.as_ref() {
+            Some(&FinishReason::ToolCalls) => {
+                let tool_calls = first_choice.message.tool_calls.unwrap();
+                tracing::warn!("Tool calls: {tool_calls:#?}");
+
+                let content = first_choice.message.content;
+                let tool_calls_str = serde_json::to_string(&tool_calls)?;
+
+                let tools_span = tracing::info_span!(target: target!(), parent: span.clone(), events::SPAN_TOOLS, tool_calls=tool_calls_str, label=tool_calls.iter().map(|t| t.function.name.clone()).collect::<Vec<String>>().join(","));
+                tools_span.follows_from(span.id());
+
+                let tool_name = tool_calls[0].function.name.clone();
+                let tool = self
+                    .tools
+                    .get(tool_name.as_str())
+                    .unwrap_or_else(|| panic!("Tool {tool_name} not found checked"));
+                if tool.stop_at_call() {
+                    let finish_reason = Self::map_finish_reason(
+                        &finish_reason.expect("Finish reason is already checked"),
+                    );
+                    tx.send(Some(ModelEvent::new(
+                        &span,
+                        ModelEventType::LlmStop(LLMFinishEvent {
+                            provider_name: SPAN_OPENAI.to_string(),
+                            model_name: self.params.model.clone().unwrap_or_default(),
+                            output: content.clone(),
+                            usage: Self::map_usage(response.usage.as_ref()),
+                            finish_reason,
+                            tool_calls: tool_calls.iter().map(Self::map_tool_call).collect(),
+                            credentials_ident: self.credentials_ident.clone(),
+                        }),
+                    )))
+                    .await
+                    .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+
+                    return Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
+                        role: "assistant".to_string(),
+                        content: content.map(ChatCompletionContent::Text),
+                        tool_calls: Some(
+                            tool_calls
+                                .iter()
+                                .map(|tool_call| ToolCall {
+                                    id: tool_call.id.clone(),
+                                    r#type: match tool_call.r#type {
+                                        ChatCompletionToolType::Function => {
+                                            "function".to_string()
+                                        }
+                                    },
+                                    function: crate::types::gateway::FunctionCall {
+                                        name: tool_call.function.name.clone(),
+                                        arguments: tool_call.function.arguments.clone(),
+                                    },
+                                })
+                                .collect(),
+                        ),
+                        ..Default::default()
+                    }));
+                } else {
+                    let mut messages: Vec<ChatCompletionRequestMessage> =
+                        vec![ChatCompletionRequestMessage::Assistant(
+                            ChatCompletionRequestAssistantMessageArgs::default()
+                                .tool_calls(tool_calls.clone())
+                                .build()
+                                .map_err(custom_err)?,
+                        )];
+                    let result_tool_calls = Self::handle_tool_calls(
+                        tool_calls.iter(),
+                        &self.tools,
+                        tx,
+                        tags.clone(),
+                    )
+                    .instrument(tools_span.clone())
+                    .await;
+                    messages.extend(result_tool_calls);
+
+                    let conversation_messages = [input_messages, messages].concat();
+
+                    return Ok(InnerExecutionResult::NextCall(conversation_messages));
+                }
+            }
+
+            Some(&FinishReason::Stop) => {
+                let finish_reason = Self::map_finish_reason(
+                    &finish_reason.expect("Finish reason is already checked"),
+                );
+                let message_content = first_choice.message.content;
+                if let Some(content) = &message_content {
+                    tx.send(Some(ModelEvent::new(
+                        &span,
+                        ModelEventType::LlmStop(LLMFinishEvent {
+                            provider_name: SPAN_OPENAI.to_string(),
+                            model_name: self.params.model.clone().unwrap_or_default(),
+                            output: Some(content.clone()),
+                            usage: Self::map_usage(response.usage.as_ref()),
+                            finish_reason,
+                            tool_calls: vec![],
+                            credentials_ident: self.credentials_ident.clone(),
+                        }),
+                    )))
+                    .await
+                    .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+
+                    return Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
+                        role: "assistant".to_string(),
+                        content: Some(ChatCompletionContent::Text(content.to_string())),
+                        ..Default::default()
+                    }));
+                } else {
+                    return Err(custom_err("no finish reason").into());
+                }
+            }
+            _ => {
+                let err = Self::handle_finish_reason(finish_reason);
+
+                return Err(err);
+            }
+        };
+    }
+
     async fn execute(
         &self,
         input_messages: Vec<ChatCompletionRequestMessage>,
-        call_span: Span,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
     ) -> GatewayResult<ChatCompletionMessage> {
-        let request = self.build_request(input_messages, false)?;
-        let mut openai_calls = vec![(request, call_span.clone())];
+        let mut openai_calls = vec![input_messages];
         let mut retries = self
             .execution_options
             .max_retries
             .unwrap_or(DEFAULT_MAX_RETRIES);
-        while let Some((call, span)) = openai_calls.pop() {
+        while let Some(messages) = openai_calls.pop() {
+            let input = serde_json::to_string(&messages)?;
+            let span = tracing::info_span!(target: target!("chat"), SPAN_OPENAI, input = input, output = field::Empty, error = field::Empty, usage = field::Empty, ttft = field::Empty, tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value());
+            
             if retries == 0 {
                 return Err(ModelError::MaxRetriesReached.into());
             } else {
                 retries -= 1;
             }
-            let input_messages = call.messages.clone();
-            tx.send(Some(ModelEvent::new(
-                &span,
-                ModelEventType::LlmStart(LLMStartEvent {
-                    provider_name: SPAN_OPENAI.to_string(),
-                    model_name: self.params.model.clone().unwrap_or_default(),
-                    input: serde_json::to_string(&input_messages)?,
-                }),
-            )))
-            .await
-            .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
-            let response = async move {
-                let result = self.client.chat().create(call).await;
-                let _ = result
-                    .as_ref()
-                    .map(|response| serde_json::to_value(response).unwrap())
-                    .as_ref()
-                    .map(JsonValue)
-                    .record();
-                let response = result.map_err(custom_err)?;
-
-                let span = Span::current();
-                span.record("output", serde_json::to_string(&response)?);
-                if let Some(ref usage) = response.usage {
-                    span.record(
-                        "usage",
-                        JsonValue(&serde_json::to_value(usage).unwrap()).as_value(),
-                    );
+            match self.execute_inner(span, messages, tx, tags.clone()).await? {
+                InnerExecutionResult::Finish(message) => return Ok(message),
+                InnerExecutionResult::NextCall(messages) => {
+                    openai_calls.push(messages);
+                    continue;
                 }
-                Ok::<_, GatewayError>(response)
             }
-            .instrument(span.clone().or_current())
-            .await?;
-
-            let choices = response.choices;
-            if choices.is_empty() {
-                return Err(custom_err("No Choices").into());
-            }
-            // always take 1 since we put n = 1 in request
-            let first_choice = choices[0].to_owned();
-            let finish_reason = first_choice.finish_reason;
-            match finish_reason.as_ref() {
-                Some(&FinishReason::ToolCalls) => {
-                    let tool_calls = first_choice.message.tool_calls.unwrap();
-                    tracing::warn!("Tool calls: {tool_calls:#?}");
-
-                    let content = first_choice.message.content;
-                    let tool_calls_str = serde_json::to_string(&tool_calls)?;
-                    let tools_span = tracing::info_span!(target: target!(), events::SPAN_TOOLS, tool_calls=tool_calls_str, label=tool_calls.iter().map(|t| t.function.name.clone()).collect::<Vec<String>>().join(","));
-                    tools_span.follows_from(span.id());
-
-                    let tool_name = tool_calls[0].function.name.clone();
-                    let tool = self
-                        .tools
-                        .get(tool_name.as_str())
-                        .unwrap_or_else(|| panic!("Tool {tool_name} not found checked"));
-                    if tool.stop_at_call() {
-                        let finish_reason = Self::map_finish_reason(
-                            &finish_reason.expect("Finish reason is already checked"),
-                        );
-                        tx.send(Some(ModelEvent::new(
-                            &span,
-                            ModelEventType::LlmStop(LLMFinishEvent {
-                                provider_name: SPAN_OPENAI.to_string(),
-                                model_name: self.params.model.clone().unwrap_or_default(),
-                                output: content.clone(),
-                                usage: Self::map_usage(response.usage.as_ref()),
-                                finish_reason,
-                                tool_calls: tool_calls.iter().map(Self::map_tool_call).collect(),
-                                credentials_ident: self.credentials_ident.clone(),
-                            }),
-                        )))
-                        .await
-                        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
-
-                        return Ok(ChatCompletionMessage {
-                            role: "assistant".to_string(),
-                            content: content.map(ChatCompletionContent::Text),
-                            tool_calls: Some(
-                                tool_calls
-                                    .iter()
-                                    .map(|tool_call| ToolCall {
-                                        id: tool_call.id.clone(),
-                                        r#type: match tool_call.r#type {
-                                            ChatCompletionToolType::Function => {
-                                                "function".to_string()
-                                            }
-                                        },
-                                        function: crate::types::gateway::FunctionCall {
-                                            name: tool_call.function.name.clone(),
-                                            arguments: tool_call.function.arguments.clone(),
-                                        },
-                                    })
-                                    .collect(),
-                            ),
-                            ..Default::default()
-                        });
-                    } else {
-                        let mut messages: Vec<ChatCompletionRequestMessage> =
-                            vec![ChatCompletionRequestMessage::Assistant(
-                                ChatCompletionRequestAssistantMessageArgs::default()
-                                    .tool_calls(tool_calls.clone())
-                                    .build()
-                                    .map_err(custom_err)?,
-                            )];
-                        let result_tool_calls = Self::handle_tool_calls(
-                            tool_calls.iter(),
-                            &self.tools,
-                            tx,
-                            tags.clone(),
-                        )
-                        .instrument(tools_span.clone())
-                        .await;
-                        messages.extend(result_tool_calls);
-
-                        let conversation_messages = [input_messages, messages].concat();
-                        let request = self.build_request(conversation_messages, false)?;
-                        let input = serde_json::to_string(&request)?;
-                        let call_span = tracing::info_span!(target: target!("chat"), SPAN_OPENAI, input=input, output = field::Empty, ttft = field::Empty, error = field::Empty, usage = field::Empty);
-                        call_span.follows_from(tools_span.id());
-                        openai_calls.push((request, call_span));
-                        continue;
-                    }
-                }
-
-                Some(&FinishReason::Stop) => {
-                    let finish_reason = Self::map_finish_reason(
-                        &finish_reason.expect("Finish reason is already checked"),
-                    );
-                    let message_content = first_choice.message.content;
-                    if let Some(content) = &message_content {
-                        tx.send(Some(ModelEvent::new(
-                            &span,
-                            ModelEventType::LlmStop(LLMFinishEvent {
-                                provider_name: SPAN_OPENAI.to_string(),
-                                model_name: self.params.model.clone().unwrap_or_default(),
-                                output: Some(content.clone()),
-                                usage: Self::map_usage(response.usage.as_ref()),
-                                finish_reason,
-                                tool_calls: vec![],
-                                credentials_ident: self.credentials_ident.clone(),
-                            }),
-                        )))
-                        .await
-                        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
-
-                        return Ok(ChatCompletionMessage {
-                            role: "assistant".to_string(),
-                            content: Some(ChatCompletionContent::Text(content.to_string())),
-                            ..Default::default()
-                        });
-                    } else {
-                        return Err(custom_err("no finish reason").into());
-                    }
-                }
-                _ => {
-                    let err = Self::handle_finish_reason(finish_reason);
-
-                    return Err(err);
-                }
-            };
         }
         unreachable!();
     }
@@ -536,118 +556,136 @@ impl OpenAIModel {
         })
     }
 
+    async fn execute_stream_inner(
+        &self,
+        span: Span,
+        input_messages: Vec<ChatCompletionRequestMessage>,
+        tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
+        tags: HashMap<String, String>,
+    ) -> GatewayResult<InnerExecutionResult> {
+        tx.send(Some(ModelEvent::new(
+            &span,
+            ModelEventType::LlmStart(LLMStartEvent {
+                provider_name: "openai".to_string(),
+                model_name: self.params.model.clone().unwrap_or_default(),
+                input: serde_json::to_string(&input_messages)?,
+            }),
+        )))
+        .await
+        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+
+        let request = self.build_request(&input_messages, true)?;
+            
+        let stream = self
+            .client
+            .chat()
+            .create_stream(request)
+            .await
+            .map_err(ModelError::OpenAIApi)?;
+        let (finish_reason, tool_calls, usage) = self
+            .process_stream(stream, &tx)
+            .instrument(span.clone())
+            .await?;
+
+        let trace_finish_reason = Self::map_finish_reason(&finish_reason);
+        tx.send(Some(ModelEvent::new(
+            &span,
+            ModelEventType::LlmStop(LLMFinishEvent {
+                provider_name: SPAN_OPENAI.to_string(),
+                model_name: self.params.model.clone().unwrap_or_default(),
+                output: None,
+                usage: Self::map_usage(usage.as_ref()),
+                finish_reason: trace_finish_reason.clone(),
+                tool_calls: tool_calls.iter().map(Self::map_tool_call).collect(),
+                credentials_ident: self.credentials_ident.clone(),
+            }),
+        )))
+        .await
+        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+        if let Some(usage) = usage {
+            span.record(
+                "usage",
+                JsonValue(&serde_json::to_value(usage).unwrap()).as_value(),
+            );
+        }
+        let response = serde_json::json!({
+            "finish_reason": trace_finish_reason,
+            "tool_calls": tool_calls
+        });
+        span.record("output", response.to_string());
+        match finish_reason {
+            FinishReason::Stop => Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
+                ..Default::default()
+            })),
+            FinishReason::ToolCalls => {
+                let tool = self
+                    .tools
+                    .get(tool_calls[0].function.name.as_str())
+                    .unwrap();
+
+                let tools_span = tracing::info_span!(target: target!(), parent: span.clone(), events::SPAN_TOOLS, tool_calls=field::Empty, label=tool_calls.iter().map(|t| t.function.name.clone()).collect::<Vec<String>>().join(","));
+                tools_span.follows_from(span.id());
+
+                if tool.stop_at_call() {
+                    return Ok(InnerExecutionResult::Finish(ChatCompletionMessage {..Default::default()}));
+                } else {
+                    let mut messages: Vec<ChatCompletionRequestMessage> =
+                        vec![ChatCompletionRequestMessage::Assistant(
+                            ChatCompletionRequestAssistantMessageArgs::default()
+                                .tool_calls(tool_calls.clone())
+                                .build()
+                                .map_err(custom_err)?,
+                        )];
+                    let result_tool_calls = Self::handle_tool_calls(
+                        tool_calls.iter(),
+                        &self.tools,
+                        &tx,
+                        tags.clone(),
+                    )
+                    .instrument(tools_span.clone())
+                    .await;
+                    messages.extend(result_tool_calls);
+
+                    let conversation_messages = [input_messages, messages].concat();
+                    tracing::trace!("New messages: {conversation_messages:?}");
+                    
+                    Ok(InnerExecutionResult::NextCall(conversation_messages))
+                }
+            }
+            other => {
+                Err(Self::handle_finish_reason(Some(other)))
+            }
+        }
+    }
+    
     async fn execute_stream(
         &self,
         input_messages: Vec<ChatCompletionRequestMessage>,
-        tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
-        call_span: Span,
+        tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
     ) -> GatewayResult<()> {
-        let request = self.build_request(input_messages, true)?;
-        let mut openai_calls = vec![(request, call_span)];
+        let mut openai_calls = vec![input_messages];
         let mut retries = self
             .execution_options
             .max_retries
             .unwrap_or(DEFAULT_MAX_RETRIES);
-        while let Some((call, span)) = openai_calls.pop() {
+        while let Some(input_messages) = openai_calls.pop() {
             if retries == 0 {
                 return Err(ModelError::MaxRetriesReached.into());
             } else {
                 retries -= 1;
             }
-            let input_messages = call.messages.clone();
-
-            tx.send(Some(ModelEvent::new(
-                &span,
-                ModelEventType::LlmStart(LLMStartEvent {
-                    provider_name: "openai".to_string(),
-                    model_name: self.params.model.clone().unwrap_or_default(),
-                    input: serde_json::to_string(&input_messages)?,
-                }),
-            )))
-            .await
-            .map_err(|e| GatewayError::CustomError(e.to_string()))?;
-
-            let stream = self
-                .client
-                .chat()
-                .create_stream(call)
-                .await
-                .map_err(ModelError::OpenAIApi)?;
-            let (finish_reason, tool_calls, usage) = self
-                .process_stream(stream, &tx)
-                .instrument(span.clone())
-                .await?;
-
-            let trace_finish_reason = Self::map_finish_reason(&finish_reason);
-            tx.send(Some(ModelEvent::new(
-                &span,
-                ModelEventType::LlmStop(LLMFinishEvent {
-                    provider_name: SPAN_OPENAI.to_string(),
-                    model_name: self.params.model.clone().unwrap_or_default(),
-                    output: None,
-                    usage: Self::map_usage(usage.as_ref()),
-                    finish_reason: trace_finish_reason.clone(),
-                    tool_calls: tool_calls.iter().map(Self::map_tool_call).collect(),
-                    credentials_ident: self.credentials_ident.clone(),
-                }),
-            )))
-            .await
-            .map_err(|e| GatewayError::CustomError(e.to_string()))?;
-            if let Some(usage) = usage {
-                span.record(
-                    "usage",
-                    JsonValue(&serde_json::to_value(usage).unwrap()).as_value(),
-                );
-            }
-            let response = serde_json::json!({
-                "finish_reason": trace_finish_reason,
-                "tool_calls": tool_calls
-            });
-            span.record("output", response.to_string());
-            match finish_reason {
-                FinishReason::Stop => return Ok(()),
-                FinishReason::ToolCalls => {
-                    let tool = self
-                        .tools
-                        .get(tool_calls[0].function.name.as_str())
-                        .unwrap();
-
-                    let tools_span = tracing::info_span!(target: target!(), events::SPAN_TOOLS, label=tool_calls.iter().map(|t| t.function.name.clone()).collect::<Vec<String>>().join(","));
-                    tools_span.follows_from(span.id());
-
-                    if tool.stop_at_call() {
-                        return Ok(());
-                    } else {
-                        let mut messages: Vec<ChatCompletionRequestMessage> =
-                            vec![ChatCompletionRequestMessage::Assistant(
-                                ChatCompletionRequestAssistantMessageArgs::default()
-                                    .tool_calls(tool_calls.clone())
-                                    .build()
-                                    .map_err(custom_err)?,
-                            )];
-                        let result_tool_calls = Self::handle_tool_calls(
-                            tool_calls.iter(),
-                            &self.tools,
-                            &tx,
-                            tags.clone(),
-                        )
-                        .instrument(tools_span.clone())
-                        .await;
-                        messages.extend(result_tool_calls);
-
-                        let conversation_messages = [input_messages, messages].concat();
-                        tracing::trace!("New messages: {conversation_messages:?}");
-                        let request = self.build_request(conversation_messages, true)?;
-                        let input = serde_json::to_string(&request)?;
-                        let call_span = tracing::info_span!(target: target!("chat"), SPAN_OPENAI, input = input,output = field::Empty, ttft = field::Empty, error = field::Empty, usage = field::Empty);
-                        call_span.follows_from(tools_span.id());
-                        openai_calls.push((request, call_span));
-                        continue;
-                    }
-                }
-                other => {
-                    return Err(Self::handle_finish_reason(Some(other)));
+            
+            let input = serde_json::to_string(&input_messages)?;
+            let span = tracing::info_span!(target: target!("chat"), SPAN_OPENAI, input = input, output = field::Empty, error = field::Empty, usage = field::Empty, ttft = field::Empty, tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value());
+            
+            match self.execute_stream_inner(span, input_messages, tx, tags.clone()).await? {
+                InnerExecutionResult::Finish(_) => {
+                    break;
+                },
+                InnerExecutionResult::NextCall(messages) => {
+                    openai_calls.push(messages);
+                    continue;
                 }
             }
         }
@@ -724,12 +762,8 @@ impl ModelInstance for OpenAIModel {
     ) -> GatewayResult<ChatCompletionMessage> {
         let conversational_messages =
             self.construct_messages(input_variables, previous_messages.clone())?;
-        let input = serde_json::to_string(&conversational_messages)?;
-        let call_span = tracing::info_span!(target: target!("chat"), SPAN_OPENAI, input = input, output = field::Empty, error = field::Empty, usage = field::Empty, ttft = field::Empty, tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value());
-        self.execute(conversational_messages, call_span.clone(), &tx, tags)
-            .instrument(call_span.clone())
+        self.execute(conversational_messages, &tx, tags)
             .await
-            .map_err(|e| record_map_err(e, call_span))
     }
 
     async fn stream(
@@ -741,21 +775,9 @@ impl ModelInstance for OpenAIModel {
     ) -> GatewayResult<()> {
         let conversational_messages =
             self.construct_messages(input_variables, previous_messages.clone())?;
-        let input = serde_json::to_string(&conversational_messages)?;
-        let call_span = tracing::info_span!(
-            target: target!("chat"),
-            SPAN_OPENAI,
-            input = input,
-            output = field::Empty,
-            error = field::Empty,
-            usage = field::Empty,
-            ttft = field::Empty,
-            tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value()
-        );
-        self.execute_stream(conversational_messages, tx, call_span.clone(), tags)
-            .instrument(call_span.clone())
+        
+        self.execute_stream(conversational_messages, &tx, tags)
             .await
-            .map_err(|e| record_map_err(e, call_span))
     }
 }
 

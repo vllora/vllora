@@ -399,9 +399,9 @@ dependencies = [
 
 [[package]]
 name = "async-mcp"
-version = "0.0.4"
+version = "0.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0cd8633dcd23cfc76bdad6b84ecb116c14a71ac0c16c21c9cb0820c6bfba3f5b"
+checksum = "e9e6600e7521cdbd47202173a7226fe29974f283013449a7837076c5e5c20d31"
 dependencies = [
  "actix-web",
  "actix-ws",
@@ -3998,7 +3998,9 @@ checksum = "c83b561d025642014097b66e6c1bb422783339e0909e4429cde4749d1990bc38"
 dependencies = [
  "futures-util",
  "log",
+ "native-tls",
  "tokio",
+ "tokio-native-tls",
  "tungstenite",
 ]
 
@@ -4217,6 +4219,7 @@ dependencies = [
  "http 1.2.0",
  "httparse",
  "log",
+ "native-tls",
  "rand",
  "sha1",
  "thiserror 1.0.69",

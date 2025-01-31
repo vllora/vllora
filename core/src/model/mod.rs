@@ -480,6 +480,7 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
                     }
                 },
             )
+            .instrument(span.clone())
             .await
             .0;
             let span = tracing::Span::current();
@@ -493,7 +494,6 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
             };
             result
         }
-        .instrument(span)
         .await
     }
 }
