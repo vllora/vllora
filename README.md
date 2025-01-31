@@ -95,7 +95,7 @@ The gateway provides the following OpenAI-compatible endpoints:
 
 1. Run the server with your OpenAI API key:
 ```bash
-LANGDB_OPENAI_API_KEY=your-api-key cargo run
+cargo run
 ```
 
 2. Make a chat completion request:
@@ -152,6 +152,7 @@ FROM langdb.traces
 WHERE finish_date >= today() - 1
 ORDER BY finish_time_us DESC
 LIMIT 10;
+```
 
 ## Rate Limiting and Cost Control
 
@@ -226,7 +227,7 @@ redis-cli GET "default:api_calls:2025-01-31"
 
 ## Running with Docker Compose
 
-For a complete setup including ClickHouse for tracing and Redis for rate limiting/cost control, follow these steps:
+For a complete setup including ClickHouse for analytics and tracing, follow these steps:
 
 1. Start the services using Docker Compose:
 ```bash
@@ -234,27 +235,18 @@ docker-compose up -d
 ```
 
 This will start:
-- ClickHouse server on port 8123 (HTTP) for tracing
-- Redis server on port 6379 for rate limiting and cost control
+- ClickHouse server on ports 8123 (HTTP)
 - All necessary configurations will be loaded from `docker/clickhouse/server/config.d`
 
-2. Build and run the gateway with Docker services:
+2. Build and run the gateway:
 ```bash
-cargo run -- serve \
-  --clickhouse-url "http://localhost:8123" \
-  --redis-url "redis://localhost:6379"
+cargo run
 ```
 
-You can also configure these in your `config.yaml`:
-```yaml
-clickhouse:
-  url: "http://localhost:8123"
-redis:
-  url: "redis://localhost:6379"
-```
+The gateway will now be running with full analytics and logging capabilities, storing data in ClickHouse.
 
 ## Using MCP Tools
-```sh
+```bash
 curl http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
