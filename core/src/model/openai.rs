@@ -232,17 +232,19 @@ impl OpenAIModel {
         &self,
         mut stream: impl Stream<Item = Result<CreateChatCompletionStreamResponse, OpenAIError>> + Unpin,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
+        first_response_received: &mut bool,
     ) -> GatewayResult<(
         FinishReason,
         Vec<ChatCompletionMessageToolCall>,
         Option<async_openai::types::CompletionUsage>,
     )> {
         let mut tool_call_states: HashMap<i32, ChatCompletionMessageToolCall> = HashMap::new();
-        let mut first_response_received = false;
         while let Some(result) = stream.next().await {
             match result {
                 Ok(mut response) => {
-                    if first_response_received {
+                    if !*first_response_received {
+                        *first_response_received = true;
+                        // current time in nanoseconds
                         let now: u64 = SystemTime::now()
                             .duration_since(UNIX_EPOCH)
                             .unwrap_or_default()
@@ -255,21 +257,6 @@ impl OpenAIModel {
                         .map_err(|e| GatewayError::CustomError(e.to_string()))?;
                     }
                     let chat_choice = response.choices.remove(0);
-                    if !first_response_received {
-                        first_response_received = true;
-                        // current time in nanoseconds
-                        let now: u64 = SystemTime::now()
-                            .duration_since(UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_micros() as u64;
-
-                        tx.send(Some(ModelEvent::new(
-                            &Span::current(),
-                            ModelEventType::LlmFirstToken(LLMFirstToken { ttft: now }),
-                        )))
-                        .await
-                        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
-                    }
                     if let Some(tool_calls) = chat_choice.delta.tool_calls {
                         for tool_call in tool_calls.into_iter() {
                             let ChatCompletionMessageToolCallChunk {
@@ -557,6 +544,7 @@ impl OpenAIModel {
         input_messages: Vec<ChatCompletionRequestMessage>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
+        first_response_received: &mut bool,
     ) -> GatewayResult<InnerExecutionResult> {
         tx.send(Some(ModelEvent::new(
             &span,
@@ -578,7 +566,7 @@ impl OpenAIModel {
             .await
             .map_err(ModelError::OpenAIApi)?;
         let (finish_reason, tool_calls, usage) = self
-            .process_stream(stream, tx)
+            .process_stream(stream, tx, first_response_received)
             .instrument(span.clone())
             .await?;
 
@@ -670,8 +658,16 @@ impl OpenAIModel {
             let input = serde_json::to_string(&input_messages)?;
             let span = tracing::info_span!(target: target!("chat"), SPAN_OPENAI, input = input, output = field::Empty, error = field::Empty, usage = field::Empty, ttft = field::Empty, tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value());
 
+            let first_response_received = &mut false;
+
             match self
-                .execute_stream_inner(span, input_messages, tx, tags.clone())
+                .execute_stream_inner(
+                    span,
+                    input_messages,
+                    tx,
+                    tags.clone(),
+                    first_response_received,
+                )
                 .await?
             {
                 InnerExecutionResult::Finish(_) => {
