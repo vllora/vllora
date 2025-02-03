@@ -1,9 +1,9 @@
+<div align="center">
+
 # LangDB AI Gateway
 
 A Rust-based gateway service for interacting with various LLM providers (OpenAI, Anthropic, etc.) with unified API interface.
 
-
-<div align="center">
 <img src="assets/langdb-models.gif" width="550px" alt="LangDB AI Gateway Demo showing LLM Switching">
 </div>
 
