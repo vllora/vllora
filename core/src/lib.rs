@@ -20,10 +20,6 @@ use actix_web::HttpResponse;
 use serde_json::json;
 use thiserror::Error;
 
-#[cfg(feature = "redis")]
-pub use redis;
-
-#[cfg(feature = "redis")]
 pub mod usage;
 
 pub use bytes;

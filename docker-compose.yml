@@ -13,16 +13,3 @@ services:
         hard: 262144
     extra_hosts:
       - "host.docker.internal:host-gateway"
-  redis:
-    image: redis:latest
-    restart: always
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/root/redis
-    environment:
-      - REDIS_PASSWORD=langdb_password
-      - REDIS_PORT=6379
-      - REDIS_DATABASES=16
-volumes:
-  redis_data:

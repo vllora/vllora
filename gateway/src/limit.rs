@@ -2,8 +2,7 @@ use std::sync::Arc;
 
 use langdb_core::{
     handler::{DollarUsage, LimitCheck},
-    redis::aio::ConnectionManager,
-    usage::{get_value, LimitPeriod},
+    usage::{InMemoryStorage, LimitPeriod},
 };
 use tokio::sync::Mutex;
 
@@ -11,14 +10,14 @@ use crate::config::CostControl;
 
 pub const LLM_USAGE: &str = "llm_usage";
 pub struct GatewayLimitChecker {
-    client: Arc<Mutex<ConnectionManager>>,
+    storage: Arc<Mutex<InMemoryStorage>>,
     cost_control: CostControl,
 }
 
 impl GatewayLimitChecker {
-    pub fn new(client: Arc<Mutex<ConnectionManager>>, cost_control: CostControl) -> Self {
+    pub fn new(storage: Arc<Mutex<InMemoryStorage>>, cost_control: CostControl) -> Self {
         Self {
-            client,
+            storage,
             cost_control,
         }
     }
@@ -29,13 +28,24 @@ impl GatewayLimitChecker {
         &self,
         tenant_name: &str,
     ) -> Result<DollarUsage, Box<dyn std::error::Error>> {
-        let mut client = self.client.lock().await;
-        let total_usage: Option<f64> =
-            get_value(&mut client, LimitPeriod::Total, tenant_name, LLM_USAGE).await?;
-        let monthly_usage: Option<f64> =
-            get_value(&mut client, LimitPeriod::Month, tenant_name, LLM_USAGE).await?;
-        let daily_usage: Option<f64> =
-            get_value(&mut client, LimitPeriod::Day, tenant_name, LLM_USAGE).await?;
+        let total_usage: Option<f64> = self
+            .storage
+            .lock()
+            .await
+            .get_value(LimitPeriod::Total, tenant_name, LLM_USAGE)
+            .await;
+        let monthly_usage: Option<f64> = self
+            .storage
+            .lock()
+            .await
+            .get_value(LimitPeriod::Month, tenant_name, LLM_USAGE)
+            .await;
+        let daily_usage: Option<f64> = self
+            .storage
+            .lock()
+            .await
+            .get_value(LimitPeriod::Day, tenant_name, LLM_USAGE)
+            .await;
 
         Ok(DollarUsage {
             daily: daily_usage.unwrap_or(0.0),

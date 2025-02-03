@@ -68,16 +68,13 @@ clickhouse = { version = "0.11.6", git = "https://github.com/v3g42/clickhouse.rs
   "uuid",
 ], optional = true }
 tokio-util = { version = "0.7.11", optional = true }
-redis = { version = "0.27.2", features = [
-  "connection-manager",
-  "tokio-comp",
-], optional = true }
 async-mcp = "0.0.6"
+parking_lot = "0.12.3"
+
 [dependencies.openssl]
 version = "0.10"
 features = ["vendored"]
 
 [features]
-default = ["database", "redis"]
+default = ["database"]
 database = ["dep:openssh", "dep:clickhouse", "dep:tokio-util"]
-redis = ["dep:redis"]

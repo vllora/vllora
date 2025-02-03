@@ -8,9 +8,6 @@ rest:
 # clickhouse:
 #   url: http://localhost:8123
 
-# redis:
-#   url: redis://localhost:6379
-
 # cost_control:
 #   daily: 10
 #   monthly: 100

@@ -1,9 +1,8 @@
-use std::fmt::Display;
-
 use chrono::{Months, Utc};
-use redis::{aio::ConnectionManager, FromRedisValue, ToRedisArgs};
-
-pub mod connection_manager;
+use parking_lot::RwLock;
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 use chrono::Datelike;
 use chrono::Timelike;
@@ -27,6 +26,7 @@ pub fn get_total_key(company_id: &str, key: &str) -> String {
     format!("{company_id}:{key}:total")
 }
 
+#[derive(Debug)]
 pub enum LimitPeriod {
     Hour,
     Day,
@@ -83,40 +83,63 @@ impl LimitPeriod {
     }
 }
 
-pub async fn increment_and_get_value<T: FromRedisValue + Display + ToRedisArgs>(
-    client: &mut ConnectionManager,
-    refresh_rate: LimitPeriod,
-    identifier: &str,
-    key: &str,
-    incr_by: T,
-) -> Result<T, redis::RedisError> {
-    let key = refresh_rate.get_key(identifier, key);
-
-    let mut pipe = redis::pipe();
-    let seconds_until_eod = refresh_rate.get_seconds_until_refresh();
-
-    pipe.atomic().incr(&key, incr_by);
-
-    if let Some(expire) = seconds_until_eod {
-        pipe.expire(&key, expire).ignore();
-    }
-
-    let (current_value,): (T,) = pipe.query_async(client).await?;
-
-    Ok(current_value)
+#[derive(Default, Clone)]
+pub struct InMemoryStorage {
+    counters: Arc<RwLock<HashMap<String, AtomicU64>>>,
 }
 
-pub async fn get_value<T: FromRedisValue + std::fmt::Debug>(
-    client: &mut ConnectionManager,
-    refresh_rate: LimitPeriod,
-    identifier: &str,
-    key: &str,
-) -> Result<T, redis::RedisError> {
-    let key = refresh_rate.get_key(identifier, key);
+impl InMemoryStorage {
+    pub fn new() -> Self {
+        Self {
+            counters: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
 
-    let mut pipe = redis::pipe();
+    pub async fn increment_and_get_value(
+        &self,
+        refresh_rate: LimitPeriod,
+        identifier: &str,
+        key: &str,
+        incr_by: f64,
+    ) -> f64 {
+        let key = refresh_rate.get_key(identifier, key);
+        let mut counters = self.counters.write();
 
-    let (current_value,): (T,) = pipe.get(&key).query_async(client).await?;
+        let counter = counters
+            .entry(key.clone())
+            .or_insert_with(|| AtomicU64::new(0));
 
-    Ok(current_value)
+        // Convert f64 to bits for atomic storage
+        let current_bits = counter.load(Ordering::SeqCst);
+        let current = f64::from_bits(current_bits);
+        let new_value = current + incr_by;
+        let new_bits = new_value.to_bits();
+        counter.store(new_bits, Ordering::SeqCst);
+
+        // If there's an expiry period, spawn a task to remove the counter after that time
+        if let Some(expire_seconds) = refresh_rate.get_seconds_until_refresh() {
+            let counters: Arc<RwLock<HashMap<String, AtomicU64>>> = Arc::clone(&self.counters);
+            let key = key.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(tokio::time::Duration::from_secs(expire_seconds as u64)).await;
+                counters.write().remove(&key);
+            });
+        }
+
+        new_value
+    }
+
+    pub async fn get_value(
+        &self,
+        refresh_rate: LimitPeriod,
+        identifier: &str,
+        key: &str,
+    ) -> Option<f64> {
+        let key = refresh_rate.get_key(identifier, key);
+        let counters = self.counters.read();
+
+        counters
+            .get(&key)
+            .map(|counter| f64::from_bits(counter.load(Ordering::SeqCst)))
+    }
 }

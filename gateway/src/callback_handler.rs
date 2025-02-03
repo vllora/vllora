@@ -1,12 +1,16 @@
+use std::sync::Arc;
+
+use langdb_core::usage::InMemoryStorage;
 use langdb_core::{
-    handler::CallbackHandlerFn, model::types::ModelEventType, redis::aio::ConnectionManager,
+    handler::CallbackHandlerFn, model::types::ModelEventType,
     types::gateway::ImageGenerationModelUsage,
 };
 
 use crate::{cost::GatewayCostCalculator, usage::update_usage};
+use tokio::sync::Mutex;
 
 pub fn init_callback_handler(
-    client: ConnectionManager,
+    storage: Arc<Mutex<InMemoryStorage>>,
     calculator: GatewayCostCalculator,
 ) -> CallbackHandlerFn {
     let (tx, mut rx) = tokio::sync::broadcast::channel(100);
@@ -15,14 +19,13 @@ pub fn init_callback_handler(
 
     tokio::spawn(async move {
         loop {
-            let mut client = client.clone();
             if let Ok(model_event) = rx.recv().await {
                 tracing::debug!(target: "model_event", "Received model event: {model_event:#?}");
                 if let ModelEventType::LlmStop(finish_event) = &model_event.event.event {
                     let model_name = finish_event.model_name.clone();
                     let usage = finish_event.usage.clone();
                     let result = update_usage(
-                        &mut client,
+                        storage.clone(),
                         &calculator,
                         &model_name,
                         &model_event.model.provider_name,
@@ -42,7 +45,7 @@ pub fn init_callback_handler(
                 {
                     let model_name = finish_event.model_name.clone();
                     let result = update_usage(
-                        &mut client,
+                        storage.clone(),
                         &calculator,
                         &model_name,
                         &model_event.model.provider_name,
