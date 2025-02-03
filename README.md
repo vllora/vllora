@@ -2,6 +2,8 @@
 
 A Rust-based gateway service for interacting with various LLM providers (OpenAI, Anthropic, etc.) with unified API interface.
 
+![Model Switching](https://langdb-sample-data.s3.ap-southeast-1.amazonaws.com/assets/langdb-models.gif)
+
 ## Features
 
 - OpenAI-compatible API endpoints
