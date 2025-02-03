@@ -15,6 +15,22 @@ A Rust-based gateway service for interacting with various LLM providers (OpenAI,
 
 ### Quick Start
 
+Choose one of the following scenarios to get started:
+
+#### Direct installation
+
+1. Install using cargo:
+```bash
+RUSTFLAGS="--cfg tracing_unstable --cfg aws_sdk_unstable" cargo install --git https://github.com/langdb/ai-gateway.git
+```
+
+2. Run the server:
+```bash
+ai-gateway serve
+```
+
+#### Build from source
+
 1. Clone the repository:
 ```bash
 git clone https://github.com/langdb/ai-gateway.git
@@ -26,7 +42,7 @@ cd ai-gateway
 cargo run -- serve
 ```
 
-This will start the server on `127.0.0.1:8080` with default settings.
+Both scenarios will start the server on `127.0.0.1:8080` with default settings.
 
 ### Environment Variables
 
