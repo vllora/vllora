@@ -4,3 +4,7 @@ bootstrap
 .idea
 .env
 config.yaml
+docker/clickhouse/logs/*
+docker/clickhouse/files/*
+docker/clickhouse/user_scripts/*
+!.gitkeep
