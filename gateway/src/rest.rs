@@ -106,7 +106,7 @@ impl ApiServer {
                 self.config.rate_limit.clone(),
             )
         })
-        .bind((self.config.rest.host.as_str(), self.config.rest.port))?
+        .bind((self.config.http.host.as_str(), self.config.http.port))?
         .run()
         .map_err(ServerError::Actix);
 

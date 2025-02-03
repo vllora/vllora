@@ -81,7 +81,7 @@ cargo run -- serve --rate-hourly 1000
 cargo run -- serve --cost-daily 100.0 --cost-monthly 1000.0
 
 # Run with custom database connections
-cargo run -- serve --clickhouse-url "clickhouse://localhost:9000" --redis-url "redis://localhost:6379"
+cargo run -- serve --clickhouse-url "clickhouse://localhost:9000"
 ```
 
 #### Using Config File
@@ -170,23 +170,6 @@ ORDER BY finish_time_us DESC
 LIMIT 10;
 ```
 
-## Rate Limiting and Cost Control
-
-The gateway provides rate limiting and cost control features to help manage API usage and costs. These features require Redis for state management.
-
-### Setting up Redis
-
-1. Enable Redis by providing the Redis URL when running the server:
-```bash
-cargo run -- serve --redis-url "redis://localhost:6379"
-```
-
-You can also set the URL in your `config.yaml`:
-```yaml
-redis:
-  url: "redis://localhost:6379"
-```
-
 ### Rate Limiting
 
 Rate limiting helps prevent API abuse by limiting the number of requests within a time window. Configure rate limits using:
@@ -225,21 +208,6 @@ cost_control:
 ```
 
 When a cost limit is reached, the API will return a 429 response with a message indicating the limit has been exceeded.
-
-You can monitor current usage through Redis:
-```bash
-# Get current daily cost
-redis-cli GET "default:llm_usage:2025-01-31"
-
-# Get current monthly cost
-redis-cli GET "default:llm_usage:2025-01"
-
-# Get total cost
-redis-cli GET "default:llm_usage:total"
-
-# Get current rate limit counter
-redis-cli GET "default:api_calls:2025-01-31"
-```
 
 ## Running with Docker Compose
 
@@ -309,9 +277,9 @@ This project is released under the [Elastic License 2.0](./LICENSE.md). See the 
 
 - [x] Include License (Apache2)
 - [x] clickhouse config + traces
-- [x] Provide example docker-compose (simple / full (clickhouse + redis))
+- [x] Provide example docker-compose (simple / full (clickhouse))
 - [x] cost control
-- [x] rate limiting (redis configuration)
+- [x] rate limiting
 - [ ] cargo install / curl -sH install
 - [ ] CI/CD for ubuntu / mac silicon
 - [ ] postman 

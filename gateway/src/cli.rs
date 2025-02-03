@@ -30,10 +30,6 @@ pub struct ServeArgs {
     #[arg(long, value_name = "URL")]
     pub clickhouse_url: Option<String>,
 
-    /// Redis URL (default: redis://localhost:6379)
-    #[arg(long, value_name = "URL")]
-    pub redis_url: Option<String>,
-
     /// Daily cost limit in dollars (e.g., 100.0)
     #[arg(long, value_name = "LIMIT")]
     pub cost_daily: Option<f64>,

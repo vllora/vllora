@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct RestConfig {
+pub struct HttpConfig {
     pub host: String,
     pub port: u16,
     pub cors_allowed_origins: Vec<String>,
@@ -18,9 +18,8 @@ pub struct ClickhouseConfig {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Config {
-    pub rest: RestConfig,
+    pub http: HttpConfig,
     pub clickhouse: Option<ClickhouseConfig>,
-    pub redis: Option<RedisConfig>,
     pub cost_control: Option<CostControl>,
     pub rate_limit: Option<RateLimiting>,
 }
@@ -32,25 +31,7 @@ pub struct CostControl {
     pub total: Option<f64>,
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
-#[serde(crate = "serde", deny_unknown_fields)]
-pub struct RedisConfig {
-    #[serde(default = "default_redis_url")]
-    pub url: String,
-}
-impl Default for RedisConfig {
-    fn default() -> Self {
-        RedisConfig {
-            url: default_redis_url(),
-        }
-    }
-}
-
-fn default_redis_url() -> String {
-    std::env::var("REDIS_URL").unwrap_or("redis://localhost:6379".to_string())
-}
-
-impl Default for RestConfig {
+impl Default for HttpConfig {
     fn default() -> Self {
         Self {
             host: "127.0.0.1".to_string(),
@@ -72,24 +53,19 @@ impl Config {
         if let cli::Commands::Serve(args) = cli_opts {
             // Apply REST config overrides
             if let Some(host) = &args.host {
-                self.rest.host = host.clone();
+                self.http.host = host.clone();
             }
             if let Some(port) = args.port {
-                self.rest.port = port;
+                self.http.port = port;
             }
             if let Some(cors) = &args.cors_origins {
-                self.rest.cors_allowed_origins =
+                self.http.cors_allowed_origins =
                     cors.split(',').map(|s| s.trim().to_string()).collect();
             }
 
             // Apply Clickhouse config override
             if let Some(url) = &args.clickhouse_url {
                 self.clickhouse = Some(ClickhouseConfig { url: url.clone() });
-            }
-
-            // Apply Redis config override
-            if let Some(url) = &args.redis_url {
-                self.redis = Some(RedisConfig { url: url.clone() });
             }
 
             // Apply cost control overrides
