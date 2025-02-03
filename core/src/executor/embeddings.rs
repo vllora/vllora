@@ -6,6 +6,7 @@ use crate::error::GatewayError;
 use crate::model::types::ModelEvent;
 use crate::models::ModelDefinition;
 use crate::types::credentials::Credentials;
+use actix_web::HttpRequest;
 use async_openai::types::EmbeddingInput;
 use tracing::Span;
 
@@ -18,11 +19,15 @@ use tracing_futures::Instrument;
 
 use crate::handler::{CallbackHandlerFn, ModelEventWithDetails};
 
+use super::get_key_credentials;
+use super::ProvidersConfig;
+
 pub async fn handle_embeddings_invoke(
     mut request: CreateEmbeddingRequest,
     callback_handler: &CallbackHandlerFn,
     llm_model: &ModelDefinition,
     key_credentials: Option<&Credentials>,
+    req: HttpRequest,
 ) -> Result<async_openai::types::CreateEmbeddingResponse, GatewayError> {
     let span = Span::current();
     request.model = llm_model.inference_provider.model_name.clone();
@@ -62,12 +67,17 @@ pub async fn handle_embeddings_invoke(
         }
     });
 
-    let api_key_credentials = match key_credentials {
-        Some(Credentials::ApiKey(api_key)) => Some(api_key),
+    let providers_config = req.app_data::<ProvidersConfig>().cloned();
+    let key = match get_key_credentials(
+        key_credentials,
+        providers_config.as_ref(),
+        &llm_model.inference_provider.provider.to_string(),
+    ) {
+        Some(Credentials::ApiKey(key)) => Some(key),
         _ => None,
     };
 
-    let embed = OpenAIEmbed::new(params, api_key_credentials)?;
+    let embed = OpenAIEmbed::new(params, key.as_ref())?;
     embed
         .invoke(input, Some(tx.clone()))
         .instrument(span.clone())

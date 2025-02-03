@@ -47,6 +47,7 @@ pub async fn create_image(
         key.as_ref(),
         cost_calculator.into_inner(),
         tags,
+        req,
     )
     .instrument(span.clone())
     .await

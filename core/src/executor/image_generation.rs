@@ -20,8 +20,12 @@ use crate::{
         gateway::CostCalculator,
     },
 };
+use actix_web::HttpRequest;
 use tracing::Span;
 use tracing_futures::Instrument;
+
+use super::get_key_credentials;
+use super::ProvidersConfig;
 
 pub async fn handle_image_generation(
     mut request: CreateImageRequest,
@@ -30,11 +34,18 @@ pub async fn handle_image_generation(
     key_credentials: Option<&Credentials>,
     cost_calculator: Arc<Box<dyn CostCalculator>>,
     tags: HashMap<String, String>,
+    req: HttpRequest,
 ) -> Result<ImagesResponse, GatewayError> {
     let span = Span::current();
     request.model = llm_model.inference_provider.model_name.clone();
 
-    let engine = Provider::get_image_engine_for_model(llm_model, &request, key_credentials)?;
+    let providers_config = req.app_data::<ProvidersConfig>().cloned();
+    let key = get_key_credentials(
+        key_credentials,
+        providers_config.as_ref(),
+        &llm_model.inference_provider.provider.to_string(),
+    );
+    let engine = Provider::get_image_engine_for_model(llm_model, &request, key.as_ref())?;
 
     let api_provider_name = match &llm_model.inference_provider.provider {
         InferenceModelProvider::Proxy(provider) => provider.clone(),

@@ -17,3 +17,19 @@ http:
 #   hourly: 100
 #   daily: 1000
 #   monthly: 10000
+
+# providers:
+#   openai: 
+#     api_key: "{{ LANGDB_OPENAI_API_KEY }}"
+#   bedrock: 
+#     api_key: "{{ LANGDB_BEDROCK_API_KEY }}"
+#   gemini: 
+#     api_key: "{{ LANGDB_GEMINI_API_KEY }}"
+#   antrhopic: 
+#     api_key: "{{ LANGDB_ANTHROPIC_API_KEY }}"
+#   deepseek: 
+#     api_key: "{{ LANGDB_DEEPSEEK_API_KEY }}"
+#   togetherai: 
+#     api_key: "{{ LANGDB_TOGETHERAI_API_KEY }}"
+#   xai: 
+#     api_key: "{{ LANGDB_XAI_API_KEY }}"

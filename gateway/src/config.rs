@@ -1,6 +1,9 @@
 use crate::cli;
+use langdb_core::executor::ProvidersConfig;
 use langdb_core::handler::middleware::rate_limit::RateLimiting;
+use minijinja::Environment;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::Path;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -22,6 +25,7 @@ pub struct Config {
     pub clickhouse: Option<ClickhouseConfig>,
     pub cost_control: Option<CostControl>,
     pub rate_limit: Option<RateLimiting>,
+    pub providers: Option<ProvidersConfig>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -41,10 +45,28 @@ impl Default for HttpConfig {
     }
 }
 
+fn replace_env_vars(content: String) -> String {
+    let env = Environment::new();
+    let template = env.template_from_str(&content).unwrap();
+    let parameters = template.undeclared_variables(false);
+
+    let mut variables = HashMap::new();
+    parameters.iter().for_each(|k| {
+        if let Ok(v) = std::env::var(k) {
+            variables.insert(k, v);
+        };
+    });
+
+    template.render(variables).unwrap()
+}
+
 impl Config {
     pub fn load<P: AsRef<Path>>(config_path: P) -> Self {
-        match std::fs::File::open(config_path) {
-            Ok(f) => serde_yaml::from_reader(f).unwrap(),
+        match std::fs::read_to_string(config_path) {
+            Ok(content) => {
+                let content = replace_env_vars(content);
+                serde_yaml::from_str(&content).unwrap()
+            }
             Err(_) => Self::default(),
         }
     }

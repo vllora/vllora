@@ -30,6 +30,7 @@ use crate::config::Config;
 use crate::cost::GatewayCostCalculator;
 use crate::limit::GatewayLimitChecker;
 use crate::otel::DummyTraceWritterTransport;
+use langdb_core::executor::ProvidersConfig;
 use langdb_core::otel::database::DatabaseSpanWritter;
 use langdb_core::otel::SpanWriterTransport;
 use langdb_core::usage::InMemoryStorage;
@@ -104,6 +105,7 @@ impl ApiServer {
                 cost_calculator.clone(),
                 limit_checker.clone(),
                 self.config.rate_limit.clone(),
+                self.config.providers.clone(),
             )
         })
         .bind((self.config.http.host.as_str(), self.config.http.port))?
@@ -140,6 +142,7 @@ impl ApiServer {
         cost_calculator: GatewayCostCalculator,
         limit_checker: Option<LimitCheckWrapper>,
         rate_limit: Option<RateLimiting>,
+        providers: Option<ProvidersConfig>,
     ) -> App<
         impl ServiceFactory<
             ServiceRequest,
@@ -154,6 +157,10 @@ impl ApiServer {
         let mut service = Self::attach_gateway_routes(web::scope("/v1"));
         if let Some(in_memory_storage) = in_memory_storage {
             service = service.app_data(in_memory_storage);
+        }
+
+        if let Some(providers) = &providers {
+            service = service.app_data(providers.clone());
         }
 
         app.wrap(Logger::default())

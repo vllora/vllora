@@ -4,6 +4,7 @@ pub mod stream_executor;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::executor::ProvidersConfig;
 use crate::llm_gateway::message_mapper::MessageMapper;
 use crate::llm_gateway::provider::Provider;
 use crate::model::mcp::get_mcp_tools;
@@ -35,6 +36,8 @@ use crate::handler::find_model_by_full_name;
 use crate::handler::AvailableModels;
 use crate::handler::{CallbackHandlerFn, ModelEventWithDetails};
 use crate::GatewayApiError;
+
+use super::get_key_credentials;
 
 pub async fn execute(
     request: ChatCompletionRequestWithTools,
@@ -100,9 +103,13 @@ pub async fn execute(
         .map_or(Uuid::new_v4().to_string(), |v| v.clone());
 
     let key_credentials = req.extensions().get::<Credentials>().cloned();
-
-    let engine =
-        Provider::get_completion_engine_for_model(&llm_model, &request, key_credentials.clone())?;
+    let providers_config = req.app_data::<ProvidersConfig>().cloned();
+    let key = get_key_credentials(
+        key_credentials.as_ref(),
+        providers_config.as_ref(),
+        &llm_model.inference_provider.provider.to_string(),
+    );
+    let engine = Provider::get_completion_engine_for_model(&llm_model, &request, key.clone())?;
 
     let tools = ModelTools(request_tools);
 
@@ -117,7 +124,7 @@ pub async fn execute(
         tools: tools.clone(),
         model_type: ModelType::Completions,
         response_schema: None,
-        credentials: key_credentials,
+        credentials: key,
     };
 
     let completion_model_definition = CompletionModelDefinition {

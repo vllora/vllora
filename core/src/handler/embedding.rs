@@ -42,6 +42,7 @@ pub async fn embeddings_handler(
         callback_handler.get_ref(),
         &llm_model,
         key_credentials.as_ref(),
+        req,
     )
     .instrument(span)
     .await?;

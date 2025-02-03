@@ -1,7 +1,7 @@
 use clap::Parser;
 use config::Config;
+use http::ApiServer;
 use langdb_core::error::GatewayError;
-use rest::ApiServer;
 use run::models::load_models;
 use thiserror::Error;
 
@@ -9,9 +9,9 @@ mod callback_handler;
 mod cli;
 mod config;
 mod cost;
+mod http;
 mod limit;
 mod otel;
-mod rest;
 mod run;
 mod tracing;
 mod usage;
@@ -29,11 +29,12 @@ pub enum CliError {
     #[error(transparent)]
     JsonError(#[from] serde_json::Error),
     #[error(transparent)]
-    ServerError(#[from] rest::ServerError),
+    ServerError(#[from] http::ServerError),
 }
 
 #[actix_web::main]
 async fn main() -> Result<(), CliError> {
+    dotenv::dotenv().ok();
     tracing::init_tracing();
     std::env::set_var("RUST_BACKTRACE", "1");
 

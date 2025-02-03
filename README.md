@@ -46,20 +46,17 @@ Both scenarios will start the server on `127.0.0.1:8080` with default settings.
 
 ### Environment Variables
 
-Set the API keys for the providers you plan to use:
-```bash
+Create a `.env` file in the project root directory and add the API keys for the providers you plan to use:
+```
 # API Keys for different providers (set the ones you plan to use)
-export LANGDB_OPENAI_API_KEY=your-openai-key-here
-export LANGDB_BEDROCK_API_KEY=your-bedrock-key-here
-export LANGDB_ANTHROPIC_API_KEY=your-anthropic-key-here
-export LANGDB_GEMINI_API_KEY=your-gemini-key-here
-export LANGDB_TOGETHERAI_API_KEY=your-togetherai-key-here
-export LANGDB_XAI_API_KEY=your-xai-key-here
-export LANGDB_DEEPSEEK_API_KEY=your-deepseek-key-here
+LANGDB_OPENAI_API_KEY=your-openai-key-here
+# Other providers
 
 # Optional: Set log level (default: info)
-export RUST_LOG=debug
+RUST_LOG=debug
 ```
+
+The service will automatically load these environment variables from the `.env` file when starting up.
 
 ### Running with Options
 
