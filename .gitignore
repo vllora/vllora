@@ -9,3 +9,4 @@ docker/clickhouse/files/*
 docker/clickhouse/user_scripts/*
 !.gitkeep
 tui_debug.log
+.DS_Store

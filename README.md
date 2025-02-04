@@ -1,12 +1,10 @@
 <div align="center">
 
 
-<img src="./assets/images/logos/icon_red.png" width="25px" alt="LangDB Logo">
+<img src="https://raw.githubusercontent.com/langdb/ai-gateway/main/assets/images/logos/icon_red.png" width="25px" alt="LangDB Logo">
 
 ## AI Gateway
 #### OpenSource Enterprise AI Gateway built in Rust
-
-<img src="assets/langdb-models.gif" width="700px" alt="LangDB AI Gateway Demo showing LLM Switching">
 
 [![GitHub stars](https://img.shields.io/github/stars/langdb/ai-gateway?style=social)](https://github.com/langdb/ai-gateway)
 [![Slack](https://img.shields.io/badge/Join-Slack-brightgreen?logo=slack)](https://join.slack.com/t/langdbcommunity/shared_invite/zt-2haf5kj6a-d7NX6TFJUPX45w~Ag4dzlg)
