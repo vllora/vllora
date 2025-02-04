@@ -118,21 +118,24 @@ pub async fn init_completion_model_instance(
             execution_options,
             credentials,
             output_schema,
-        } => Ok(Box::new(TracedModel {
-            inner: OpenAISpecModel::new(
-                params.clone(),
-                credentials.as_ref(),
-                execution_options.clone(),
-                definition.prompt.clone(),
-                tools,
-                output_schema.clone(),
-                endpoint,
-                provider_name.unwrap(),
-            )
-            .map_err(|_| ToolError::CredentialsError("Langdb Open".into()))?,
-            definition,
-            cost_calculator: cost_calculator.clone(),
-        })),
+        } => {
+            let provider_name = provider_name.expect("provider_name is expected  here");
+            Ok(Box::new(TracedModel {
+                inner: OpenAISpecModel::new(
+                    params.clone(),
+                    credentials.as_ref(),
+                    execution_options.clone(),
+                    definition.prompt.clone(),
+                    tools,
+                    output_schema.clone(),
+                    endpoint,
+                    provider_name,
+                )
+                .map_err(|_| ToolError::CredentialsError(provider_name.into()))?,
+                definition,
+                cost_calculator: cost_calculator.clone(),
+            }))
+        }
         CompletionEngineParams::Anthropic {
             credentials,
             execution_options,

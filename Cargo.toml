@@ -1,3 +1,8 @@
 [workspace]
 resolver = "2"
-members = ["gateway", "core"]
+members = ["gateway", "core", "udfs"]
+default-members = ["gateway", "udfs"]
+
+[workspace.dependencies]
+async-openai = "0.27.2"
+thiserror = "1.0.59"

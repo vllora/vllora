@@ -1,0 +1,34 @@
+<functions>
+  <function>
+    <type>executable</type>
+    <name>ai_completions</name>
+    <argument>
+      <type>String</type>
+      <name>input</name>
+    </argument>
+    <parameter>
+      <type>String</type>
+      <name>config</name>
+    </parameter>
+    <format>JSONCompactEachRow</format>
+    <command>langdb_udf completions {config:String}</command>
+    <command_read_timeout>1000000</command_read_timeout>
+    <return_type>String</return_type>
+    <stderr_reaction>throw</stderr_reaction>
+    <check_exit_code>1</check_exit_code>
+  </function>
+  <function>
+    <type>executable</type>
+    <name>ai_embed</name>
+    <argument>
+      <type>String</type>
+      <name>input</name>
+    </argument>
+    <format>JSONCompactEachRow</format>
+    <command>langdb_udf embed {config:String}</command>
+    <command_read_timeout>1000000</command_read_timeout>
+    <return_type>String</return_type>
+    <stderr_reaction>throw</stderr_reaction>
+    <check_exit_code>1</check_exit_code>
+  </function>
+</functions>

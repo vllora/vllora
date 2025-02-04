@@ -1,0 +1,15 @@
+# Ignore everything first
+*
+
+# Then explicitly allow only the release binary
+!target/x86_64-unknown-linux-gnu/release/ai-gateway
+
+# Explicitly ignore source code and config files (for clarity)
+src/
+core/
+gateway/
+udfs/
+config.yaml
+Cargo.toml
+Cargo.lock
+.git/ 

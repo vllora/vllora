@@ -2,7 +2,7 @@
 name = "ai-gateway"
 version = "0.1.0"
 edition = "2021"
-
+default-run = "ai-gateway"
 [[bin]]
 name = "ai-gateway"
 path = "src/main.rs"

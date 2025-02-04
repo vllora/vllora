@@ -22,6 +22,22 @@ A Rust-based gateway service for interacting with various LLM providers (OpenAI,
 
 Choose one of the following scenarios to get started:
 
+#### Using Docker
+
+```bash
+# Pull and run the container
+docker run -it \
+    -p 8080:8080 \
+    -e OPENAI_API_KEY=$OPENAI_API_KEY \
+    -e RUST_LOG=info \
+    -v $(pwd)/config.yaml:/app/config.yaml \
+    langdb/ai-gateway serve
+```
+Available commands:
+```bash
+docker run -it langdb/ai-gateway 
+```
+
 #### Direct installation
 
 1. Install using cargo:

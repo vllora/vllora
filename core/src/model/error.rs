@@ -49,7 +49,7 @@ pub enum ModelError {
 
 #[derive(Error, Debug)]
 pub enum ToolError {
-    #[error("Invalid {0} Credentials")]
+    #[error(" Credentials for '{0}' are invalid or missing")]
     CredentialsError(String),
 }
 

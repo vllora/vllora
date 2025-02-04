@@ -1,15 +1,36 @@
-version: '3.8'
+version: "3.8"
 services:
   clickhouse:
     image: clickhouse/clickhouse-server:latest
     volumes:
-     - ./docker/clickhouse/server/config.d:/etc/clickhouse-server/config.d
+      - ./docker/clickhouse/server/config.d:/etc/clickhouse-server/config.d
+      - ./docker/clickhouse/user_scripts:/var/lib/clickhouse_scripts/user_scripts
+      - ./docker/clickhouse/logs:/var/lib/clickhouse/logs
     ports:
-      - '8123:8123'
-      - '9000:9000'
+      - "8123:8123"
+      - "9000:9000"
+    environment:
+      - LANGDB_API_KEY=${LANGDB_STAGING_KEY}
+      - LANGDB_PROJECT_ID=${LANGDB_PROJECT_ID}
+      # - LANGDB_STAGING_KEY=${LANGDB_STAGING_KEY}
     ulimits:
       nofile:
         soft: 262144
         hard: 262144
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    container_name: "langdb"
+  # Uncomment for using redis
+  redis:
+    image: redis:latest
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/root/redis
+    environment:
+      - REDIS_PASSWORD=langdb_password
+      - REDIS_PORT=6379
+      - REDIS_DATABASES=16
+volumes:
+  redis_data:
