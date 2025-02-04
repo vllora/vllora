@@ -67,13 +67,22 @@ where
                 _ => "".to_string(),
             };
 
-            tracing::info!(
-                "{} \"{}\" {} {}ms",
-                model_log,
-                format!("{} {} HTTP/1.1", method, uri),
-                status,
-                elapsed.as_millis(),
-            );
+            if status >= 400 {
+                tracing::error!(
+                    "{} {} {}ms",
+                    format!("{} {} HTTP/1.1", method, uri),
+                    status,
+                    elapsed.as_millis(),
+                );
+            } else {
+                tracing::info!(
+                    "{} \"{}\" {} {}ms",
+                    model_log,
+                    format!("{} {} HTTP/1.1", method, uri),
+                    status,
+                    elapsed.as_millis(),
+                );
+            }
 
             Ok(res)
         })

@@ -14,7 +14,7 @@ pub fn init_tracing() {
 
     // tracing syntax ->
     let builder = tracing_subscriber::fmt::layer()
-        .pretty()
+        .compact()
         .with_line_number(false)
         .with_file(false)
         .with_thread_ids(false)
