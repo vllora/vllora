@@ -1,12 +1,23 @@
-use crate::CliError;
 use directories::BaseDirs;
 use langdb_core::models::ModelDefinition;
 use reqwest;
 use serde_yaml;
 use std::fs;
 
+#[derive(Debug, thiserror::Error)]
+pub enum ModelsLoadError {
+    #[error("Failed to fetch models: {0}")]
+    FetchError(#[from] reqwest::Error),
+    #[error("Failed to store models: {0}")]
+    StoreError(#[from] std::io::Error),
+    #[error("Failed to parse models config: {0}")]
+    ParseError(#[from] serde_yaml::Error),
+    #[error("Could not determine home directory")]
+    NoHomeDir,
+}
+
 /// Load models configuration from the filesystem, fetching it first if it doesn't exist
-pub async fn load_models(force_update: bool) -> Result<Vec<ModelDefinition>, CliError> {
+pub async fn load_models(force_update: bool) -> Result<Vec<ModelDefinition>, ModelsLoadError> {
     let models_yaml = if force_update {
         // Force fetch and store new models
         fetch_and_store_models().await?
@@ -17,9 +28,9 @@ pub async fn load_models(force_update: bool) -> Result<Vec<ModelDefinition>, Cli
     Ok(models)
 }
 
-pub async fn fetch_and_store_models() -> Result<String, Box<dyn std::error::Error>> {
+pub async fn fetch_and_store_models() -> Result<String, ModelsLoadError> {
     // Create .langdb directory in home folder
-    let base_dirs = BaseDirs::new().ok_or("Could not determine home directory")?;
+    let base_dirs = BaseDirs::new().ok_or(ModelsLoadError::NoHomeDir)?;
     let langdb_dir = base_dirs.home_dir().join(".langdb");
     fs::create_dir_all(&langdb_dir)?;
 

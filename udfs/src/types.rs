@@ -19,24 +19,7 @@ pub struct CompletionConfig {
     pub model_settings: ModelSettings,
 }
 
-impl Default for ModelSettings {
-    fn default() -> Self {
-        Self {
-            model: Default::default(),
-            frequency_penalty: Default::default(),
-            logit_bias: Default::default(),
-            logprobs: Default::default(),
-            top_logprobs: Default::default(),
-            max_tokens: Default::default(),
-            n: Default::default(),
-            presence_penalty: Default::default(),
-            response_format: Default::default(),
-            seed: Default::default(),
-            stop: Default::default(),
-        }
-    }
-}
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct ModelSettings {
     /// The model to use for completion
     #[serde(default = "default_model")]
@@ -121,9 +104,7 @@ impl Default for GatewayConfig {
             api_key: std::env::var("LANGDB_API_KEY")
                 .unwrap_or_else(|_| "".to_string())
                 .into(),
-            project_id: std::env::var("LANGDB_PROJECT_ID")
-                .unwrap_or_else(|_| "".to_string())
-                .into(),
+            project_id: std::env::var("LANGDB_PROJECT_ID").unwrap_or_else(|_| "".to_string()),
         }
     }
 }

@@ -1,8 +1,8 @@
 use clap::Parser;
-use config::Config;
+use config::{Config, ConfigError};
 use http::ApiServer;
 use langdb_core::error::GatewayError;
-use run::models::load_models;
+use run::models::{load_models, ModelsLoadError};
 use thiserror::Error;
 
 mod callback_handler;
@@ -21,8 +21,6 @@ pub enum CliError {
     #[error(transparent)]
     GatewayError(#[from] GatewayError),
     #[error(transparent)]
-    ConfigError(#[from] Box<dyn std::error::Error>),
-    #[error(transparent)]
     IoError(#[from] std::io::Error),
     #[error(transparent)]
     YamlError(#[from] serde_yaml::Error),
@@ -30,6 +28,10 @@ pub enum CliError {
     JsonError(#[from] serde_json::Error),
     #[error(transparent)]
     ServerError(#[from] http::ServerError),
+    #[error(transparent)]
+    ConfigError(#[from] ConfigError),
+    #[error(transparent)]
+    ModelsError(#[from] ModelsLoadError),
 }
 
 #[actix_web::main]
@@ -39,7 +41,7 @@ async fn main() -> Result<(), CliError> {
     std::env::set_var("RUST_BACKTRACE", "1");
 
     let cli = cli::Cli::parse();
-    let config = Config::load(&cli.config);
+    let config = Config::load(&cli.config)?;
 
     match cli
         .command

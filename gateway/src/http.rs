@@ -48,6 +48,8 @@ pub enum ServerError {
     Actix(#[from] std::io::Error),
     #[error(transparent)]
     Tonic(#[from] tonic::transport::Error),
+    #[error(transparent)]
+    AddrParseError(#[from] std::net::AddrParseError),
 }
 
 #[derive(Clone, Debug)]
@@ -124,7 +126,7 @@ impl ApiServer {
             TraceServiceServer::new(TraceServiceImpl::new(Arc::new(TraceMap::new()), writer));
         let tonic_server = tonic::transport::Server::builder()
             .add_service(trace_service)
-            .serve_with_shutdown("[::]:4317".parse().unwrap(), async {
+            .serve_with_shutdown("[::]:4317".parse()?, async {
                 signal::ctrl_c().await.expect("failed to listen for ctrl+c");
             });
 

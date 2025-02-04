@@ -91,7 +91,7 @@ async fn main() -> Result<(), InvokeError> {
     // Wrap stdout in a BufWriter to make it cloneable
     let writer = tokio::io::BufWriter::new(stdout);
 
-    let res = execute_udf(&udf_str, reader, writer).await;
+    let res = execute_udf(udf_str, reader, writer).await;
     if let Err(e) = res {
         stderr.write_all(format!("{e}").as_bytes()).await?;
         stderr.flush().await?;

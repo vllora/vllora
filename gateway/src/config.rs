@@ -5,6 +5,15 @@ use minijinja::Environment;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum ConfigError {
+    #[error("Failed to parse config file. Error: {0}")]
+    ParseError(#[from] serde_yaml::Error),
+    #[error("Failed to read template in config. Error: {0}")]
+    ReadError(#[from] minijinja::Error),
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct HttpConfig {
@@ -45,9 +54,9 @@ impl Default for HttpConfig {
     }
 }
 
-fn replace_env_vars(content: String) -> String {
+fn replace_env_vars(content: String) -> Result<String, ConfigError> {
     let env = Environment::new();
-    let template = env.template_from_str(&content).unwrap();
+    let template = env.template_from_str(&content)?;
     let parameters = template.undeclared_variables(false);
 
     let mut variables = HashMap::new();
@@ -57,17 +66,17 @@ fn replace_env_vars(content: String) -> String {
         };
     });
 
-    template.render(variables).unwrap()
+    Ok(template.render(variables)?)
 }
 
 impl Config {
-    pub fn load<P: AsRef<Path>>(config_path: P) -> Self {
+    pub fn load<P: AsRef<Path>>(config_path: P) -> Result<Self, ConfigError> {
         match std::fs::read_to_string(config_path) {
             Ok(content) => {
-                let content = replace_env_vars(content);
-                serde_yaml::from_str(&content).unwrap()
+                let content = replace_env_vars(content)?;
+                Ok(serde_yaml::from_str(&content)?)
             }
-            Err(_) => Self::default(),
+            Err(_) => Ok(Self::default()),
         }
     }
 
