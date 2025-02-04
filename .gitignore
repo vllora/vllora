@@ -8,3 +8,4 @@ docker/clickhouse/logs/*
 docker/clickhouse/files/*
 docker/clickhouse/user_scripts/*
 !.gitkeep
+tui_debug.log
