@@ -57,7 +57,6 @@ async fn main() -> Result<(), CliError> {
     std::env::set_var("RUST_BACKTRACE", "1");
 
     let cli = cli::Cli::parse();
-    let config = Config::load(&cli.config)?;
 
     match cli
         .command
@@ -82,6 +81,7 @@ async fn main() -> Result<(), CliError> {
                 let (log_sender, log_receiver) = tokio::sync::mpsc::channel(100);
                 tracing::init_tui_tracing(log_sender);
 
+                let config = Config::load(&cli.config)?;
                 let models = load_models(false).await?;
                 let config = config.apply_cli_overrides(&cli::Commands::Serve(serve_args));
 
@@ -132,6 +132,7 @@ async fn main() -> Result<(), CliError> {
                 }
             } else {
                 tracing::init_tracing();
+                let config = Config::load(&cli.config)?;
                 let config = config.apply_cli_overrides(&cli::Commands::Serve(serve_args));
                 let api_server = ApiServer::new(config);
                 let models = load_models(false).await?;
