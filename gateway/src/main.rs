@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use clap::Parser;
 use config::{Config, ConfigError};
@@ -78,6 +78,11 @@ async fn main() -> Result<(), CliError> {
 
             let storage = Arc::new(Mutex::new(InMemoryStorage::new()));
             let storage_clone = storage.clone();
+            let counters = Arc::new(RwLock::new(Counters::default()));
+            let counters_clone = counters.clone();
+            let mut counters_handle =
+                tokio::spawn(async move { Tui::spawn_counter_loop(storage, counters).await });
+
             let mut server_handle = tokio::spawn(async move {
                 match api_server.start(models, Some(storage_clone)).await {
                     Ok(server) => server.await,
@@ -88,11 +93,17 @@ async fn main() -> Result<(), CliError> {
             let mut tui_handle: tokio::task::JoinHandle<Result<(), CliError>> =
                 tokio::spawn(async move {
                     let mut tui = Tui::new(log_receiver)?;
-                    tui.run(storage)?;
+                    tui.run(counters_clone)?;
                     Ok::<(), CliError>(())
                 });
 
             tokio::select! {
+                counter_result = &mut counters_handle => {
+                    if let Err(e) = counter_result {
+                            eprintln!("{e}");
+                    }
+                    counters_handle.abort();
+                }
                 tui_result = &mut tui_handle => {
                     if let Ok(result) = tui_result {
                         if let Err(e) = result {

@@ -77,8 +77,45 @@ impl Tui {
             log_receiver,
         })
     }
+    pub async fn spawn_counter_loop(
+        storage: Arc<Mutex<InMemoryStorage>>,
+        counters: Arc<RwLock<Counters>>,
+    ) -> io::Result<()> {
+        let mut debug_file = OpenOptions::new().append(true).open("tui_debug.log")?;
 
-    pub fn run(&mut self, storage: Arc<Mutex<InMemoryStorage>>) -> io::Result<()> {
+        writeln!(debug_file, "Spawn loop starting...")?;
+
+        loop {
+            if let Ok(storage) = storage.try_lock() {
+                let total = storage
+                    .get_value(LimitPeriod::Total, "total", "tokens")
+                    .await
+                    .unwrap_or(0.0);
+                let prompt = storage
+                    .get_value(LimitPeriod::Total, "total", "prompt_tokens")
+                    .await
+                    .unwrap_or(0.0);
+                let completion = storage
+                    .get_value(LimitPeriod::Total, "total", "completion_tokens")
+                    .await
+                    .unwrap_or(0.0);
+
+                let mut counters = counters.write().unwrap();
+                counters.total = total;
+                counters.prompt = prompt;
+                counters.completion = completion;
+            } else {
+                writeln!(debug_file, "Cannot get storage...").unwrap();
+            }
+            if let Err(e) = writeln!(debug_file, "Spawn loop...") {
+                eprint!("{e}");
+                std::process::exit(1);
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    }
+
+    pub fn run(&mut self, counters: Arc<RwLock<Counters>>) -> io::Result<()> {
         let tick_rate = Duration::from_millis(200);
         let mut last_tick = Instant::now();
         let start_time = Instant::now();
@@ -89,34 +126,6 @@ impl Tui {
             .open("tui_debug.log")?;
 
         writeln!(debug_file, "TUI run starting...")?;
-        let counters = Arc::new(RwLock::new(Counters::default()));
-        // Spawn counter update task
-        let storage_clone = storage.clone();
-        let counters_clone = counters.clone();
-        tokio::spawn(async move {
-            loop {
-                if let Ok(storage) = storage_clone.try_lock() {
-                    let total = storage
-                        .get_value(LimitPeriod::Total, "total", "tokens")
-                        .await
-                        .unwrap_or(0.0);
-                    let prompt = storage
-                        .get_value(LimitPeriod::Total, "total", "prompt_tokens")
-                        .await
-                        .unwrap_or(0.0);
-                    let completion = storage
-                        .get_value(LimitPeriod::Total, "total", "completion_tokens")
-                        .await
-                        .unwrap_or(0.0);
-
-                    let mut counters = counters_clone.write().unwrap();
-                    counters.total = total;
-                    counters.prompt = prompt;
-                    counters.completion = completion;
-                }
-                tokio::time::sleep(Duration::from_millis(50)).await;
-            }
-        });
 
         loop {
             // Update uptime first
