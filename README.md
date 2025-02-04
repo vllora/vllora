@@ -40,19 +40,44 @@ A Rust-based gateway service for interacting with various LLM providers (OpenAI,
 
 Choose one of the following scenarios to get started:
 
-##### Environment Variables
+#### Configuration
 
-Create a `.env` file in the project root directory and add the API keys for the providers you plan to use:
+You can configure the API keys and other settings in two ways:
+
+##### 1. Using config.yaml
+
+Create a `config.yaml` file (or copy from `config.sample.yaml`):
+```yaml
+http:
+  host: "0.0.0.0"
+  port: 8080
+
+providers:
+  openai: 
+    api_key: "your-openai-key-here"
+  anthropic: 
+    api_key: "your-anthropic-key-here"
+  # Add other providers as needed
 ```
-# API Keys for different providers (set the ones you plan to use)
+
+##### 2. Using Environment Variables
+
+Alternatively, create a `.env` file:
+```bash
+# API Keys for different providers
 LANGDB_OPENAI_API_KEY=your-openai-key-here
-# Other providers
+LANGDB_ANTHROPIC_API_KEY=your-anthropic-key-here
+LANGDB_GEMINI_API_KEY=your-gemini-key-here
+LANGDB_BEDROCK_API_KEY=your-bedrock-key-here
+LANGDB_DEEPSEEK_API_KEY=your-deepseek-key-here
+LANGDB_TOGETHERAI_API_KEY=your-togetherai-key-here
+LANGDB_XAI_API_KEY=your-xai-key-here
 
 # Optional: Set log level (default: info)
 RUST_LOG=debug
 ```
 
-The service will automatically load these environment variables from the `.env` file when starting up.
+The service will automatically load configuration from both sources, with environment variables taking precedence over config file values.
 
 ### Using Docker
 
@@ -60,7 +85,7 @@ The service will automatically load these environment variables from the `.env` 
 # Pull and run the container
 docker run -it \
     -p 8080:8080 \
-    -e OPENAI_API_KEY=$OPENAI_API_KEY \
+    -e LANGDB_OPENAI_API_KEY=$OPENAI_API_KEY \
     -e RUST_LOG=info \
     -v $(pwd)/config.yaml:/app/config.yaml \
     langdb/ai-gateway serve
