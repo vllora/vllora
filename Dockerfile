@@ -1,6 +1,12 @@
 # Use debian:bullseye-slim as base image since it has glibc 2.31
 FROM --platform=linux/amd64 debian:bullseye-slim
 
+# Install required packages
+RUN apt-get update && apt-get install -y \
+    curl \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 # Create a non-root user to run the application
 RUN groupadd -r aigateway && useradd -r -g aigateway aigateway
 
