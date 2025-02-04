@@ -6,6 +6,8 @@
 ## AI Gateway
 #### OpenSource Enterprise AI Gateway built in Rust
 
+<img src="assets/langdb.gif" width="700px" alt="LangDB AI Gateway Demo showing LLM Switching">
+
 [![GitHub stars](https://img.shields.io/github/stars/langdb/ai-gateway?style=social)](https://github.com/langdb/ai-gateway)
 [![Slack](https://img.shields.io/badge/Join-Slack-brightgreen?logo=slack)](https://join.slack.com/t/langdbcommunity/shared_invite/zt-2haf5kj6a-d7NX6TFJUPX45w~Ag4dzlg)
 [![Documentation](https://img.shields.io/badge/docs-langdb.ai-blue)](https://docs.langdb.ai)
@@ -67,6 +69,7 @@ export RUSTFLAGS="--cfg tracing_unstable --cfg aws_sdk_unstable"
 
 cargo install ai-gateway
 
+export LANGDB_OPENAI_API_KEY=your-openai-key-here
 ai-gateway serve
 ```
 
