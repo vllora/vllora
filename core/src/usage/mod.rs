@@ -142,21 +142,4 @@ impl InMemoryStorage {
             .get(&key)
             .map(|counter| f64::from_bits(counter.load(Ordering::SeqCst)))
     }
-
-    pub fn get_counters(&self) -> (f64, f64, f64) {
-        let counters = self.counters.read();
-        let total = counters
-            .get("total:tokens:total")
-            .map(|c| f64::from_bits(c.load(Ordering::SeqCst)))
-            .unwrap_or(0.0);
-        let prompt = counters
-            .get("total:prompt_tokens:total")
-            .map(|c| f64::from_bits(c.load(Ordering::SeqCst)))
-            .unwrap_or(0.0);
-        let completion = counters
-            .get("total:completion_tokens:total")
-            .map(|c| f64::from_bits(c.load(Ordering::SeqCst)))
-            .unwrap_or(0.0);
-        (total, prompt, completion)
-    }
 }
