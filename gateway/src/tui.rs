@@ -5,15 +5,12 @@ use crossterm::{
 };
 use ratatui::{
     layout::{Constraint, Direction, Layout},
-    style::{Color, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
     Frame, Terminal,
 };
 use std::{
     io::{self, stdout},
-    sync::mpsc::channel,
-    thread,
     time::{Duration, Instant},
 };
 use tokio::sync::mpsc::Receiver;
@@ -127,33 +124,6 @@ impl Tui {
                 last_tick = Instant::now();
             }
         }
-    }
-
-    fn ui(&self, f: &mut Frame) {
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Length(3), Constraint::Min(0)].as_ref())
-            .split(f.size());
-
-        // Stats section
-        let stats = format!(
-            "Requests: {} | Active Connections: {} | Uptime: {:?}",
-            self.state.stats.requests, self.state.stats.active_connections, self.state.stats.uptime
-        );
-        let stats_widget =
-            Paragraph::new(stats).block(Block::default().borders(Borders::ALL).title("Stats"));
-        f.render_widget(stats_widget, chunks[0]);
-
-        // Logs section
-        let logs: Vec<Line> = self
-            .state
-            .logs
-            .iter()
-            .map(|log| Line::from(vec![Span::raw(log)]))
-            .collect();
-        let logs_widget =
-            Paragraph::new(logs).block(Block::default().borders(Borders::ALL).title("Logs"));
-        f.render_widget(logs_widget, chunks[1]);
     }
 }
 

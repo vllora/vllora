@@ -65,15 +65,10 @@ impl ApiServer {
     pub async fn start(
         self,
         models: Vec<ModelDefinition>,
+        storage: Option<Arc<Mutex<InMemoryStorage>>>,
     ) -> Result<impl Future<Output = Result<(), ServerError>>, ServerError> {
         let trace_senders = Arc::new(TraceMap::new());
         let trace_senders_inner = Arc::clone(&trace_senders);
-
-        let storage = if self.config.rate_limit.is_some() {
-            Some(Arc::new(Mutex::new(InMemoryStorage::new())))
-        } else {
-            None
-        };
 
         let cost_calculator = GatewayCostCalculator::new(models.clone());
         let callback = if let Some(storage) = &storage {

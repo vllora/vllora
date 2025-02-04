@@ -1,7 +1,11 @@
+use std::sync::Arc;
+
 use clap::Parser;
 use config::{Config, ConfigError};
 use http::ApiServer;
-use langdb_core::{error::GatewayError, model::image_generation::openai::ApiError};
+use langdb_core::{
+    error::GatewayError, model::image_generation::openai::ApiError, usage::InMemoryStorage,
+};
 use run::models::{load_models, ModelsLoadError};
 use thiserror::Error;
 
@@ -17,6 +21,7 @@ mod tracing;
 mod tui;
 mod usage;
 use ::tracing::info;
+use tokio::sync::Mutex;
 use tui::Tui;
 
 #[derive(Error, Debug)]
@@ -73,29 +78,36 @@ async fn main() -> Result<(), CliError> {
             let api_server = ApiServer::new(config);
             info!("Starting server...");
 
+            let storage = Arc::new(Mutex::new(InMemoryStorage::new()));
+            let storage_clone = storage.clone();
             let mut server_handle = tokio::spawn(async move {
-                match api_server.start(models).await {
+                match api_server.start(models, Some(storage_clone)).await {
                     Ok(server) => server.await,
                     Err(e) => Err(e),
                 }
             });
 
-            let mut tui_handle = tokio::spawn(async move {
-                let mut tui = Tui::new(log_receiver)?;
-                tui.run()?;
-                Ok::<(), CliError>(())
-            });
+            let mut tui_handle: tokio::task::JoinHandle<Result<(), CliError>> =
+                tokio::spawn(async move {
+                    let mut tui = Tui::new(log_receiver)?;
+                    tui.run()?;
+                    Ok::<(), CliError>(())
+                });
 
             tokio::select! {
                 tui_result = &mut tui_handle => {
                     if let Ok(result) = tui_result {
-                        result?;
+                        if let Err(e) = result {
+                            eprintln!("{e}");
+                        }
                     }
                     server_handle.abort();
                 }
                 server_result = &mut server_handle => {
                     if let Ok(result) = server_result {
-                        result?;
+                        if let Err(e) = result {
+                            eprintln!("{e}");
+                        }
                     }
                     tui_handle.abort();
                 }

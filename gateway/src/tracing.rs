@@ -77,12 +77,6 @@ pub fn init_tui_tracing(sender: Sender<String>) {
                 .with_level(false),
         )
         .init();
-
-    // Initial log not needed anymore
-    // let sender = sender.clone();
-    // tokio::spawn(async move {
-    //     sender.send("Tracing initialized".to_string()).await.ok();
-    // });
 }
 
 struct LogWriter {
