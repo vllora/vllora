@@ -57,13 +57,19 @@ pub async fn embeddings_handler(
         })
         .collect();
 
-    Ok(HttpResponse::Ok().json(CreateEmbeddingResponse {
-        object: "list".into(),
-        data,
-        model: llm_model.model.clone(),
-        usage: EmbeddingUsage {
-            prompt_tokens: result.usage.prompt_tokens,
-            total_tokens: result.usage.total_tokens,
-        },
-    }))
+    Ok(HttpResponse::Ok()
+        .append_header(("X-Model-Name", llm_model.model.clone()))
+        .append_header((
+            "X-Provider-Name",
+            llm_model.inference_provider.provider.to_string(),
+        ))
+        .json(CreateEmbeddingResponse {
+            object: "list".into(),
+            data,
+            model: llm_model.model.clone(),
+            usage: EmbeddingUsage {
+                prompt_tokens: result.usage.prompt_tokens,
+                total_tokens: result.usage.total_tokens,
+            },
+        }))
 }
