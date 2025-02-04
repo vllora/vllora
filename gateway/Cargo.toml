@@ -1,6 +1,14 @@
 [package]
 name = "ai-gateway"
-version = "0.1.0"
+version = "0.0.2"
+authors = ["LangDB Team<api@langdb.ai>"]
+description = "AI gateway for managing and routing LLM requests - Govern, Secure, and Optimize your AI Traffic."
+license = "Apache-2.0"
+repository = "https://github.com/langdb/ai-gateway"
+documentation = "https://docs.langdb.ai"
+readme = "../README.md"
+keywords = ["llm", "openai", "anthropic", "gemini", "mcp"]
+categories = ["web-programming", "network-programming"]
 edition = "2021"
 default-run = "ai-gateway"
 [[bin]]
@@ -8,7 +16,7 @@ name = "ai-gateway"
 path = "src/main.rs"
 
 [dependencies]
-langdb_core = { path = "../core" }
+langdb_core = { path = "../core", version = "0.0.2" }
 tokio = { version = "1.37.0", features = ["sync"] }
 tokio-stream = { version = "0.1.15", features = ["io-util"] }
 tracing-futures = { version = "0.2", features = ["futures-03"] }

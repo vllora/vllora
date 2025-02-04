@@ -97,15 +97,15 @@ LangDB AI Gateway currently supports the following LLM providers. Find all [the 
 
 |                                                          | Provider                        |
 | -------------------------------------------------------- | ------------------------------- |
-| <img src="assets/images/openai.png" width="32">          | OpenAI                          |
-| <img src="assets/images/gemini.png" width="32">          | Google Gemini                   |
-| <img src="assets/images/Anthropic-AI.png" width="32">    | Anthropic                       |
-| <img src="assets/images/deepseek.png" width="32">        | DeepSeek                        |
-| <img src="assets/images/cohere.875858bb.svg" width="32"> | TogetherAI                      |
-| <img src="assets/images/xai.png" width="32">             | XAI                             |
-| <img src="assets/images/meta.png" width="32">            | Meta ( Provided by Bedrock )    |
-| <img src="assets/images/cohere.png" width="32">          | Cohere ( Provided by Bedrock )  |
-| <img src="assets/images/mistral.png" width="32">         | Mistral ( Provided by Bedrock ) |
+| <img src="https://raw.githubusercontent.com/langdb/ai-gateway/main/assets/images/openai.png" width="32">          | OpenAI                          |
+| <img src="https://raw.githubusercontent.com/langdb/ai-gateway/main/assets/images/gemini.png" width="32">          | Google Gemini                   |
+| <img src="https://raw.githubusercontent.com/langdb/ai-gateway/main/assets/images/Anthropic-AI.png" width="32">    | Anthropic                       |
+| <img src="https://raw.githubusercontent.com/langdb/ai-gateway/main/assets/images/deepseek.png" width="32">        | DeepSeek                        |
+| <img src="https://raw.githubusercontent.com/langdb/ai-gateway/main/assets/images/cohere.875858bb.svg" width="32"> | TogetherAI                      |
+| <img src="https://raw.githubusercontent.com/langdb/ai-gateway/main/assets/images/xai.png" width="32">             | XAI                             |
+| <img src="https://raw.githubusercontent.com/langdb/ai-gateway/main/assets/images/meta.png" width="32">            | Meta ( Provided by Bedrock )    |
+| <img src="https://raw.githubusercontent.com/langdb/ai-gateway/main/assets/images/cohere.png" width="32">          | Cohere ( Provided by Bedrock )  |
+| <img src="https://raw.githubusercontent.com/langdb/ai-gateway/main/assets/images/mistral.png" width="32">         | Mistral ( Provided by Bedrock ) |
 
 The gateway supports standard OpenAI-compatible endpoints:
 - `/v1/chat/completions` - For chat completions
