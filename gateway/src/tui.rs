@@ -83,7 +83,7 @@ impl Tui {
         storage: Arc<Mutex<InMemoryStorage>>,
         counters: Arc<RwLock<Counters>>,
     ) -> io::Result<()> {
-        let mut debug_file = OpenOptions::new().append(true).open("tui_debug_2.log")?;
+        let mut debug_file = OpenOptions::new().append(true).open("tui_debug.log")?;
 
         writeln!(debug_file, "Spawn loop starting...")?;
 
