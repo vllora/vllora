@@ -7,6 +7,22 @@ A Rust-based gateway service for interacting with various LLM providers (OpenAI,
 <img src="assets/langdb-models.gif" width="550px" alt="LangDB AI Gateway Demo showing LLM Switching">
 </div>
 
+## Table of Contents
+- [Features](#features)
+- [Setup](#setup)
+  - [Quick Start](#quick-start)
+  - [Using Docker](#using-docker)
+  - [Direct Installation](#direct-installation)
+  - [Build from Source](#build-from-source)
+  - [Running with Options](#running-with-options)
+    - [Command Line Options](#command-line-options)
+    - [Using Config File](#using-config-file)
+    - [Rate Limiting](#rate-limiting)
+- [API Endpoints](#api-endpoints)
+- [Tracing](#tracing)
+  - [Setting up Tracing](#setting-up-tracing)
+  - [Querying Traces](#querying-traces)
+
 ## Features
 
 - OpenAI-compatible API endpoints
@@ -22,7 +38,21 @@ A Rust-based gateway service for interacting with various LLM providers (OpenAI,
 
 Choose one of the following scenarios to get started:
 
-#### Using Docker
+##### Environment Variables
+
+Create a `.env` file in the project root directory and add the API keys for the providers you plan to use:
+```
+# API Keys for different providers (set the ones you plan to use)
+LANGDB_OPENAI_API_KEY=your-openai-key-here
+# Other providers
+
+# Optional: Set log level (default: info)
+RUST_LOG=debug
+```
+
+The service will automatically load these environment variables from the `.env` file when starting up.
+
+### Using Docker
 
 ```bash
 # Pull and run the container
@@ -38,7 +68,19 @@ Available commands:
 docker run -it langdb/ai-gateway 
 ```
 
-#### Direct installation
+#### Make your first request
+
+```bash
+curl http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o-mini",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+```
+
+
+### Direct installation
 
 1. Install using cargo:
 ```bash
@@ -50,7 +92,7 @@ RUSTFLAGS="--cfg tracing_unstable --cfg aws_sdk_unstable" cargo install --git ht
 ai-gateway serve
 ```
 
-#### Build from source
+### Build from source
 
 1. Clone the repository:
 ```bash
@@ -63,21 +105,9 @@ cd ai-gateway
 cargo run -- serve
 ```
 
-Both scenarios will start the server on `0.0.0.0:8080` with default settings.
+> Both scenarios will start the server on `0.0.0.0:8080` with default settings.
 
-### Environment Variables
 
-Create a `.env` file in the project root directory and add the API keys for the providers you plan to use:
-```
-# API Keys for different providers (set the ones you plan to use)
-LANGDB_OPENAI_API_KEY=your-openai-key-here
-# Other providers
-
-# Optional: Set log level (default: info)
-RUST_LOG=debug
-```
-
-The service will automatically load these environment variables from the `.env` file when starting up.
 
 ### Running with Options
 
@@ -116,6 +146,23 @@ cargo run -- serve
 
 Command line options will override corresponding config file settings when both are specified.
 
+### Rate Limiting
+
+Rate limiting helps prevent API abuse by limiting the number of requests within a time window. Configure rate limits using:
+
+```bash
+# Limit to 1000 requests per hour
+cargo run -- serve --rate-hourly 1000
+```
+
+Or in `config.yaml`:
+```yaml
+rate_limit:
+  hourly: 1000
+```
+
+When a rate limit is exceeded, the API will return a 429 (Too Many Requests) response.
+
 ## API Endpoints
 
 The gateway provides the following OpenAI-compatible endpoints:
@@ -125,24 +172,6 @@ The gateway provides the following OpenAI-compatible endpoints:
 - `POST /v1/embeddings` - Generate embeddings
 - `POST /v1/images/generations` - Generate images
 
-## Example Usage
-
-1. Run the server with your OpenAI API key:
-```bash
-cargo run
-```
-
-2. Make a chat completion request:
-```bash
-curl http://localhost:8080/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gpt-4o-mini",
-    "messages": [{"role": "user", "content": "Hello!"}]
-  }'
-```
-
-The gateway will now be running with basic functionality on http://localhost:8080.
 
 ## Tracing
 
@@ -187,24 +216,6 @@ WHERE finish_date >= today() - 1
 ORDER BY finish_time_us DESC
 LIMIT 10;
 ```
-
-### Rate Limiting
-
-Rate limiting helps prevent API abuse by limiting the number of requests within a time window. Configure rate limits using:
-
-```bash
-# Limit to 1000 requests per hour
-cargo run -- serve --rate-hourly 1000
-```
-
-Or in `config.yaml`:
-```yaml
-rate_limit:
-  hourly: 1000
-```
-
-When a rate limit is exceeded, the API will return a 429 (Too Many Requests) response.
-
 ### Cost Control
 
 Cost control helps manage API spending by setting daily, monthly, or total cost limits. Configure cost limits using:
@@ -305,4 +316,3 @@ This project is released under the [Elastic License 2.0](./LICENSE.md). See the 
 - [ ] usage command (runs a query and prints model usage)
 - [ ] README has explanations each of them.
 - [ ] Docs (opensource section) / Mrunmay
-- [ ] 
