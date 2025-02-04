@@ -1,6 +1,6 @@
 [package]
 name = "ai-gateway"
-version = "0.0.2"
+version = "0.1.0"
 authors = ["LangDB Team<api@langdb.ai>"]
 description = "AI gateway for managing and routing LLM requests - Govern, Secure, and Optimize your AI Traffic."
 license = "Apache-2.0"
@@ -16,7 +16,7 @@ name = "ai-gateway"
 path = "src/main.rs"
 
 [dependencies]
-langdb_core = { path = "../core", version = "0.0.2" }
+langdb_core = { path = "../core", version = "0.1.0" }
 tokio = { version = "1.37.0", features = ["sync"] }
 tokio-stream = { version = "0.1.15", features = ["io-util"] }
 tracing-futures = { version = "0.2", features = ["futures-03"] }

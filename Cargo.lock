@@ -252,7 +252,7 @@ dependencies = [
 
 [[package]]
 name = "ai-gateway"
-version = "0.0.2"
+version = "0.1.0"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -2397,7 +2397,7 @@ dependencies = [
 
 [[package]]
 name = "langdb_core"
-version = "0.0.2"
+version = "0.1.0"
 dependencies = [
  "actix-web",
  "async-mcp",
