@@ -1138,36 +1138,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f46ad14479a25103f283c0f10005961cf086d8dc42205bb44c46ac563475dca6"
 
 [[package]]
-name = "clickhouse"
-version = "0.11.6"
-source = "git+https://github.com/v3g42/clickhouse.rs.git#2cab3cce5d4f9f5e9196d8ca518c9ba12decfbd8"
-dependencies = [
- "bstr",
- "bytes",
- "clickhouse-derive",
- "clickhouse-rs-cityhash-sys",
- "futures",
- "hyper 0.14.32",
- "hyper-tls 0.5.0",
- "lz4",
- "sealed",
- "serde",
- "static_assertions",
- "thiserror 1.0.69",
- "tokio",
- "url",
- "uuid",
-]
-
-[[package]]
 name = "clickhouse-derive"
 version = "0.1.1"
-source = "git+https://github.com/v3g42/clickhouse.rs.git#2cab3cce5d4f9f5e9196d8ca518c9ba12decfbd8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18af5425854858c507eec70f7deb4d5d8cec4216fcb086283a78872387281ea5"
 dependencies = [
  "proc-macro2",
  "quote",
  "serde_derive_internals",
- "syn 2.0.96",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -1177,21 +1156,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4baf9d4700a28d6cb600e17ed6ae2b43298a5245f1f76b4eab63027ebfd592b9"
 dependencies = [
  "cc",
-]
-
-[[package]]
-name = "clust"
-version = "0.9.0"
-source = "git+https://github.com/v3g42/clust.git#111c196f8c5d610b4e044dbee02f7057fc38dcfa"
-dependencies = [
- "bytes",
- "futures-core",
- "pin-project",
- "reqwest",
- "serde",
- "serde-json-fmt",
- "serde_json",
- "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -2393,6 +2357,45 @@ dependencies = [
 ]
 
 [[package]]
+name = "langdb_clickhouse"
+version = "0.11.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8948e6b29264c4d8f9d72b8cca74ca2b66de3a573de7b35b78f12466c2bb194f"
+dependencies = [
+ "bstr",
+ "bytes",
+ "clickhouse-derive",
+ "clickhouse-rs-cityhash-sys",
+ "futures",
+ "hyper 0.14.32",
+ "hyper-tls 0.5.0",
+ "lz4",
+ "sealed",
+ "serde",
+ "static_assertions",
+ "thiserror 1.0.69",
+ "tokio",
+ "url",
+ "uuid",
+]
+
+[[package]]
+name = "langdb_clust"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b33c4b2376b8030a7b6791479ec85aa767a6d78665d651006c74b8f379e7514"
+dependencies = [
+ "bytes",
+ "futures-core",
+ "pin-project",
+ "reqwest",
+ "serde",
+ "serde-json-fmt",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "langdb_core"
 version = "0.1.0"
 dependencies = [
@@ -2409,12 +2412,12 @@ dependencies = [
  "bytemuck",
  "bytes",
  "chrono",
- "clickhouse",
- "clust",
  "dashmap",
  "either",
  "futures",
  "indexmap 2.7.1",
+ "langdb_clickhouse",
+ "langdb_clust",
  "minijinja",
  "openssh",
  "openssl",
@@ -3653,13 +3656,13 @@ dependencies = [
 
 [[package]]
 name = "serde_derive_internals"
-version = "0.29.1"
+version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "18d26a20a969b9e3fdf2fc2d9f21eda6c40e2de84c9408bb5d3b05d499aae711"
+checksum = "85bf8229e7920a9f636479437026331ce11aa132b4dde37d121944a44d6e5f3c"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.96",
+ "syn 1.0.109",
 ]
 
 [[package]]
