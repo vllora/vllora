@@ -19,9 +19,11 @@ A Rust-based gateway service for interacting with various LLM providers (OpenAI,
     - [Using Config File](#using-config-file)
     - [Rate Limiting](#rate-limiting)
 - [API Endpoints](#api-endpoints)
+- [Supported Providers](#supported-providers)
 - [Tracing](#tracing)
   - [Setting up Tracing](#setting-up-tracing)
   - [Querying Traces](#querying-traces)
+
 
 ## Features
 
@@ -172,6 +174,21 @@ The gateway provides the following OpenAI-compatible endpoints:
 - `POST /v1/embeddings` - Generate embeddings
 - `POST /v1/images/generations` - Generate images
 
+## Supported Providers
+
+LangDB AI Gateway currently supports the following LLM providers:
+
+|  | Provider |
+|------|----------|
+| <img src="assets/images/openai.png" width="32"> | OpenAI |
+| <img src="assets/images/gemini.png" width="32"> | Google Gemini |
+| <img src="assets/images/Anthropic-AI.png" width="32"> | Anthropic |
+| <img src="assets/images/deepseek.png" width="32"> | DeepSeek |
+| <img src="assets/images/cohere.875858bb.svg" width="32"> | TogetherAI |
+| <img src="assets/images/xai.png" width="32"> | XAI |
+| <img src="assets/images/meta.png" width="32"> | Meta ( Provided by Bedrock ) |
+| <img src="assets/images/cohere.png" width="32"> | Cohere ( Provided by Bedrock ) |
+| <img src="assets/images/mistral.png" width="32"> | Mistral ( Provided by Bedrock ) |
 
 ## Tracing
 
