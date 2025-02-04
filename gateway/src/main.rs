@@ -3,9 +3,7 @@ use std::sync::Arc;
 use clap::Parser;
 use config::{Config, ConfigError};
 use http::ApiServer;
-use langdb_core::{
-    error::GatewayError, model::image_generation::openai::ApiError, usage::InMemoryStorage,
-};
+use langdb_core::{error::GatewayError, usage::InMemoryStorage};
 use run::models::{load_models, ModelsLoadError};
 use thiserror::Error;
 
@@ -22,7 +20,7 @@ mod tui;
 mod usage;
 use ::tracing::info;
 use tokio::sync::Mutex;
-use tui::Tui;
+use tui::{Counters, Tui};
 
 #[derive(Error, Debug)]
 pub enum CliError {
@@ -90,7 +88,7 @@ async fn main() -> Result<(), CliError> {
             let mut tui_handle: tokio::task::JoinHandle<Result<(), CliError>> =
                 tokio::spawn(async move {
                     let mut tui = Tui::new(log_receiver)?;
-                    tui.run()?;
+                    tui.run(storage)?;
                     Ok::<(), CliError>(())
                 });
 
@@ -103,6 +101,7 @@ async fn main() -> Result<(), CliError> {
                     }
                     server_handle.abort();
                 }
+
                 server_result = &mut server_handle => {
                     if let Ok(result) = server_result {
                         if let Err(e) = result {

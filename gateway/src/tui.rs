@@ -1,24 +1,27 @@
 use crossterm::{
-    event::{self, Event, KeyCode},
+    event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
+use langdb_core::usage::InMemoryStorage;
+use langdb_core::usage::LimitPeriod;
 use ratatui::{
     layout::{Constraint, Direction, Layout},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
-    Frame, Terminal,
+    Terminal,
 };
 use std::{
-    io::{self, stdout},
+    fs::OpenOptions,
+    io::{self, stdout, Write},
+    sync::{Arc, RwLock},
     time::{Duration, Instant},
 };
-use tokio::sync::mpsc::Receiver;
+use tokio::sync::{mpsc::Receiver, Mutex};
 
 pub struct Stats {
-    pub requests: u64,
-    pub active_connections: u32,
     pub uptime: Duration,
+    pub total_requests: u64,
 }
 
 pub struct TuiState {
@@ -30,9 +33,8 @@ impl TuiState {
     pub fn new() -> Self {
         Self {
             stats: Stats {
-                requests: 0,
-                active_connections: 0,
                 uptime: Duration::from_secs(0),
+                total_requests: 0,
             },
             logs: Vec::new(),
         }
@@ -40,10 +42,18 @@ impl TuiState {
 
     pub fn add_log(&mut self, message: String) {
         self.logs.push(message);
-        if self.logs.len() > 100 {
+        self.stats.total_requests += 1;
+        if self.logs.len() > 15 {
             self.logs.remove(0);
         }
     }
+}
+
+#[derive(Default)]
+pub struct Counters {
+    total: f64,
+    prompt: f64,
+    completion: f64,
 }
 
 pub struct Tui {
@@ -68,54 +78,124 @@ impl Tui {
         })
     }
 
-    pub fn run(&mut self) -> io::Result<()> {
+    pub fn run(&mut self, storage: Arc<Mutex<InMemoryStorage>>) -> io::Result<()> {
         let tick_rate = Duration::from_millis(200);
         let mut last_tick = Instant::now();
+        let start_time = Instant::now();
 
-        println!("TUI run started");
+        let mut debug_file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("tui_debug.log")?;
+
+        writeln!(debug_file, "TUI run starting...")?;
+        let counters = Arc::new(RwLock::new(Counters::default()));
+        // Spawn counter update task
+        let storage_clone = storage.clone();
+        let counters_clone = counters.clone();
+        tokio::spawn(async move {
+            loop {
+                if let Ok(storage) = storage_clone.try_lock() {
+                    let total = storage
+                        .get_value(LimitPeriod::Total, "total", "tokens")
+                        .await
+                        .unwrap_or(0.0);
+                    let prompt = storage
+                        .get_value(LimitPeriod::Total, "total", "prompt_tokens")
+                        .await
+                        .unwrap_or(0.0);
+                    let completion = storage
+                        .get_value(LimitPeriod::Total, "total", "completion_tokens")
+                        .await
+                        .unwrap_or(0.0);
+
+                    let mut counters = counters_clone.write().unwrap();
+                    counters.total = total;
+                    counters.prompt = prompt;
+                    counters.completion = completion;
+                }
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        });
+
         loop {
-            // Handle logs first
-            if let Ok(log) = self.log_receiver.try_recv() {
-                // println!("TUI received log: {}", log);
+            // Update uptime first
+            self.state.stats.uptime = start_time.elapsed();
+
+            // Process all available logs
+            while let Ok(log) = self.log_receiver.try_recv() {
                 self.state.add_log(log);
             }
 
-            // Then take the state reference for drawing
-            let state = &self.state;
+            // Draw UI
             self.terminal.draw(|f| {
                 let chunks = Layout::default()
                     .direction(Direction::Vertical)
-                    .constraints([Constraint::Length(3), Constraint::Min(0)].as_ref())
+                    .constraints(
+                        [
+                            Constraint::Length(3),
+                            Constraint::Length(5),
+                            Constraint::Min(0),
+                        ]
+                        .as_ref(),
+                    )
                     .split(f.size());
 
                 // Stats section
+                let total_requests = self.state.stats.total_requests;
                 let stats = format!(
-                    "Requests: {} | Active Connections: {} | Uptime: {:?}",
-                    state.stats.requests, state.stats.active_connections, state.stats.uptime
+                    "Total Requests: {} | Uptime: {:.2?}",
+                    total_requests, self.state.stats.uptime
                 );
                 let stats_widget = Paragraph::new(stats)
                     .block(Block::default().borders(Borders::ALL).title("Stats"));
                 f.render_widget(stats_widget, chunks[0]);
 
+                // Counters section
+                let counters = counters.read().unwrap();
+                let counters_text = format!(
+                    "Tokens: {}\nPrompt Tokens: {}\nCompletion Tokens: {}",
+                    counters.total, counters.prompt, counters.completion
+                );
+                let counters_widget = Paragraph::new(counters_text)
+                    .block(Block::default().borders(Borders::ALL).title("Counters"));
+                f.render_widget(counters_widget, chunks[1]);
+
                 // Logs section
-                let logs: Vec<Line> = state
+                let logs: Vec<Line> = self
+                    .state
                     .logs
                     .iter()
                     .map(|log| Line::from(vec![Span::raw(log)]))
                     .collect();
-                let logs_widget = Paragraph::new(logs)
-                    .block(Block::default().borders(Borders::ALL).title("Logs"));
-                f.render_widget(logs_widget, chunks[1]);
+                let logs_widget = Paragraph::new(logs).block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title(format!("Logs ({})", self.state.logs.len())),
+                );
+                f.render_widget(logs_widget, chunks[2]);
             })?;
 
+            // Handle events with a timeout
             let timeout = tick_rate
                 .checked_sub(last_tick.elapsed())
                 .unwrap_or_else(|| Duration::from_secs(0));
 
             if event::poll(timeout)? {
                 if let Event::Key(key) = event::read()? {
-                    if key.code == KeyCode::Char('q') {
-                        return Ok(());
+                    match key {
+                        KeyEvent {
+                            code: KeyCode::Char('c'),
+                            modifiers: KeyModifiers::CONTROL,
+                            ..
+                        }
+                        | KeyEvent {
+                            code: KeyCode::Char('q'),
+                            ..
+                        } => {
+                            return Ok(());
+                        }
+                        _ => {}
                     }
                 }
             }
