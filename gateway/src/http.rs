@@ -98,7 +98,7 @@ impl ApiServer {
         println!("   🌟 Star the repo (we'll notice!)");
         println!("   💬 Share your builds on Slack");
         println!("   🔥 Keep up with our shenanigans on X");
-        println!("");
+        println!();
     }
     pub async fn start(
         self,
@@ -107,9 +107,7 @@ impl ApiServer {
     ) -> Result<impl Future<Output = Result<(), ServerError>>, ServerError> {
         let trace_senders = Arc::new(TraceMap::new());
         let trace_senders_inner = Arc::clone(&trace_senders);
-
-        // Print friendly startup message
-        self.print_useful_info();
+        let server_config = self.clone();
 
         let cost_calculator = GatewayCostCalculator::new(models.clone());
         let callback = if let Some(storage) = &storage {
@@ -120,7 +118,7 @@ impl ApiServer {
 
         let server = HttpServer::new(move || {
             let limit_checker = if let Some(storage) = storage.clone() {
-                match &self.config.cost_control {
+                match &server_config.config.cost_control {
                     Some(cc) => {
                         let checker = GatewayLimitChecker::new(storage, cc.clone());
                         Some(LimitCheckWrapper {
@@ -142,15 +140,15 @@ impl ApiServer {
                 callback.clone(),
                 cost_calculator.clone(),
                 limit_checker.clone(),
-                self.config.rate_limit.clone(),
-                self.config.providers.clone(),
+                server_config.config.rate_limit.clone(),
+                server_config.config.providers.clone(),
             )
         })
         .bind((self.config.http.host.as_str(), self.config.http.port))?
         .run()
         .map_err(ServerError::Actix);
 
-        let writer = match self.config.clickhouse {
+        let writer = match server_config.config.clickhouse {
             Some(c) => {
                 let client = ClickhouseHttp::root().with_url(&c.url).clone_box();
                 Box::new(DatabaseSpanWritter::new(client)) as Box<dyn SpanWriterTransport>
@@ -167,6 +165,10 @@ impl ApiServer {
             });
 
         let tonic_fut = tonic_server.map_err(ServerError::Tonic);
+
+        // Print useful info after servers are bound and ready
+        self.print_useful_info();
+
         Ok(try_join(server, tonic_fut).map_ok(|_| ()))
     }
 

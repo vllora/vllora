@@ -30,10 +30,15 @@ pub struct ClickhouseConfig {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Config {
+    #[serde(default)]
     pub http: HttpConfig,
+    #[serde(default)]
     pub clickhouse: Option<ClickhouseConfig>,
+    #[serde(default)]
     pub cost_control: Option<CostControl>,
+    #[serde(default)]
     pub rate_limit: Option<RateLimiting>,
+    #[serde(default)]
     pub providers: Option<ProvidersConfig>,
 }
 

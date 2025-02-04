@@ -10,21 +10,12 @@ pub fn pretty_print_models(models: Vec<ModelDefinition>) {
         "Provider",
         "Price",
         "Type",
-        "Context Size"
     ]);
 
     // Add data rows
     for model in models {
         // Combine name and description with truncation
-        let model_info = {
-            let desc = model.description;
-            let truncated_desc = if desc.len() > 100 {
-                format!("{}...", &desc[..47])
-            } else {
-                desc
-            };
-            format!("{}\n{}", model.model, truncated_desc)
-        };
+        let model_info = { model.model.to_string() };
 
         // Format provider information - only show both when they differ
         let provider_info = if model.model_provider == model.inference_provider.provider.to_string()
@@ -39,13 +30,7 @@ pub fn pretty_print_models(models: Vec<ModelDefinition>) {
 
         // Format prices as dollars
         let price = get_price(model.price);
-        table.add_row(row![
-            model_info,
-            provider_info,
-            price,
-            model.r#type,
-            model.limits.max_context_size,
-        ]);
+        table.add_row(row![model_info, provider_info, price, model.r#type,]);
     }
 
     // Print the table

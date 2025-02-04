@@ -52,6 +52,7 @@ pub const LOGO: &str = r#"
 #[actix_web::main]
 async fn main() -> Result<(), CliError> {
     dotenv::dotenv().ok();
+    println!("{LOGO}");
     std::env::set_var("RUST_BACKTRACE", "1");
 
     let cli = cli::Cli::parse();
@@ -130,8 +131,8 @@ async fn main() -> Result<(), CliError> {
                 }
             } else {
                 tracing::init_tracing();
+
                 let config = Config::load(&cli.config)?;
-                println!("{LOGO}");
                 let config = config.apply_cli_overrides(&cli::Commands::Serve(serve_args));
                 let api_server = ApiServer::new(config);
                 let models = load_models(false).await?;
