@@ -1,174 +1,163 @@
 <div align="center">
 
-# LangDB AI Gateway
 
-A Rust-based gateway service for interacting with various LLM providers (OpenAI, Anthropic, etc.) with unified API interface.
+<img src="./assets/images/logos/icon_red.png" width="25px" alt="LangDB Logo">
 
-<img src="assets/langdb-models.gif" width="550px" alt="LangDB AI Gateway Demo showing LLM Switching">
+## AI Gateway
+#### OpenSource Enterprise AI Gateway built in Rust
+
+<img src="assets/langdb-models.gif" width="700px" alt="LangDB AI Gateway Demo showing LLM Switching">
+
+[![GitHub stars](https://img.shields.io/github/stars/langdb/ai-gateway?style=social)](https://github.com/langdb/ai-gateway)
+[![Slack](https://img.shields.io/badge/Join-Slack-brightgreen?logo=slack)](https://join.slack.com/t/langdbcommunity/shared_invite/zt-2haf5kj6a-d7NX6TFJUPX45w~Ag4dzlg)
+[![Documentation](https://img.shields.io/badge/docs-langdb.ai-blue)](https://docs.langdb.ai)
+
 </div>
 
-## Table of Contents
-- [Features](#features)
-- [Setup](#setup)
-  - [Quick Start](#quick-start)
-  - [Using Docker](#using-docker)
-  - [Direct Installation](#direct-installation)
-  - [Build from Source](#build-from-source)
-  - [Running with Options](#running-with-options)
-    - [Command Line Options](#command-line-options)
-    - [Using Config File](#using-config-file)
-    - [Rate Limiting](#rate-limiting)
-- [API Endpoints](#api-endpoints)
-- [Supported Providers](#supported-providers)
-- [Tracing](#tracing)
-  - [Setting up Tracing](#setting-up-tracing)
-  - [Querying Traces](#querying-traces)
+Govern, Secure, and Optimize your AI Traffic. LangDB AI Gateway provides unified interface to all LLMs using OpenAI API format. Built with performance and reliability in mind.
 
+### Key Features
 
-## Features
+🚀 **High Performance**
+- Built in Rust for maximum speed and reliability
+- Seamless integration with any framework (Langchain, Vercel AI SDK, CrewAI, etc.)
+- Integrate with any MCP servers(https://docs.langdb.ai/ai-gateway/features/mcp-support)
 
-- OpenAI-compatible API endpoints
-- Model configuration via YAML
-- Support for multiple LLM providers
-- Debug-level event logging
-- OpenTelemetry integration
-- Cost tracking and usage monitoring
+📊 **Enterprise Ready**
+- [Comprehensive usage analytics and cost tracking](https://docs.langdb.ai/ai-gateway/features/analytics)
+- [Rate limiting and cost control](https://docs.langdb.ai/ai-gateway/features/usage)
+- [Advanced routing, load balancing and failover](https://docs.langdb.ai/ai-gateway/features/routing)
+- [Evaluations](https://docs.langdb.ai/ai-gateway/features/evaluation)
 
-## Setup
+🔒 **Data Control**
+- Full ownership of your LLM usage data
+- Detailed logging and tracing
 
-### Quick Start
+### Looking for More? Try Our Hosted & Enterprise Solutions
 
-Choose one of the following scenarios to get started:
+🌟 **[Hosted Version](https://langdb.ai)** - Get started in minutes with our fully managed solution
+- Zero infrastructure management
+- Automatic updates and maintenance
+- Pay-as-you-go pricing
 
-#### Configuration
+💼 **[Enterprise Version](https://langdb.ai/)** - Enhanced features for large-scale deployments
+- Advanced team management and access controls
+- Custom security guardrails and compliance features
+- Intuitive monitoring dashboard
+- Priority support and SLA guarantees
+- Custom deployment options
 
-You can configure the API keys and other settings in two ways:
+[Contact our team](https://calendly.com/d/cqs2-cfz-gdn/meet-langdb-team) to learn more about enterprise solutions.
 
-##### 1. Using config.yaml
+## Getting Started
 
-Create a `config.yaml` file (or copy from `config.sample.yaml`):
+### 1. Installation
+
+Choose one of these installation methods:
+
+#### Using Docker (Recommended)
+```bash
+docker run -it \
+    -p 8080:8080 \
+    -e LANGDB_OPENAI_API_KEY=your-openai-key-here \
+    langdb/ai-gateway serve
+```
+
+#### Using Cargo
+```bash
+RUSTFLAGS="--cfg tracing_unstable --cfg aws_sdk_unstable" cargo install --git https://github.com/langdb/ai-gateway.git
+ai-gateway serve
+```
+
+### 2. Make Your First Request
+
+Test the gateway with a simple chat completion:
+
+```bash
+# Chat completion with GPT-4
+curl http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o-mini",
+    "messages": [{"role": "user", "content": "What is the capital of France?"}]
+  }'
+
+# Or try Claude
+curl http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-3-opus",
+    "messages": [
+      {"role": "user", "content": "What is the capital of France?"}
+    ]
+  }'
+```
+
+## Providers
+
+LangDB AI Gateway currently supports the following LLM providers. Find all [the available models here](https://app.langdb.ai/models).
+
+|                                                          | Provider                        |
+| -------------------------------------------------------- | ------------------------------- |
+| <img src="assets/images/openai.png" width="32">          | OpenAI                          |
+| <img src="assets/images/gemini.png" width="32">          | Google Gemini                   |
+| <img src="assets/images/Anthropic-AI.png" width="32">    | Anthropic                       |
+| <img src="assets/images/deepseek.png" width="32">        | DeepSeek                        |
+| <img src="assets/images/cohere.875858bb.svg" width="32"> | TogetherAI                      |
+| <img src="assets/images/xai.png" width="32">             | XAI                             |
+| <img src="assets/images/meta.png" width="32">            | Meta ( Provided by Bedrock )    |
+| <img src="assets/images/cohere.png" width="32">          | Cohere ( Provided by Bedrock )  |
+| <img src="assets/images/mistral.png" width="32">         | Mistral ( Provided by Bedrock ) |
+
+The gateway supports standard OpenAI-compatible endpoints:
+- `/v1/chat/completions` - For chat completions
+- `/v1/completions` - For text completions
+- `/v1/embeddings` - For generating embeddings
+
+### Advanced Configuration
+Create a `config.yaml` file:
 ```yaml
-http:
-  host: "0.0.0.0"
-  port: 8080
-
 providers:
   openai: 
     api_key: "your-openai-key-here"
   anthropic: 
     api_key: "your-anthropic-key-here"
-  # Add other providers as needed
+  
+  # Supports mustache style variables  
+  gemini:
+    api_key: {{LANGDB_GEMINI_API_KEY}}
+
+http:
+  host: "0.0.0.0"
+  port: 8080
 ```
-
-##### 2. Using Environment Variables
-
-Alternatively, create a `.env` file:
-```bash
-# API Keys for different providers
-LANGDB_OPENAI_API_KEY=your-openai-key-here
-LANGDB_ANTHROPIC_API_KEY=your-anthropic-key-here
-LANGDB_GEMINI_API_KEY=your-gemini-key-here
-LANGDB_BEDROCK_API_KEY=your-bedrock-key-here
-LANGDB_DEEPSEEK_API_KEY=your-deepseek-key-here
-LANGDB_TOGETHERAI_API_KEY=your-togetherai-key-here
-LANGDB_XAI_API_KEY=your-xai-key-here
-
-# Optional: Set log level (default: info)
-RUST_LOG=debug
-```
-
-The service will automatically load configuration from both sources, with environment variables taking precedence over config file values.
-
-### Using Docker
-
-```bash
-# Pull and run the container
-docker run -it \
-    -p 8080:8080 \
-    -e LANGDB_OPENAI_API_KEY=$OPENAI_API_KEY \
-    -e RUST_LOG=info \
-    -v $(pwd)/config.yaml:/app/config.yaml \
-    langdb/ai-gateway serve
-```
-Available commands:
-```bash
-docker run -it langdb/ai-gateway 
-```
-
-#### Make your first request
-
-```bash
-curl http://localhost:8080/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gpt-4o-mini",
-    "messages": [{"role": "user", "content": "Hello!"}]
-  }'
-```
-
-
-### Direct installation
-
-1. Install using cargo:
-```bash
-RUSTFLAGS="--cfg tracing_unstable --cfg aws_sdk_unstable" cargo install --git https://github.com/langdb/ai-gateway.git
-```
-
-2. Run the server:
-```bash
-ai-gateway serve
-```
-
-### Build from source
-
-1. Clone the repository:
-```bash
-git clone https://github.com/langdb/ai-gateway.git
-cd ai-gateway
-```
-
-2. Run the server with default configuration:
-```bash
-cargo run -- serve
-```
-
-> Both scenarios will start the server on `0.0.0.0:8080` with default settings.
-
-
-
-### Running with Options
-
-The server supports various configuration options that can be specified either via command line arguments or through a config file.
 
 #### Command Line Options
 
 ```bash
 # Run with custom host and port
-cargo run -- serve --host 0.0.0.0 --port 3000
+ai-gateway serve --host 0.0.0.0 --port 3000
 
 # Run with CORS origins
-cargo run -- serve --cors-origins "http://localhost:3000,http://example.com"
+ai-gateway serve --cors-origins "http://localhost:3000,http://example.com"
 
 # Run with rate limiting
-cargo run -- serve --rate-hourly 1000
+ai-gateway serve --rate-hourly 1000
 
 # Run with cost limits
-cargo run -- serve --cost-daily 100.0 --cost-monthly 1000.0
+ai-gateway serve --cost-daily 100.0 --cost-monthly 1000.0
 
 # Run with custom database connections
-cargo run -- serve --clickhouse-url "clickhouse://localhost:9000"
+ai-gateway serve --clickhouse-url "clickhouse://localhost:9000"
 ```
 
 #### Using Config File
-
+Download the sample configuration from our repo.
 1. Copy the example config file:
 ```bash
-cp config.sample.yaml config.yaml
-```
+curl -sL https://raw.githubusercontent.com/langdb/ai-gateway/main/config.sample.yaml -o config.sample.yaml
 
-2. Run the server:
-```bash
-cargo run -- serve
+cp config.sample.yaml config.yaml
 ```
 
 Command line options will override corresponding config file settings when both are specified.
@@ -179,7 +168,7 @@ Rate limiting helps prevent API abuse by limiting the number of requests within 
 
 ```bash
 # Limit to 1000 requests per hour
-cargo run -- serve --rate-hourly 1000
+ai-gateway serve --rate-hourly 1000
 ```
 
 Or in `config.yaml`:
@@ -199,24 +188,8 @@ The gateway provides the following OpenAI-compatible endpoints:
 - `POST /v1/embeddings` - Generate embeddings
 - `POST /v1/images/generations` - Generate images
 
-## Supported Providers
 
-LangDB AI Gateway currently supports the following LLM providers:
-
-|  | Provider |
-|------|----------|
-| <img src="assets/images/openai.png" width="32"> | OpenAI |
-| <img src="assets/images/gemini.png" width="32"> | Google Gemini |
-| <img src="assets/images/Anthropic-AI.png" width="32"> | Anthropic |
-| <img src="assets/images/deepseek.png" width="32"> | DeepSeek |
-| <img src="assets/images/cohere.875858bb.svg" width="32"> | TogetherAI |
-| <img src="assets/images/xai.png" width="32"> | XAI |
-| <img src="assets/images/meta.png" width="32"> | Meta ( Provided by Bedrock ) |
-| <img src="assets/images/cohere.png" width="32"> | Cohere ( Provided by Bedrock ) |
-| <img src="assets/images/mistral.png" width="32"> | Mistral ( Provided by Bedrock ) |
-
-## Tracing
-
+## Clickhouse Integration
 The gateway supports OpenTelemetry tracing with ClickHouse as the storage backend. All traces are stored in the `langdb.traces` table.
 
 ### Setting up Tracing
@@ -232,7 +205,7 @@ clickhouse-client --query "$(cat sql/traces.sql)"
 
 2. Enable tracing by providing the ClickHouse URL when running the server:
 ```bash
-cargo run -- serve --clickhouse-url "clickhouse://localhost:9000"
+ai-gateway serve --clickhouse-url "clickhouse://localhost:9000"
 ```
 
 You can also set the URL in your `config.yaml`:
@@ -264,7 +237,7 @@ Cost control helps manage API spending by setting daily, monthly, or total cost 
 
 ```bash
 # Set daily and monthly limits
-cargo run -- serve \
+ai-gateway serve \
   --cost-daily 100.0 \
   --cost-monthly 1000.0 \
   --cost-total 5000.0
@@ -295,7 +268,7 @@ This will start:
 
 2. Build and run the gateway:
 ```bash
-cargo run
+ai-gateway run
 ```
 
 The gateway will now be running with full analytics and logging capabilities, storing data in ClickHouse.
@@ -313,48 +286,30 @@ curl http://localhost:8080/v1/chat/completions \
 
 ## Development
 
-### Project Structure
+To get started with development:
 
-- `gateway/` - Core gateway implementation
-  - Models and provider integrations
-  - API types and handlers
-  - OpenTelemetry integration
-- `server/` - HTTP server implementation
-  - Configuration management
-  - REST API endpoints
-  - Cost tracking
+1. Clone the repository
+2. Copy `config.sample.yaml` to `config.yaml` and configure as needed
+3. Run `cargo build` to compile
+4. Run `cargo test` to run tests
 
-### Running Tests
+## Contributing
 
-```bash
-cargo test
-```
+We welcome contributions! Please check out our [Contributing Guide](CONTRIBUTING.md) for guidelines on:
 
+- How to submit issues
+- How to submit pull requests
+- Code style conventions
+- Development workflow
+- Testing requirements
 ### Logging
 
 The gateway uses `tracing` for logging. Set the `RUST_LOG` environment variable to control log levels:
 
 ```bash
-RUST_LOG=debug cargo run    # For detailed logs
-RUST_LOG=info cargo run     # For standard logs
+RUST_LOG=debug cargo run serve    # For detailed logs
+RUST_LOG=info cargo run serve   # For standard logs
 ```
-
 ## License
 
 This project is released under the [Elastic License 2.0](./LICENSE.md). See the license file for more information.
-
-
-## Roadmap
-
-- [x] Include License (Apache2)
-- [x] clickhouse config + traces
-- [x] Provide example docker-compose (simple / full (clickhouse))
-- [x] cost control
-- [x] rate limiting
-- [ ] cargo install / curl -sH install
-- [ ] CI/CD for ubuntu / mac silicon
-- [ ] postman 
-- [ ] Include Model selection config (All / Filter)
-- [ ] usage command (runs a query and prints model usage)
-- [ ] README has explanations each of them.
-- [ ] Docs (opensource section) / Mrunmay

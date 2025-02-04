@@ -1,15 +1,20 @@
-# Contributing to LangDB AI Gateway
+# Contributing
 
 Thank you for your interest in contributing to LangDB AI Gateway! We welcome contributions from the community and are excited to have you on board.
 
 ## Table of Contents
 
-- [Code of Conduct](#code-of-conduct)
-- [Getting Started](#getting-started)
-- [Development Setup](#development-setup)
-- [Making Changes](#making-changes)
-- [Submitting Pull Requests](#submitting-pull-requests)
-- [Reporting Issues](#reporting-issues)
+- [Contributing](#contributing)
+  - [Table of Contents](#table-of-contents)
+  - [Code of Conduct](#code-of-conduct)
+  - [Getting Started](#getting-started)
+  - [Development Setup](#development-setup)
+    - [Prerequisites](#prerequisites)
+    - [Local Development](#local-development)
+  - [Making Changes](#making-changes)
+  - [Submitting Pull Requests](#submitting-pull-requests)
+  - [Reporting Issues](#reporting-issues)
+  - [License](#license)
 
 ## Code of Conduct
 
