@@ -8,46 +8,10 @@
     </argument>
     <parameter>
       <type>String</type>
-      <name>api_base</name>
-    </parameter>
-    <parameter>
-      <type>String</type>
-      <name>api_key</name>
-    </parameter>
-    <parameter>
-      <type>String</type>
-      <name>project_id</name>
-    </parameter>
-    <parameter>
-      <type>Float32</type>
-      <name>frequency_penalty</name>
-    </parameter>
-    <parameter>
-      <type>UInt32</type>
-      <name>max_tokens</name>
-    </parameter>
-    <parameter>
-      <type>UInt8</type>
-      <name>n</name>
-    </parameter>
-    <parameter>
-      <type>Float32</type>
-      <name>presence_penalty</name>
-    </parameter>
-    <parameter>
-      <type>String</type>
-      <name>stop</name>
-    </parameter>
-    <parameter>
-      <type>Int64</type>
-      <name>seed</name>
-    </parameter>
-    <parameter>
-      <type>String</type>
-      <name>model</name>
+      <name>config</name>
     </parameter>
     <format>JSONCompactEachRow</format>
-    <command>langdb_udf completions --api-base ${api_base} --api-key ${api_key} --project-id ${project_id} --model ${model} --frequency-penalty ${frequency_penalty} --max-tokens ${max_tokens} --n ${n} --presence-penalty ${presence_penalty} --stop ${stop} --seed ${seed}</command>
+    <command>langdb_udf completions {config:String}</command>
     <command_read_timeout>1000000</command_read_timeout>
     <return_type>String</return_type>
     <stderr_reaction>throw</stderr_reaction>

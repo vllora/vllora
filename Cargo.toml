@@ -1,7 +1,8 @@
 [workspace]
 resolver = "2"
 members = ["gateway", "core", "udfs"]
+default-members = ["gateway", "udfs"]
 
 [workspace.dependencies]
-async-openai = { git = "https://github.com/v3g42/async-openai.git" }
+async-openai = "0.27.2"
 thiserror = "1.0.59"

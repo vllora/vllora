@@ -10,7 +10,9 @@ services:
       - "8123:8123"
       - "9000:9000"
     environment:
-      - LANGDB_API_KEY=${LANGDB_API_KEY}
+      - LANGDB_API_KEY=${LANGDB_STAGING_KEY}
+      - LANGDB_PROJECT_ID=${LANGDB_PROJECT_ID}
+      # - LANGDB_STAGING_KEY=${LANGDB_STAGING_KEY}
     ulimits:
       nofile:
         soft: 262144

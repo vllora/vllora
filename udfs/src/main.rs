@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tokio::io::AsyncBufReadExt;
 use tokio::io::{stderr, stdin, stdout, AsyncWriteExt, BufReader};
 use tokio::sync::Mutex;
-use tracing;
+use tracing::{self, debug};
 use udfs::completions::completions;
 use udfs::{init_tracing, InvokeError};
 
@@ -12,10 +12,16 @@ async fn process_line(
     input: String,
     writer: Arc<Mutex<impl AsyncWriteExt + Send + Unpin>>,
 ) -> Result<(), InvokeError> {
+    debug!(
+        "Parsing CLI arguments: {:?}",
+        std::env::args().collect::<Vec<_>>()
+    );
+
+    let last = std::env::args().last().unwrap_or_default().replace("'", "");
     let val = match &udf_name {
         &"completions" => {
             tracing::debug!("Calling completions with input: {}", input);
-            completions(input).await
+            completions(input, &last).await
         }
         x => {
             tracing::error!("Unsupported UDF: {}", x);

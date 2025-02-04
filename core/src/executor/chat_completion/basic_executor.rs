@@ -44,7 +44,7 @@ pub async fn execute(
         }
         (None, Some(c)) => {
             span.record("response", c.as_string());
-            Ok("stoped".to_string())
+            Ok("stop".to_string())
         }
         _ => Err(GatewayApiError::GatewayError(GatewayError::CustomError(
             "No content in response".to_string(),
