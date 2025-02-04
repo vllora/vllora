@@ -63,7 +63,10 @@ docker run -it \
 
 #### Using Cargo
 ```bash
-RUSTFLAGS="--cfg tracing_unstable --cfg aws_sdk_unstable" cargo install --git https://github.com/langdb/ai-gateway.git
+export RUSTFLAGS="--cfg tracing_unstable --cfg aws_sdk_unstable" 
+
+cargo install ai-gateway
+
 ai-gateway serve
 ```
 
