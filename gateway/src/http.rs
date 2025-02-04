@@ -62,6 +62,44 @@ impl ApiServer {
         Self { config }
     }
 
+    pub fn print_useful_info(&self) {
+        // Print friendly startup message
+        println!("\n🚀 AI Gateway starting up:");
+        println!(
+            "   🌐 HTTP server ready at: \x1b[36mhttp://{}:{}\x1b[0m",
+            self.config.http.host, self.config.http.port
+        );
+
+        // Add documentation and community links
+        println!("\n📚 Where the cool kids hang out:");
+        println!(
+            "   🔍 Read the docs (if you're into that): \x1b[36mhttps://docs.langdb.ai\x1b[0m"
+        );
+        println!("   ⭐ Drop us a star: \x1b[36mhttps://github.com/langdb/ai-gateway\x1b[0m");
+        println!(
+            "   🎮 Join our Slack (we have memes): \x1b[36mhttps://join.slack.com/t/langdbcommunity/shared_invite/zt-2haf5kj6a-d7NX6TFJUPX45w~Ag4dzlg\x1b[0m"
+        );
+        println!("   🐦 Latest updates on X: \x1b[36mhttps://x.com/LangdbAi\x1b[0m");
+
+        println!("\n⚡Quick Start ⚡");
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+        println!(
+            "\x1b[33mcurl -X POST \x1b[36mhttp://{}:{}/v1/chat/completions\x1b[33m \\\x1b[0m",
+            self.config.http.host, self.config.http.port
+        );
+        println!("\x1b[33m  -H \x1b[32m\"Content-Type: application/json\"\x1b[33m \\\x1b[0m");
+        println!("\x1b[33m  -d\x1b[0m \x1b[32m'{{");
+        println!("    \"model\": \"gpt-4o-mini\",");
+        println!("    \"messages\": [{{\"role\": \"user\", \"content\": \"Hello LangDB!\"}}]");
+        println!("  }}'\x1b[0m");
+        println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+        println!("\n💫 Join the fun:");
+        println!("   🌟 Star the repo (we'll notice!)");
+        println!("   💬 Share your builds on Slack");
+        println!("   🔥 Keep up with our shenanigans on X");
+        println!("");
+    }
     pub async fn start(
         self,
         models: Vec<ModelDefinition>,
@@ -69,6 +107,9 @@ impl ApiServer {
     ) -> Result<impl Future<Output = Result<(), ServerError>>, ServerError> {
         let trace_senders = Arc::new(TraceMap::new());
         let trace_senders_inner = Arc::clone(&trace_senders);
+
+        // Print friendly startup message
+        self.print_useful_info();
 
         let cost_calculator = GatewayCostCalculator::new(models.clone());
         let callback = if let Some(storage) = &storage {

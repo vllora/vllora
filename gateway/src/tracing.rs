@@ -9,7 +9,7 @@ use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Layer, Registry};
 
 pub fn init_tracing() {
     let log_level = std::env::var("RUST_LOG").unwrap_or("info".to_string());
-    let env_filter = EnvFilter::new(log_level);
+    let env_filter = EnvFilter::new(log_level).add_directive("actix_server=off".parse().unwrap());
     let color = std::env::var("ANSI_OUTPUT").map_or(true, |v| v == "true");
 
     // tracing syntax ->
@@ -19,6 +19,7 @@ pub fn init_tracing() {
         .with_file(false)
         .with_thread_ids(false)
         .with_thread_names(false)
+        .with_target(false)
         .with_ansi(color)
         .with_filter(env_filter);
 

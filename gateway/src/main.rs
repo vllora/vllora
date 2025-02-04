@@ -41,14 +41,12 @@ pub enum CliError {
 }
 
 pub const LOGO: &str = r#"
-                                                                                             
-  _                      ____  ____  
- | |    __ _ _ __   __ _|  _ \| __ ) 
- | |   / _` | '_ \ / _` | | | |  _ \ 
- | |__| (_| | | | | (_| | |_| | |_) |
- |_____\__,_|_| |_|\__, |____/|____/ 
-                   |___/                                                                                             
-                                                                                                                                                                                                                                                                                       
+
+  ██       █████  ███    ██  ██████  ██████  ██████  
+  ██      ██   ██ ████   ██ ██       ██   ██ ██   ██ 
+  ██      ███████ ██ ██  ██ ██   ███ ██   ██ ██████  
+  ██      ██   ██ ██  ██ ██ ██    ██ ██   ██ ██   ██ 
+  ███████ ██   ██ ██   ████  ██████  ██████  ██████
 "#;
 
 #[actix_web::main]
@@ -133,6 +131,7 @@ async fn main() -> Result<(), CliError> {
             } else {
                 tracing::init_tracing();
                 let config = Config::load(&cli.config)?;
+                println!("{LOGO}");
                 let config = config.apply_cli_overrides(&cli::Commands::Serve(serve_args));
                 let api_server = ApiServer::new(config);
                 let models = load_models(false).await?;
