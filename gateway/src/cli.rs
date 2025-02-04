@@ -53,6 +53,10 @@ pub struct ServeArgs {
     /// Maximum number of API calls per month (e.g., 100000)
     #[arg(long, value_name = "LIMIT")]
     pub rate_monthly: Option<u64>,
+
+    /// Start server in interactive mode with TUI interface
+    #[arg(short, long)]
+    pub interactive: bool,
 }
 
 #[derive(Subcommand)]
