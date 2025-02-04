@@ -63,7 +63,7 @@ cd ai-gateway
 cargo run -- serve
 ```
 
-Both scenarios will start the server on `127.0.0.1:8080` with default settings.
+Both scenarios will start the server on `0.0.0.0:8080` with default settings.
 
 ### Environment Variables
 

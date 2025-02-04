@@ -47,7 +47,7 @@ pub struct CostControl {
 impl Default for HttpConfig {
     fn default() -> Self {
         Self {
-            host: "127.0.0.1".to_string(),
+            host: "0.0.0.0".to_string(),
             port: 8080,
             cors_allowed_origins: vec!["*".to_string()],
         }
