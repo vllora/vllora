@@ -13,6 +13,7 @@ mod config;
 mod cost;
 mod http;
 mod limit;
+mod middleware;
 mod otel;
 mod run;
 mod tracing;

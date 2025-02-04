@@ -10,6 +10,7 @@ use crate::llm_gateway::provider::Provider;
 use crate::model::mcp::get_mcp_tools;
 use crate::model::tools::{GatewayTool, Tool};
 use crate::model::types::ModelEvent;
+use crate::models::ModelDefinition;
 use crate::types::gateway::{ChatCompletionRequestWithTools, CompletionModelUsage};
 use actix_web::{HttpMessage, HttpRequest};
 use either::Either::{self, Left, Right};
@@ -32,8 +33,6 @@ use tracing_futures::Instrument;
 
 use crate::executor::chat_completion::stream_executor::stream_chunks;
 use crate::handler::extract_tags;
-use crate::handler::find_model_by_full_name;
-use crate::handler::AvailableModels;
 use crate::handler::{CallbackHandlerFn, ModelEventWithDetails};
 use crate::GatewayApiError;
 
@@ -43,8 +42,8 @@ pub async fn execute(
     request: ChatCompletionRequestWithTools,
     callback_handler: &CallbackHandlerFn,
     req: HttpRequest,
-    provided_models: &AvailableModels,
     cost_calculator: Arc<Box<dyn CostCalculator>>,
+    llm_model: &ModelDefinition,
 ) -> Result<
     Either<
         Result<
@@ -94,7 +93,6 @@ pub async fn execute(
 
     let mut request = request.request.clone();
 
-    let llm_model = find_model_by_full_name(&request.model, provided_models)?;
     request.model = llm_model.inference_provider.model_name.clone();
 
     let user: String = request
@@ -109,7 +107,7 @@ pub async fn execute(
         providers_config.as_ref(),
         &llm_model.inference_provider.provider.to_string(),
     );
-    let engine = Provider::get_completion_engine_for_model(&llm_model, &request, key.clone())?;
+    let engine = Provider::get_completion_engine_for_model(llm_model, &request, key.clone())?;
 
     let tools = ModelTools(request_tools);
 

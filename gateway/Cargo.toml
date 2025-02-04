@@ -60,7 +60,7 @@ clap = { version = "4.5", features = ["derive"] }
 directories = "5.0"
 prettytable-rs = "0.10.0"
 dotenv = "0.15.0"
-
+futures-util = "0.3"
 
 ratatui = "0.24.0"
 crossterm = "0.27.0"

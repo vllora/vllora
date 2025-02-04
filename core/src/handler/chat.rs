@@ -20,6 +20,7 @@ use tracing::Span;
 use tracing_futures::Instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt as _;
 
+use crate::handler::find_model_by_full_name;
 use crate::handler::AvailableModels;
 use crate::handler::CallbackHandlerFn;
 use crate::otel::{trace_id_uuid, TraceMap};
@@ -58,12 +59,15 @@ pub async fn create_chat_completion(
     let request = request.into_inner();
     let model_name = request.request.model.clone();
 
+    let available_models = provided_models.get_ref();
+    let llm_model = find_model_by_full_name(&request.request.model, available_models)?;
+
     let response = execute(
         request,
         &callback_handler,
         req.clone(),
-        &provided_models,
         cost_calculator.into_inner(),
+        &llm_model,
     )
     .instrument(span.clone())
     .await?;
@@ -71,7 +75,11 @@ pub async fn create_chat_completion(
     let mut response_builder = HttpResponse::Ok();
     let builder = response_builder
         .insert_header(("X-Trace-Id", trace_id_uuid(trace_id).to_string()))
-        .insert_header(("X-Model-Name", model_name.clone()));
+        .insert_header(("X-Model-Name", model_name.clone()))
+        .insert_header((
+            "X-Provider-Name",
+            llm_model.inference_provider.provider.to_string(),
+        ));
 
     match response {
         Left(result_stream) => {

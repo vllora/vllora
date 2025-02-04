@@ -267,6 +267,7 @@ dependencies = [
  "dotenv",
  "either",
  "futures",
+ "futures-util",
  "indexmap 2.7.1",
  "langdb_core",
  "minijinja",

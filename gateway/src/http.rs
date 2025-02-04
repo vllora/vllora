@@ -1,5 +1,4 @@
 use actix_cors::Cors;
-use actix_web::middleware::Logger;
 use actix_web::Scope as ActixScope;
 use actix_web::{
     body::MessageBody,
@@ -29,6 +28,7 @@ use crate::callback_handler::init_callback_handler;
 use crate::config::Config;
 use crate::cost::GatewayCostCalculator;
 use crate::limit::GatewayLimitChecker;
+use crate::middleware::trace_logger::TraceLogger;
 use crate::otel::DummyTraceWritterTransport;
 use langdb_core::executor::ProvidersConfig;
 use langdb_core::otel::database::DatabaseSpanWritter;
@@ -203,7 +203,7 @@ impl ApiServer {
             service = service.app_data(providers.clone());
         }
 
-        app.wrap(Logger::default())
+        app.wrap(TraceLogger)
             .service(
                 service
                     .app_data(limit_checker)
