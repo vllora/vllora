@@ -18,7 +18,7 @@ serde_json = "1.0"
 chrono = { version = "0.4.38", features = ["serde"] }
 async-trait = "0.1.82"
 thiserror = "1.0.59"
-async-openai = { git = "https://github.com/v3g42/async-openai.git" }
+async-openai = "0.27.2"
 futures = "0.3"
 
 serde_with = { version = "3.8.1", features = ["json"] }
@@ -43,7 +43,7 @@ reqwest = { version = "0.12.2", default-features = false, features = [
   "stream",
 ] }
 regex = "1.11.1"
-secrecy = { version = "0.8.0", features = ["serde"] }
+secrecy = { version = "0.10.3", features = ["serde"] }
 actix-web = "4"
 tonic = "0.12.0"
 dashmap = "6.0.1"

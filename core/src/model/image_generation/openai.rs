@@ -144,8 +144,8 @@ impl ImageGenerationModelInstance for OpenAIImageGeneration {
             n: request.n,
             size,
             response_format: request.response_format.as_ref().map(|f| match f {
-                ImageResponseFormat::Url => async_openai::types::ResponseFormat::Url,
-                ImageResponseFormat::B64Json => async_openai::types::ResponseFormat::B64Json,
+                ImageResponseFormat::Url => async_openai::types::ImageResponseFormat::Url,
+                ImageResponseFormat::B64Json => async_openai::types::ImageResponseFormat::B64Json,
             }),
             user: request.user.clone(),
             model: Some(model),

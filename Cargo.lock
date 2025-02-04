@@ -392,15 +392,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "34ac096ce696dc2fcabef30516bb13c0a68a11d30131d3df6f04711467681b04"
 
 [[package]]
-name = "async-convert"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d416feee97712e43152cd42874de162b8f9b77295b1c85e5d92725cc8310bae"
-dependencies = [
- "async-trait",
-]
-
-[[package]]
 name = "async-mcp"
 version = "0.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -421,31 +412,6 @@ dependencies = [
  "tracing",
  "url",
  "uuid",
-]
-
-[[package]]
-name = "async-openai"
-version = "0.23.4"
-source = "git+https://github.com/v3g42/async-openai.git#a82441362fe3bb6626bbe8532fdc6450faa116b7"
-dependencies = [
- "async-convert",
- "backoff",
- "base64 0.22.1",
- "bytes",
- "derive_builder",
- "eventsource-stream",
- "futures",
- "rand",
- "reqwest",
- "reqwest-eventsource",
- "secrecy 0.8.0",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
- "tokio-stream",
- "tokio-util",
- "tracing",
 ]
 
 [[package]]
@@ -2431,7 +2397,7 @@ version = "0.1.0"
 dependencies = [
  "actix-web",
  "async-mcp",
- "async-openai 0.23.4",
+ "async-openai",
  "async-trait",
  "aws-config",
  "aws-sdk-bedrock",
@@ -2458,7 +2424,7 @@ dependencies = [
  "regex",
  "reqwest",
  "reqwest-eventsource",
- "secrecy 0.8.0",
+ "secrecy 0.10.3",
  "serde",
  "serde_json",
  "serde_tuple",
@@ -4491,7 +4457,7 @@ checksum = "42ff0bf0c66b8238c6f3b578df37d0b7848e55df8577b3f74f92a69acceeb825"
 name = "udfs"
 version = "0.1.0"
 dependencies = [
- "async-openai 0.27.2",
+ "async-openai",
  "clap",
  "futures",
  "mockall",

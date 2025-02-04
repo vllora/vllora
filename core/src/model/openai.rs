@@ -25,15 +25,14 @@ use async_openai::types::{
     ChatCompletionMessageToolCall, ChatCompletionMessageToolCallChunk,
     ChatCompletionRequestAssistantMessageArgs, ChatCompletionRequestMessage,
     ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestToolMessage,
-    ChatCompletionRequestUserMessageArgs, ChatCompletionResponseFormat,
-    ChatCompletionResponseFormatType, ChatCompletionTool, ChatCompletionToolArgs,
-    ChatCompletionToolChoiceOption, ChatCompletionToolType, ChatJsonSchemaObjectArgs,
-    CreateChatCompletionRequest, CreateChatCompletionRequestArgs, FinishReason, FunctionCall,
-    FunctionCallStream, FunctionObject,
+    ChatCompletionRequestToolMessageContent, ChatCompletionRequestUserMessageArgs,
+    ChatCompletionRequestUserMessageContentPart, ChatCompletionTool, ChatCompletionToolArgs,
+    ChatCompletionToolChoiceOption, ChatCompletionToolType, CreateChatCompletionRequest,
+    CreateChatCompletionRequestArgs, FinishReason, FunctionCall, FunctionCallStream,
+    FunctionObject, ResponseFormat, ResponseFormatJsonSchema,
 };
 use async_openai::types::{
-    ChatCompletionRequestMessageContentPart, ChatCompletionRequestMessageContentPartImage,
-    CreateChatCompletionStreamResponse, ImageUrl,
+    ChatCompletionRequestMessageContentPartImage, CreateChatCompletionStreamResponse, ImageUrl,
 };
 use async_openai::types::{ChatCompletionRequestToolMessageArgs, CompletionUsage};
 use async_openai::types::{ChatCompletionRequestUserMessageContent, ChatCompletionStreamOptions};
@@ -141,6 +140,7 @@ impl OpenAIModel {
                 let result = handle_tool_call(&tool_call, tools, tx, tags_value).await;
                 tracing::trace!("Result ({id}): {result:?}");
                 let content = result.unwrap_or_else(|err| err.to_string());
+                let content = ChatCompletionRequestToolMessageContent::Text(content);
                 ChatCompletionRequestMessage::Tool(ChatCompletionRequestToolMessage {
                     content,
                     tool_call_id: id.clone(),
@@ -168,6 +168,7 @@ impl OpenAIModel {
                             .get_function_parameters()
                             .map(serde_json::to_value)
                             .transpose()?,
+                        strict: Some(false),
                     })
                     .build()
                     .map_err(custom_err)?,
@@ -196,16 +197,13 @@ impl OpenAIModel {
         }
 
         if let Some(schema) = &self.output_schema {
-            let schema = ChatJsonSchemaObjectArgs::default()
-                .schema(schema.clone())
-                .strict(true)
-                .name("response".to_string())
-                .build()
-                .map_err(ModelError::OpenAIApi)?;
-
-            builder.response_format(ChatCompletionResponseFormat {
-                r#type: ChatCompletionResponseFormatType::JsonSchema,
-                json_schema: Some(schema),
+            builder.response_format(ResponseFormat::JsonSchema {
+                json_schema: ResponseFormatJsonSchema {
+                    description: None,
+                    name: "response".into(),
+                    schema: Some(schema.clone()),
+                    strict: Some(true),
+                },
             });
         }
 
@@ -238,7 +236,7 @@ impl OpenAIModel {
         Vec<ChatCompletionMessageToolCall>,
         Option<async_openai::types::CompletionUsage>,
     )> {
-        let mut tool_call_states: HashMap<i32, ChatCompletionMessageToolCall> = HashMap::new();
+        let mut tool_call_states: HashMap<u32, ChatCompletionMessageToolCall> = HashMap::new();
         while let Some(result) = stream.next().await {
             match result {
                 Ok(mut response) => {
@@ -852,12 +850,12 @@ fn construct_user_message(m: &InnerMessage) -> ChatCompletionRequestMessage {
         crate::types::threads::InnerMessage::Array(content_array) => {
             let mut messages = vec![];
             for m in content_array {
-                let msg: ChatCompletionRequestMessageContentPart = match m.r#type {
+                let msg = match m.r#type {
                     crate::types::threads::MessageContentType::Text => {
-                        ChatCompletionRequestMessageContentPart::Text(m.value.clone().into())
+                        ChatCompletionRequestUserMessageContentPart::Text(m.value.clone().into())
                     }
                     crate::types::threads::MessageContentType::ImageUrl => {
-                        ChatCompletionRequestMessageContentPart::ImageUrl(
+                        ChatCompletionRequestUserMessageContentPart::ImageUrl(
                             ChatCompletionRequestMessageContentPartImage {
                                 image_url: ImageUrl {
                                     url: m.value.clone(),
