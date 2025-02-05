@@ -43,7 +43,7 @@ opentelemetry-otlp = { version = "0.17", features = ["tls"] }
 opentelemetry_sdk = { version = "0.24.0", features = ["rt-tokio"] }
 serde_yaml = "0.9"
 clap = { version = "4.5", features = ["derive"] }
-directories = "5.0"
+directories = "6.0"
 prettytable-rs = "0.10.0"
 dotenv = "0.15.0"
 futures-util = "0.3"
