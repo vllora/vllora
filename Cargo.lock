@@ -257,6 +257,7 @@ dependencies = [
  "actix-cors",
  "actix-web",
  "async-trait",
+ "chrono",
  "clap",
  "crossterm",
  "directories",
