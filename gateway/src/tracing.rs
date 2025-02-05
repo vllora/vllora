@@ -61,9 +61,9 @@ pub fn init_tui_tracing(sender: Sender<String>) {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::new(
-                "langdb_core=off,actix_web::middleware::logger=info,error",
+                "langdb_core=off,ai_gateway::middleware::trace_logger=info,error",
             )
-            .add_directive("actix_web::middleware::logger=info".parse().unwrap())
+            .add_directive("ai_gateway::middleware::trace_logger=info".parse().unwrap())
             .add_directive("langdb_gateway=off".parse().unwrap())
             .add_directive("langdb_core=off".parse().unwrap())
             .add_directive("actix_server=off".parse().unwrap()),
@@ -74,8 +74,9 @@ pub fn init_tui_tracing(sender: Sender<String>) {
             tracing_subscriber::fmt::format()
                 .compact()
                 .without_time()
+                .with_ansi(false)
                 .with_target(false)
-                .with_level(false),
+                .with_level(true),
         )
         .init();
 }

@@ -19,7 +19,6 @@ mod run;
 mod tracing;
 mod tui;
 mod usage;
-use ::tracing::info;
 use tokio::sync::Mutex;
 use tui::{Counters, Tui};
 
@@ -78,56 +77,58 @@ async fn main() -> Result<(), CliError> {
         }
         cli::Commands::Serve(serve_args) => {
             if serve_args.interactive {
-                let (log_sender, log_receiver) = tokio::sync::mpsc::channel(100);
-                tracing::init_tui_tracing(log_sender);
-
-                let config = Config::load(&cli.config)?;
-                let models = load_models(false).await?;
-                let config = config.apply_cli_overrides(&cli::Commands::Serve(serve_args));
-
-                let api_server = ApiServer::new(config);
-                info!("Starting server...");
-
                 let storage = Arc::new(Mutex::new(InMemoryStorage::new()));
                 let storage_clone = storage.clone();
                 let counters = Arc::new(RwLock::new(Counters::default()));
                 let counters_clone = counters.clone();
-                let mut counters_handle =
+
+                let (log_sender, log_receiver) = tokio::sync::mpsc::channel(100);
+                tracing::init_tui_tracing(log_sender);
+
+                let counter_handle =
                     tokio::spawn(async move { Tui::spawn_counter_loop(storage, counters).await });
 
-                let mut server_handle = tokio::spawn(async move {
+                let config = Config::load(&cli.config)?;
+                let config = config.apply_cli_overrides(&cli::Commands::Serve(serve_args));
+                let api_server = ApiServer::new(config);
+                let models = load_models(false).await?;
+                let server_handle = tokio::spawn(async move {
                     match api_server.start(models, Some(storage_clone)).await {
                         Ok(server) => server.await,
                         Err(e) => Err(e),
                     }
                 });
 
-                let mut tui_handle: tokio::task::JoinHandle<Result<(), CliError>> =
-                    tokio::spawn(async move {
-                        let mut tui = Tui::new(log_receiver)?;
-                        tui.run(counters_clone)?;
-                        Ok::<(), CliError>(())
-                    });
+                let tui_handle = tokio::spawn(async move {
+                    let tui = Tui::new(log_receiver);
+                    if let Ok(mut tui) = tui {
+                        tui.run(counters_clone).await?;
+                    }
+                    Ok::<(), CliError>(())
+                });
+
+                // Create abort handles
+                let counter_abort = counter_handle.abort_handle();
+                let server_abort = server_handle.abort_handle();
 
                 tokio::select! {
-                    counter_result = &mut counters_handle => {
-                        if let Err(e) = counter_result {
-                            eprintln!("{e}");
+                    r = counter_handle => {
+                        if let Err(e) = r {
+                            eprintln!("Counter loop error: {}", e);
                         }
-                        counters_handle.abort();
                     }
-                    tui_result = &mut tui_handle => {
-                        if let Ok(Err(e)) = tui_result {
-                            eprintln!("{e}");
+                    r = server_handle => {
+                        if let Err(e) = r {
+                            eprintln!("Server error: {}", e);
                         }
-                        server_handle.abort();
                     }
-
-                    server_result = &mut server_handle => {
-                        if let Ok(Err(e)) = server_result {
-                            eprintln!("{e}");
+                    r = tui_handle => {
+                        if let Err(e) = r {
+                            eprintln!("TUI error: {}", e);
                         }
-                        tui_handle.abort();
+                        // If TUI exits, abort other tasks
+                        counter_abort.abort();
+                        server_abort.abort();
                     }
                 }
             } else {
