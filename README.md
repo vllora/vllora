@@ -11,6 +11,7 @@
 [![GitHub stars](https://img.shields.io/github/stars/langdb/ai-gateway?style=social)](https://github.com/langdb/ai-gateway)
 [![Slack](https://img.shields.io/badge/Join-Slack-brightgreen?logo=slack)](https://join.slack.com/t/langdbcommunity/shared_invite/zt-2haf5kj6a-d7NX6TFJUPX45w~Ag4dzlg)
 [![Documentation](https://img.shields.io/badge/docs-langdb.ai-blue)](https://docs.langdb.ai)
+[![Crates.io](https://img.shields.io/crates/v/ai-gateway.svg)](https://crates.io/crates/ai-gateway)
 
 </div>
 
@@ -64,6 +65,7 @@ docker run -it \
 ```
 
 #### Using Cargo
+Install from [crates.io](https://crates.io/crates/ai-gateway):
 ```bash
 export RUSTFLAGS="--cfg tracing_unstable --cfg aws_sdk_unstable" 
 
