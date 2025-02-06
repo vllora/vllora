@@ -398,10 +398,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-openai"
+name = "async-openai-compat"
 version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d126927c78e1562d7e8473008ac8b082318c04d69e3a83e3495a563f8b84a66"
+checksum = "8dee3694912a70299575cb9be24eba2be9079827121a96b1814805922c8267f8"
 dependencies = [
  "backoff",
  "base64 0.22.1",
@@ -2383,7 +2383,7 @@ version = "0.1.0"
 dependencies = [
  "actix-web",
  "async-mcp",
- "async-openai",
+ "async-openai-compat",
  "async-trait",
  "aws-config",
  "aws-sdk-bedrock",
@@ -4422,7 +4422,7 @@ checksum = "42ff0bf0c66b8238c6f3b578df37d0b7848e55df8577b3f74f92a69acceeb825"
 name = "udfs"
 version = "0.1.0"
 dependencies = [
- "async-openai",
+ "async-openai-compat",
  "clap",
  "futures",
  "mockall",
