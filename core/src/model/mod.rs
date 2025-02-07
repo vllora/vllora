@@ -302,8 +302,7 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
         // TODO: Fix input creation properly
         let input_str = self.clean_input_trace(&input_vars)?;
         let model_name = self.definition.name.clone();
-        let provider_name = self.definition.model_params.provider_name.clone();
-
+        let provider_name = self.definition.db_model.provider_name.clone();
         let (tx, mut rx) = channel::<Option<ModelEvent>>(outer_tx.max_capacity());
         // let json_value_tags = JsonValue(&serde_json::to_value(tags_1.clone())?).as_value();
         let span = info_span!(
