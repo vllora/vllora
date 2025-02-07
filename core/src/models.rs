@@ -270,4 +270,5 @@ pub struct ModelDefinition {
     pub r#type: ModelType,
     pub limits: Limits,
     pub description: String,
+    pub parameters: Option<serde_json::Value>,
 }
