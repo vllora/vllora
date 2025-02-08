@@ -412,7 +412,7 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
         let input_str = self.clean_input_trace(&input_vars)?;
 
         let model_name = self.definition.name.clone();
-        let provider_name = self.definition.model_params.provider_name.clone();
+        let provider_name = self.definition.db_model.provider_name.clone();
         let cost_calculator = self.cost_calculator.clone();
 
         let span = info_span!(
