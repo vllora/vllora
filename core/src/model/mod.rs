@@ -425,7 +425,7 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
             credentials_identifier = credentials_ident.to_string(),
             cost = tracing::field::Empty,
             usage = tracing::field::Empty,
-            tags = tracing::field::Empty,
+            tags = JsonValue(&serde_json::to_value(tags.clone())?).as_value(),
             ttft = tracing::field::Empty,
         );
 
