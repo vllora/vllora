@@ -35,7 +35,9 @@ impl CostCalculator for GatewayCostCalculator {
         usage: &Usage,
     ) -> Result<CostCalculationResult, CostCalculatorError> {
         let model = self.models.iter().find(|m| {
-            m.model.to_lowercase() == model_name.to_lowercase()
+            (m.model.to_lowercase() == model_name.to_lowercase()
+                || m.inference_provider.model_name.to_string().to_lowercase()
+                    == model_name.to_lowercase())
                 && m.inference_provider.provider.to_string() == *provider_name
         });
 

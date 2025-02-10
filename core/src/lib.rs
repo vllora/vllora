@@ -10,6 +10,7 @@ pub mod model;
 pub mod models;
 pub mod otel;
 pub mod pricing;
+pub mod routing;
 pub mod types;
 
 use crate::error::GatewayError;
@@ -47,11 +48,14 @@ pub enum GatewayApiError {
 
     #[error("Token usage limit exceeded")]
     TokenUsageLimit,
+
+    #[error(transparent)]
+    RouteError(#[from] routing::RouterError),
 }
 
 impl actix_web::error::ResponseError for GatewayApiError {
     fn error_response(&self) -> HttpResponse {
-        tracing::info!("API error: {:?}", self);
+        tracing::error!("API error: {:?}", self);
         let json_error = json!({
             "error": self.to_string(),
         });
@@ -68,6 +72,7 @@ impl actix_web::error::ResponseError for GatewayApiError {
             GatewayApiError::CustomError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             GatewayApiError::CostCalculatorError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             GatewayApiError::ModelError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            GatewayApiError::RouteError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             GatewayApiError::TokenUsageLimit => StatusCode::BAD_REQUEST,
         }
     }

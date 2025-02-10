@@ -1,10 +1,10 @@
+use crate::model::tools::Tool;
+use crate::routing::RoutingStrategy;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt::Display;
 use thiserror::Error;
-
-use crate::model::tools::Tool;
 
 use super::engine::ModelTool;
 
@@ -50,12 +50,35 @@ pub struct ChatCompletionRequest {
     pub stream_options: Option<StreamOptions>,
 }
 
+impl ChatCompletionRequest {
+    pub fn with_model(mut self, model: String) -> Self {
+        self.model = model;
+        self
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatCompletionRequestWithTools {
     #[serde(flatten)]
     pub request: ChatCompletionRequest,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mcp_servers: Option<Vec<McpDefinition>>,
+    #[serde(skip_serializing_if = "Option::is_none", alias = "router")]
+    pub routing: Option<DynamicRouter>,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone, Default)]
+pub struct DynamicRouter {
+    pub strategy: RoutingStrategy,
+    #[serde(default)]
+    pub models: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_cost: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub routers: Option<Vec<DynamicRouter>>,
+    pub fallback: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
