@@ -20,6 +20,8 @@ use actix_web::HttpResponse;
 use serde_json::json;
 use thiserror::Error;
 
+pub use dashmap;
+
 pub mod usage;
 
 pub use bytes;
