@@ -64,7 +64,7 @@ pub struct ChatCompletionRequestWithTools {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mcp_servers: Option<Vec<McpDefinition>>,
     #[serde(skip_serializing_if = "Option::is_none", alias = "router")]
-    pub routing: Option<DynamicRouter>,
+    pub routing: Option<Vec<DynamicRouter>>,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone, Default)]
@@ -77,7 +77,6 @@ pub struct DynamicRouter {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub routers: Option<Vec<DynamicRouter>>,
     pub fallback: Option<String>,
 }
 

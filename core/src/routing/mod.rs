@@ -68,11 +68,16 @@ impl RouteStrategy for LlmRouter {
     ) -> Result<ChatCompletionRequest, RouterError> {
         match &self.strategy {
             RoutingStrategy::Cost { .. } => {
-                Ok(request.with_model("openai/gpt-3.5-turbo".to_string()))
+                Ok(request.with_model("openai/gpt-4o-mini".to_string()))
             }
             RoutingStrategy::Latency => {
                 // Route to the fastest model
-                Ok(request.with_model("openai/gpt-3.5-turbo".to_string()))
+                Ok(request.with_model(
+                    self.models
+                        .first()
+                        .cloned()
+                        .unwrap_or_else(|| "gpt-4o-mini".to_string()),
+                ))
             }
             RoutingStrategy::Time => {
                 // Time-based routing (e.g., different models at different times)

@@ -30,6 +30,122 @@ use crate::GatewayApiError;
 
 use super::can_execute_llm_for_request;
 
+pub type ErrorWithFallback = (GatewayApiError, Option<String>);
+
+async fn execute_inner(
+    mut request: ChatCompletionRequestWithTools,
+    callback_handler: web::Data<CallbackHandlerFn>,
+    traces: web::Data<TraceMap>,
+    req: HttpRequest,
+    provided_models: web::Data<AvailableModels>,
+    cost_calculator: web::Data<Box<dyn CostCalculator>>,
+) -> Result<HttpResponse, ErrorWithFallback> {
+    let span = Span::current();
+    let mut fallback = None;
+    let result = async {
+        let span = Span::current();
+        if request.request.model.starts_with("router/") {
+            let router_name = request.request.model.split('/').last().unwrap().to_string();
+            span.record("router_name", &router_name);
+            if let Some(routers) = &request.routing {
+                let router = routers.iter().find(|r| {
+                    if let Some(r_name) = r.name.clone() {
+                        r_name == router_name
+                    } else {
+                        false
+                    }
+                });
+
+                if let Some(router) = router {
+                    let llm_router = LlmRouter {
+                        name: router.name.clone().unwrap_or("dynamic".to_string()),
+                        strategy: router.strategy.clone(),
+                        models: router.models.clone(),
+                        max_cost: router.max_cost,
+                        fallbacks: None,
+                    };
+                    let available_models = provided_models.get_ref();
+                    fallback = router.fallback.clone();
+                    request.request = llm_router
+                        .route(
+                            request.request.clone(),
+                            available_models.clone(),
+                            req.headers()
+                                .into_iter()
+                                .map(|(k, v)| (k.to_string(), v.to_str().unwrap().to_string()))
+                                .collect(),
+                        )
+                        .await?;
+
+                    tracing::info!(
+                        "Router {:?} routed to {}",
+                        router.name,
+                        request.request.model
+                    );
+                }
+            }
+        }
+
+        span.record("request", &serde_json::to_string(&request)?);
+        let trace_id = span.context().span().span_context().trace_id();
+        traces
+            .entry(trace_id)
+            .or_insert_with(|| broadcast::channel(8));
+
+        let callback_handler = callback_handler.get_ref().clone();
+
+        let model_name = request.request.model.clone();
+
+        let available_models = provided_models.get_ref();
+        let llm_model = find_model_by_full_name(&request.request.model, available_models)?;
+
+        let response = execute(
+            request,
+            &callback_handler,
+            req.clone(),
+            cost_calculator.into_inner(),
+            &llm_model,
+        )
+        .instrument(span.clone())
+        .await?;
+
+        let mut response_builder = HttpResponse::Ok();
+        let builder = response_builder
+            .insert_header(("X-Trace-Id", trace_id_uuid(trace_id).to_string()))
+            .insert_header(("X-Model-Name", model_name.clone()))
+            .insert_header((
+                "X-Provider-Name",
+                llm_model.inference_provider.provider.to_string(),
+            ));
+
+        match response {
+            Left(result_stream) => {
+                let result = result_stream?
+                    .map_err(|e| {
+                        GatewayApiError::GatewayError(GatewayError::CustomError(e.to_string()))
+                    })
+                    .then(move |delta| {
+                        let model_name = model_name.clone();
+                        async move { map_sso_event(delta, model_name) }
+                    })
+                    .chain(futures::stream::once(async {
+                        Ok::<_, GatewayApiError>(Bytes::from("data: [DONE]\n\n"))
+                    }));
+
+                Ok(builder.content_type("text/event-stream").streaming(result))
+            }
+            Right(completions_response) => Ok(builder.json(completions_response?)),
+        }
+    }
+    .instrument(span)
+    .await;
+
+    match result {
+        Ok(response) => Ok(response),
+        Err(err) => Err((err, fallback.clone())),
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub async fn create_chat_completion(
     request: web::Json<ChatCompletionRequestWithTools>,
@@ -52,82 +168,38 @@ pub async fn create_chat_completion(
     ));
 
     let mut request = request.into_inner();
-    if request.request.model.starts_with("router/") {
-        let router_name = request.request.model.split('/').last().unwrap().to_string();
-        span.record("router_name", &router_name);
-        if router_name == *"dynamic" {
-            if let Some(router) = &request.routing {
-                let llm_router = LlmRouter {
-                    name: router.name.clone().unwrap_or("dynamic".to_string()),
-                    strategy: router.strategy.clone(),
-                    models: router.models.clone(),
-                    max_cost: router.max_cost,
-                    fallbacks: None,
-                };
-                let available_models = provided_models.get_ref();
-                request.request = llm_router
-                    .route(
-                        request.request.clone(),
-                        available_models.clone(),
-                        req.headers()
-                            .into_iter()
-                            .map(|(k, v)| (k.to_string(), v.to_str().unwrap().to_string()))
-                            .collect(),
-                    )
-                    .await?;
+    let max_runs = 5;
+    let mut run_count = 0;
+
+    loop {
+        let result = execute_inner(
+            request.clone(),
+            callback_handler.clone(),
+            traces.clone(),
+            req.clone(),
+            provided_models.clone(),
+            cost_calculator.clone(),
+        )
+        .instrument(span.clone())
+        .await;
+        run_count += 1;
+
+        match result {
+            Ok(r) => return Ok(r),
+            Err((e, Some(fallback))) => {
+                tracing::error!("LLM call failed: {}", e);
+                if run_count >= max_runs {
+                    tracing::warn!(
+                        "Reached max calls in single execution. Fallback to: {} is ignored",
+                        fallback
+                    );
+                    return Err(e);
+                }
+                tracing::info!("Fallback to: {}", fallback);
+                request.request.model = fallback;
             }
+            Err((e, None)) => return Err(e),
         }
-    }
-
-    span.record("request", &serde_json::to_string(&request)?);
-    let trace_id = span.context().span().span_context().trace_id();
-    traces
-        .entry(trace_id)
-        .or_insert_with(|| broadcast::channel(8));
-
-    let callback_handler = callback_handler.get_ref().clone();
-
-    let model_name = request.request.model.clone();
-
-    let available_models = provided_models.get_ref();
-    let llm_model = find_model_by_full_name(&request.request.model, available_models)?;
-
-    let response = execute(
-        request,
-        &callback_handler,
-        req.clone(),
-        cost_calculator.into_inner(),
-        &llm_model,
-    )
-    .instrument(span.clone())
-    .await?;
-
-    let mut response_builder = HttpResponse::Ok();
-    let builder = response_builder
-        .insert_header(("X-Trace-Id", trace_id_uuid(trace_id).to_string()))
-        .insert_header(("X-Model-Name", model_name.clone()))
-        .insert_header((
-            "X-Provider-Name",
-            llm_model.inference_provider.provider.to_string(),
-        ));
-
-    match response {
-        Left(result_stream) => {
-            let result = result_stream?
-                .map_err(|e| {
-                    GatewayApiError::GatewayError(GatewayError::CustomError(e.to_string()))
-                })
-                .then(move |delta| {
-                    let model_name = model_name.clone();
-                    async move { map_sso_event(delta, model_name) }
-                })
-                .chain(futures::stream::once(async {
-                    Ok::<_, GatewayApiError>(Bytes::from("data: [DONE]\n\n"))
-                }));
-
-            Ok(builder.content_type("text/event-stream").streaming(result))
-        }
-        Right(completions_response) => Ok(builder.json(completions_response?)),
     }
 }
 
