@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::model::executor;
 use crate::model::types::LLMFinishEvent;
 use crate::model::types::ModelEvent;
 use crate::types::gateway::CompletionModelUsage;
@@ -20,7 +19,6 @@ use crate::{
         threads::Message,
     },
 };
-use serde_json::Value;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::Span;
 use tracing_futures::Instrument;
@@ -33,7 +31,6 @@ use crate::GatewayApiError;
 pub async fn stream_chunks(
     completion_model_definition: CompletionModelDefinition,
     model: Box<dyn ModelInstance>,
-    params: Vec<Value>,
     messages: Vec<Message>,
     callback_handler: Arc<CallbackHandlerFn>,
     tags: HashMap<String, String>,
@@ -43,7 +40,8 @@ pub async fn stream_chunks(
     >,
     GatewayApiError,
 > {
-    let parent_definition = ParentDefinition::CompletionModel(completion_model_definition.clone());
+    let parent_definition =
+        ParentDefinition::CompletionModel(Box::new(completion_model_definition.clone()));
     let model_options = ParentCompletionOptions {
         definition: Box::new(parent_definition),
         named_args: Default::default(),
@@ -52,13 +50,12 @@ pub async fn stream_chunks(
 
     let db_model = model_options.definition.get_db_model();
     let (outer_tx, rx) = tokio::sync::mpsc::channel(100);
-    let input_variables = executor::prepare_input_variables(model_options, params)?;
 
     tokio::spawn(
         async move {
             let (tx, mut rx) = tokio::sync::mpsc::channel(100);
             let result_fut = model
-                .stream(input_variables, tx, messages, tags)
+                .stream(HashMap::new(), tx, messages, tags)
                 .instrument(Span::current());
 
             let forward_fut = async {

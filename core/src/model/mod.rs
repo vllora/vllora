@@ -1,14 +1,12 @@
-use crate::error::GatewayError;
 use crate::events::{JsonValue, RecordResult, SPAN_MODEL_CALL};
 use crate::model::bedrock::BedrockModel;
 use crate::model::error::ToolError;
 use crate::types::engine::{CompletionEngineParams, CompletionModelParams};
-use crate::types::engine::{CompletionModelDefinition, InputArgs, ModelTools, ModelType};
+use crate::types::engine::{CompletionModelDefinition, ModelTools, ModelType};
 use crate::types::gateway::{
     ChatCompletionContent, ChatCompletionMessage, ContentType, CostCalculator, Usage,
 };
-use crate::types::threads;
-use crate::types::threads::{InnerMessage, Message, MessageContentPart};
+use crate::types::threads::Message;
 use crate::GatewayResult;
 use anthropic::AnthropicModel;
 use async_trait::async_trait;
@@ -30,7 +28,6 @@ use crate::model::langdb_open::OpenAISpecModel;
 pub mod anthropic;
 pub mod bedrock;
 pub mod error;
-pub mod executor;
 pub mod gemini;
 pub mod image_generation;
 pub mod langdb_open;
@@ -184,7 +181,6 @@ pub async fn initialize_completion(
 #[derive(Clone, Serialize)]
 struct TraceModelDefinition {
     pub name: String,
-    pub input_args: InputArgs,
     pub provider_name: String,
     pub engine_name: String,
     pub prompt_name: Option<String>,
@@ -240,7 +236,6 @@ impl From<CompletionModelDefinition> for TraceModelDefinition {
         Self {
             model_name: value.model_name(),
             name: value.name,
-            input_args: value.input_args,
             provider_name: value.model_params.provider_name.clone(),
             engine_name: value.model_params.engine.engine_name().to_string(),
             prompt_name: value.model_params.prompt_name.clone(),
@@ -253,34 +248,7 @@ impl From<CompletionModelDefinition> for TraceModelDefinition {
 
 impl<Inner: ModelInstance> TracedModel<Inner> {
     fn clean_input_trace(&self, input_vars: &HashMap<String, Value>) -> GatewayResult<String> {
-        let mut input_vars = input_vars.clone();
-        let first_arg = self.definition.input_args.0.first();
-        if let Some(first_arg) = first_arg {
-            input_vars.entry(first_arg.name.clone()).and_modify(|m| {
-                if let Ok(InnerMessage::Array(arr)) =
-                    serde_json::from_value::<InnerMessage>(m.clone())
-                {
-                    let arr: Vec<MessageContentPart> = arr
-                        .iter()
-                        .map(|a| {
-                            let mut a = a.clone();
-                            match a.r#type {
-                                threads::MessageContentType::Text => {}
-                                threads::MessageContentType::ImageUrl => {
-                                    // Dont return image urls in tracing
-                                    a.value =
-                                        a.value.split(',').nth(0).unwrap_or_default().to_string();
-                                }
-                                threads::MessageContentType::InputAudio => {}
-                            }
-                            a
-                        })
-                        .collect();
-                    let v = serde_json::to_value(arr).unwrap();
-                    *m = v;
-                }
-            });
-        }
+        let input_vars = input_vars.clone();
         let str = serde_json::to_string(&json!(input_vars))?;
         Ok(str)
     }
@@ -502,19 +470,6 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
         }
         .await
     }
-}
-
-pub fn validate_variables(
-    input_variables: &HashMap<String, Value>,
-    required_variables: &[String],
-    model_args: &InputArgs,
-) -> GatewayResult<()> {
-    for var in required_variables {
-        if !model_args.contains(var) && !input_variables.contains_key(var) {
-            return Err(GatewayError::MissingVariable(var.clone()));
-        }
-    }
-    Ok(())
 }
 
 pub fn credentials_identifier(model_params: &CompletionModelParams) -> CredentialsIdent {

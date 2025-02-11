@@ -30,6 +30,11 @@ use crate::GatewayApiError;
 
 use super::can_execute_llm_for_request;
 
+use crate::events::JsonValue;
+use crate::events::SPAN_REQUEST_ROUTING;
+use tracing::field;
+use valuable::Valuable;
+
 pub type ErrorWithFallback = (GatewayApiError, Option<String>);
 
 async fn execute_inner(
@@ -43,10 +48,18 @@ async fn execute_inner(
     let span = Span::current();
     let mut fallback = None;
     let result = async {
-        let span = Span::current();
         if request.request.model.starts_with("router/") {
             let router_name = request.request.model.split('/').last().unwrap().to_string();
             span.record("router_name", &router_name);
+
+            let span = tracing::info_span!(
+                target: "langdb::user_tracing::request_routing",
+                SPAN_REQUEST_ROUTING,
+                router_name = router_name,
+                before = JsonValue(&serde_json::to_value(&request.request)?).as_value(),
+                after = field::Empty
+            );
+
             if let Some(routers) = &request.routing {
                 let router = routers.iter().find(|r| {
                     if let Some(r_name) = r.name.clone() {
@@ -75,8 +88,13 @@ async fn execute_inner(
                                 .map(|(k, v)| (k.to_string(), v.to_str().unwrap().to_string()))
                                 .collect(),
                         )
+                        .instrument(span.clone())
                         .await?;
 
+                    span.record(
+                        "after",
+                        JsonValue(&serde_json::to_value(&request.request)?).as_value(),
+                    );
                     tracing::info!(
                         "Router {:?} routed to {}",
                         router.name,
@@ -137,7 +155,6 @@ async fn execute_inner(
             Right(completions_response) => Ok(builder.json(completions_response?)),
         }
     }
-    .instrument(span)
     .await;
 
     match result {
