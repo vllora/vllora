@@ -3356,7 +3356,7 @@ dependencies = [
  "proc-macro-error-attr2",
  "proc-macro2",
  "quote",
- "version_check",
+ "syn 2.0.96",
 ]
 
 [[package]]
