@@ -304,13 +304,15 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
         let model_name = self.definition.name.clone();
         let provider_name = self.definition.db_model.provider_name.clone();
         let (tx, mut rx) = channel::<Option<ModelEvent>>(outer_tx.max_capacity());
-        // let json_value_tags = JsonValue(&serde_json::to_value(tags_1.clone())?).as_value();
+
         let span = info_span!(
             target: "langdb::user_tracing::models",
             SPAN_MODEL_CALL,
             input = &input_str,
             model = model_str,
             provider_name = provider_name,
+            model_name = model_name.clone(),
+            inference_model_name = self.definition.db_model.name.to_string(),
             output = tracing::field::Empty,
             error = tracing::field::Empty,
             credentials_identifier = credentials_ident.to_string(),
@@ -420,6 +422,8 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
             input = &input_str,
             model = model_str,
             provider_name = provider_name,
+            model_name = model_name.clone(),
+            inference_model_name = self.definition.db_model.name.to_string(),
             output = tracing::field::Empty,
             error = tracing::field::Empty,
             credentials_identifier = credentials_ident.to_string(),

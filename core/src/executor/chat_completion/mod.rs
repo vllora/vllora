@@ -126,7 +126,7 @@ pub async fn execute(
     };
 
     let completion_model_definition = CompletionModelDefinition {
-        name: request.model.clone(),
+        name: format!("{}/{}", llm_model.model_provider, llm_model.model),
         model_params: CompletionModelParams {
             engine: engine.clone(),
             provider_name: llm_model.model_provider.to_string(),
