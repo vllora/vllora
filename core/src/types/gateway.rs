@@ -8,7 +8,7 @@ use thiserror::Error;
 
 use super::engine::ModelTool;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ChatCompletionRequest {
     pub model: String,
     pub messages: Vec<ChatCompletionMessage>,
@@ -197,6 +197,16 @@ pub struct ChatCompletionMessage {
     pub tool_calls: Option<Vec<ToolCall>>,
     pub refusal: Option<String>,
     pub tool_call_id: Option<String>,
+}
+
+impl ChatCompletionMessage {
+    pub fn new_text(role: String, content: String) -> Self {
+        Self {
+            role,
+            content: Some(ChatCompletionContent::Text(content)),
+            ..Default::default()
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

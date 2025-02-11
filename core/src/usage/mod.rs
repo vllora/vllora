@@ -96,7 +96,7 @@ impl LimitPeriod {
     }
 }
 
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default, Serialize, Clone)]
 pub struct Metrics {
     pub requests: Option<f64>,
     pub input_tokens: Option<f64>,
@@ -107,7 +107,7 @@ pub struct Metrics {
     pub llm_usage: Option<f64>,
 }
 
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default, Serialize, Clone)]
 pub struct TimeMetrics {
     pub total: Metrics,
     pub monthly: BTreeMap<String, Metrics>, // Format: "YYYY-MM"
@@ -115,12 +115,12 @@ pub struct TimeMetrics {
     pub hourly: BTreeMap<String, Metrics>,  // Format: "YYYY-MM-DD-HH"
 }
 
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default, Serialize, Clone)]
 pub struct ModelMetrics {
     pub metrics: TimeMetrics,
 }
 
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default, Serialize, Clone)]
 pub struct ProviderMetrics {
     pub models: BTreeMap<String, ModelMetrics>,
 }

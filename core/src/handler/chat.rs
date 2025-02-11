@@ -4,12 +4,15 @@ use crate::executor::chat_completion::execute;
 use crate::routing::RouteStrategy;
 use crate::types::gateway::ChatCompletionRequestWithTools;
 use crate::types::gateway::CompletionModelUsage;
+use crate::usage::InMemoryStorage;
 use crate::GatewayError;
 use actix_web::{web, HttpRequest, HttpResponse};
 use bytes::Bytes;
 use either::Either::{Left, Right};
 use futures::StreamExt;
 use futures::TryStreamExt;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 use crate::types::gateway::{
     ChatCompletionChunk, ChatCompletionChunkChoice, ChatCompletionDelta, ChatCompletionUsage,
@@ -44,6 +47,7 @@ async fn execute_inner(
     req: HttpRequest,
     provided_models: web::Data<AvailableModels>,
     cost_calculator: web::Data<Box<dyn CostCalculator>>,
+    memory_storage: Arc<Mutex<InMemoryStorage>>,
 ) -> Result<HttpResponse, ErrorWithFallback> {
     let span = Span::current();
     let mut fallback = None;
@@ -79,6 +83,9 @@ async fn execute_inner(
                     };
                     let available_models = provided_models.get_ref();
                     fallback = router.fallback.clone();
+                    let metrics_guard = memory_storage.lock().await;
+                    let metrics = metrics_guard.get_all_counters().await;
+
                     request.request = llm_router
                         .route(
                             request.request.clone(),
@@ -87,6 +94,7 @@ async fn execute_inner(
                                 .into_iter()
                                 .map(|(k, v)| (k.to_string(), v.to_str().unwrap().to_string()))
                                 .collect(),
+                            metrics,
                         )
                         .instrument(span.clone())
                         .await?;
@@ -184,7 +192,11 @@ pub async fn create_chat_completion(
         message_id = tracing::field::Empty,
     ));
 
-    let mut request = request.into_inner();
+    let memory_storage = req
+        .app_data::<Arc<Mutex<InMemoryStorage>>>()
+        .unwrap()
+        .clone();
+    let mut request = request.clone();
     let max_runs = 5;
     let mut run_count = 0;
 
@@ -196,6 +208,7 @@ pub async fn create_chat_completion(
             req.clone(),
             provided_models.clone(),
             cost_calculator.clone(),
+            memory_storage.clone(),
         )
         .instrument(span.clone())
         .await;
