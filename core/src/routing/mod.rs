@@ -16,9 +16,12 @@ pub enum RouterError {
 pub struct LlmRouter {
     pub name: String,
     pub strategy: RoutingStrategy,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub models: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub max_cost: Option<f64>,
-    pub fallbacks: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fallback: Option<String>,
 }
 
 /// Defines the primary optimization strategy for model selection
@@ -33,7 +36,7 @@ pub enum RoutingStrategy {
     #[default]
     Time,
     Random,
-    ABTesting {
+    Percentage {
         model_a: (String, f64),
         model_b: (String, f64),
     },
@@ -91,7 +94,7 @@ impl RouteStrategy for LlmRouter {
                 let idx = rng.gen_range(0..self.models.len());
                 Ok(request.with_model(self.models[idx].clone()))
             }
-            RoutingStrategy::ABTesting {
+            RoutingStrategy::Percentage {
                 model_a: (model_a, split_a),
                 model_b: (model_b, spilt_b),
             } => {
@@ -127,15 +130,44 @@ mod tests {
     #[test]
     fn test_router() {
         let router = LlmRouter {
-            name: "test".to_string(),
-            strategy: super::RoutingStrategy::ABTesting {
-                model_a: ("gpt-3.5-turbo-0125".to_string(), 0.25),
-                model_b: ("gpt-4o-mini".to_string(), 0.75),
+            name: "ab_test".to_string(),
+            strategy: super::RoutingStrategy::Percentage {
+                model_a: ("gemini/gemini-1.5-flash-latest".to_string(), 0.25),
+                model_b: ("openai/gpt-4o-mini".to_string(), 0.75),
             },
-            models: vec!["gpt-3.5-turbo-0125".to_string(), "gpt-4o-mini".to_string()],
+            models: vec![],
             max_cost: None,
-            fallbacks: None,
+            fallback: None,
         };
-        println!("{:?}", serde_json::to_string(&router).unwrap());
+        println!("{}", serde_json::to_string_pretty(&router).unwrap());
+
+        let router = LlmRouter {
+            name: "fastest".to_string(),
+            strategy: super::RoutingStrategy::Latency,
+            models: vec![
+                "gemini/gemini-1.5-flash-latest".to_string(),
+                "openai/gpt-4o-mini".to_string(),
+                "deepseek/deepseek-chat".to_string(),
+                "xai/grok-2".to_string(),
+            ],
+            max_cost: None,
+            fallback: None,
+        };
+        println!("{}", serde_json::to_string_pretty(&router).unwrap());
+
+        let router = LlmRouter {
+            name: "fastest".to_string(),
+            strategy: super::RoutingStrategy::Script {
+                script: r#"const route = (body, headers, availableModels, metrics) => { 
+                    let cheapestOpenAiModel = availableModels.filter((m) => m.inference_provider.provider == \"openai\" && m.type == \"completions\")
+                        .sort(function(a,b) { return a.price.per_input_token >  b.price.per_input_token ? 1 : -1; })[0]; 
+                    return `${cheapestOpenAiModel.model}`;
+                }"#.to_string(),
+            },
+            models: vec![],
+            max_cost: None,
+            fallback: None,
+        };
+        println!("{}", serde_json::to_string_pretty(&router).unwrap());
     }
 }

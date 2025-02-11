@@ -62,7 +62,7 @@ async fn execute_inner(
                         strategy: router.strategy.clone(),
                         models: router.models.clone(),
                         max_cost: router.max_cost,
-                        fallbacks: None,
+                        fallback: None,
                     };
                     let available_models = provided_models.get_ref();
                     fallback = router.fallback.clone();
