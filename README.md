@@ -103,8 +103,8 @@ curl http://localhost:8080/v1/chat/completions \
 
 LangDB AI Gateway currently supports the following LLM providers. Find all [the available models here](https://app.langdb.ai/models).
 
-|                                                          | Provider                        |
-| -------------------------------------------------------- | ------------------------------- |
+|                                                                                                                   | Provider                        |
+| ----------------------------------------------------------------------------------------------------------------- | ------------------------------- |
 | <img src="https://raw.githubusercontent.com/langdb/ai-gateway/main/assets/images/openai.png" width="32">          | OpenAI                          |
 | <img src="https://raw.githubusercontent.com/langdb/ai-gateway/main/assets/images/gemini.png" width="32">          | Google Gemini                   |
 | <img src="https://raw.githubusercontent.com/langdb/ai-gateway/main/assets/images/Anthropic-AI.png" width="32">    | Anthropic                       |
@@ -237,6 +237,10 @@ WHERE finish_date >= today() - 1
 ORDER BY finish_time_us DESC
 LIMIT 10;
 ```
+
+### Leveraging LangDB APIs directly within Clickhouse
+Did you know you can call LangDB APIs directly within ClickHouse? Check out our [UDF documentation](UDF.md) to learn how to use LLMs in your SQL queries!
+
 ### Cost Control
 
 Cost control helps manage API spending by setting daily, monthly, or total cost limits. Configure cost limits using:

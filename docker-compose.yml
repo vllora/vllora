@@ -5,14 +5,17 @@ services:
     volumes:
       - ./docker/clickhouse/server/config.d:/etc/clickhouse-server/config.d
       - ./docker/clickhouse/user_scripts:/var/lib/clickhouse_scripts/user_scripts
+      # If you want to persist logs
       - ./docker/clickhouse/logs:/var/lib/clickhouse/logs
     ports:
       - "8123:8123"
       - "9000:9000"
     environment:
-      - LANGDB_API_KEY=${LANGDB_STAGING_KEY}
-      - LANGDB_PROJECT_ID=${LANGDB_PROJECT_ID}
-      # - LANGDB_STAGING_KEY=${LANGDB_STAGING_KEY}
+      - LANGDB_API_KEY=${GATEWAY_API_KEY}
+      - LANGDB_PROJECT_ID=${GATEWAY_PROJECT_ID}
+      # If you want to use local gateway
+      # - LANGDB_API_BASE=http://host.docker.internal:8080/v1
+
     ulimits:
       nofile:
         soft: 262144
