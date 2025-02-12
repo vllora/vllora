@@ -10,7 +10,7 @@ pub const LANGDB_PROJECT_HEADER: &str = "X-Project-Id";
 
 use serde_json::Value;
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CompletionConfig {
     #[serde(flatten)]
     pub config: GatewayConfig,
@@ -18,11 +18,72 @@ pub struct CompletionConfig {
     pub model_settings: ModelSettings,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub enum FunctionConfig {
+    Completion(CompletionConfig),
+    Embedding(EmbeddingConfig),
+}
+impl FunctionConfig {
+    pub fn r#type(&self) -> &str {
+        match self {
+            FunctionConfig::Completion(_) => "completion",
+            FunctionConfig::Embedding(_) => "embedding",
+        }
+    }
+    pub fn parallel(&self) -> usize {
+        match self {
+            FunctionConfig::Completion(config) => config.model_settings.parallel,
+            FunctionConfig::Embedding(config) => config.model_settings.parallel,
+        }
+    }
+
+    pub fn max_tokens(&self) -> Option<usize> {
+        match self {
+            FunctionConfig::Completion(config) => config.model_settings.max_tokens,
+            FunctionConfig::Embedding(config) => config.model_settings.max_tokens,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct EmbeddingConfig {
+    #[serde(flatten)]
+    pub config: GatewayConfig,
+    #[serde(flatten)]
+    pub model_settings: EmbeddingSettings,
+}
+
+fn default_parallel() -> usize {
+    100
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct EmbeddingSettings {
+    /// The model to use for embedding
+    #[serde(default = "default_embedding_model")]
+    pub model: String,
+
+    /// Number of parallel requests to make to the model
+    #[serde(default = "default_parallel")]
+    pub parallel: usize,
+
+    /// The maximum number of [tokens]
+    #[serde(default)]
+    pub max_tokens: Option<usize>,
+}
+fn default_embedding_model() -> String {
+    "text-embedding-3-small".to_string()
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ModelSettings {
     /// The model to use for completion
     #[serde(default = "default_model")]
     pub model: String,
+
+    /// Number of parallel requests to make to the model
+    #[serde(default = "default_parallel")]
+    pub parallel: usize,
 
     /// Number between -2.0 and 2.0. Positive values penalize new tokens based on their existing frequency in the text so far, decreasing the model's likelihood to repeat the same line verbatim.
     ///
@@ -51,7 +112,7 @@ pub struct ModelSettings {
     ///
     /// The total length of input tokens and generated tokens is limited by the model's context length. [Example Python code](https://cookbook.openai.com/examples/how_to_count_tokens_with_tiktoken) for counting tokens.
     #[serde(default)]
-    pub max_tokens: Option<u32>,
+    pub max_tokens: Option<usize>,
 
     /// How many chat completion choices to generate for each input message. Note that you will be charged based on the number of generated tokens across all of the choices. Keep `n` as `1` to minimize costs.
     #[serde(default)]
@@ -94,18 +155,38 @@ pub struct GatewayConfig {
     #[serde(skip)]
     api_key: SecretString,
     project_id: String,
+    #[serde(default = "default_uuid_v4")]
+    thread_id: Option<String>,
+    #[serde(default)]
+    run_id: Option<String>,
+}
+
+fn default_uuid_v4() -> Option<String> {
+    Some(uuid::Uuid::new_v4().to_string())
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CommonResponse {
+    pub response: Value,
+    pub usage: Usage,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Usage {
+    pub total_tokens: usize,
 }
 
 impl Default for GatewayConfig {
     fn default() -> Self {
         Self {
             api_base: std::env::var("LANGDB_API_BASE")
-                .unwrap_or_else(|_| LANGDB_API_BASE.to_string())
-                .into(),
+                .unwrap_or_else(|_| LANGDB_API_BASE.to_string()),
             api_key: std::env::var("LANGDB_API_KEY")
                 .unwrap_or_else(|_| "".to_string())
                 .into(),
             project_id: std::env::var("LANGDB_PROJECT_ID").unwrap_or_else(|_| "".to_string()),
+            thread_id: default_uuid_v4(),
+            run_id: default_uuid_v4(),
         }
     }
 }
@@ -133,8 +214,20 @@ impl GatewayConfig {
         self.api_base = api_base.into();
         self
     }
+
+    pub fn with_thread_id<S: Into<String>>(mut self, thread_id: S) -> Self {
+        self.thread_id = Some(thread_id.into());
+        self
+    }
+
+    pub fn with_run_id<S: Into<String>>(mut self, run_id: S) -> Self {
+        self.run_id = Some(run_id.into());
+        self
+    }
 }
 
+pub const LANGDB_THREAD_HEADER: &str = "X-Thread-Id";
+pub const LANGDB_RUN_HEADER: &str = "X-Run-Id";
 impl Config for GatewayConfig {
     fn headers(&self) -> HeaderMap {
         let mut headers = HeaderMap::new();
@@ -153,6 +246,19 @@ impl Config for GatewayConfig {
                 .parse()
                 .unwrap(),
         );
+
+        let thread_id = self
+            .thread_id
+            .clone()
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        headers.insert(LANGDB_THREAD_HEADER, thread_id.parse().unwrap());
+
+        let run_id = self
+            .run_id
+            .clone()
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        headers.insert(LANGDB_RUN_HEADER, run_id.parse().unwrap());
+
         headers
     }
 
