@@ -4,8 +4,7 @@ use async_openai::config::Config;
 use reqwest::header::{HeaderMap, AUTHORIZATION};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
-// pub const LANGDB_API_BASE: &str = "https://api.staging.langdb.ai/v1";
-pub const LANGDB_API_BASE: &str = "http://host.docker.internal:8080/v1";
+pub const LANGDB_API_BASE: &str = "https://api.us-east-1.langdb.ai/v1";
 /// Project header
 pub const LANGDB_PROJECT_HEADER: &str = "X-Project-Id";
 
@@ -100,7 +99,9 @@ pub struct GatewayConfig {
 impl Default for GatewayConfig {
     fn default() -> Self {
         Self {
-            api_base: LANGDB_API_BASE.to_string(),
+            api_base: std::env::var("LANGDB_API_BASE")
+                .unwrap_or_else(|_| LANGDB_API_BASE.to_string())
+                .into(),
             api_key: std::env::var("LANGDB_API_KEY")
                 .unwrap_or_else(|_| "".to_string())
                 .into(),

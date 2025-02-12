@@ -1,6 +1,7 @@
 use crate::types::CompletionConfig;
 use crate::InvokeError;
 use async_openai::types::{
+    ChatCompletionRequestSystemMessage, ChatCompletionRequestSystemMessageContent,
     ChatCompletionRequestUserMessage, ChatCompletionRequestUserMessageContent,
     CreateChatCompletionRequestArgs,
 };
@@ -23,10 +24,14 @@ pub async fn completions(input: String, last: &str) -> Result<String, InvokeErro
         }
     };
 
-    completions_with_config(input, config).await
+    let input = serde_json::from_str::<Vec<String>>(&input)?;
+    let system_prompt = input[0].to_string();
+    let input = input[1].to_string();
+    completions_with_config(system_prompt, input, config).await
 }
 
 async fn completions_with_config(
+    system_prompt: String,
     input: String,
     config: CompletionConfig,
 ) -> Result<String, InvokeError> {
@@ -38,7 +43,15 @@ async fn completions_with_config(
         });
 
     // Create the completion request with optional parameters
-    let messages = [message];
+    let messages = [
+        async_openai::types::ChatCompletionRequestMessage::System(
+            ChatCompletionRequestSystemMessage {
+                content: ChatCompletionRequestSystemMessageContent::Text(system_prompt),
+                name: None,
+            },
+        ),
+        message,
+    ];
     let mut request = CreateChatCompletionRequestArgs::default();
 
     request = request.model(&config.model_settings.model).to_owned();
@@ -108,9 +121,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_model() {
-        let response = completions::completions("sdfs".to_string(), "{}")
-            .await
-            .unwrap();
+        let response = completions::completions(
+            "[\"you are a helpful assistant,\"what is the capital of the moon?\"]".to_string(),
+            "{}",
+        )
+        .await
+        .unwrap();
         println!("{response}");
     }
 }
