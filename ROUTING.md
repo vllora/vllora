@@ -144,7 +144,7 @@ Latency-based routing selects the model with the lowest response time, ensuring 
 LangDB AI allows nesting of routing strategies, enabling combinations like fallback within script-based selection. This flexibility helps refine model selection based on dynamic business needs.
 
 ### Example
-```json
+```bash
 
 {
     "model": "router/dynamic",
