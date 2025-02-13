@@ -26,7 +26,7 @@ LangDB AI Gateway supports multiple routing strategies that can be combined and 
 Fallback routing allows sequential attempts to different model targets in case of failure or unavailability. It ensures robustness by cascading through a list of models based on predefined logic.
 
 Example:
-
+```json
 {
     "model": "router/dynamic",
     "messages": [
@@ -42,7 +42,7 @@ Example:
     },
     "stream": false
 }
-
+```
 
 ## Script-Based Routing
 
