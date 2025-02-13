@@ -126,7 +126,10 @@ pub async fn execute(
     };
 
     let completion_model_definition = CompletionModelDefinition {
-        name: format!("{}/{}", llm_model.model_provider, llm_model.model),
+        name: format!(
+            "{}/{}",
+            llm_model.inference_provider.provider, llm_model.model
+        ),
         model_params: CompletionModelParams {
             engine: engine.clone(),
             provider_name: llm_model.model_provider.to_string(),
