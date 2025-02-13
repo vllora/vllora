@@ -50,7 +50,7 @@ Example:
 LangDB AI allows executing custom JavaScript scripts to determine the best model dynamically. The script runs at request time and evaluates multiple parameters, including pricing, latency, and model availability.
 
 ### Example
-```json
+```bash
 
 {
     "model": "router/dynamic",
