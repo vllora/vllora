@@ -18,6 +18,7 @@ use crate::types::gateway::CostCalculatorError;
 use actix_web::http::header::ContentType;
 use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
+use executor::chat_completion::routed_executor::RoutedExecutorError;
 use serde_json::json;
 use thiserror::Error;
 
@@ -51,6 +52,9 @@ pub enum GatewayApiError {
 
     #[error(transparent)]
     RouteError(#[from] routing::RouterError),
+
+    #[error(transparent)]
+    RoutedExecutorError(#[from] RoutedExecutorError),
 }
 
 impl actix_web::error::ResponseError for GatewayApiError {
@@ -73,6 +77,7 @@ impl actix_web::error::ResponseError for GatewayApiError {
             GatewayApiError::CostCalculatorError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             GatewayApiError::ModelError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             GatewayApiError::RouteError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            GatewayApiError::RoutedExecutorError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             GatewayApiError::TokenUsageLimit => StatusCode::BAD_REQUEST,
         }
     }

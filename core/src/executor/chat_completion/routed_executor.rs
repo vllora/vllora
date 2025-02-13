@@ -13,6 +13,7 @@ use either::Either::{Left, Right};
 use futures::StreamExt;
 use futures::TryStreamExt;
 use std::sync::Arc;
+use thiserror::Error;
 use tokio::sync::Mutex;
 
 use crate::types::gateway::CostCalculator;
@@ -33,6 +34,15 @@ use crate::events::JsonValue;
 use crate::events::SPAN_REQUEST_ROUTING;
 use tracing::field;
 use valuable::Valuable;
+
+#[derive(Error, Debug)]
+pub enum RoutedExecutorError {
+    #[error("Failed deserializing request to json: {0}")]
+    FailedToDeserializeRequestResult(#[from] serde_json::Error),
+
+    #[error("Failed serializing merged request with target: {0}")]
+    FailedToSerializeMergedRequestResult(serde_json::Error),
+}
 
 pub struct RoutedExecutor {
     request: ChatCompletionRequestWithTools,
@@ -59,11 +69,17 @@ impl RoutedExecutor {
         while let Some((mut request, target)) = targets.pop() {
             if let Some(t) = target {
                 request.router = None;
-                request = Self::merge_request_with_target(&request, &t);
+                request = Self::merge_request_with_target(&request, &t)?;
             }
 
             if let Some(router) = &request.router {
-                let router_name = request.request.model.split('/').last().unwrap().to_string();
+                let router_name = request
+                    .request
+                    .model
+                    .split('/')
+                    .last()
+                    .expect("Model name should not be empty")
+                    .to_string();
                 span.record("router_name", &router_name);
 
                 let span = tracing::info_span!(
@@ -94,7 +110,7 @@ impl RoutedExecutor {
                         available_models,
                         req.headers()
                             .into_iter()
-                            .map(|(k, v)| (k.to_string(), v.to_str().unwrap().to_string()))
+                            .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
                             .collect(),
                         metrics,
                     )
@@ -112,7 +128,7 @@ impl RoutedExecutor {
                     }
                 }
             } else {
-                let result = Self::execute_llm(
+                let result = Self::execute_request(
                     &request,
                     callback_handler,
                     traces,
@@ -141,7 +157,7 @@ impl RoutedExecutor {
         unreachable!()
     }
 
-    async fn execute_llm(
+    async fn execute_request(
         request: &ChatCompletionRequestWithTools,
         callback_handler: &CallbackHandlerFn,
         traces: &TraceMap,
@@ -204,10 +220,9 @@ impl RoutedExecutor {
     fn merge_request_with_target(
         request: &ChatCompletionRequestWithTools,
         target: &HashMap<String, serde_json::Value>,
-    ) -> ChatCompletionRequestWithTools {
+    ) -> Result<ChatCompletionRequestWithTools, RoutedExecutorError> {
         let mut request_value = serde_json::to_value(request)
-            // .map_err(RouterError::FailedToDeserializeRequestResult)
-            .unwrap();
+            .map_err(RoutedExecutorError::FailedToDeserializeRequestResult)?;
 
         if let Some(obj) = request_value.as_object_mut() {
             for (key, value) in target {
@@ -218,6 +233,7 @@ impl RoutedExecutor {
             }
         }
 
-        serde_json::from_value(request_value).unwrap()
+        serde_json::from_value(request_value)
+            .map_err(RoutedExecutorError::FailedToDeserializeRequestResult)
     }
 }
