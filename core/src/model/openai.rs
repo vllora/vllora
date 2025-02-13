@@ -305,7 +305,6 @@ impl OpenAIModel {
                     }
                 }
                 Err(err) => {
-                    tracing::warn!("Stream error: {err:?}");
                     return Err(ModelError::OpenAIApi(err).into());
                 }
             }
