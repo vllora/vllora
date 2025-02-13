@@ -311,7 +311,11 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
                                             s.record("cost", serde_json::to_string(&c).unwrap());
                                         }
                                         Err(e) => {
-                                            tracing::error!("Error calculating cost: {:?}", e);
+                                            tracing::error!(
+                                                "Error calculating cost: {:?} {:#?}",
+                                                e,
+                                                llmfinish_event
+                                            );
                                         }
                                     };
 

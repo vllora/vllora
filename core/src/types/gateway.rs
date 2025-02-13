@@ -11,6 +11,7 @@ use super::engine::ModelTool;
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ChatCompletionRequest {
     pub model: String,
+    #[serde(default)]
     pub messages: Vec<ChatCompletionMessage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f32>,
@@ -63,21 +64,18 @@ pub struct ChatCompletionRequestWithTools {
     pub request: ChatCompletionRequest,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mcp_servers: Option<Vec<McpDefinition>>,
-    #[serde(skip_serializing_if = "Option::is_none", alias = "router")]
-    pub routing: Option<Vec<DynamicRouter>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub router: Option<DynamicRouter>,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone, Default)]
 pub struct DynamicRouter {
+    #[serde(flatten)]
     pub strategy: RoutingStrategy,
     #[serde(default)]
-    pub models: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_cost: Option<f64>,
+    pub targets: Vec<HashMap<String, serde_json::Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub fallback: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -1,4 +1,5 @@
 pub mod basic_executor;
+pub mod routed_executor;
 pub mod stream_executor;
 
 use std::collections::HashMap;
@@ -39,7 +40,7 @@ use crate::GatewayApiError;
 use super::get_key_credentials;
 
 pub async fn execute(
-    request: ChatCompletionRequestWithTools,
+    request: &ChatCompletionRequestWithTools,
     callback_handler: &CallbackHandlerFn,
     req: HttpRequest,
     cost_calculator: Arc<Box<dyn CostCalculator>>,

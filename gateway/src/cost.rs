@@ -34,6 +34,13 @@ impl CostCalculator for GatewayCostCalculator {
         provider_name: &str,
         usage: &Usage,
     ) -> Result<CostCalculationResult, CostCalculatorError> {
+        let model_name =
+            if let Some(stripped) = model_name.strip_prefix(&format!("{}/", provider_name)) {
+                stripped
+            } else {
+                model_name
+            };
+
         let model = self.models.iter().find(|m| {
             (m.model.to_lowercase() == model_name.to_lowercase()
                 || m.inference_provider.model_name.to_string().to_lowercase()
@@ -73,6 +80,7 @@ impl CostCalculator for GatewayCostCalculator {
                 }
             }
         } else {
+            tracing::error!("Model not found: {model_name} - {provider_name}");
             return Err(CostCalculatorError::ModelNotFound);
         }
     }

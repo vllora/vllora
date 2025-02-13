@@ -23,45 +23,62 @@ pub enum RouterError {
 
     #[error("Transformation router error: {0}")]
     TransformationRouterError(String),
+
+    #[error("Invalid metric: {0}")]
+    InvalidMetric(String),
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
 pub struct LlmRouter {
     pub name: String,
+    #[serde(flatten)]
     pub strategy: RoutingStrategy,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub models: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_cost: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub fallback: Option<String>,
+    #[serde(default)]
+    pub targets: Vec<HashMap<String, serde_json::Value>>,
 }
 
 /// Defines the primary optimization strategy for model selection
-#[derive(serde::Deserialize, serde::Serialize, Debug, Clone, Default)]
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum RoutingStrategy {
-    Cost {
-        max_cost_per_million_tokens: Option<f64>,
-        willingness_to_pay: Option<f64>,
-    },
-    Latency,
-    #[default]
-    Time,
-    Random,
+    Fallback,
+    // Cost {
+    //     max_cost_per_million_tokens: Option<f64>,
+    //     willingness_to_pay: Option<f64>,
+    // },
     Percentage {
-        model_a: (String, f64),
-        model_b: (String, f64),
+        model_a: (TargetOrRouterName, f64),
+        model_b: (TargetOrRouterName, f64),
     },
-    Transformed {
-        parameters: serde_json::Value,
-    },
+    Random,
     Script {
         script: String,
-        // js function. It gets parameters in parameters
-        // transform_request({request, models, metrics}) -> request
+        // js function. Context is passed in parameters
+        // transform_request({request, models, metrics, headers}) -> request
     },
-    Min(String),
+    Optimized {
+        metric: strategy::metric::MetricSelector,
+    },
+}
+
+impl Default for RoutingStrategy {
+    fn default() -> Self {
+        Self::Optimized {
+            metric: strategy::metric::MetricSelector::default(),
+        }
+    }
+}
+
+pub type Target = HashMap<String, serde_json::Value>;
+
+pub type Targets = Vec<Target>;
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+#[serde(untagged)]
+pub enum TargetOrRouterName {
+    String(String),
+    Target(Target),
 }
 
 #[async_trait::async_trait]
@@ -69,10 +86,10 @@ pub trait RouteStrategy {
     async fn route(
         &self,
         request: ChatCompletionRequest,
-        available_models: AvailableModels,
+        available_models: &AvailableModels,
         headers: HashMap<String, String>,
         metrics: BTreeMap<String, ProviderMetrics>,
-    ) -> Result<ChatCompletionRequest, RouterError>;
+    ) -> Result<Targets, RouterError>;
 }
 
 #[async_trait::async_trait]
@@ -80,45 +97,22 @@ impl RouteStrategy for LlmRouter {
     async fn route(
         &self,
         request: ChatCompletionRequest,
-        available_models: AvailableModels,
+        available_models: &AvailableModels,
         headers: HashMap<String, String>,
         metrics: BTreeMap<String, ProviderMetrics>,
-    ) -> Result<ChatCompletionRequest, RouterError> {
+    ) -> Result<Targets, RouterError> {
         match &self.strategy {
-            RoutingStrategy::Cost { .. } => {
-                unimplemented!()
-            }
-            RoutingStrategy::Latency => {
-                strategy::metric::route(
-                    &self.models,
-                    request,
-                    available_models,
-                    headers,
-                    &metrics,
-                    strategy::metric::MetricSelector::Ttft,
-                    true,
-                )
-                .await
-            }
-            RoutingStrategy::Time => {
-                strategy::metric::route(
-                    &self.models,
-                    request,
-                    available_models,
-                    headers,
-                    &metrics,
-                    strategy::metric::MetricSelector::RequestsDuration,
-                    true,
-                )
-                .await
-            }
+            RoutingStrategy::Fallback => Ok(self.targets.clone()),
+            // RoutingStrategy::Cost { .. } => {
+            //     unimplemented!()
+            // }
             RoutingStrategy::Random => {
                 // Randomly select between available models
                 use rand::Rng;
 
                 let mut rng = rand::thread_rng();
-                let idx = rng.gen_range(0..self.models.len());
-                Ok(request.with_model(self.models[idx].clone()))
+                let idx = rng.gen_range(0..self.targets.len());
+                Ok(vec![self.targets[idx].clone()])
             }
             RoutingStrategy::Percentage {
                 model_a: (model_a, split_a),
@@ -126,66 +120,46 @@ impl RouteStrategy for LlmRouter {
             } => {
                 // A/B testing between models based on ModelPairWithSplit
                 let rand_val = rand::random::<f64>() * (split_a + spilt_b);
-                if rand_val < *split_a {
-                    Ok(request.with_model(model_a.clone()))
+                let target = if rand_val < *split_a {
+                    model_a.clone()
                 } else {
-                    Ok(request.with_model(model_b.clone()))
-                }
-            }
-            RoutingStrategy::Transformed { parameters } => {
-                // Execute a script to transform the request
-                let params = parameters.as_object().ok_or_else(|| {
-                    RouterError::TransformationRouterError(
-                        "parameters must be an object".to_string(),
-                    )
-                })?;
+                    model_b.clone()
+                };
 
-                // Convert request to Value, merge with parameters, and convert back
-                let mut request_value = serde_json::to_value(&request)
-                    .map_err(RouterError::FailedToDeserializeRequestResult)?;
+                let target = match target {
+                    TargetOrRouterName::Target(target) => target,
+                    TargetOrRouterName::String(model_name) => HashMap::from([(
+                        "model".to_string(),
+                        serde_json::Value::String(model_name),
+                    )]),
+                };
 
-                if let Some(obj) = request_value.as_object_mut() {
-                    for (key, value) in params {
-                        // Only override if the new value is not null
-                        if !value.is_null() {
-                            obj.insert(key.clone(), value.clone());
-                        }
-                    }
-                }
-
-                serde_json::from_value(request_value)
-                    .map_err(RouterError::FailedToDeserializeRequestResult)
+                Ok(vec![target])
             }
             RoutingStrategy::Script { script } => {
                 let result =
-                    ScriptStrategy::run(script, &request, &headers, &available_models, &metrics)?;
+                    ScriptStrategy::run(script, &request, &headers, available_models, &metrics)?;
 
-                Ok(serde_json::from_value(result)
-                    .map_err(RouterError::FailedToDeserializeRequestResult)?)
+                let r = serde_json::from_value(result)
+                    .map_err(RouterError::FailedToDeserializeRequestResult)?;
+
+                Ok(vec![r])
             }
-            RoutingStrategy::Min(metric) => {
-                // Use metric-based routing with the specified metric
-                let metric_selector = match metric.as_str() {
-                    "requests" => strategy::metric::MetricSelector::Requests,
-                    "input_tokens" => strategy::metric::MetricSelector::InputTokens,
-                    "output_tokens" => strategy::metric::MetricSelector::OutputTokens,
-                    "total_tokens" => strategy::metric::MetricSelector::TotalTokens,
-                    "requests_duration" => strategy::metric::MetricSelector::RequestsDuration,
-                    "ttft" => strategy::metric::MetricSelector::Ttft,
-                    "llm_usage" => strategy::metric::MetricSelector::LlmUsage,
-                    _ => return Err(RouterError::UnkwownMetric(metric.clone())),
-                };
+            RoutingStrategy::Optimized { metric } => {
+                let models = self
+                    .targets
+                    .iter()
+                    .filter_map(|m| {
+                        m.get("model")
+                            .and_then(|v| v.as_str().map(|s| s.to_string()))
+                    })
+                    .collect::<Vec<_>>();
+                let model = strategy::metric::route(&models, &metrics, metric, true).await?;
 
-                strategy::metric::route(
-                    &self.models,
-                    request,
-                    available_models,
-                    headers,
-                    &metrics,
-                    metric_selector,
-                    true,
-                )
-                .await
+                Ok(vec![HashMap::from([(
+                    "model".to_string(),
+                    serde_json::Value::String(model),
+                )])])
             }
         }
     }
@@ -196,6 +170,54 @@ mod tests {
     use crate::types::gateway::ChatCompletionMessage;
 
     use super::*;
+
+    #[test]
+    fn test_serialize() {
+        let router = LlmRouter {
+            name: "dynamic".to_string(),
+            strategy: RoutingStrategy::Optimized {
+                metric: strategy::metric::MetricSelector::Ttft,
+            },
+            targets: vec![],
+        };
+
+        eprintln!("{}", serde_json::to_string_pretty(&router).unwrap());
+
+        let router = LlmRouter {
+            name: "dynamic".to_string(),
+            strategy: RoutingStrategy::Percentage {
+                model_a: (
+                    TargetOrRouterName::Target(HashMap::from([
+                        (
+                            "model".to_string(),
+                            serde_json::Value::String("openai/gpt-4o-mini".to_string()),
+                        ),
+                        (
+                            "frequence_penality".to_string(),
+                            serde_json::Value::Number(1.into()),
+                        ),
+                    ])),
+                    0.5,
+                ),
+                model_b: (
+                    TargetOrRouterName::Target(HashMap::from([
+                        (
+                            "model".to_string(),
+                            serde_json::Value::String("openai/gpt-4o-mini".to_string()),
+                        ),
+                        (
+                            "frequence_penality".to_string(),
+                            serde_json::Value::Number(2.into()),
+                        ),
+                    ])),
+                    0.5,
+                ),
+            },
+            targets: vec![],
+        };
+
+        eprintln!("{}", serde_json::to_string_pretty(&router).unwrap());
+    }
 
     #[tokio::test]
     async fn test_script_router() {
@@ -213,12 +235,7 @@ mod tests {
                 "#
                 .to_string(),
             },
-            models: vec![
-                "openai/gpt-3.5-turbo".to_string(),
-                "openai/gpt-4".to_string(),
-            ],
-            fallback: None,
-            max_cost: None,
+            targets: vec![],
         };
 
         // Test case 1: Short conversation (≤ 5 messages)
@@ -238,14 +255,25 @@ mod tests {
         let result = router
             .route(
                 request.clone(),
-                available_models.clone(),
+                &available_models,
                 headers.clone(),
                 metrics.clone(),
             )
             .await;
 
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().model, "openai/gpt-3.5-turbo");
+        assert_eq!(
+            result
+                .unwrap()
+                .first()
+                .expect("No targets")
+                .get("model")
+                .expect("No model")
+                .as_str()
+                .expect("No model string")
+                .to_string(),
+            "openai/gpt-3.5-turbo"
+        );
 
         // Test case 2: Long conversation (> 5 messages)
         let long_request = ChatCompletionRequest {
@@ -262,104 +290,33 @@ mod tests {
         };
 
         let result = router
-            .route(long_request, available_models, headers, metrics)
+            .route(long_request, &available_models, headers, metrics)
             .await;
 
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().model, "openai/gpt-4");
+        assert_eq!(
+            result
+                .unwrap()
+                .first()
+                .expect("No targets")
+                .get("model")
+                .expect("No model")
+                .as_str()
+                .expect("No model string")
+                .to_string(),
+            "openai/gpt-4"
+        );
 
         // Test serialization
         let serialized = serde_json::to_string_pretty(&router).unwrap();
         let deserialized: LlmRouter = serde_json::from_str(&serialized).unwrap();
         assert_eq!(router.name, deserialized.name);
-        assert_eq!(router.models, deserialized.models);
+        assert_eq!(router.targets, deserialized.targets);
         match (&router.strategy, &deserialized.strategy) {
             (RoutingStrategy::Script { script: s1 }, RoutingStrategy::Script { script: s2 }) => {
                 assert_eq!(s1, s2);
             }
             _ => panic!("Deserialized strategy does not match"),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_transformed_router() {
-        let router = LlmRouter {
-            name: "test".to_string(),
-            strategy: RoutingStrategy::Transformed {
-                parameters: serde_json::json!({
-                    "model": "openai/gpt-4",
-                    "temperature": 0.7,
-                    "max_tokens": 128,
-                    "top_p": 0.9,
-                    "presence_penalty": 0.5,
-                    "frequency_penalty": 0.3,
-                    "stop": ["END", "STOP"]
-                }),
-            },
-            models: vec![
-                "openai/gpt-3.5-turbo".to_string(),
-                "openai/gpt-4".to_string(),
-            ],
-            fallback: None,
-            max_cost: None,
-        };
-
-        let request = ChatCompletionRequest {
-            model: "router/test".to_string(),
-            messages: vec![ChatCompletionMessage::new_text(
-                "user".to_string(),
-                "Hello".to_string(),
-            )],
-            temperature: Some(0.5),
-            max_tokens: None,
-            ..Default::default()
-        };
-
-        let headers = HashMap::new();
-        let available_models = AvailableModels(vec![]);
-        let metrics = BTreeMap::new();
-
-        let result = router
-            .route(
-                request.clone(),
-                available_models.clone(),
-                headers.clone(),
-                metrics.clone(),
-            )
-            .await;
-
-        assert!(result.is_ok());
-        let transformed = result.unwrap();
-        assert_eq!(transformed.model, "openai/gpt-4");
-        assert_eq!(transformed.temperature, Some(0.7));
-        assert_eq!(transformed.max_tokens, Some(128));
-        assert_eq!(transformed.top_p, Some(0.9));
-        assert_eq!(transformed.presence_penalty, Some(0.5));
-        assert_eq!(transformed.frequency_penalty, Some(0.3));
-        assert_eq!(
-            transformed.stop,
-            Some(vec!["END".to_string(), "STOP".to_string()])
-        );
-
-        // Test invalid parameters
-        let invalid_router = LlmRouter {
-            name: "test".to_string(),
-            strategy: RoutingStrategy::Transformed {
-                parameters: serde_json::json!("not an object"),
-            },
-            models: vec![],
-            fallback: None,
-            max_cost: None,
-        };
-
-        let result = invalid_router
-            .route(request, available_models, headers, metrics)
-            .await;
-
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            RouterError::TransformationRouterError(_) => (),
-            err => panic!("Expected InvalidParameters error, got: {}", err),
         }
     }
 }
