@@ -201,9 +201,26 @@ impl RoutedExecutor {
                     GatewayApiError::GatewayError(GatewayError::CustomError(e.to_string()))
                 });
 
-                let result = stream
+                // Pin the stream to heap
+                let mut stream = Box::pin(stream);
+
+                // Check first element for error
+                let first = match stream.as_mut().next().await {
+                    Some(Ok(delta)) => delta,
+                    Some(Err(e)) => {
+                        return Err(e);
+                    }
+                    None => {
+                        return Err(GatewayApiError::GatewayError(GatewayError::CustomError(
+                            "Empty response from model".to_string(),
+                        )));
+                    }
+                };
+
+                let model_name = model_name.clone();
+                let result = futures::stream::once(async { Ok(first) })
+                    .chain(stream)
                     .then(move |delta| {
-                        tracing::warn!("delta: {delta:?}");
                         let model_name = model_name.clone();
                         async move { map_sso_event(delta, model_name) }
                     })
