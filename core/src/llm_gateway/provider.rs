@@ -119,8 +119,18 @@ impl Provider {
                         max_output_tokens: request.max_tokens.map(|x| x as i32),
                         temperature: request.temperature,
                         top_p: request.top_p,
-                        top_k: None,
                         stop_sequences: request.stop.clone(),
+                        candidate_count: request.n,
+                        presence_penalty: request.presence_penalty,
+                        frequency_penalty: request.frequency_penalty,
+                        seed: request.seed,
+                        // Not supported by request inteface
+                        // response_logprobs: request.response_logprobs,
+                        // logprobs: request.logprobs,
+                        // top_k: request.top_k,
+                        response_logprobs: None,
+                        logprobs: None,
+                        top_k: None,
                     },
                 })
             }
