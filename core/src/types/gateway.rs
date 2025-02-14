@@ -1,5 +1,4 @@
 use crate::model::tools::Tool;
-use crate::routing::RoutingStrategy;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -59,19 +58,19 @@ impl ChatCompletionRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatCompletionRequestWithTools {
+pub struct ChatCompletionRequestWithTools<T> {
     #[serde(flatten)]
     pub request: ChatCompletionRequest,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mcp_servers: Option<Vec<McpDefinition>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub router: Option<DynamicRouter>,
+    pub router: Option<DynamicRouter<T>>,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone, Default)]
-pub struct DynamicRouter {
+pub struct DynamicRouter<T> {
     #[serde(flatten)]
-    pub strategy: RoutingStrategy,
+    pub strategy: T,
     #[serde(default)]
     pub targets: Vec<HashMap<String, serde_json::Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]

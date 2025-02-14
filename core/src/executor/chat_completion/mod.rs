@@ -16,6 +16,8 @@ use crate::types::gateway::{ChatCompletionRequestWithTools, CompletionModelUsage
 use actix_web::{HttpMessage, HttpRequest};
 use either::Either::{self, Left, Right};
 use futures::Stream;
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 use uuid::Uuid;
 
 use crate::{
@@ -38,9 +40,10 @@ use crate::handler::{CallbackHandlerFn, ModelEventWithDetails};
 use crate::GatewayApiError;
 
 use super::get_key_credentials;
+use std::fmt::Debug;
 
-pub async fn execute(
-    request: &ChatCompletionRequestWithTools,
+pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
+    request: &ChatCompletionRequestWithTools<T>,
     callback_handler: &CallbackHandlerFn,
     req: HttpRequest,
     cost_calculator: Arc<Box<dyn CostCalculator>>,

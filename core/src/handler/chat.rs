@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use crate::routing::RoutingStrategy;
 use crate::types::gateway::ChatCompletionRequestWithTools;
 use crate::types::gateway::CompletionModelUsage;
 use crate::usage::InMemoryStorage;
@@ -26,7 +27,7 @@ use crate::executor::chat_completion::routed_executor::RoutedExecutor;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn create_chat_completion(
-    request: web::Json<ChatCompletionRequestWithTools>,
+    request: web::Json<ChatCompletionRequestWithTools<RoutingStrategy>>,
     callback_handler: web::Data<CallbackHandlerFn>,
     traces: web::Data<TraceMap>,
     req: HttpRequest,

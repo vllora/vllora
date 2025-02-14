@@ -26,6 +26,9 @@ pub enum RouterError {
 
     #[error("Invalid metric: {0}")]
     InvalidMetric(String),
+
+    #[error(transparent)]
+    BoxedError(#[from] Box<dyn std::error::Error + Send + Sync>),
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
@@ -43,10 +46,6 @@ pub struct LlmRouter {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum RoutingStrategy {
     Fallback,
-    // Cost {
-    //     max_cost_per_million_tokens: Option<f64>,
-    //     willingness_to_pay: Option<f64>,
-    // },
     Percentage {
         model_a: (TargetOrRouterName, f64),
         model_b: (TargetOrRouterName, f64),
@@ -103,9 +102,6 @@ impl RouteStrategy for LlmRouter {
     ) -> Result<Targets, RouterError> {
         match &self.strategy {
             RoutingStrategy::Fallback => Ok(self.targets.clone()),
-            // RoutingStrategy::Cost { .. } => {
-            //     unimplemented!()
-            // }
             RoutingStrategy::Random => {
                 // Randomly select between available models
                 use rand::Rng;

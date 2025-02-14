@@ -1,4 +1,5 @@
 use crate::handler::chat::map_sso_event;
+use crate::routing::RoutingStrategy;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 
@@ -45,11 +46,11 @@ pub enum RoutedExecutorError {
 }
 
 pub struct RoutedExecutor {
-    request: ChatCompletionRequestWithTools,
+    request: ChatCompletionRequestWithTools<RoutingStrategy>,
 }
 
 impl RoutedExecutor {
-    pub fn new(request: ChatCompletionRequestWithTools) -> Self {
+    pub fn new(request: ChatCompletionRequestWithTools<RoutingStrategy>) -> Self {
         Self { request }
     }
 
@@ -158,7 +159,7 @@ impl RoutedExecutor {
     }
 
     async fn execute_request(
-        request: &ChatCompletionRequestWithTools,
+        request: &ChatCompletionRequestWithTools<RoutingStrategy>,
         callback_handler: &CallbackHandlerFn,
         traces: &TraceMap,
         req: &HttpRequest,
@@ -235,9 +236,9 @@ impl RoutedExecutor {
     }
 
     fn merge_request_with_target(
-        request: &ChatCompletionRequestWithTools,
+        request: &ChatCompletionRequestWithTools<RoutingStrategy>,
         target: &HashMap<String, serde_json::Value>,
-    ) -> Result<ChatCompletionRequestWithTools, RoutedExecutorError> {
+    ) -> Result<ChatCompletionRequestWithTools<RoutingStrategy>, RoutedExecutorError> {
         let mut request_value = serde_json::to_value(request)
             .map_err(RoutedExecutorError::FailedToDeserializeRequestResult)?;
 
