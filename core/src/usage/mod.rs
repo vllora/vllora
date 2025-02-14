@@ -10,7 +10,7 @@ use chrono::Datelike;
 use chrono::Timelike;
 
 pub fn get_hour_key(company_id: &str, key: &str) -> String {
-    let hour = Utc::now().date_naive().format("%Y-%m-%d%h");
+    let hour = Utc::now().naive_utc().format("%Y-%m-%d-%H");
     format!("{company_id}:{key}:{hour}")
 }
 

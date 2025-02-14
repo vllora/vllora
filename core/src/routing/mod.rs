@@ -46,7 +46,7 @@ pub struct LlmRouter {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum RoutingStrategy {
     Fallback,
-    #[serde(alias="a_b_testing")]
+    #[serde(alias = "a_b_testing")]
     Percentage {
         model_a: (TargetOrRouterName, f64),
         model_b: (TargetOrRouterName, f64),
