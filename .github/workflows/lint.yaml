@@ -47,3 +47,7 @@ jobs:
       - name: Format
         run: |
           cargo fmt -- --check
+
+      - name: Run tests
+        run: |
+          cargo test --all --exclude udfs

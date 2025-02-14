@@ -8,7 +8,6 @@ use minijinja::Environment;
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
-use serde_with::json::JsonString;
 use serde_with::serde_as;
 use serde_with::OneOrMany;
 use validator::Validate;
@@ -26,7 +25,6 @@ use serde::de::Error;
 pub struct CompletionModelDefinition {
     pub name: String,
     pub model_params: CompletionModelParams,
-    pub input_args: InputArgs,
     pub prompt: Prompt,
     pub tools: ModelTools,
     pub db_model: Model,
@@ -43,8 +41,6 @@ pub struct Model {
     pub model_params: HashMap<String, Value>,
     #[serde_as(as = "JsonStringCond")]
     pub execution_options: ExecutionOptions,
-    #[serde_as(as = "JsonString")]
-    pub input_args: InputArgs,
     #[serde_as(as = "JsonStringCond")]
     pub tools: ModelTools,
     pub model_type: ModelType,
@@ -138,71 +134,6 @@ impl Prompt {
             messages: vec![],
             owning_model: None,
         }
-    }
-}
-
-impl<I> From<I> for InputArgs
-where
-    I: IntoIterator<Item = String>,
-{
-    fn from(value: I) -> Self {
-        Self(
-            value
-                .into_iter()
-                .map(|name| InputArg {
-                    name,
-                    description: None,
-                })
-                .collect(),
-        )
-    }
-}
-#[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-pub struct InputArg {
-    pub name: String,
-    pub description: Option<String>,
-}
-
-impl InputArg {
-    pub fn new(name: impl Into<String>) -> Self {
-        Self {
-            name: name.into(),
-            description: None,
-        }
-    }
-
-    pub fn with_description(mut self, description: impl Into<String>) -> Self {
-        self.description = Some(description.into());
-        self
-    }
-}
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-pub struct InputArgs(pub Vec<InputArg>);
-
-impl FromIterator<InputArg> for InputArgs {
-    fn from_iter<T: IntoIterator<Item = InputArg>>(iter: T) -> Self {
-        Self(iter.into_iter().collect())
-    }
-}
-
-impl InputArgs {
-    pub fn contains(&self, r: &String) -> bool {
-        self.0.iter().any(|arg| &arg.name == r)
-    }
-
-    pub fn names(&self) -> impl Iterator<Item = &'_ String> {
-        self.0.iter().map(|arg| &arg.name)
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = &InputArg> {
-        self.0.iter()
-    }
-}
-
-impl Default for InputArgs {
-    fn default() -> Self {
-        Self(vec![InputArg::new("input")])
     }
 }
 
@@ -873,7 +804,6 @@ impl View {
 pub struct RoutingModelDefinition {
     pub name: String,
     pub view: View,
-    pub input_args: InputArgs,
     pub db_model: Model,
 }
 
@@ -894,9 +824,9 @@ pub struct CompletionModelOptions {
 impl From<CompletionModelOptions> for ParentCompletionOptions {
     fn from(value: CompletionModelOptions) -> Self {
         Self {
-            definition: Box::new(ParentDefinition::CompletionModel(
+            definition: Box::new(ParentDefinition::CompletionModel(Box::new(
                 value.definition.deref().clone(),
-            )),
+            ))),
             named_args: value.named_args,
             verbose: value.verbose,
         }
@@ -924,7 +854,7 @@ pub struct ImageGenerationModelDefinition {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum ParentDefinition {
-    CompletionModel(CompletionModelDefinition),
+    CompletionModel(Box<CompletionModelDefinition>),
     RoutingModel(Box<RoutingModelDefinition>),
     ImageGenerationModel(Box<ImageGenerationModelDefinition>),
 }
@@ -937,14 +867,6 @@ impl ParentDefinition {
             ParentDefinition::ImageGenerationModel(image_generation_model_definition) => {
                 image_generation_model_definition.name.clone()
             }
-        }
-    }
-
-    pub fn get_input_args(&self) -> InputArgs {
-        match self {
-            ParentDefinition::CompletionModel(model) => model.input_args.clone(),
-            ParentDefinition::RoutingModel(model) => model.input_args.clone(),
-            ParentDefinition::ImageGenerationModel(_) => InputArgs(vec![]),
         }
     }
 

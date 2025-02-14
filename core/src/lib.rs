@@ -10,6 +10,7 @@ pub mod model;
 pub mod models;
 pub mod otel;
 pub mod pricing;
+pub mod routing;
 pub mod types;
 
 use crate::error::GatewayError;
@@ -17,6 +18,7 @@ use crate::types::gateway::CostCalculatorError;
 use actix_web::http::header::ContentType;
 use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
+use executor::chat_completion::routed_executor::RoutedExecutorError;
 use serde_json::json;
 use thiserror::Error;
 
@@ -47,11 +49,17 @@ pub enum GatewayApiError {
 
     #[error("Token usage limit exceeded")]
     TokenUsageLimit,
+
+    #[error(transparent)]
+    RouteError(#[from] routing::RouterError),
+
+    #[error(transparent)]
+    RoutedExecutorError(#[from] RoutedExecutorError),
 }
 
 impl actix_web::error::ResponseError for GatewayApiError {
     fn error_response(&self) -> HttpResponse {
-        tracing::info!("API error: {:?}", self);
+        tracing::error!("API error: {:?}", self);
         let json_error = json!({
             "error": self.to_string(),
         });
@@ -68,6 +76,8 @@ impl actix_web::error::ResponseError for GatewayApiError {
             GatewayApiError::CustomError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             GatewayApiError::CostCalculatorError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             GatewayApiError::ModelError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            GatewayApiError::RouteError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            GatewayApiError::RoutedExecutorError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             GatewayApiError::TokenUsageLimit => StatusCode::BAD_REQUEST,
         }
     }

@@ -16,7 +16,7 @@ use crate::{
     model::types::ModelEventType,
     types::{
         credentials::Credentials,
-        engine::{ExecutionOptions, InputArgs, Model, ModelTools, ModelType},
+        engine::{ExecutionOptions, Model, ModelTools, ModelType},
         gateway::CostCalculator,
     },
 };
@@ -59,7 +59,6 @@ pub async fn handle_image_generation(
         prompt_name: None,
         model_params: HashMap::new(),
         execution_options: ExecutionOptions::default(),
-        input_args: InputArgs(vec![]),
         tools: ModelTools(vec![]),
         model_type: ModelType::ImageGeneration,
         response_schema: None,

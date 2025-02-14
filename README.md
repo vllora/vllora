@@ -195,6 +195,9 @@ The gateway provides the following OpenAI-compatible endpoints:
 - `POST /v1/images/generations` - Generate images
 
 
+## Dynamic Model Routing
+Did you know you can implement sophisticated routing strategies for your LLM requests? Check out our [routing documentation](ROUTING.md) to learn how to use features like fallback routing, script-based routing, and latency-based routing to optimize your AI traffic!
+
 ## Clickhouse Integration
 The gateway supports OpenTelemetry tracing with ClickHouse as the storage backend. All traces are stored in the `langdb.traces` table.
 
