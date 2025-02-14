@@ -39,7 +39,7 @@ use crate::handler::extract_tags;
 use crate::handler::{CallbackHandlerFn, ModelEventWithDetails};
 use crate::GatewayApiError;
 
-use super::get_key_credentials;
+use super::{get_key_credentials, use_langdb_proxy};
 use std::fmt::Debug;
 
 pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
@@ -106,13 +106,14 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         .map_or(Uuid::new_v4().to_string(), |v| v.clone());
 
     let key_credentials = req.extensions().get::<Credentials>().cloned();
+    let (key_credentials, llm_model) = use_langdb_proxy(key_credentials, llm_model.clone());
     let providers_config = req.app_data::<ProvidersConfig>().cloned();
     let key = get_key_credentials(
         key_credentials.as_ref(),
         providers_config.as_ref(),
         &llm_model.inference_provider.provider.to_string(),
     );
-    let engine = Provider::get_completion_engine_for_model(llm_model, &request, key.clone())?;
+    let engine = Provider::get_completion_engine_for_model(&llm_model, &request, key.clone())?;
 
     let tools = ModelTools(request_tools);
 

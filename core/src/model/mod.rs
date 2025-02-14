@@ -24,16 +24,16 @@ use types::{ModelEvent, ModelEventType};
 use valuable::Valuable;
 pub mod handler;
 use self::openai::OpenAIModel;
-use crate::model::langdb_open::OpenAISpecModel;
+use crate::model::proxy::OpenAISpecModel;
 pub mod anthropic;
 pub mod bedrock;
 pub mod error;
 pub mod gemini;
 pub mod image_generation;
-pub mod langdb_open;
 pub mod mcp;
 pub mod openai;
 pub mod openai_spec_client;
+pub mod proxy;
 pub mod tools;
 pub mod types;
 
@@ -112,7 +112,7 @@ pub async fn init_completion_model_instance(
             cost_calculator: cost_calculator.clone(),
             router_span: router_span.clone(),
         })),
-        CompletionEngineParams::LangdbOpen {
+        CompletionEngineParams::Proxy {
             params,
             execution_options,
             credentials,
@@ -224,7 +224,7 @@ impl TraceModelDefinition {
             } => {
                 credentials.take();
             }
-            CompletionEngineParams::LangdbOpen {
+            CompletionEngineParams::Proxy {
                 ref mut credentials,
                 ..
             } => {
@@ -489,7 +489,7 @@ pub fn credentials_identifier(model_params: &CompletionModelParams) -> Credentia
         CompletionEngineParams::OpenAi { credentials, .. } => credentials.is_none(),
         CompletionEngineParams::Anthropic { credentials, .. } => credentials.is_none(),
         CompletionEngineParams::Gemini { credentials, .. } => credentials.is_none(),
-        CompletionEngineParams::LangdbOpen { credentials, .. } => credentials.is_none(),
+        CompletionEngineParams::Proxy { credentials, .. } => credentials.is_none(),
     };
 
     if langdb_creds {

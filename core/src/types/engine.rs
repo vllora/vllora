@@ -155,7 +155,7 @@ impl CompletionModelDefinition {
             CompletionEngineParams::Gemini { params, .. } => {
                 params.model.clone().unwrap_or_default()
             }
-            CompletionEngineParams::LangdbOpen { params, .. } => {
+            CompletionEngineParams::Proxy { params, .. } => {
                 params.model.clone().unwrap_or_default()
             }
         }
@@ -167,7 +167,7 @@ impl CompletionModelDefinition {
             CompletionEngineParams::Bedrock { provider, .. } => provider.to_string(),
             CompletionEngineParams::Anthropic { .. } => "anthropic".to_string(),
             CompletionEngineParams::Gemini { .. } => "gemini".to_string(),
-            CompletionEngineParams::LangdbOpen { .. } => "langdb_open".to_string(),
+            CompletionEngineParams::Proxy { .. } => "langdb_open".to_string(),
         }
     }
 }
@@ -304,7 +304,7 @@ pub enum CompletionEngineParams {
         execution_options: ExecutionOptions,
         params: GeminiModelParams,
     },
-    LangdbOpen {
+    Proxy {
         params: OpenAiModelParams,
         execution_options: ExecutionOptions,
         credentials: Option<ApiKeyCredentials>,
@@ -318,7 +318,7 @@ impl CompletionEngineParams {
             Self::Bedrock { .. } => "bedrock",
             Self::Anthropic { .. } => "anthropic",
             Self::Gemini { .. } => "gemini",
-            Self::LangdbOpen { .. } => "langdb_open",
+            Self::Proxy { .. } => "proxy",
         }
     }
 
@@ -333,7 +333,7 @@ impl CompletionEngineParams {
             },
             Self::Anthropic { .. } => "anthropic",
             Self::Gemini { .. } => "gemini",
-            Self::LangdbOpen { .. } => "langdb_open",
+            Self::Proxy { .. } => "proxy",
         }
     }
 }
@@ -345,7 +345,7 @@ impl CompletionEngineParams {
             Self::Bedrock { params, .. } => params.model_id.as_deref(),
             Self::Anthropic { params, .. } => params.model.as_ref().map(|m| m.string.as_str()),
             Self::Gemini { params, .. } => params.model.as_deref(),
-            Self::LangdbOpen { params, .. } => params.model.as_deref(),
+            Self::Proxy { params, .. } => params.model.as_deref(),
         }
     }
 }
