@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::{collections::HashMap, fmt::Display, ops::Deref, str::FromStr};
 
 use crate::types::json::JsonStringCond;
+use async_openai::types::ResponseFormat;
 use clust::messages as claude;
 use indexmap::IndexMap;
 use minijinja::Environment;
@@ -286,7 +287,6 @@ pub enum CompletionEngineParams {
         params: OpenAiModelParams,
         execution_options: ExecutionOptions,
         credentials: Option<ApiKeyCredentials>,
-        output_schema: Option<Value>,
     },
     Bedrock {
         credentials: Option<AwsCredentials>,
@@ -308,7 +308,6 @@ pub enum CompletionEngineParams {
         params: OpenAiModelParams,
         execution_options: ExecutionOptions,
         credentials: Option<ApiKeyCredentials>,
-        output_schema: Option<Value>,
     },
 }
 
@@ -450,6 +449,9 @@ pub struct OpenAiModelParams {
     /// A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](https://platform.openai.com/docs/guides/safety-best-practices/end-user-ids).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response_format: Option<ResponseFormat>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Validate)]

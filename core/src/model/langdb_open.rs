@@ -31,7 +31,6 @@ impl OpenAISpecModel {
         execution_options: ExecutionOptions,
         prompt: Prompt,
         tools: HashMap<String, Box<dyn Tool>>,
-        output_schema: Option<Value>,
         endpoint: Option<&str>,
         provider_name: &str,
     ) -> Result<Self, ModelError> {
@@ -52,7 +51,6 @@ impl OpenAISpecModel {
             execution_options,
             prompt,
             tools,
-            output_schema,
             Some(client),
         )?;
 

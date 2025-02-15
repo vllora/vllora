@@ -29,7 +29,7 @@ use async_openai::types::{
     ChatCompletionRequestUserMessageContentPart, ChatCompletionTool, ChatCompletionToolArgs,
     ChatCompletionToolChoiceOption, ChatCompletionToolType, CreateChatCompletionRequest,
     CreateChatCompletionRequestArgs, FinishReason, FunctionCall, FunctionCallStream,
-    FunctionObject, ResponseFormat, ResponseFormatJsonSchema,
+    FunctionObject,
 };
 use async_openai::types::{
     ChatCompletionRequestMessageContentPartImage, CreateChatCompletionStreamResponse, ImageUrl,
@@ -88,7 +88,6 @@ pub struct OpenAIModel {
     prompt: Prompt,
     client: Client<OpenAIConfig>,
     tools: Arc<HashMap<String, Box<dyn Tool>>>,
-    output_schema: Option<Value>,
     credentials_ident: CredentialsIdent,
 }
 
@@ -99,7 +98,6 @@ impl OpenAIModel {
         execution_options: ExecutionOptions,
         prompt: Prompt,
         tools: HashMap<String, Box<dyn Tool>>,
-        output_schema: Option<Value>,
         client: Option<Client<OpenAIConfig>>,
     ) -> Result<Self, ModelError> {
         Ok(Self {
@@ -108,7 +106,6 @@ impl OpenAIModel {
             prompt,
             client: client.unwrap_or(openai_client(credentials)?),
             tools: Arc::new(tools),
-            output_schema,
             credentials_ident: credentials
                 .map(|_c| CredentialsIdent::Own)
                 .unwrap_or(CredentialsIdent::Langdb),
@@ -196,15 +193,8 @@ impl OpenAIModel {
             builder.user(user.clone());
         }
 
-        if let Some(schema) = &self.output_schema {
-            builder.response_format(ResponseFormat::JsonSchema {
-                json_schema: ResponseFormatJsonSchema {
-                    description: None,
-                    name: "response".into(),
-                    schema: Some(schema.clone()),
-                    strict: Some(true),
-                },
-            });
+        if let Some(schema) = &model_params.response_format {
+            builder.response_format(schema.clone());
         }
 
         builder
