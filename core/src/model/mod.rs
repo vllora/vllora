@@ -95,7 +95,6 @@ pub async fn init_completion_model_instance(
             params,
             execution_options,
             credentials,
-            output_schema,
         } => Ok(Box::new(TracedModel {
             inner: OpenAIModel::new(
                 params.clone(),
@@ -103,7 +102,6 @@ pub async fn init_completion_model_instance(
                 execution_options.clone(),
                 definition.prompt.clone(),
                 tools,
-                output_schema.clone(),
                 None,
             )
             .map_err(|_| ToolError::CredentialsError("Openai".into()))?,
@@ -114,7 +112,6 @@ pub async fn init_completion_model_instance(
             params,
             execution_options,
             credentials,
-            output_schema,
         } => {
             let provider_name = provider_name.expect("provider_name is expected  here");
             Ok(Box::new(TracedModel {
@@ -124,7 +121,6 @@ pub async fn init_completion_model_instance(
                     execution_options.clone(),
                     definition.prompt.clone(),
                     tools,
-                    output_schema.clone(),
                     endpoint,
                     provider_name,
                 )

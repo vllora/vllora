@@ -38,6 +38,7 @@ impl Provider {
                     temperature: request.temperature,
                     top_p: request.top_p,
                     user: request.user.clone(),
+                    response_format: request.response_format.clone(),
                 };
                 let api_key_credentials = credentials.and_then(|cred| match cred {
                     Credentials::ApiKey(key) => Some(key),
@@ -48,14 +49,12 @@ impl Provider {
                         params,
                         execution_options: Default::default(),
                         credentials: api_key_credentials,
-                        output_schema: None,
                     })
                 } else {
                     Ok(CompletionEngineParams::LangdbOpen {
                         params,
                         execution_options: Default::default(),
                         credentials: api_key_credentials,
-                        output_schema: None,
                     })
                 }
             }
