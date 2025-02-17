@@ -62,6 +62,7 @@ pub struct TracedModel<Inner: ModelInstance> {
     inner: Inner,
     definition: CompletionModelDefinition,
     cost_calculator: Option<Arc<Box<dyn CostCalculator>>>,
+    router_span: tracing::Span
 }
 
 pub async fn init_completion_model_instance(
@@ -70,6 +71,7 @@ pub async fn init_completion_model_instance(
     cost_calculator: Option<Arc<Box<dyn CostCalculator>>>,
     endpoint: Option<&str>,
     provider_name: Option<&str>,
+    router_span: tracing::Span,
 ) -> Result<Box<dyn ModelInstance>, ToolError> {
     match &definition.model_params.engine {
         CompletionEngineParams::Bedrock {
@@ -90,6 +92,7 @@ pub async fn init_completion_model_instance(
             .map_err(|_| ToolError::CredentialsError("Bedrock".into()))?,
             definition,
             cost_calculator: cost_calculator.clone(),
+            router_span: router_span.clone(),
         })),
         CompletionEngineParams::OpenAi {
             params,
@@ -107,6 +110,7 @@ pub async fn init_completion_model_instance(
             .map_err(|_| ToolError::CredentialsError("Openai".into()))?,
             definition,
             cost_calculator: cost_calculator.clone(),
+            router_span: router_span.clone(),
         })),
         CompletionEngineParams::LangdbOpen {
             params,
@@ -127,6 +131,7 @@ pub async fn init_completion_model_instance(
                 .map_err(|_| ToolError::CredentialsError(provider_name.into()))?,
                 definition,
                 cost_calculator: cost_calculator.clone(),
+                router_span: router_span.clone(),
             }))
         }
         CompletionEngineParams::Anthropic {
@@ -144,6 +149,7 @@ pub async fn init_completion_model_instance(
             .map_err(|_| ToolError::CredentialsError("Anthropic".into()))?,
             definition,
             cost_calculator: cost_calculator.clone(),
+            router_span: router_span.clone(),
         })),
         CompletionEngineParams::Gemini {
             credentials,
@@ -160,6 +166,7 @@ pub async fn init_completion_model_instance(
             .map_err(|_| ToolError::CredentialsError("Gemini".into()))?,
             definition,
             cost_calculator: cost_calculator.clone(),
+            router_span: router_span.clone(),
         })),
     }
 }
@@ -168,10 +175,11 @@ pub async fn initialize_completion(
     definition: CompletionModelDefinition,
     cost_calculator: Option<Arc<Box<dyn CostCalculator>>>,
     provider_name: Option<&str>,
+    router_span: tracing::Span,
 ) -> Result<Box<dyn ModelInstance>, ToolError> {
     let tools: HashMap<_, Box<(dyn Tool + 'static)>> = HashMap::new();
 
-    init_completion_model_instance(definition, tools, cost_calculator, None, provider_name).await
+    init_completion_model_instance(definition, tools, cost_calculator, None, provider_name, router_span).await
 }
 
 #[derive(Clone, Serialize)]
@@ -271,6 +279,7 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
 
         let span = info_span!(
             target: "langdb::user_tracing::models",
+            parent: self.router_span.clone(),
             SPAN_MODEL_CALL,
             input = &input_str,
             model = model_str,
@@ -386,7 +395,9 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
         let cost_calculator = self.cost_calculator.clone();
 
         let span = info_span!(
-            target: "langdb::user_tracing::models", SPAN_MODEL_CALL,
+            target: "langdb::user_tracing::models", 
+            parent: self.router_span.clone(),
+            SPAN_MODEL_CALL,
             input = &input_str,
             model = model_str,
             provider_name = provider_name,

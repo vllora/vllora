@@ -48,6 +48,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
     req: HttpRequest,
     cost_calculator: Arc<Box<dyn CostCalculator>>,
     llm_model: &ModelDefinition,
+    router_span: tracing::Span,
 ) -> Result<
     Either<
         Result<
@@ -149,6 +150,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         Some(cost_calculator.clone()),
         llm_model.inference_provider.endpoint.as_deref(),
         Some(&llm_model.inference_provider.provider.to_string()),
+        router_span.clone(),
     )
     .await
     .map_err(|e| GatewayApiError::CustomError(e.to_string()))?;
