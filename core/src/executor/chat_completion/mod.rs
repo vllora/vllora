@@ -106,8 +106,13 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         .map_or(Uuid::new_v4().to_string(), |v| v.clone());
 
     let key_credentials = req.extensions().get::<Credentials>().cloned();
-    let (key_credentials, llm_model) = use_langdb_proxy(key_credentials, llm_model.clone());
     let providers_config = req.app_data::<ProvidersConfig>().cloned();
+    let (key_credentials, llm_model) = use_langdb_proxy(
+        key_credentials,
+        llm_model.clone(),
+        providers_config.as_ref(),
+    );
+
     let key = get_key_credentials(
         key_credentials.as_ref(),
         providers_config.as_ref(),

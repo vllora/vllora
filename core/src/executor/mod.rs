@@ -15,7 +15,7 @@ pub mod embeddings;
 pub mod image_generation;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
-pub struct ProvidersConfig(HashMap<String, ApiKeyCredentials>);
+pub struct ProvidersConfig(pub HashMap<String, ApiKeyCredentials>);
 
 pub fn get_key_credentials(
     key_credentials: Option<&Credentials>,
@@ -37,10 +37,16 @@ pub fn get_key_credentials(
 pub fn use_langdb_proxy(
     key_credentials: Option<Credentials>,
     mut llm_model: ModelDefinition,
+    providers_config: Option<&ProvidersConfig>,
 ) -> (Option<Credentials>, ModelDefinition) {
-    let (key_credentials, endpoint) = match (key_credentials, std::env::var("LANGDB_KEY")) {
-        (None, Ok(key)) => (
-            Some(Credentials::ApiKey(ApiKeyCredentials { api_key: key })),
+    let (key_credentials, endpoint) = match (
+        key_credentials,
+        providers_config
+            .as_ref()
+            .and_then(|p| p.0.get("langdb_proxy")),
+    ) {
+        (None, Some(key)) => (
+            Some(Credentials::ApiKey(key.clone())),
             Some(
                 std::env::var("LANGDB_API_ENDPOINT")
                     .ok()

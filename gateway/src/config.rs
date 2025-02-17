@@ -1,6 +1,8 @@
 use crate::cli;
+use crate::session::Credentials;
 use langdb_core::executor::ProvidersConfig;
 use langdb_core::handler::middleware::rate_limit::RateLimiting;
+use langdb_core::types::credentials::ApiKeyCredentials;
 use minijinja::Environment;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -135,5 +137,32 @@ impl Config {
             self.rate_limit = Some(rate_limit);
         }
         self
+    }
+}
+
+pub fn load_langdb_proxy_config(config: Option<ProvidersConfig>) -> Option<ProvidersConfig> {
+    if let Some(mut providers_config) = config {
+        if !providers_config.0.contains_key("langdb_proxy") {
+            let api_key = std::env::var("LANGDB_API_KEY").ok().or_else(|| {
+                std::env::var("HOME")
+                    .ok()
+                    .and_then(|home_dir| {
+                        let credentials_path = format!("{}/.langdb/credentials.yaml", home_dir);
+                        std::fs::read_to_string(credentials_path).ok()
+                    })
+                    .and_then(|credentials| serde_yaml::from_str::<Credentials>(&credentials).ok())
+                    .map(|credentials| credentials.api_key)
+            });
+
+            if let Some(key) = api_key {
+                providers_config.0.insert(
+                    "langdb_proxy".to_string(),
+                    ApiKeyCredentials { api_key: key },
+                );
+            }
+        }
+        Some(providers_config)
+    } else {
+        config
     }
 }
