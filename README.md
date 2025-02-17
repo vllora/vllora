@@ -196,7 +196,31 @@ The gateway provides the following OpenAI-compatible endpoints:
 
 
 ## Dynamic Model Routing
-Did you know you can implement sophisticated routing strategies for your LLM requests? Check out our [routing documentation](ROUTING.md) to learn how to use features like fallback routing, script-based routing, and latency-based routing to optimize your AI traffic!
+
+LangDB AI Gateway empowers you to implement sophisticated routing strategies for your LLM requests. By utilizing features such as fallback routing, script-based routing, and latency-based routing, you can optimize your AI traffic to balance cost, speed, and availability.
+
+Here's an example of a dynamic routing configuration:
+
+```json
+{
+    "model": "router/dynamic",
+    "messages": [
+        { "role": "system", "content": "You are a helpful assistant." },
+        { "role": "user", "content": "What is the formula of a square plot?" }
+    ],
+    "router": {
+        "router": "router",
+        "type": "fallback", // Type: fallback/script/optimized/percentage/latency
+        "targets": [
+            { "model": "openai/gpt-4o-mini", "temperature": 0.9, "max_tokens": 500, "top_p": 0.9 },
+            { "model": "deepseek/deepseek-chat", "frequency_penalty": 1, "presence_penalty": 0.6 }
+        ]
+    },
+    "stream": false
+}
+```
+
+This configuration demonstrates how you can define multiple targets with specific parameters to ensure your requests are handled by the most suitable models. For more detailed information, explore our [routing documentation](ROUTING.md).
 
 ## Clickhouse Integration
 The gateway supports OpenTelemetry tracing with ClickHouse as the storage backend. All traces are stored in the `langdb.traces` table.
