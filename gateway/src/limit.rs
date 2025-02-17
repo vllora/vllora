@@ -28,24 +28,21 @@ impl GatewayLimitChecker {
         &self,
         tenant_name: &str,
     ) -> Result<DollarUsage, Box<dyn std::error::Error>> {
-        let total_usage: Option<f64> = self
-            .storage
-            .lock()
-            .await
-            .get_value(LimitPeriod::Total, tenant_name, LLM_USAGE)
-            .await;
-        let monthly_usage: Option<f64> = self
-            .storage
-            .lock()
-            .await
-            .get_value(LimitPeriod::Month, tenant_name, LLM_USAGE)
-            .await;
-        let daily_usage: Option<f64> = self
-            .storage
-            .lock()
-            .await
-            .get_value(LimitPeriod::Day, tenant_name, LLM_USAGE)
-            .await;
+        let total_usage: Option<f64> =
+            self.storage
+                .lock()
+                .await
+                .get_value(&LimitPeriod::Total, tenant_name, LLM_USAGE);
+        let monthly_usage: Option<f64> =
+            self.storage
+                .lock()
+                .await
+                .get_value(&LimitPeriod::Month, tenant_name, LLM_USAGE);
+        let daily_usage: Option<f64> =
+            self.storage
+                .lock()
+                .await
+                .get_value(&LimitPeriod::Day, tenant_name, LLM_USAGE);
 
         Ok(DollarUsage {
             daily: daily_usage.unwrap_or(0.0),

@@ -520,7 +520,7 @@ where
     }
 }
 
-struct HeaderExtractor<'a>(&'a HeaderMap);
+pub struct HeaderExtractor<'a>(pub &'a HeaderMap);
 
 impl Extractor for HeaderExtractor<'_> {
     fn get(&self, key: &str) -> Option<&str> {

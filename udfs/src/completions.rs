@@ -1,35 +1,18 @@
-use crate::types::CompletionConfig;
+use crate::types::{CommonResponse, CompletionConfig, Usage};
 use crate::InvokeError;
 use async_openai::types::{
+    ChatCompletionRequestSystemMessage, ChatCompletionRequestSystemMessageContent,
     ChatCompletionRequestUserMessage, ChatCompletionRequestUserMessageContent,
     CreateChatCompletionRequestArgs,
 };
-use clap::{Parser, Subcommand};
-use serde_json;
-use tracing::{debug, error};
 
-pub async fn completions(input: String, last: &str) -> Result<String, InvokeError> {
-    debug!("Received input: {}", input);
-
-    // Get the config
-    let config = match parse_completion_config(last) {
-        Ok(config) => {
-            debug!("Parsed config successfully: {:?}", config);
-            config
-        }
-        Err(e) => {
-            error!("Failed to parse config: {:?}", e);
-            return Err(InvokeError::CustomError(e.to_string()));
-        }
-    };
-
-    completions_with_config(input, config).await
-}
-
-async fn completions_with_config(
+pub async fn completions(
     input: String,
-    config: CompletionConfig,
-) -> Result<String, InvokeError> {
+    config: &CompletionConfig,
+) -> Result<CommonResponse, InvokeError> {
+    let input = serde_json::from_str::<Vec<String>>(&input)?;
+    let system_prompt = input[0].to_string();
+    let input = input[1].to_string();
     // Create the message
     let message =
         async_openai::types::ChatCompletionRequestMessage::User(ChatCompletionRequestUserMessage {
@@ -38,7 +21,15 @@ async fn completions_with_config(
         });
 
     // Create the completion request with optional parameters
-    let messages = [message];
+    let messages = [
+        async_openai::types::ChatCompletionRequestMessage::System(
+            ChatCompletionRequestSystemMessage {
+                content: ChatCompletionRequestSystemMessageContent::Text(system_prompt),
+                name: None,
+            },
+        ),
+        message,
+    ];
     let mut request = CreateChatCompletionRequestArgs::default();
 
     request = request.model(&config.model_settings.model).to_owned();
@@ -49,7 +40,7 @@ async fn completions_with_config(
         request = request.frequency_penalty(fp).to_owned();
     }
     if let Some(mt) = config.model_settings.max_tokens {
-        request = request.max_tokens(mt).to_owned();
+        request = request.max_tokens(mt as u32).to_owned();
     }
     if let Some(n) = config.model_settings.n {
         request = request.n(n).to_owned();
@@ -57,7 +48,7 @@ async fn completions_with_config(
     if let Some(pp) = config.model_settings.presence_penalty {
         request = request.presence_penalty(pp).to_owned();
     }
-    if let Some(stop) = config.model_settings.stop {
+    if let Some(stop) = &config.model_settings.stop {
         request = request.stop([stop]).to_owned();
     }
     if let Some(seed) = config.model_settings.seed {
@@ -67,7 +58,7 @@ async fn completions_with_config(
     let request = request.build()?;
 
     // Create client and send request
-    let client = async_openai::Client::with_config(config.config);
+    let client = async_openai::Client::with_config(config.config.clone());
     let response = client.chat().create(request).await?;
 
     // Extract the first choice's message content
@@ -77,40 +68,30 @@ async fn completions_with_config(
         .and_then(|choice| choice.message.content.clone())
         .unwrap_or_default();
 
-    Ok(content)
-}
-
-#[derive(Parser, Debug)]
-pub struct Cli {
-    #[command(subcommand)]
-    command: Commands,
-}
-
-#[derive(Subcommand, Debug)]
-pub enum Commands {
-    Completions(CompletionConfigArgs),
-}
-
-#[derive(Parser, Debug)]
-pub struct CompletionConfigArgs {
-    #[arg(long)]
-    config: String, // This will contain the JSON string of all parameters
-}
-
-pub fn parse_completion_config(last: &str) -> Result<CompletionConfig, InvokeError> {
-    let config: CompletionConfig = serde_json::from_str(last)?;
-    Ok(config)
+    Ok(CommonResponse {
+        response: content.into(),
+        usage: Usage {
+            total_tokens: response
+                .usage
+                .map_or(0, |usage| usage.total_tokens as usize),
+        },
+    })
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::completions;
+    use crate::{completions::completions, types::CompletionConfig};
 
     #[tokio::test]
     async fn test_model() {
-        let response = completions::completions("sdfs".to_string(), "{}")
-            .await
-            .unwrap();
-        println!("{response}");
+        let config =
+            serde_json::from_str::<CompletionConfig>("{\"model\":\"gpt-4o-mini\"}").unwrap();
+        let response = completions(
+            "[\"you are a helpful assistant,\"what is the capital of the moon?\"]".to_string(),
+            &config,
+        )
+        .await
+        .unwrap();
+        println!("{:?}", response);
     }
 }

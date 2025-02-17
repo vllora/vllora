@@ -26,11 +26,11 @@ serde_json = "1.0"
 chrono = { version = "0.4.38", features = ["serde"] }
 async-trait = "0.1.82"
 thiserror = "1.0.59"
-async-openai = "0.27.2"
+async-openai = { version = "0.27.2", package = "async-openai-compat" }
 futures = "0.3"
 
 serde_with = { version = "3.8.1", features = ["json"] }
-validator = { version = "0.18", features = ["derive"] }
+validator = { version = "0.20", features = ["derive"] }
 clust = { version = "0.9.0", package = "langdb_clust" }
 indexmap = { version = "2.2.6", features = ["serde"] }
 serde_tuple = "0.5.0"
@@ -78,10 +78,8 @@ clickhouse = { version = "0.11.6", package = "langdb_clickhouse", features = [
 tokio-util = { version = "0.7.11", optional = true }
 async-mcp = "0.0.6"
 parking_lot = "0.12.3"
-
-[dependencies.openssl]
-version = "0.10"
-features = ["vendored"]
+rand = "0.8.5"
+deno_core = "0.334.0"
 
 [features]
 default = ["database"]

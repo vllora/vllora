@@ -6,11 +6,12 @@
 ## AI Gateway
 #### OpenSource Enterprise AI Gateway built in Rust
 
-<img src="https://raw.githubusercontent.com/langdb/ai-gateway/chore/docs/assets/langdb.gif" width="900px" alt="LangDB AI Gateway Demo showing LLM Switching">
+<img src="https://raw.githubusercontent.com/langdb/ai-gateway/main/assets/langdb.gif" width="900px" alt="LangDB AI Gateway Demo showing LLM Switching">
 
 [![GitHub stars](https://img.shields.io/github/stars/langdb/ai-gateway?style=social)](https://github.com/langdb/ai-gateway)
 [![Slack](https://img.shields.io/badge/Join-Slack-brightgreen?logo=slack)](https://join.slack.com/t/langdbcommunity/shared_invite/zt-2haf5kj6a-d7NX6TFJUPX45w~Ag4dzlg)
 [![Documentation](https://img.shields.io/badge/docs-langdb.ai-blue)](https://docs.langdb.ai)
+[![Crates.io](https://img.shields.io/crates/v/ai-gateway.svg)](https://crates.io/crates/ai-gateway)
 
 </div>
 
@@ -64,6 +65,7 @@ docker run -it \
 ```
 
 #### Using Cargo
+Install from [crates.io](https://crates.io/crates/ai-gateway):
 ```bash
 export RUSTFLAGS="--cfg tracing_unstable --cfg aws_sdk_unstable" 
 
@@ -101,8 +103,8 @@ curl http://localhost:8080/v1/chat/completions \
 
 LangDB AI Gateway currently supports the following LLM providers. Find all [the available models here](https://app.langdb.ai/models).
 
-|                                                          | Provider                        |
-| -------------------------------------------------------- | ------------------------------- |
+|                                                                                                                   | Provider                        |
+| ----------------------------------------------------------------------------------------------------------------- | ------------------------------- |
 | <img src="https://raw.githubusercontent.com/langdb/ai-gateway/main/assets/images/openai.png" width="32">          | OpenAI                          |
 | <img src="https://raw.githubusercontent.com/langdb/ai-gateway/main/assets/images/gemini.png" width="32">          | Google Gemini                   |
 | <img src="https://raw.githubusercontent.com/langdb/ai-gateway/main/assets/images/Anthropic-AI.png" width="32">    | Anthropic                       |
@@ -193,6 +195,9 @@ The gateway provides the following OpenAI-compatible endpoints:
 - `POST /v1/images/generations` - Generate images
 
 
+## Dynamic Model Routing
+Did you know you can implement sophisticated routing strategies for your LLM requests? Check out our [routing documentation](ROUTING.md) to learn how to use features like fallback routing, script-based routing, and latency-based routing to optimize your AI traffic!
+
 ## Clickhouse Integration
 The gateway supports OpenTelemetry tracing with ClickHouse as the storage backend. All traces are stored in the `langdb.traces` table.
 
@@ -235,6 +240,10 @@ WHERE finish_date >= today() - 1
 ORDER BY finish_time_us DESC
 LIMIT 10;
 ```
+
+### Leveraging LangDB APIs directly within Clickhouse
+Did you know you can call LangDB APIs directly within ClickHouse? Check out our [UDF documentation](UDF.md) to learn how to use LLMs in your SQL queries!
+
 ### Cost Control
 
 Cost control helps manage API spending by setting daily, monthly, or total cost limits. Configure cost limits using:

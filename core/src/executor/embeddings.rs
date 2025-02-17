@@ -12,7 +12,7 @@ use tracing::Span;
 
 use crate::types::embed::OpenAiEmbeddingParams;
 use crate::types::{
-    engine::{ExecutionOptions, InputArgs, Model, ModelTools, ModelType},
+    engine::{ExecutionOptions, Model, ModelTools, ModelType},
     gateway::{CreateEmbeddingRequest, Input},
 };
 use tracing_futures::Instrument;
@@ -57,7 +57,6 @@ pub async fn handle_embeddings_invoke(
                     prompt_name: None,
                     model_params: HashMap::new(),
                     execution_options: ExecutionOptions::default(),
-                    input_args: InputArgs(vec![]),
                     tools: ModelTools(vec![]),
                     model_type: ModelType::Embedding,
                     response_schema: None,

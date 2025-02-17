@@ -1,14 +1,12 @@
-use crate::error::GatewayError;
 use crate::events::{JsonValue, RecordResult, SPAN_MODEL_CALL};
 use crate::model::bedrock::BedrockModel;
 use crate::model::error::ToolError;
 use crate::types::engine::{CompletionEngineParams, CompletionModelParams};
-use crate::types::engine::{CompletionModelDefinition, InputArgs, ModelTools, ModelType};
+use crate::types::engine::{CompletionModelDefinition, ModelTools, ModelType};
 use crate::types::gateway::{
     ChatCompletionContent, ChatCompletionMessage, ContentType, CostCalculator, Usage,
 };
-use crate::types::threads;
-use crate::types::threads::{InnerMessage, Message, MessageContentPart};
+use crate::types::threads::Message;
 use crate::GatewayResult;
 use anthropic::AnthropicModel;
 use async_trait::async_trait;
@@ -30,7 +28,6 @@ use crate::model::langdb_open::OpenAISpecModel;
 pub mod anthropic;
 pub mod bedrock;
 pub mod error;
-pub mod executor;
 pub mod gemini;
 pub mod image_generation;
 pub mod langdb_open;
@@ -98,7 +95,6 @@ pub async fn init_completion_model_instance(
             params,
             execution_options,
             credentials,
-            output_schema,
         } => Ok(Box::new(TracedModel {
             inner: OpenAIModel::new(
                 params.clone(),
@@ -106,7 +102,6 @@ pub async fn init_completion_model_instance(
                 execution_options.clone(),
                 definition.prompt.clone(),
                 tools,
-                output_schema.clone(),
                 None,
             )
             .map_err(|_| ToolError::CredentialsError("Openai".into()))?,
@@ -117,7 +112,6 @@ pub async fn init_completion_model_instance(
             params,
             execution_options,
             credentials,
-            output_schema,
         } => {
             let provider_name = provider_name.expect("provider_name is expected  here");
             Ok(Box::new(TracedModel {
@@ -127,7 +121,6 @@ pub async fn init_completion_model_instance(
                     execution_options.clone(),
                     definition.prompt.clone(),
                     tools,
-                    output_schema.clone(),
                     endpoint,
                     provider_name,
                 )
@@ -184,7 +177,6 @@ pub async fn initialize_completion(
 #[derive(Clone, Serialize)]
 struct TraceModelDefinition {
     pub name: String,
-    pub input_args: InputArgs,
     pub provider_name: String,
     pub engine_name: String,
     pub prompt_name: Option<String>,
@@ -240,7 +232,6 @@ impl From<CompletionModelDefinition> for TraceModelDefinition {
         Self {
             model_name: value.model_name(),
             name: value.name,
-            input_args: value.input_args,
             provider_name: value.model_params.provider_name.clone(),
             engine_name: value.model_params.engine.engine_name().to_string(),
             prompt_name: value.model_params.prompt_name.clone(),
@@ -253,34 +244,7 @@ impl From<CompletionModelDefinition> for TraceModelDefinition {
 
 impl<Inner: ModelInstance> TracedModel<Inner> {
     fn clean_input_trace(&self, input_vars: &HashMap<String, Value>) -> GatewayResult<String> {
-        let mut input_vars = input_vars.clone();
-        let first_arg = self.definition.input_args.0.first();
-        if let Some(first_arg) = first_arg {
-            input_vars.entry(first_arg.name.clone()).and_modify(|m| {
-                if let Ok(InnerMessage::Array(arr)) =
-                    serde_json::from_value::<InnerMessage>(m.clone())
-                {
-                    let arr: Vec<MessageContentPart> = arr
-                        .iter()
-                        .map(|a| {
-                            let mut a = a.clone();
-                            match a.r#type {
-                                threads::MessageContentType::Text => {}
-                                threads::MessageContentType::ImageUrl => {
-                                    // Dont return image urls in tracing
-                                    a.value =
-                                        a.value.split(',').nth(0).unwrap_or_default().to_string();
-                                }
-                                threads::MessageContentType::InputAudio => {}
-                            }
-                            a
-                        })
-                        .collect();
-                    let v = serde_json::to_value(arr).unwrap();
-                    *m = v;
-                }
-            });
-        }
+        let input_vars = input_vars.clone();
         let str = serde_json::to_string(&json!(input_vars))?;
         Ok(str)
     }
@@ -302,16 +266,17 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
         // TODO: Fix input creation properly
         let input_str = self.clean_input_trace(&input_vars)?;
         let model_name = self.definition.name.clone();
-        let provider_name = self.definition.model_params.provider_name.clone();
-
+        let provider_name = self.definition.db_model.provider_name.clone();
         let (tx, mut rx) = channel::<Option<ModelEvent>>(outer_tx.max_capacity());
-        // let json_value_tags = JsonValue(&serde_json::to_value(tags_1.clone())?).as_value();
+
         let span = info_span!(
             target: "langdb::user_tracing::models",
             SPAN_MODEL_CALL,
             input = &input_str,
             model = model_str,
             provider_name = provider_name,
+            model_name = model_name.clone(),
+            inference_model_name = self.definition.db_model.name.to_string(),
             output = tracing::field::Empty,
             error = tracing::field::Empty,
             credentials_identifier = credentials_ident.to_string(),
@@ -342,7 +307,11 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
                                             s.record("cost", serde_json::to_string(&c).unwrap());
                                         }
                                         Err(e) => {
-                                            tracing::error!("Error calculating cost: {:?}", e);
+                                            tracing::error!(
+                                                "Error calculating cost: {:?} {:#?}",
+                                                e,
+                                                llmfinish_event
+                                            );
                                         }
                                     };
 
@@ -413,7 +382,7 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
         let input_str = self.clean_input_trace(&input_vars)?;
 
         let model_name = self.definition.name.clone();
-        let provider_name = self.definition.model_params.provider_name.clone();
+        let provider_name = self.definition.db_model.provider_name.clone();
         let cost_calculator = self.cost_calculator.clone();
 
         let span = info_span!(
@@ -421,12 +390,14 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
             input = &input_str,
             model = model_str,
             provider_name = provider_name,
+            model_name = model_name.clone(),
+            inference_model_name = self.definition.db_model.name.to_string(),
             output = tracing::field::Empty,
             error = tracing::field::Empty,
             credentials_identifier = credentials_ident.to_string(),
             cost = tracing::field::Empty,
             usage = tracing::field::Empty,
-            tags = tracing::field::Empty,
+            tags = JsonValue(&serde_json::to_value(tags.clone())?).as_value(),
             ttft = tracing::field::Empty,
         );
 
@@ -499,19 +470,6 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
         }
         .await
     }
-}
-
-pub fn validate_variables(
-    input_variables: &HashMap<String, Value>,
-    required_variables: &[String],
-    model_args: &InputArgs,
-) -> GatewayResult<()> {
-    for var in required_variables {
-        if !model_args.contains(var) && !input_variables.contains_key(var) {
-            return Err(GatewayError::MissingVariable(var.clone()));
-        }
-    }
-    Ok(())
 }
 
 pub fn credentials_identifier(model_params: &CompletionModelParams) -> CredentialsIdent {

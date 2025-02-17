@@ -1,16 +1,16 @@
+use crate::model::tools::Tool;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt::Display;
 use thiserror::Error;
 
-use crate::model::tools::Tool;
-
 use super::engine::ModelTool;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ChatCompletionRequest {
     pub model: String,
+    #[serde(default)]
     pub messages: Vec<ChatCompletionMessage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f32>,
@@ -33,7 +33,7 @@ pub struct ChatCompletionRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub response_format: Option<ResponseFormat>,
+    pub response_format: Option<async_openai::types::ResponseFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub seed: Option<i64>,
     // Keeping functions for backward compatibility
@@ -50,12 +50,31 @@ pub struct ChatCompletionRequest {
     pub stream_options: Option<StreamOptions>,
 }
 
+impl ChatCompletionRequest {
+    pub fn with_model(mut self, model: String) -> Self {
+        self.model = model;
+        self
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatCompletionRequestWithTools {
+pub struct ChatCompletionRequestWithTools<T> {
     #[serde(flatten)]
     pub request: ChatCompletionRequest,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mcp_servers: Option<Vec<McpDefinition>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub router: Option<DynamicRouter<T>>,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone, Default)]
+pub struct DynamicRouter<T> {
+    #[serde(flatten)]
+    pub strategy: T,
+    #[serde(default)]
+    pub targets: Vec<HashMap<String, serde_json::Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -175,6 +194,16 @@ pub struct ChatCompletionMessage {
     pub tool_calls: Option<Vec<ToolCall>>,
     pub refusal: Option<String>,
     pub tool_call_id: Option<String>,
+}
+
+impl ChatCompletionMessage {
+    pub fn new_text(role: String, content: String) -> Self {
+        Self {
+            role,
+            content: Some(ChatCompletionContent::Text(content)),
+            ..Default::default()
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

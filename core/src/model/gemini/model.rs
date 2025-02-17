@@ -119,7 +119,12 @@ impl GeminiModel {
             top_p: model_params.top_p,
             top_k: model_params.top_k,
             stop_sequences: model_params.stop_sequences.clone(),
-            candidate_count: None,
+            candidate_count: model_params.candidate_count,
+            presence_penalty: model_params.presence_penalty,
+            frequency_penalty: model_params.frequency_penalty,
+            seed: model_params.seed,
+            response_logprobs: model_params.response_logprobs,
+            logprobs: model_params.logprobs,
         };
 
         let tools = if self.tools.is_empty() {
@@ -421,7 +426,16 @@ impl GeminiModel {
                     [input_messages, call_messages, tools_messages].concat();
                 let request = self.build_request(conversation_messages)?;
                 let input = serde_json::to_string(&request)?;
-                let call_span = tracing::info_span!(target: target!("chat"), SPAN_GEMINI, ttft = field::Empty, input=input, output = field::Empty, error = field::Empty, usage = field::Empty);
+                let call_span = tracing::info_span!(
+                    target: target!("chat"),
+                    SPAN_GEMINI,
+                    ttft = field::Empty,
+                    input=input,
+                    output = field::Empty,
+                    error = field::Empty,
+                    usage = field::Empty,
+                    request = JsonValue(&serde_json::to_value(&request).unwrap_or_default()).as_value()
+                );
                 call_span.follows_from(tools_span.id());
                 gemini_calls.push((request, call_span));
                 continue;

@@ -23,6 +23,7 @@ tracing-subscriber = { version = "0.3.0", features = [
   "env-filter",
   "tracing-log",
 ] }
+uuid = "1.13.1"
 
 
 [[bin]]
@@ -32,3 +33,7 @@ name = "udf"
 [dev-dependencies]
 mockall = "0.11"
 tokio = { version = "1.0", features = ["full"] }
+
+[dependencies.openssl]
+version = "0.10"
+features = ["vendored"]

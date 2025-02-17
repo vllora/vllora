@@ -12,7 +12,6 @@ use valuable::Valuable;
 use crate::events::{JsonValue, RecordResult, SPAN_MODEL_CALL};
 use crate::model::error::ToolError;
 use crate::model::types::ModelEventType;
-use crate::types::engine::InputArgs;
 use crate::types::engine::{ImageGenerationEngineParams, ImageGenerationModelDefinition};
 use crate::types::gateway::{CostCalculator, CreateImageRequest, ImageGenerationModelUsage, Usage};
 use crate::types::image::ImagesResponse;
@@ -82,7 +81,6 @@ pub struct TracedImageGenerationModel<Inner: ImageGenerationModelInstance> {
 #[derive(Clone, Serialize)]
 struct TracedImageGenerationModelDefinition {
     pub name: String,
-    pub input_args: InputArgs,
     pub provider_name: String,
     pub engine_name: String,
     pub prompt_name: Option<String>,
@@ -131,7 +129,6 @@ impl From<ImageGenerationModelDefinition> for TracedImageGenerationModelDefiniti
         Self {
             model_name: value.db_model.name.clone(),
             name: value.name.clone(),
-            input_args: InputArgs(vec![]),
             provider_name: value.db_model.provider_name.clone(),
             engine_name: value.engine.engine_name().to_string(),
             prompt_name: None,

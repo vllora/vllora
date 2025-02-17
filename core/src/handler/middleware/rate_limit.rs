@@ -68,13 +68,13 @@ where
                     .clone();
 
                 if let Some(hourly) = rate_limit.hourly {
-                    check_limit(storage.clone(), LimitPeriod::Hour, hourly).await?;
+                    check_limit(storage.clone(), &LimitPeriod::Hour, hourly).await?;
                 }
                 if let Some(daily) = rate_limit.daily {
-                    check_limit(storage.clone(), LimitPeriod::Day, daily).await?;
+                    check_limit(storage.clone(), &LimitPeriod::Day, daily).await?;
                 }
                 if let Some(monthly) = rate_limit.monthly {
-                    check_limit(storage.clone(), LimitPeriod::Month, monthly).await?;
+                    check_limit(storage.clone(), &LimitPeriod::Month, monthly).await?;
                 }
             }
 
@@ -85,7 +85,7 @@ where
 
 async fn check_limit(
     storage: Arc<Mutex<InMemoryStorage>>,
-    period: LimitPeriod,
+    period: &LimitPeriod,
     limit: u64,
 ) -> Result<(), Error> {
     let current_calls = storage

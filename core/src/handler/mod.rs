@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AvailableModels(pub Vec<ModelDefinition>);
 
 pub fn find_model_by_full_name(
@@ -37,7 +37,8 @@ pub fn find_model_by_full_name(
             .0
             .iter()
             .find(|m| {
-                m.model.to_lowercase() == model_name.to_lowercase()
+                (m.model.to_lowercase() == model_name.to_lowercase()
+                    || m.inference_provider.model_name == model_name.to_lowercase())
                     && m.inference_provider.provider.to_string() == *provided_by
             })
             .cloned()

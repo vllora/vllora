@@ -67,6 +67,11 @@ pub struct GenerationConfig {
     pub top_k: Option<i32>,
     pub stop_sequences: Option<Vec<String>>,
     pub candidate_count: Option<u32>,
+    pub presence_penalty: Option<f32>,
+    pub frequency_penalty: Option<f32>,
+    pub seed: Option<i64>,
+    pub response_logprobs: Option<bool>,
+    pub logprobs: Option<i32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

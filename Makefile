@@ -26,6 +26,7 @@ endif
 build: build_udf build_gateway
 
 build_udf: ${TARGETDIR}/udf
+	cp ${TARGETDIR}/udf docker/clickhouse/user_scripts/langdb_udf
 
 build_gateway: ${TARGETDIR}/ai-gateway
 

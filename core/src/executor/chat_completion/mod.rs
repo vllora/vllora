@@ -1,4 +1,5 @@
 pub mod basic_executor;
+pub mod routed_executor;
 pub mod stream_executor;
 
 use std::collections::HashMap;
@@ -15,6 +16,8 @@ use crate::types::gateway::{ChatCompletionRequestWithTools, CompletionModelUsage
 use actix_web::{HttpMessage, HttpRequest};
 use either::Either::{self, Left, Right};
 use futures::Stream;
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 use uuid::Uuid;
 
 use crate::{
@@ -22,8 +25,8 @@ use crate::{
     types::{
         credentials::Credentials,
         engine::{
-            CompletionModelDefinition, CompletionModelParams, ExecutionOptions, InputArgs, Model,
-            ModelTool, ModelTools, ModelType, Prompt,
+            CompletionModelDefinition, CompletionModelParams, ExecutionOptions, Model, ModelTool,
+            ModelTools, ModelType, Prompt,
         },
         gateway::{ChatCompletionDelta, ChatCompletionResponse, CostCalculator},
     },
@@ -37,9 +40,10 @@ use crate::handler::{CallbackHandlerFn, ModelEventWithDetails};
 use crate::GatewayApiError;
 
 use super::get_key_credentials;
+use std::fmt::Debug;
 
-pub async fn execute(
-    request: ChatCompletionRequestWithTools,
+pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
+    request: &ChatCompletionRequestWithTools<T>,
     callback_handler: &CallbackHandlerFn,
     req: HttpRequest,
     cost_calculator: Arc<Box<dyn CostCalculator>>,
@@ -118,7 +122,6 @@ pub async fn execute(
         prompt_name: None,
         model_params: HashMap::new(),
         execution_options: ExecutionOptions::default(),
-        input_args: InputArgs(vec![]),
         tools: tools.clone(),
         model_type: ModelType::Completions,
         response_schema: None,
@@ -126,13 +129,15 @@ pub async fn execute(
     };
 
     let completion_model_definition = CompletionModelDefinition {
-        name: request.model.clone(),
+        name: format!(
+            "{}/{}",
+            llm_model.inference_provider.provider, llm_model.model
+        ),
         model_params: CompletionModelParams {
             engine: engine.clone(),
             provider_name: llm_model.model_provider.to_string(),
             prompt_name: None,
         },
-        input_args: InputArgs(vec![]),
         prompt: Prompt::empty(),
         tools,
         db_model: db_model.clone(),
@@ -203,7 +208,6 @@ pub async fn execute(
             stream_chunks(
                 completion_model_definition,
                 model,
-                vec![],
                 messages.clone(),
                 callback_handler.clone().into(),
                 tags.clone(),

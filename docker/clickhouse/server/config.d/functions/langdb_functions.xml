@@ -6,6 +6,10 @@
       <type>String</type>
       <name>input</name>
     </argument>
+    <argument>
+      <type>Nullable(String)</type>
+      <name>system_prompt</name>
+    </argument>
     <parameter>
       <type>String</type>
       <name>config</name>
@@ -27,7 +31,7 @@
     <format>JSONCompactEachRow</format>
     <command>langdb_udf embed {config:String}</command>
     <command_read_timeout>1000000</command_read_timeout>
-    <return_type>String</return_type>
+    <return_type>`Array`(`Float32`)</return_type>
     <stderr_reaction>throw</stderr_reaction>
     <check_exit_code>1</check_exit_code>
   </function>
