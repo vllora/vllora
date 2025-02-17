@@ -62,7 +62,7 @@ pub struct TracedModel<Inner: ModelInstance> {
     inner: Inner,
     definition: CompletionModelDefinition,
     cost_calculator: Option<Arc<Box<dyn CostCalculator>>>,
-    router_span: tracing::Span
+    router_span: tracing::Span,
 }
 
 pub async fn init_completion_model_instance(
@@ -179,7 +179,15 @@ pub async fn initialize_completion(
 ) -> Result<Box<dyn ModelInstance>, ToolError> {
     let tools: HashMap<_, Box<(dyn Tool + 'static)>> = HashMap::new();
 
-    init_completion_model_instance(definition, tools, cost_calculator, None, provider_name, router_span).await
+    init_completion_model_instance(
+        definition,
+        tools,
+        cost_calculator,
+        None,
+        provider_name,
+        router_span,
+    )
+    .await
 }
 
 #[derive(Clone, Serialize)]
@@ -395,7 +403,7 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
         let cost_calculator = self.cost_calculator.clone();
 
         let span = info_span!(
-            target: "langdb::user_tracing::models", 
+            target: "langdb::user_tracing::models",
             parent: self.router_span.clone(),
             SPAN_MODEL_CALL,
             input = &input_str,
