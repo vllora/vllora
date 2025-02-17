@@ -1,8 +1,46 @@
 # LangDB AI Gateway - Dynamic Routing Guide
 
-LangDB AI Gateway optimizes LLM selection based on cost, speed, and availability, ensuring efficient request handling. This guide covers the various dynamic routing strategies available in the system.
+LangDB AI Gateway optimizes LLM selection based on cost, speed, and availability, ensuring efficient request handling. This guide covers the various dynamic routing strategies available in the system, including fallback, script-based, optimized, percentage-based, and latency-based routing. Each strategy can be tailored to meet specific needs, allowing for flexible and efficient AI traffic management.
+
+## Understanding Targets
+
+In the context of LangDB AI Gateway, "targets" refer to the specific models or endpoints that the routing strategies can direct requests to. Each target represents a potential destination for processing a request, and they are defined within the routing logic to optimize performance and reliability.
+
+Defining Targets
+
+Example of defining targets:
+```json
+{
+    "router": {
+        "type": "optimized",
+        "targets": [
+            { "model": "openai/gpt-4o", "temperature": 0.7, "max_tokens": 300, "top_p": 0.95 },
+            { "model": "deepseek/deepseek-chat", "temperature": 0.8, "max_tokens": 400, "frequency_penalty": 0.5 },
+            { "model": "custom-model/advanced-ai", "temperature": 0.6, "max_tokens": 350, "presence_penalty": 0.3 }
+        ]
+    }
+}
+```
+
+### Customizing Model Parameters
+
+You can customize parameters for each target model to fine-tune the behavior and output of the models. Parameters such as `temperature`, `max_tokens`, and `frequency_penalty` can be adjusted to meet specific requirements.
+
+Example of customizing model parameters:
+```json
+{
+    "router": {
+        "type": "fallback",
+        "targets": [
+            { "model": "openai/gpt-4o-mini", "temperature": 0.9, "max_tokens": 500, "top_p": 0.9 },
+            { "model": "deepseek/deepseek-chat", "frequency_penalty": 1, "presence_penalty": 0.6 }
+        ]
+    }
+}
+```
 
 ## Table of Contents
+- [Understanding Targets](#understanding-targets)
 - [Routing Types Overview](#routing-types-overview)
 - [Fallback Routing](#fallback-routing)
 - [Script-Based Routing](#script-based-routing)
@@ -10,7 +48,6 @@ LangDB AI Gateway optimizes LLM selection based on cost, speed, and availability
 - [Percentage-Based Routing](#percentage-based-routing)
 - [Latency-Based Routing](#latency-based-routing)
 - [Nested Routing](#nested-routing)
-- [Customizing Model Parameters](#customizing-model-parameters)
 
 ## Routing Types Overview
 LangDB AI Gateway supports multiple routing strategies that can be combined and customized to meet your specific needs:
@@ -34,10 +71,11 @@ Example:
         { "role": "user", "content": "What is the formula of a square plot?" }
     ],
     "router": {
-        "type": "fallback",
+        "router": "router",
+        "type": "fallback", // Type: fallback/script/optimized/percentage/latency
         "targets": [
-            { "model": "openai/gpt-4o-mini" },
-            { "model": "deepseek/deepseek-chat" }
+            { "model": "openai/gpt-4o-mini", "temperature": 0.9, "max_tokens": 500, "top_p": 0.9 },
+            { "model": "deepseek/deepseek-chat", "frequency_penalty": 1, "presence_penalty": 0.6 }
         ]
     },
     "stream": false
@@ -51,7 +89,6 @@ LangDB AI allows executing custom JavaScript scripts to determine the best model
 
 ### Example
 ```bash
-
 {
     "model": "router/dynamic",
     "router": {
@@ -61,7 +98,7 @@ LangDB AI allows executing custom JavaScript scripts to determine the best model
             let cheapest_open_ai_model = models \
                 .filter(m => m.inference_provider.provider === 'bedrock' && m.type === 'completions') \
                 .sort((a, b) => a.price.per_input_token - b.price.per_input_token)[0]; \
-            return { model: cheapest_open_ai_model.model }; \
+            return { model: cheapest_open_ai_model.model, temperature: 0.7, max_tokens: 300, top_p: 0.95 }; \
         };"
     }
 }
@@ -82,8 +119,8 @@ Optimized routing automatically selects the best model based on real-time perfor
         "type": "optimized",
         "metric": "ttft",
         "targets": [
-            { "model": "gpt-3.5-turbo" },
-            { "model": "gpt-4o-mini" }
+            { "model": "gpt-3.5-turbo", "temperature": 0.8, "max_tokens": 400, "frequency_penalty": 0.5 },
+            { "model": "gpt-4o-mini", "temperature": 0.9, "max_tokens": 500, "top_p": 0.9 }
         ]
     }
 }
@@ -105,11 +142,11 @@ Percentage-based routing distributes requests between models according to predef
     "name": "dynamic",
     "type": "percentage",
     "model_a": [
-      { "model": "openai/gpt-4o-mini", "frequency_penalty": 1 },
+      { "model": "openai/gpt-4o-mini", "temperature": 0.9, "max_tokens": 500, "top_p": 0.9 },
       0.5
     ],
     "model_b": [
-      { "model": "openai/gpt-4o-mini", "frequency_penalty": 2 },
+      { "model": "openai/gpt-4o-mini", "temperature": 0.8, "max_tokens": 400, "frequency_penalty": 1 },
       0.5
     ]
   }
@@ -130,9 +167,9 @@ Latency-based routing selects the model with the lowest response time, ensuring 
     "name": "fastest_latency",
     "type": "latency",
     "targets": [
-      { "model": "openai/gpt-4o-mini" },
-      { "model": "deepseek/deepseek-chat" },
-      { "model": "gemini/gemini-2.0-flash-exp" }
+      { "model": "openai/gpt-4o-mini", "temperature": 0.9, "max_tokens": 500, "top_p": 0.9 },
+      { "model": "deepseek/deepseek-chat", "frequency_penalty": 1, "presence_penalty": 0.6 },
+      { "model": "gemini/gemini-2.0-flash-exp", "temperature": 0.8, "max_tokens": 400, "frequency_penalty": 0.5 }
     ]
   }
 }
@@ -172,40 +209,18 @@ LangDB AI allows nesting of routing strategies, enabling combinations like fallb
                     "type": "optimized",
                     "metric": "ttft",
                     "targets": [
-                        { "model": "gpt-3.5-turbo" },
-                        { "model": "gpt-4o-mini" }
+                        { "model": "gpt-3.5-turbo", "temperature": 0.8, "max_tokens": 400, "frequency_penalty": 0.5 },
+                        { "model": "gpt-4o-mini", "temperature": 0.9, "max_tokens": 500, "top_p": 0.9 }
                     ]
                 }
             },
-            { "model": "deepseek/deepseek-chat", "frequency_penalty": 1 }
+            { "model": "deepseek/deepseek-chat", "temperature": 0.7, "max_tokens": 300, "frequency_penalty": 1 }
         ]
     },
     "stream": false
 }
 ```
 
-## Customizing Model Parameters
-
-### Description
-Whether you're using Fallback, Percentage-Based, Latency-Based, Script-Based, or Optimized Routing, you can define temperature, max_tokens, frequency_penalty, top_p, and more for each target model.
-
-### Example: Adjusting Model Parameters in Fallback Routing
-```json
-
-{
-    "model": "router/dynamic",
-    "messages": [
-        { "role": "user", "content": "Generate a creative story." }
-    ],
-    "router": {
-        "type": "fallback",
-        "targets": [
-            { "model": "openai/gpt-4o-mini", "temperature": 0.9, "max_tokens": 500 },
-            { "model": "deepseek/deepseek-chat", "frequency_penalty": 1 }
-        ]
-    }
-}
-```
 
 ## Additional Resources
 For complete examples and more detailed information, please check out our [Samples Repository](https://github.com/langdb/langdb-samples/tree/main/examples/routing).
