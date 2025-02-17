@@ -1,6 +1,6 @@
 # LangDB AI Gateway - Dynamic Routing Guide
 
-LangDB AI Gateway optimizes LLM selection based on cost, speed, and availability, ensuring efficient request handling. This guide covers the various dynamic routing strategies available in the system.
+LangDB AI Gateway optimizes LLM selection based on cost, speed, and availability, ensuring efficient request handling. This guide covers the various dynamic routing strategies available in the system, including fallback, script-based, optimized, percentage-based, and latency-based routing. Each strategy can be tailored to meet specific needs, allowing for flexible and efficient AI traffic management.
 
 ## Understanding Targets
 
