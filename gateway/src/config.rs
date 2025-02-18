@@ -143,7 +143,7 @@ impl Config {
 pub fn load_langdb_proxy_config(config: Option<ProvidersConfig>) -> Option<ProvidersConfig> {
     if let Some(mut providers_config) = config {
         if !providers_config.0.contains_key("langdb_proxy") {
-            let api_key = std::env::var("LANGDB_API_KEY").ok().or_else(|| {
+            let api_key = std::env::var("LANGDB_KEY").ok().or_else(|| {
                 std::env::var("HOME")
                     .ok()
                     .and_then(|home_dir| {
