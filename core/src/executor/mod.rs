@@ -7,6 +7,7 @@ use crate::{
     types::{
         credentials::{ApiKeyCredentials, Credentials},
         provider::InferenceModelProvider,
+        LANGDB_API_URL,
     },
 };
 
@@ -47,11 +48,12 @@ pub fn use_langdb_proxy(
     ) {
         (None, Some(key)) => (
             Some(Credentials::ApiKey(key.clone())),
-            Some(
-                std::env::var("LANGDB_API_ENDPOINT")
+            Some(format!(
+                "{}/v1",
+                std::env::var("LANGDB_API_URL")
                     .ok()
-                    .unwrap_or("https://api.us-east-1.langdb.ai/v1".to_string()),
-            ),
+                    .unwrap_or(LANGDB_API_URL.to_string())
+            )),
         ),
         (credentials, _) => (credentials, None),
     };

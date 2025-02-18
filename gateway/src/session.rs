@@ -1,8 +1,6 @@
+use langdb_core::types::{LANGDB_API_URL, LANGDB_UI_URL};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
-
-pub const LANGDB_API_URL: &str = "https://api.us-east-1.langdb.ai/v1";
-pub const LANGDB_UI_URL: &str = "https://app.langdb.ai";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionResponse {
