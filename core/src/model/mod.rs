@@ -24,16 +24,16 @@ use types::{ModelEvent, ModelEventType};
 use valuable::Valuable;
 pub mod handler;
 use self::openai::OpenAIModel;
-use crate::model::langdb_open::OpenAISpecModel;
+use crate::model::proxy::OpenAISpecModel;
 pub mod anthropic;
 pub mod bedrock;
 pub mod error;
 pub mod gemini;
 pub mod image_generation;
-pub mod langdb_open;
 pub mod mcp;
 pub mod openai;
 pub mod openai_spec_client;
+pub mod proxy;
 pub mod tools;
 pub mod types;
 
@@ -62,7 +62,7 @@ pub struct TracedModel<Inner: ModelInstance> {
     inner: Inner,
     definition: CompletionModelDefinition,
     cost_calculator: Option<Arc<Box<dyn CostCalculator>>>,
-    router_span: tracing::Span
+    router_span: tracing::Span,
 }
 
 pub async fn init_completion_model_instance(
@@ -112,7 +112,7 @@ pub async fn init_completion_model_instance(
             cost_calculator: cost_calculator.clone(),
             router_span: router_span.clone(),
         })),
-        CompletionEngineParams::LangdbOpen {
+        CompletionEngineParams::Proxy {
             params,
             execution_options,
             credentials,
@@ -179,7 +179,15 @@ pub async fn initialize_completion(
 ) -> Result<Box<dyn ModelInstance>, ToolError> {
     let tools: HashMap<_, Box<(dyn Tool + 'static)>> = HashMap::new();
 
-    init_completion_model_instance(definition, tools, cost_calculator, None, provider_name, router_span).await
+    init_completion_model_instance(
+        definition,
+        tools,
+        cost_calculator,
+        None,
+        provider_name,
+        router_span,
+    )
+    .await
 }
 
 #[derive(Clone, Serialize)]
@@ -224,7 +232,7 @@ impl TraceModelDefinition {
             } => {
                 credentials.take();
             }
-            CompletionEngineParams::LangdbOpen {
+            CompletionEngineParams::Proxy {
                 ref mut credentials,
                 ..
             } => {
@@ -395,7 +403,7 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
         let cost_calculator = self.cost_calculator.clone();
 
         let span = info_span!(
-            target: "langdb::user_tracing::models", 
+            target: "langdb::user_tracing::models",
             parent: self.router_span.clone(),
             SPAN_MODEL_CALL,
             input = &input_str,
@@ -489,7 +497,7 @@ pub fn credentials_identifier(model_params: &CompletionModelParams) -> Credentia
         CompletionEngineParams::OpenAi { credentials, .. } => credentials.is_none(),
         CompletionEngineParams::Anthropic { credentials, .. } => credentials.is_none(),
         CompletionEngineParams::Gemini { credentials, .. } => credentials.is_none(),
-        CompletionEngineParams::LangdbOpen { credentials, .. } => credentials.is_none(),
+        CompletionEngineParams::Proxy { credentials, .. } => credentials.is_none(),
     };
 
     if langdb_creds {

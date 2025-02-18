@@ -60,7 +60,7 @@ Choose one of these installation methods:
 ```bash
 docker run -it \
     -p 8080:8080 \
-    -e LANGDB_OPENAI_API_KEY=your-openai-key-here \
+    -e LANGDB_KEY=your-langdb-key-here \
     langdb/ai-gateway serve
 ```
 
@@ -71,7 +71,7 @@ export RUSTFLAGS="--cfg tracing_unstable --cfg aws_sdk_unstable"
 
 cargo install ai-gateway
 
-export LANGDB_OPENAI_API_KEY=your-openai-key-here
+export LANGDB_KEY=your-langdb-key-here
 ai-gateway serve
 ```
 

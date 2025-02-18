@@ -25,7 +25,7 @@ use tokio::signal;
 use tokio::sync::Mutex;
 
 use crate::callback_handler::init_callback_handler;
-use crate::config::Config;
+use crate::config::{load_langdb_proxy_config, Config};
 use crate::cost::GatewayCostCalculator;
 use crate::limit::GatewayLimitChecker;
 use crate::middleware::trace_logger::TraceLogger;
@@ -131,6 +131,8 @@ impl ApiServer {
                 None
             };
 
+            let providers_config = load_langdb_proxy_config(server_config.config.providers.clone());
+
             let cors = Self::get_cors(CorsOptions::Permissive);
             Self::create_app_entry(
                 cors,
@@ -141,7 +143,7 @@ impl ApiServer {
                 cost_calculator.clone(),
                 limit_checker.clone(),
                 server_config.config.rate_limit.clone(),
-                server_config.config.providers.clone(),
+                providers_config,
             )
         })
         .bind((self.config.http.host.as_str(), self.config.http.port))?
