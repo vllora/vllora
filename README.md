@@ -6,7 +6,7 @@
 ## AI Gateway
 #### OpenSource Enterprise AI Gateway built in Rust
 
-<img src="https://raw.githubusercontent.com/langdb/ai-gateway/chore/docs/assets/login.gif" width="900px" alt="LangDB AI Gateway Demo showing LLM Switching">
+<img src="https://raw.githubusercontent.com/langdb/ai-gateway/main/assets/langdb.gif" width="900px" alt="LangDB AI Gateway Demo showing LLM Switching">
 
 [![GitHub stars](https://img.shields.io/github/stars/langdb/ai-gateway?style=social)](https://github.com/langdb/ai-gateway)
 [![Slack](https://img.shields.io/badge/Join-Slack-brightgreen?logo=slack)](https://join.slack.com/t/langdbcommunity/shared_invite/zt-2haf5kj6a-d7NX6TFJUPX45w~Ag4dzlg)
