@@ -111,7 +111,7 @@ impl Tui {
                                    completion += model_metrics.metrics.total.output_tokens.unwrap_or(0.0);
                                    cost += model_metrics.metrics.total.llm_usage.unwrap_or(0.0);
                                    total_requests += model_metrics.metrics.total.requests.unwrap_or(0.0);
-                                   total_response_time += model_metrics.metrics.total.requests_duration.unwrap_or(0.0);
+                                   total_response_time += model_metrics.metrics.total.latency.unwrap_or(0.0);
                                }
                            }
 
@@ -218,7 +218,7 @@ impl Tui {
                 for (provider_name, v) in &counters.metrics {
                     for (model_name, m) in &v.models {
                         if m.metrics.total.requests.unwrap_or(0.0) > 0.0 {
-                            let avg_time = match (m.metrics.total.requests, m.metrics.total.requests_duration) {
+                            let avg_time = match (m.metrics.total.requests, m.metrics.total.latency) {
                                 (Some(requests), Some(duration)) => {
                                     Some(duration / requests)
                                 }

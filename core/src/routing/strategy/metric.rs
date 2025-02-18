@@ -9,25 +9,21 @@ use crate::{
 #[serde(rename_all = "snake_case")]
 pub enum MetricSelector {
     Requests,
-    InputTokens,
-    OutputTokens,
-    TotalTokens,
-    RequestsDuration,
     #[default]
+    Latency,
     Ttft,
-    LlmUsage,
+    Tps,
+    ErrorRate,
 }
 
 impl MetricSelector {
     fn get_value(&self, metrics: &Metrics) -> Option<f64> {
         match self {
             MetricSelector::Requests => metrics.requests,
-            MetricSelector::InputTokens => metrics.input_tokens,
-            MetricSelector::OutputTokens => metrics.output_tokens,
-            MetricSelector::TotalTokens => metrics.total_tokens,
-            MetricSelector::RequestsDuration => metrics.requests_duration,
+            MetricSelector::Latency => metrics.latency,
             MetricSelector::Ttft => metrics.ttft,
-            MetricSelector::LlmUsage => metrics.llm_usage,
+            MetricSelector::Tps => metrics.tps,
+            MetricSelector::ErrorRate => metrics.error_rate,
         }
     }
 }
@@ -104,9 +100,11 @@ mod tests {
                     input_tokens: Some(5000.0),
                     output_tokens: Some(2000.0),
                     total_tokens: Some(7000.0),
-                    requests_duration: Some(requests_duration),
+                    latency: Some(requests_duration),
                     ttft: Some(ttft),
                     llm_usage: Some(0.05),
+                    tps: Some(0.1),
+                    error_rate: Some(0.01),
                 },
                 monthly: BTreeMap::new(),
                 daily: BTreeMap::new(),
@@ -210,7 +208,7 @@ mod tests {
         assert_eq!(new_model, "provider_c/model_a".to_string());
 
         // Test with request duration (minimize)
-        let new_model = super::route(&models, &metrics, &MetricSelector::RequestsDuration, true)
+        let new_model = super::route(&models, &metrics, &MetricSelector::Latency, true)
             .await
             .unwrap();
 

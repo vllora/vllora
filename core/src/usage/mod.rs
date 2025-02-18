@@ -102,9 +102,11 @@ pub struct Metrics {
     pub input_tokens: Option<f64>,
     pub output_tokens: Option<f64>,
     pub total_tokens: Option<f64>,
-    pub requests_duration: Option<f64>,
+    pub latency: Option<f64>,
     pub ttft: Option<f64>,
     pub llm_usage: Option<f64>,
+    pub tps: Option<f64>,
+    pub error_rate: Option<f64>,
 }
 
 #[derive(Debug, Default, Serialize, Clone)]
@@ -228,7 +230,7 @@ impl InMemoryStorage {
                 "input_tokens" => metrics.input_tokens = v,
                 "output_tokens" => metrics.output_tokens = v,
                 "total_tokens" => metrics.total_tokens = v,
-                "requests_duration" => metrics.requests_duration = v,
+                "latency" => metrics.latency = v,
                 "ttft" => metrics.ttft = v,
                 "llm_usage" => model_metrics.metrics.total.llm_usage = v,
                 _ => {}
