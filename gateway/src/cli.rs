@@ -71,4 +71,6 @@ pub enum Commands {
     List,
     /// Start the API server (default if no command specified)
     Serve(ServeArgs),
+    /// Login to the API server
+    Login,
 }

@@ -183,6 +183,7 @@ impl RoutedExecutor {
             req.clone(),
             cost_calculator,
             &llm_model,
+            span.clone(),
         )
         .instrument(span.clone())
         .await?;

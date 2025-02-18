@@ -39,7 +39,7 @@ use crate::handler::extract_tags;
 use crate::handler::{CallbackHandlerFn, ModelEventWithDetails};
 use crate::GatewayApiError;
 
-use super::get_key_credentials;
+use super::{get_key_credentials, use_langdb_proxy};
 use std::fmt::Debug;
 
 pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
@@ -48,6 +48,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
     req: HttpRequest,
     cost_calculator: Arc<Box<dyn CostCalculator>>,
     llm_model: &ModelDefinition,
+    router_span: tracing::Span,
 ) -> Result<
     Either<
         Result<
@@ -106,12 +107,18 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
 
     let key_credentials = req.extensions().get::<Credentials>().cloned();
     let providers_config = req.app_data::<ProvidersConfig>().cloned();
+    let (key_credentials, llm_model) = use_langdb_proxy(
+        key_credentials,
+        llm_model.clone(),
+        providers_config.as_ref(),
+    );
+
     let key = get_key_credentials(
         key_credentials.as_ref(),
         providers_config.as_ref(),
         &llm_model.inference_provider.provider.to_string(),
     );
-    let engine = Provider::get_completion_engine_for_model(llm_model, &request, key.clone())?;
+    let engine = Provider::get_completion_engine_for_model(&llm_model, &request, key.clone())?;
 
     let tools = ModelTools(request_tools);
 
@@ -149,6 +156,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         Some(cost_calculator.clone()),
         llm_model.inference_provider.endpoint.as_deref(),
         Some(&llm_model.inference_provider.provider.to_string()),
+        router_span.clone(),
     )
     .await
     .map_err(|e| GatewayApiError::CustomError(e.to_string()))?;

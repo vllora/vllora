@@ -5,4 +5,4 @@ default-members = ["gateway", "udfs"]
 
 [workspace.dependencies]
 async-openai = { version = "0.27.2", package = "async-openai-compat" }
-thiserror = "1.0.59"
+thiserror = "2.0.11"

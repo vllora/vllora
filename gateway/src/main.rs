@@ -5,6 +5,7 @@ use config::{Config, ConfigError};
 use http::ApiServer;
 use langdb_core::{error::GatewayError, usage::InMemoryStorage};
 use run::models::{load_models, ModelsLoadError};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 mod callback_handler;
@@ -16,6 +17,7 @@ mod limit;
 mod middleware;
 mod otel;
 mod run;
+mod session;
 mod tracing;
 mod tui;
 mod usage;
@@ -40,6 +42,16 @@ pub enum CliError {
     ModelsError(#[from] ModelsLoadError),
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionResponse {
+    session_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Credentials {
+    api_key: String,
+}
+
 pub const LOGO: &str = r#"
 
   ██       █████  ███    ██  ██████  ██████  ██████  
@@ -61,6 +73,7 @@ async fn main() -> Result<(), CliError> {
         .command
         .unwrap_or(cli::Commands::Serve(cli::ServeArgs::default()))
     {
+        cli::Commands::Login => session::login().await,
         cli::Commands::Update { force } => {
             tracing::init_tracing();
             println!("Updating models{}...", if force { " (forced)" } else { "" });

@@ -21,7 +21,7 @@ tokio = { version = "1.37.0", features = ["sync"] }
 serde = { version = "1.0.199", features = ["serde_derive"] }
 serde_json = "1.0"
 async-trait = "0.1.82"
-thiserror = "1.0.59"
+thiserror = "2.0.11"
 futures = "0.3.30"
 actix-cors = "0.7.0"
 
@@ -50,5 +50,6 @@ futures-util = "0.3"
 
 ratatui = "0.24.0"
 crossterm = "0.27.0"
+open = "5.3.2"
 
 chrono = "0.4"
