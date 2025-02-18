@@ -35,6 +35,21 @@ pub fn get_key_credentials(
     }
 }
 
+pub fn get_langdb_proxy_key(
+    key_credentials: Option<Credentials>,
+    providers_config: Option<&ProvidersConfig>,
+) -> Option<Credentials> {
+    match (
+        key_credentials,
+        providers_config
+            .as_ref()
+            .and_then(|p| p.0.get("langdb_proxy")),
+    ) {
+        (None, Some(key)) => Some(Credentials::ApiKey(key.clone())),
+        (credentials, _) => credentials,
+    }
+}
+
 pub fn use_langdb_proxy(
     key_credentials: Option<Credentials>,
     mut llm_model: ModelDefinition,
