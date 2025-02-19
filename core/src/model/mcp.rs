@@ -96,6 +96,8 @@ pub async fn get_tools(definitions: &[McpDefinition]) -> Result<Vec<ServerTools>
             with_transport!(tool_def.clone(), |transport| async move {
                 let client = ClientBuilder::new(transport).build();
 
+                let client_clone = client.clone();
+                let _handle = tokio::spawn(async move { client_clone.start().await });
                 // Get available tools
                 let response = client
                     .request(
@@ -193,6 +195,10 @@ pub async fn execute_mcp_tool(
             serde_json::to_value(request).map_err(|e| GatewayError::CustomError(e.to_string()))?;
         tracing::debug!("Sending tool request");
         tracing::debug!("{}", params);
+
+        let client_clone = client.clone();
+        let _handle = tokio::spawn(async move { client_clone.start().await });
+
         let response = client
             .request(
                 "tools/call",
