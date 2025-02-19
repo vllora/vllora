@@ -115,10 +115,15 @@ LangDB AI Gateway currently supports the following LLM providers. Find all [the 
 | <img src="https://raw.githubusercontent.com/langdb/ai-gateway/main/assets/images/cohere.png" width="32">          | Cohere ( Provided by Bedrock )  |
 | <img src="https://raw.githubusercontent.com/langdb/ai-gateway/main/assets/images/mistral.png" width="32">         | Mistral ( Provided by Bedrock ) |
 
-The gateway supports standard OpenAI-compatible endpoints:
-- `/v1/chat/completions` - For chat completions
-- `/v1/completions` - For text completions
-- `/v1/embeddings` - For generating embeddings
+## API Endpoints
+
+The gateway provides the following OpenAI-compatible endpoints:
+
+- `POST /v1/chat/completions` - Chat completions
+- `GET /v1/models` - List available models
+- `POST /v1/embeddings` - Generate embeddings
+- `POST /v1/images/generations` - Generate images
+
 
 ### Advanced Configuration
 Create a `config.yaml` file:
@@ -168,7 +173,7 @@ cp config.sample.yaml config.yaml
 
 Command line options will override corresponding config file settings when both are specified.
 
-### Rate Limiting
+## Rate Limiting
 
 Rate limiting helps prevent API abuse by limiting the number of requests within a time window. Configure rate limits using:
 
@@ -181,18 +186,34 @@ Or in `config.yaml`:
 ```yaml
 rate_limit:
   hourly: 1000
+  daily: 10000
+  monthly: 100000
 ```
 
+## Cost Control
+
+Cost control helps manage API spending by setting daily, monthly, or total cost limits. Configure cost limits using:
+
+```bash
+# Set daily and monthly limits
+ai-gateway serve \
+  --cost-daily 100.0 \
+  --cost-monthly 1000.0 \
+  --cost-total 5000.0
+```
+
+Or in `config.yaml`:
+```yaml
+cost_control:
+  daily: 100.0   # $100 per day
+  monthly: 1000.0  # $1000 per month
+  total: 5000.0    # $5000 total
+```
+
+When a cost limit is reached, the API will return a 429 response with a message indicating the limit has been exceeded.
+
+
 When a rate limit is exceeded, the API will return a 429 (Too Many Requests) response.
-
-## API Endpoints
-
-The gateway provides the following OpenAI-compatible endpoints:
-
-- `POST /v1/chat/completions` - Chat completions
-- `GET /v1/models` - List available models
-- `POST /v1/embeddings` - Generate embeddings
-- `POST /v1/images/generations` - Generate images
 
 
 ## Dynamic Model Routing
@@ -222,7 +243,8 @@ Here's an example of a dynamic routing configuration:
 
 This configuration demonstrates how you can define multiple targets with specific parameters to ensure your requests are handled by the most suitable models. For more detailed information, explore our [routing documentation](ROUTING.md).
 
-## Clickhouse Integration
+## Observability
+
 The gateway supports OpenTelemetry tracing with ClickHouse as the storage backend. All traces are stored in the `langdb.traces` table.
 
 ### Setting up Tracing
@@ -268,28 +290,6 @@ LIMIT 10;
 ### Leveraging LangDB APIs directly within Clickhouse
 Did you know you can call LangDB APIs directly within ClickHouse? Check out our [UDF documentation](UDF.md) to learn how to use LLMs in your SQL queries!
 
-### Cost Control
-
-Cost control helps manage API spending by setting daily, monthly, or total cost limits. Configure cost limits using:
-
-```bash
-# Set daily and monthly limits
-ai-gateway serve \
-  --cost-daily 100.0 \
-  --cost-monthly 1000.0 \
-  --cost-total 5000.0
-```
-
-Or in `config.yaml`:
-```yaml
-cost_control:
-  daily: 100.0   # $100 per day
-  monthly: 1000.0  # $1000 per month
-  total: 5000.0    # $5000 total
-```
-
-When a cost limit is reached, the API will return a 429 response with a message indicating the limit has been exceeded.
-
 ## Running with Docker Compose
 
 For a complete setup including ClickHouse for analytics and tracing, follow these steps:
@@ -305,7 +305,7 @@ This will start:
 
 2. Build and run the gateway:
 ```bash
-ai-gateway run
+ai-gateway
 ```
 
 The gateway will now be running with full analytics and logging capabilities, storing data in ClickHouse.
