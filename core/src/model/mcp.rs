@@ -1,125 +1,174 @@
 use std::{collections::HashMap, time::Duration};
 
 use async_mcp::{
-    client::{Client, ClientBuilder},
+    client::ClientBuilder,
     protocol::RequestOptions,
-    transport::{ClientHttpTransport, ClientSseTransport, ClientWsTransport, Transport},
-    types::{CallToolRequest, CallToolResponse, ToolResponseContent, ToolsListResponse},
+    transport::{
+        ClientInMemoryTransport, ClientSseTransport, ClientWsTransport, ServerInMemoryTransport,
+        Transport,
+    },
+    types::{CallToolRequest, CallToolResponse, Tool, ToolResponseContent, ToolsListResponse},
 };
+use regex::Regex;
 use serde_json::json;
+use tracing::debug;
 
+use super::mcp_server::tavily;
 use crate::{
     error::GatewayError,
     types::gateway::{McpDefinition, McpTool, ServerTools, ToolsFilter},
 };
-
-use super::error::ModelError;
-
-pub async fn get_client(
-    mcp_server: &McpDefinition,
-) -> Result<Client<ClientHttpTransport>, ModelError> {
-    let transport = match mcp_server.r#type {
-        crate::types::gateway::McpServerType::Sse => {
-            let mut transport = ClientSseTransport::builder(mcp_server.server_url.clone());
-            for (k, v) in &mcp_server.headers {
-                transport = transport.with_header(k.to_string(), v.to_string());
-            }
-            let transport = transport.build();
-            transport
-                .open()
+async fn async_server(name: &str, transport: ServerInMemoryTransport) -> Result<(), GatewayError> {
+    match name {
+        "langdb" => {
+            let server = tavily::build(transport)?;
+            server
+                .listen()
                 .await
-                .map_err(|e| ModelError::CustomError(e.to_string()))?;
-
-            ClientHttpTransport::Sse(transport)
+                .map_err(|e| GatewayError::CustomError(e.to_string()))
         }
-        crate::types::gateway::McpServerType::Ws => {
-            let mut transport = ClientWsTransport::builder(mcp_server.server_url.clone());
-            for (k, v) in &mcp_server.headers {
-                transport = transport.with_header(k.to_string(), v.to_string());
+        _ => Err(GatewayError::CustomError("Invalid server name".to_string())),
+    }
+}
+
+macro_rules! with_transport {
+    ($mcp_server:expr, $body:expr) => {
+        match $mcp_server.r#type {
+            crate::types::gateway::McpTransportType::Sse {
+                server_url,
+                headers,
+            } => {
+                let mut transport = ClientSseTransport::builder(server_url);
+                for (k, v) in headers {
+                    transport = transport.with_header(k.to_string(), v.to_string());
+                }
+                let transport = transport.build();
+                transport
+                    .open()
+                    .await
+                    .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+                $body(transport)
+                    .await
+                    .map_err(|e| GatewayError::CustomError(e.to_string()))
             }
-            let transport = transport.build();
-            transport
-                .open()
-                .await
-                .map_err(|e| ModelError::CustomError(e.to_string()))?;
-            ClientHttpTransport::Ws(transport)
+            crate::types::gateway::McpTransportType::Ws {
+                server_url,
+                headers,
+            } => {
+                let mut transport = ClientWsTransport::builder(server_url);
+                for (k, v) in headers {
+                    transport = transport.with_header(k.to_string(), v.to_string());
+                }
+                let transport = transport.build();
+                transport
+                    .open()
+                    .await
+                    .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+                $body(transport)
+                    .await
+                    .map_err(|e| GatewayError::CustomError(e.to_string()))
+            }
+            crate::types::gateway::McpTransportType::InMemory { name } => {
+                let client_transport = ClientInMemoryTransport::new(move |t| {
+                    let name = name.clone();
+                    tokio::spawn(async move {
+                        let name = name.as_str();
+                        async_server(name, t).await.unwrap()
+                    })
+                });
+                client_transport
+                    .open()
+                    .await
+                    .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+                $body(client_transport)
+                    .await
+                    .map_err(|e| GatewayError::CustomError(e.to_string()))
+            }
         }
     };
-    Ok(ClientBuilder::new(transport).build())
 }
-pub async fn get_mcp_tools(mcp_servers: &[McpDefinition]) -> Result<Vec<ServerTools>, ModelError> {
-    // Create futures for each server
-    let futures = mcp_servers.iter().map(|def| async move {
-        let client: Client<ClientHttpTransport> = get_client(def).await?;
+pub async fn get_tools(definitions: &[McpDefinition]) -> Result<Vec<ServerTools>, GatewayError> {
+    let mut all_tools = Vec::new();
 
-        // Start the client
-        let client_clone = client.clone();
-        let _client_handle = tokio::spawn(async move { client_clone.start().await });
+    for tool_def in definitions {
+        let mcp_server_name = tool_def.server_name();
+        let tools: Result<Vec<Tool>, GatewayError> =
+            with_transport!(tool_def.clone(), |transport| async move {
+                let client = ClientBuilder::new(transport).build();
 
-        // Get available tools
-        let response = client
-            .request(
-                "tools/list",
-                Some(json!({})),
-                RequestOptions::default().timeout(Duration::from_secs(10)),
-            )
-            .await
-            .map_err(|e| ModelError::CustomError(e.to_string()))?;
+                // Get available tools
+                let response = client
+                    .request(
+                        "tools/list",
+                        Some(json!({})),
+                        RequestOptions::default().timeout(Duration::from_secs(10)),
+                    )
+                    .await
+                    .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+                // Parse response into Vec<Tool>
+                let response: ToolsListResponse = serde_json::from_value(response)?;
+                let mut tools = response.tools;
 
-        // Parse response into Vec<Tool>
-        let response: ToolsListResponse = serde_json::from_value(response)?;
-        let mut tools = response.tools;
+                let total_tools = tools.len();
 
-        let total_tools = tools.len();
-
-        // Filter tools based on actions_filter if specified
-        match &def.filter {
-            ToolsFilter::All => {
-                tracing::info!("Loading all {} tools from {}", total_tools, def.server_url);
-            }
-            ToolsFilter::Selected(selected) => {
-                let before_count = tools.len();
-                tools.retain_mut(|tool| {
-                    let found = selected.iter().find(|t| *t.name == tool.name);
-                    if let Some(Some(d)) = found.as_ref().map(|t| t.description.as_ref()) {
-                        tool.description = Some(d.clone());
+                // Filter tools based on actions_filter if specified
+                match &tool_def.filter {
+                    ToolsFilter::All => {
+                        tracing::debug!(
+                            "Loading all {} tools from {}",
+                            total_tools,
+                            mcp_server_name
+                        );
                     }
-                    found.is_some()
+                    ToolsFilter::Selected(selected) => {
+                        let before_count = tools.len();
+                        tools.retain_mut(|tool| {
+                            let found = selected.iter().find(|t| {
+                                if tool.name == t.name {
+                                    true
+                                } else if let Ok(name_regex) = Regex::new(&t.name) {
+                                    debug!("Matching {} against pattern {}", tool.name, t.name);
+                                    name_regex.is_match(&tool.name)
+                                } else {
+                                    false
+                                }
+                            });
+                            if let Some(Some(d)) = found.as_ref().map(|t| t.description.as_ref()) {
+                                tool.description = Some(d.clone());
+                            }
+                            found.is_some()
+                        });
+                        tracing::debug!(
+                            "Filtered tools for {}: {}/{} tools selected",
+                            mcp_server_name,
+                            tools.len(),
+                            before_count
+                        );
+                    }
+                }
+                Ok::<Vec<Tool>, GatewayError>(tools)
+            });
+
+        match tools {
+            Ok(tools) => {
+                let mcp_tools = tools
+                    .into_iter()
+                    .map(|t| McpTool(t, tool_def.clone()))
+                    .collect();
+
+                all_tools.push(ServerTools {
+                    tools: mcp_tools,
+                    definition: tool_def.clone(),
                 });
-                tracing::info!(
-                    "Filtered tools for {}: {}/{} tools selected",
-                    def.server_url,
-                    tools.len(),
-                    before_count
-                );
+            }
+            Err(e) => {
+                tracing::error!("{e}");
+                return Err(GatewayError::CustomError(e.to_string()));
             }
         }
+    }
 
-        // Convert Vec<Tool> to Vec<McpTool>
-        let mcp_tools = tools.into_iter().map(|t| McpTool(t, def.clone())).collect();
-
-        Ok::<_, ModelError>(ServerTools {
-            tools: mcp_tools,
-            definition: def.clone(),
-        })
-    });
-
-    // Run all futures in parallel and collect results
-    let results = futures::future::join_all(futures).await;
-
-    // Collect successful results and log errors
-    let all_tools: Vec<ServerTools> = results
-        .into_iter()
-        .filter_map(|result| match result {
-            Ok(tools) => Some(tools),
-            Err(e) => {
-                tracing::error!("Failed to get tools from MCP server: {}", e);
-                None
-            }
-        })
-        .collect();
-
-    tracing::info!("Loaded {} tool definitions in total", all_tools.len());
+    tracing::debug!("Loaded {} tool definitions in total", all_tools.len());
     Ok(all_tools)
 }
 
@@ -129,37 +178,32 @@ pub async fn execute_mcp_tool(
     inputs: HashMap<String, serde_json::Value>,
 ) -> Result<String, GatewayError> {
     let name = tool.name.clone();
-    let mcp_server = def.server_url.to_string();
+    let mcp_server = def.server_name();
     tracing::info!("Executing tool: {name}, mcp_server: {mcp_server}");
 
-    let request = CallToolRequest {
-        name: name.clone(),
-        arguments: Some(inputs),
-        meta: None,
-    };
+    let response: serde_json::Value = with_transport!(def.clone(), |transport| async move {
+        let request = CallToolRequest {
+            name: name.clone(),
+            arguments: Some(inputs),
+            meta: None,
+        };
 
-    let params = serde_json::to_value(request)?;
-
-    tracing::debug!("Starting tool client");
-    let client: Client<ClientHttpTransport> = get_client(def).await?;
-
-    // Start the client
-    let client_clone = client.clone();
-    let client_handle = tokio::spawn(async move { client_clone.start().await });
-
-    tracing::debug!("Sending tool request");
-    tracing::debug!("{}", params);
-    let response = client
-        .request(
-            "tools/call",
-            Some(params),
-            RequestOptions::default().timeout(Duration::from_secs(10)),
-        )
-        .await
-        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+        let params =
+            serde_json::to_value(request).map_err(|e| GatewayError::CustomError(e.to_string()))?;
+        tracing::debug!("Sending tool request");
+        tracing::debug!("{}", params);
+        let response = transport
+            .request(
+                "tools/call",
+                Some(params),
+                RequestOptions::default().timeout(Duration::from_secs(10)),
+            )
+            .await
+            .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+        Ok::<serde_json::Value, GatewayError>(response)
+    })?;
 
     let response: CallToolResponse = serde_json::from_value(response)?;
-
     tracing::debug!("Tool {name}: Processing tool response");
     tracing::debug!("{:?}", response);
     let text = response
@@ -173,7 +217,7 @@ pub async fn execute_mcp_tool(
             tracing::error!("Tool {name}: No text content in tool response");
             GatewayError::CustomError("Tool {name}: No text content in response".to_string())
         })?;
-    client_handle.abort();
+
     tracing::debug!("Tool {name}: execution completed successfully");
     Ok(text)
 }
