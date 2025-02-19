@@ -95,6 +95,7 @@ impl RoutedExecutor {
                     name: router.name.clone().unwrap_or("dynamic".to_string()),
                     strategy: router.strategy.clone(),
                     targets: router.targets.clone(),
+                    metrics_duration: None,
                 };
 
                 let metrics = match memory_storage {

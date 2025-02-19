@@ -35,6 +35,13 @@ pub enum RouterError {
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+pub enum MetricsDuration {
+    Total,
+    Last15Minutes,
+    LastHour,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
 pub struct LlmRouter {
     pub name: String,
     #[serde(flatten)]
@@ -42,6 +49,8 @@ pub struct LlmRouter {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     #[serde(default)]
     pub targets: Vec<HashMap<String, serde_json::Value>>,
+    #[serde(default)]
+    pub metrics_duration: Option<MetricsDuration>,
 }
 
 /// Defines the primary optimization strategy for model selection
@@ -156,7 +165,14 @@ impl RouteStrategy for LlmRouter {
                             .and_then(|v| v.as_str().map(|s| s.to_string()))
                     })
                     .collect::<Vec<_>>();
-                let model = strategy::metric::route(&models, &metrics, metric, true).await?;
+                let model = strategy::metric::route(
+                    &models,
+                    &metrics,
+                    metric,
+                    true,
+                    self.metrics_duration.as_ref(),
+                )
+                .await?;
 
                 Ok(vec![HashMap::from([(
                     "model".to_string(),
@@ -181,6 +197,7 @@ mod tests {
                 metric: strategy::metric::MetricSelector::Ttft,
             },
             targets: vec![],
+            metrics_duration: None,
         };
 
         eprintln!("{}", serde_json::to_string_pretty(&router).unwrap());
@@ -212,6 +229,7 @@ mod tests {
                     ),
                 ]),
             ],
+            metrics_duration: None,
         };
 
         eprintln!("{}", serde_json::to_string_pretty(&router).unwrap());
@@ -234,6 +252,7 @@ mod tests {
                 .to_string(),
             },
             targets: vec![],
+            metrics_duration: None,
         };
 
         // Test case 1: Short conversation (≤ 5 messages)

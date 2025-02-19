@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    routing::RouterError,
+    routing::{MetricsDuration, RouterError},
     usage::{Metrics, ProviderMetrics},
 };
 
@@ -33,6 +33,7 @@ pub async fn route(
     metrics: &BTreeMap<String, ProviderMetrics>,
     metric: &MetricSelector,
     minimize: bool,
+    metrics_duration: Option<&MetricsDuration>,
 ) -> Result<String, RouterError> {
     // Find the model with the best metric value
     let best_model = models
@@ -45,8 +46,16 @@ pub async fn route(
                     .get(provider)
                     .and_then(|provider_metrics| provider_metrics.models.get(model_name))
                     .and_then(|metrics| {
+                        let period_metrics = match metrics_duration {
+                            Some(MetricsDuration::Total) | None => &metrics.metrics.total,
+                            Some(MetricsDuration::LastHour) => &metrics.metrics.last_hour,
+                            Some(MetricsDuration::Last15Minutes) => {
+                                &metrics.metrics.last_15_minutes
+                            }
+                        };
+
                         metric
-                            .get_value(&metrics.metrics.total)
+                            .get_value(period_metrics)
                             .map(|value| (model.clone(), value))
                     })
             } else {
@@ -55,8 +64,16 @@ pub async fn route(
                     .iter()
                     .filter_map(|(provider, provider_metrics)| {
                         provider_metrics.models.get(model).and_then(|metrics| {
+                            let period_metrics = match metrics_duration {
+                                Some(MetricsDuration::Total) | None => &metrics.metrics.total,
+                                Some(MetricsDuration::LastHour) => &metrics.metrics.last_hour,
+                                Some(MetricsDuration::Last15Minutes) => {
+                                    &metrics.metrics.last_15_minutes
+                                }
+                            };
+
                             metric
-                                .get_value(&metrics.metrics.total)
+                                .get_value(period_metrics)
                                 .map(|value| (format!("{}/{}", provider, model), value))
                         })
                     })
@@ -81,9 +98,7 @@ pub async fn route(
 
     match best_model {
         Some((model, _)) => Ok(model),
-        None => Err(RouterError::MetricRouterError(
-            "No valid model found".to_string(),
-        )),
+        None => Ok(models.first().cloned().unwrap_or_default()),
     }
 }
 
@@ -93,22 +108,23 @@ mod tests {
     use crate::usage::{ModelMetrics, TimeMetrics};
 
     fn create_model_metrics(requests_duration: f64, ttft: f64) -> ModelMetrics {
+        let metrics = Metrics {
+            requests: Some(100.0),
+            input_tokens: Some(5000.0),
+            output_tokens: Some(2000.0),
+            total_tokens: Some(7000.0),
+            latency: Some(requests_duration),
+            ttft: Some(ttft),
+            llm_usage: Some(0.05),
+            tps: Some(0.1),
+            error_rate: Some(0.01),
+        };
+
         ModelMetrics {
             metrics: TimeMetrics {
-                total: Metrics {
-                    requests: Some(100.0),
-                    input_tokens: Some(5000.0),
-                    output_tokens: Some(2000.0),
-                    total_tokens: Some(7000.0),
-                    latency: Some(requests_duration),
-                    ttft: Some(ttft),
-                    llm_usage: Some(0.05),
-                    tps: Some(0.1),
-                    error_rate: Some(0.01),
-                },
-                monthly: BTreeMap::new(),
-                daily: BTreeMap::new(),
-                hourly: BTreeMap::new(),
+                total: metrics.clone(),
+                last_15_minutes: metrics.clone(),
+                last_hour: metrics,
             },
         }
     }
@@ -153,14 +169,14 @@ mod tests {
         ];
 
         // Test with TTFT metric (minimize)
-        let new_model = super::route(&models, &metrics, &MetricSelector::Ttft, true)
+        let new_model = super::route(&models, &metrics, &MetricSelector::Ttft, true, None)
             .await
             .unwrap();
 
         assert_eq!(new_model, "gemini/gemini-1.5-flash-latest".to_string());
 
         // Test with requests metric (maximize)
-        let new_model = super::route(&models, &metrics, &MetricSelector::Requests, false)
+        let new_model = super::route(&models, &metrics, &MetricSelector::Requests, false, None)
             .await
             .unwrap();
 
@@ -201,14 +217,14 @@ mod tests {
         let models = vec!["model_a".to_string(), "provider_c/model_d".to_string()];
 
         // Test with TTFT metric (minimize)
-        let new_model = super::route(&models, &metrics, &MetricSelector::Ttft, true)
+        let new_model = super::route(&models, &metrics, &MetricSelector::Ttft, true, None)
             .await
             .unwrap();
 
         assert_eq!(new_model, "provider_c/model_a".to_string());
 
         // Test with request duration (minimize)
-        let new_model = super::route(&models, &metrics, &MetricSelector::Latency, true)
+        let new_model = super::route(&models, &metrics, &MetricSelector::Latency, true, None)
             .await
             .unwrap();
 
