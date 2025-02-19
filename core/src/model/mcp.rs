@@ -182,6 +182,7 @@ pub async fn execute_mcp_tool(
     tracing::info!("Executing tool: {name}, mcp_server: {mcp_server}");
 
     let response: serde_json::Value = with_transport!(def.clone(), |transport| async move {
+        let client = ClientBuilder::new(transport).build();
         let request = CallToolRequest {
             name: name.clone(),
             arguments: Some(inputs),
@@ -192,7 +193,7 @@ pub async fn execute_mcp_tool(
             serde_json::to_value(request).map_err(|e| GatewayError::CustomError(e.to_string()))?;
         tracing::debug!("Sending tool request");
         tracing::debug!("{}", params);
-        let response = transport
+        let response = client
             .request(
                 "tools/call",
                 Some(params),
@@ -204,7 +205,7 @@ pub async fn execute_mcp_tool(
     })?;
 
     let response: CallToolResponse = serde_json::from_value(response)?;
-    tracing::debug!("Tool {name}: Processing tool response");
+    tracing::debug!("Tool {name}: Processing tool response", name = tool.name);
     tracing::debug!("{:?}", response);
     let text = response
         .content
@@ -214,10 +215,16 @@ pub async fn execute_mcp_tool(
             _ => None,
         })
         .ok_or_else(|| {
-            tracing::error!("Tool {name}: No text content in tool response");
+            tracing::error!(
+                "Tool {name}: No text content in tool response",
+                name = tool.name
+            );
             GatewayError::CustomError("Tool {name}: No text content in response".to_string())
         })?;
 
-    tracing::debug!("Tool {name}: execution completed successfully");
+    tracing::debug!(
+        "Tool {name}: execution completed successfully",
+        name = tool.name
+    );
     Ok(text)
 }
