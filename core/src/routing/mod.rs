@@ -29,6 +29,9 @@ pub enum RouterError {
 
     #[error(transparent)]
     BoxedError(#[from] Box<dyn std::error::Error + Send + Sync>),
+
+    #[error("Target by index not found: {0}")]
+    TargetByIndexNotFound(usize),
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
@@ -48,8 +51,7 @@ pub enum RoutingStrategy {
     Fallback,
     #[serde(alias = "a_b_testing")]
     Percentage {
-        model_a: (TargetOrRouterName, f64),
-        model_b: (TargetOrRouterName, f64),
+        targets_percentages: Vec<f64>,
     },
     Random,
     Script {
@@ -112,23 +114,26 @@ impl RouteStrategy for LlmRouter {
                 Ok(vec![self.targets[idx].clone()])
             }
             RoutingStrategy::Percentage {
-                model_a: (model_a, split_a),
-                model_b: (model_b, spilt_b),
+                targets_percentages,
             } => {
+                // it should be 100, but it is not restricted
+                let total_percentages: f64 = targets_percentages.iter().sum();
                 // A/B testing between models based on ModelPairWithSplit
-                let rand_val = rand::random::<f64>() * (split_a + spilt_b);
-                let target = if rand_val < *split_a {
-                    model_a.clone()
-                } else {
-                    model_b.clone()
-                };
+                let rand_val = rand::random::<f64>() * total_percentages;
 
-                let target = match target {
-                    TargetOrRouterName::Target(target) => target,
-                    TargetOrRouterName::String(model_name) => HashMap::from([(
-                        "model".to_string(),
-                        serde_json::Value::String(model_name),
-                    )]),
+                let mut sum = 0.0;
+                let idx = targets_percentages
+                    .iter()
+                    .position(|x| {
+                        let prev_sum = sum;
+                        sum += x;
+                        rand_val >= prev_sum && rand_val < sum
+                    })
+                    .unwrap_or(0);
+
+                let target = match self.targets.get(idx) {
+                    Some(target) => target.clone(),
+                    None => return Err(RouterError::TargetByIndexNotFound(idx)),
                 };
 
                 Ok(vec![target])
@@ -183,34 +188,30 @@ mod tests {
         let router = LlmRouter {
             name: "dynamic".to_string(),
             strategy: RoutingStrategy::Percentage {
-                model_a: (
-                    TargetOrRouterName::Target(HashMap::from([
-                        (
-                            "model".to_string(),
-                            serde_json::Value::String("openai/gpt-4o-mini".to_string()),
-                        ),
-                        (
-                            "frequence_penality".to_string(),
-                            serde_json::Value::Number(1.into()),
-                        ),
-                    ])),
-                    0.5,
-                ),
-                model_b: (
-                    TargetOrRouterName::Target(HashMap::from([
-                        (
-                            "model".to_string(),
-                            serde_json::Value::String("openai/gpt-4o-mini".to_string()),
-                        ),
-                        (
-                            "frequence_penality".to_string(),
-                            serde_json::Value::Number(2.into()),
-                        ),
-                    ])),
-                    0.5,
-                ),
+                targets_percentages: vec![0.5, 0.5],
             },
-            targets: vec![],
+            targets: vec![
+                HashMap::from([
+                    (
+                        "model".to_string(),
+                        serde_json::Value::String("openai/gpt-4o-mini".to_string()),
+                    ),
+                    (
+                        "frequence_penality".to_string(),
+                        serde_json::Value::Number(1.into()),
+                    ),
+                ]),
+                HashMap::from([
+                    (
+                        "model".to_string(),
+                        serde_json::Value::String("openai/gpt-4o-mini".to_string()),
+                    ),
+                    (
+                        "frequence_penality".to_string(),
+                        serde_json::Value::Number(2.into()),
+                    ),
+                ]),
+            ],
         };
 
         eprintln!("{}", serde_json::to_string_pretty(&router).unwrap());
