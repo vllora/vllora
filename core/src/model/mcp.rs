@@ -20,7 +20,7 @@ use crate::{
 };
 async fn async_server(name: &str, transport: ServerInMemoryTransport) -> Result<(), GatewayError> {
     match name {
-        "langdb" => {
+        "websearch" => {
             let server = tavily::build(transport)?;
             server
                 .listen()
