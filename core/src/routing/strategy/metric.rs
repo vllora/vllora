@@ -107,14 +107,14 @@ mod tests {
     use super::*;
     use crate::usage::{ModelMetrics, TimeMetrics};
 
-    fn create_model_metrics(requests_duration: f64, ttft: f64) -> ModelMetrics {
+    fn create_model_metrics(latency: Option<f64>, ttft: Option<f64>) -> ModelMetrics {
         let metrics = Metrics {
             requests: Some(100.0),
             input_tokens: Some(5000.0),
             output_tokens: Some(2000.0),
             total_tokens: Some(7000.0),
-            latency: Some(requests_duration),
-            ttft: Some(ttft),
+            latency,
+            ttft,
             llm_usage: Some(0.05),
             tps: Some(0.1),
             error_rate: Some(0.01),
@@ -134,9 +134,12 @@ mod tests {
         let openai_models = BTreeMap::from([
             (
                 "gpt-4o-mini".to_string(),
-                create_model_metrics(1550.0, 1800.0),
+                create_model_metrics(Some(1550.0), Some(1800.0)),
             ),
-            ("gpt-4o".to_string(), create_model_metrics(2550.0, 1900.0)),
+            (
+                "gpt-4o".to_string(),
+                create_model_metrics(Some(2550.0), Some(1900.0)),
+            ),
         ]);
         let openai_metrics = ProviderMetrics {
             models: openai_models,
@@ -145,11 +148,11 @@ mod tests {
         let gemini_models = BTreeMap::from([
             (
                 "gemini-1.5-flash-latest".to_string(),
-                create_model_metrics(500.0, 1000.0),
+                create_model_metrics(Some(500.0), Some(1000.0)),
             ),
             (
                 "gemini-1.5-pro-latest".to_string(),
-                create_model_metrics(4500.0, 1100.0),
+                create_model_metrics(Some(4500.0), Some(1100.0)),
             ),
         ]);
         let gemini_metrics = ProviderMetrics {
@@ -187,22 +190,40 @@ mod tests {
     #[tokio::test]
     async fn test_metric_router_for_all_providers() {
         let provider_a_models = BTreeMap::from([
-            ("model_a".to_string(), create_model_metrics(4550.0, 3800.0)),
-            ("model_b".to_string(), create_model_metrics(3550.0, 2900.0)),
+            (
+                "model_a".to_string(),
+                create_model_metrics(Some(4550.0), Some(3800.0)),
+            ),
+            (
+                "model_b".to_string(),
+                create_model_metrics(Some(3550.0), Some(2900.0)),
+            ),
         ]);
         let provider_a_metrics = ProviderMetrics {
             models: provider_a_models,
         };
         let provider_b_models = BTreeMap::from([
-            ("model_a".to_string(), create_model_metrics(1550.0, 1800.0)),
-            ("model_c".to_string(), create_model_metrics(2550.0, 1900.0)),
+            (
+                "model_a".to_string(),
+                create_model_metrics(Some(1550.0), Some(1800.0)),
+            ),
+            (
+                "model_c".to_string(),
+                create_model_metrics(Some(2550.0), Some(1900.0)),
+            ),
         ]);
         let provider_b_metrics = ProviderMetrics {
             models: provider_b_models,
         };
         let provider_c_models = BTreeMap::from([
-            ("model_a".to_string(), create_model_metrics(1950.0, 1200.0)),
-            ("model_d".to_string(), create_model_metrics(2950.0, 1700.0)),
+            (
+                "model_a".to_string(),
+                create_model_metrics(Some(1950.0), Some(1200.0)),
+            ),
+            (
+                "model_d".to_string(),
+                create_model_metrics(Some(2950.0), Some(1700.0)),
+            ),
         ]);
         let provider_c_metrics = ProviderMetrics {
             models: provider_c_models,
@@ -229,5 +250,41 @@ mod tests {
             .unwrap();
 
         assert_eq!(new_model, "provider_b/model_a".to_string());
+    }
+
+    #[tokio::test]
+    async fn test_metric_router_when_one_model_does_not_have_metrics() {
+        let openai_models = BTreeMap::from([
+            (
+                "gpt-4o-mini".to_string(),
+                create_model_metrics(Some(1550.0), Some(1800.0)),
+            ),
+            ("gpt-4o".to_string(), create_model_metrics(None, None)),
+        ]);
+        let openai_metrics = ProviderMetrics {
+            models: openai_models,
+        };
+
+        let metrics = BTreeMap::from([("openai".to_string(), openai_metrics)]);
+
+        let models = vec![
+            "openai/gpt-4o".to_string(),
+            "openai/gpt-4o-mini".to_string(),
+        ];
+
+        // Test with TTFT metric (minimize)
+        let new_model = super::route(&models, &metrics, &MetricSelector::Ttft, true, None)
+            .await
+            .unwrap();
+
+        assert_eq!(new_model, "openai/gpt-4o-mini".to_string());
+
+        // Test with request duration (maximize)
+        let new_model = super::route(&models, &metrics, &MetricSelector::Latency, false, None)
+            .await
+            .unwrap();
+
+        // All models have same request count, so first one should be selected
+        assert_eq!(new_model, "openai/gpt-4o-mini".to_string());
     }
 }
