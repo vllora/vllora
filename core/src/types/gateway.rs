@@ -90,23 +90,44 @@ pub struct ToolSelector {
     pub description: Option<String>,
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum McpServerType {
-    #[default]
-    Sse,
-    Ws,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase", tag = "type")]
+pub enum McpTransportType {
+    Sse {
+        server_url: String,
+        #[serde(default)]
+        headers: HashMap<String, String>,
+    },
+    Ws {
+        server_url: String,
+        #[serde(default)]
+        headers: HashMap<String, String>,
+    },
+    #[serde(rename = "in-memory")]
+    InMemory {
+        #[serde(default = "default_in_memory_name")]
+        name: String,
+    },
+}
+fn default_in_memory_name() -> String {
+    "langdb".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpDefinition {
     #[serde(default = "default_tools_filter")]
     pub filter: ToolsFilter,
-    pub server_url: String,
-    #[serde(default)]
-    pub r#type: McpServerType,
-    #[serde(default)]
-    pub headers: HashMap<String, String>,
+    #[serde(flatten)]
+    pub r#type: McpTransportType,
+}
+impl McpDefinition {
+    pub fn server_name(&self) -> String {
+        match &self.r#type {
+            McpTransportType::InMemory { name, .. } => name.clone(),
+            McpTransportType::Sse { server_url, .. } => server_url.clone(),
+            McpTransportType::Ws { server_url, .. } => server_url.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
