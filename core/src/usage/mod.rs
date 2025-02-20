@@ -107,6 +107,7 @@ pub struct Metrics {
     pub total_tokens: Option<f64>,
     pub latency: Option<f64>,
     pub ttft: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub llm_usage: Option<f64>,
     pub tps: Option<f64>,
     pub error_rate: Option<f64>,
