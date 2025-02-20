@@ -16,6 +16,21 @@ pub enum MetricSelector {
     ErrorRate,
 }
 
+#[derive(PartialEq, Eq)]
+pub enum MetricOptimizationDirection {
+    Minimize,
+    Maximize,
+}
+
+impl MetricSelector {
+    fn get_optimization_direction(&self) -> MetricOptimizationDirection {
+        match self {
+            MetricSelector::Requests | MetricSelector::Tps => MetricOptimizationDirection::Maximize,
+            _ => MetricOptimizationDirection::Minimize,
+        }
+    }
+}
+
 impl MetricSelector {
     fn get_value(&self, metrics: &Metrics) -> Option<f64> {
         match self {
@@ -32,9 +47,10 @@ pub async fn route(
     models: &[String],
     metrics: &BTreeMap<String, ProviderMetrics>,
     metric: &MetricSelector,
-    minimize: bool,
     metrics_duration: Option<&MetricsDuration>,
 ) -> Result<String, RouterError> {
+    let minimize = metric.get_optimization_direction() == MetricOptimizationDirection::Minimize;
+
     // Find the model with the best metric value
     let best_model = models
         .iter()
@@ -172,14 +188,14 @@ mod tests {
         ];
 
         // Test with TTFT metric (minimize)
-        let new_model = super::route(&models, &metrics, &MetricSelector::Ttft, true, None)
+        let new_model = super::route(&models, &metrics, &MetricSelector::Ttft, None)
             .await
             .unwrap();
 
         assert_eq!(new_model, "gemini/gemini-1.5-flash-latest".to_string());
 
         // Test with requests metric (maximize)
-        let new_model = super::route(&models, &metrics, &MetricSelector::Requests, false, None)
+        let new_model = super::route(&models, &metrics, &MetricSelector::Requests, None)
             .await
             .unwrap();
 
@@ -238,14 +254,14 @@ mod tests {
         let models = vec!["model_a".to_string(), "provider_c/model_d".to_string()];
 
         // Test with TTFT metric (minimize)
-        let new_model = super::route(&models, &metrics, &MetricSelector::Ttft, true, None)
+        let new_model = super::route(&models, &metrics, &MetricSelector::Ttft, None)
             .await
             .unwrap();
 
         assert_eq!(new_model, "provider_c/model_a".to_string());
 
         // Test with request duration (minimize)
-        let new_model = super::route(&models, &metrics, &MetricSelector::Latency, true, None)
+        let new_model = super::route(&models, &metrics, &MetricSelector::Latency, None)
             .await
             .unwrap();
 
@@ -273,14 +289,14 @@ mod tests {
         ];
 
         // Test with TTFT metric (minimize)
-        let new_model = super::route(&models, &metrics, &MetricSelector::Ttft, true, None)
+        let new_model = super::route(&models, &metrics, &MetricSelector::Ttft, None)
             .await
             .unwrap();
 
         assert_eq!(new_model, "openai/gpt-4o-mini".to_string());
 
         // Test with request duration (maximize)
-        let new_model = super::route(&models, &metrics, &MetricSelector::Latency, false, None)
+        let new_model = super::route(&models, &metrics, &MetricSelector::Latency, None)
             .await
             .unwrap();
 

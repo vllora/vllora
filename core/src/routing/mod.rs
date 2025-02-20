@@ -169,7 +169,6 @@ impl RouteStrategy for LlmRouter {
                     &models,
                     &metrics,
                     metric,
-                    true,
                     self.metrics_duration.as_ref(),
                 )
                 .await?;
