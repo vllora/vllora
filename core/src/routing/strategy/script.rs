@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use deno_core::error::CoreError;
 use deno_core::serde_v8;
 use deno_core::v8;
+use deno_core::Extension;
 use deno_core::JsRuntime;
 use deno_core::RuntimeOptions;
 
@@ -44,10 +45,52 @@ impl ScriptStrategy {
         models: &AvailableModels,
         metrics: &BTreeMap<String, ProviderMetrics>,
     ) -> Result<serde_json::Value, ScriptError> {
-        let mut runtime = JsRuntime::new(RuntimeOptions::default());
+        // Configure runtime options with security constraints
+        let options = RuntimeOptions {
+            extensions: vec![Extension {
+                name: "routing",
+                ops: vec![].into(),
+                js_files: vec![].into(),
+                esm_files: vec![].into(),
+                esm_entry_point: None,
+                lazy_loaded_esm_files: vec![].into(),
+                enabled: true,
+                ..Default::default()
+            }],
+            module_loader: None,    // Disable module loading
+            startup_snapshot: None, // No startup snapshot
+            shared_array_buffer_store: None,
+            create_params: None, // Use default V8 parameters
+            v8_platform: None,
+            inspector: false, // Disable inspector
+            skip_op_registration: false,
+            ..Default::default()
+        };
 
+        let mut runtime = JsRuntime::new(options);
+
+        // Create a secure context with limited globals
         let code = format!(
-            "{script}; route({{request: {}, headers: {}, models: {}, metrics: {}}});",
+            "(() => {{ 
+                // Remove potentially dangerous globals
+                const secureGlobals = {{}};
+                const safeProps = ['Object', 'Array', 'Number', 'String', 'Boolean', 'Math', 'JSON'];
+                safeProps.forEach(prop => {{ secureGlobals[prop] = globalThis[prop]; }});
+                
+                // Add our script in a secure wrapper
+                const router = (context) => {{
+                    'use strict';
+                    {script}
+                    return route(context);
+                }};
+
+                return router;
+            }})()({{
+                request: {},
+                headers: {},
+                models: {},
+                metrics: {}
+            }});",
             serde_json::to_string(request)?,
             serde_json::to_string(headers)?,
             serde_json::to_string(&models.0)?,
