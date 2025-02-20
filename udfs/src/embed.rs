@@ -5,12 +5,16 @@ use crate::{
     EmbeddingConfig, InvokeError,
 };
 
-pub async fn embed(input: String, config: &EmbeddingConfig) -> Result<CommonResponse, InvokeError> {
-    tracing::debug!("Embedding input: {}", input);
-
-    let input = serde_json::from_str::<Vec<String>>(&input)?;
-    let input = input[0].to_string();
+pub async fn embed(
+    values: &mut std::slice::Iter<'_, String>,
+    config: &EmbeddingConfig,
+) -> Result<CommonResponse, InvokeError> {
+    let input = values
+        .next()
+        .cloned()
+        .ok_or_else(|| InvokeError::CustomError("No input provided".to_string()))?;
     let mut request = CreateEmbeddingRequestArgs::default();
+    tracing::debug!("Calling embeddings with input: {}", input);
 
     request = request.model(&config.model_settings.model).to_owned();
     request = request.input(input).to_owned();

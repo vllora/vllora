@@ -14,7 +14,7 @@ use udfs::InvokeError;
 use udfs::FunctionConfig;
 async fn process_line(
     config: &FunctionConfig,
-    input: String,
+    values: &mut std::slice::Iter<'_, String>,
     writer: Arc<Mutex<impl AsyncWriteExt + Send + Unpin>>,
     tokens: Arc<AtomicUsize>,
 ) -> Result<(), InvokeError> {
@@ -23,17 +23,10 @@ async fn process_line(
         std::env::args().collect::<Vec<_>>()
     );
 
-    let val = match config {
-        FunctionConfig::Completion(config) => {
-            tracing::debug!("Calling completions with input: {}", input);
+    let val = match &config {
+        FunctionConfig::Completion(config) => completions(values, config).await,
 
-            completions(input, config).await
-        }
-
-        FunctionConfig::Embedding(config) => {
-            tracing::debug!("Calling embeddings with input: {}", input);
-            embed(input, config).await
-        }
+        FunctionConfig::Embedding(config) => embed(values, config).await,
     }?;
     let max_tokens = config.max_tokens();
     if let Some(max_tokens) = max_tokens {
@@ -51,6 +44,7 @@ async fn process_line(
     write(&mut *writer, values).await
 }
 
+const PARALLEL: usize = 100;
 async fn execute_udf<R, W>(udf: &str, mut reader: R, writer: W) -> Result<(), InvokeError>
 where
     R: tokio::io::AsyncBufRead + std::marker::Unpin,
@@ -58,12 +52,10 @@ where
 {
     let writer = Arc::new(Mutex::new(writer));
     let mut line = String::new();
-    let last = std::env::args().last().unwrap_or_default().replace("'", "");
-    let config = parse_function_config(udf, &last)?;
 
     let tokens = Arc::new(AtomicUsize::new(0));
     // Create a buffer to store futures with their order
-    let mut futures = Vec::with_capacity(config.parallel());
+    let mut futures = Vec::with_capacity(PARALLEL);
     let mut line_number = 0u64;
 
     loop {
@@ -77,20 +69,33 @@ where
 
                 let line_clone = line.trim().to_string();
                 let writer_clone = writer.clone();
-                let config_clone = config.clone();
+
                 let tokens_clone = tokens.clone();
-                // Store the future with its order
+
+                let values: Vec<String> = serde_json::from_str(line_clone.as_str())?;
+                let config = values.first().cloned().ok_or_else(|| {
+                    InvokeError::CustomError("No configuration provided".to_string())
+                })?;
+                let config = parse_function_config(udf, &config)?;
+                let remaining_values = values[1..].to_vec();
+
                 futures.push((
                     line_number,
                     tokio::spawn(async move {
-                        process_line(&config_clone, line_clone, writer_clone, tokens_clone).await
+                        process_line(
+                            &config,
+                            &mut remaining_values.iter(),
+                            writer_clone,
+                            tokens_clone,
+                        )
+                        .await
                     }),
                 ));
 
                 line_number += 1;
 
                 // Process results when we hit the parallel limit or on last line
-                if futures.len() >= config.parallel() {
+                if futures.len() >= PARALLEL {
                     process_ordered_futures(&mut futures).await?;
                 }
             }
