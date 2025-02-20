@@ -99,8 +99,11 @@ impl LimitPeriod {
 #[derive(Debug, Default, Serialize, Clone)]
 pub struct Metrics {
     pub requests: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub input_tokens: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub output_tokens: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub total_tokens: Option<f64>,
     pub latency: Option<f64>,
     pub ttft: Option<f64>,

@@ -28,9 +28,6 @@ pub enum ModelError {
     #[error(transparent)]
     Anthropic(#[from] AnthropicError),
 
-    #[error("Invalid API Key")]
-    InvalidApiKey,
-
     #[error("Max retries reached")]
     MaxRetriesReached,
 
@@ -45,6 +42,15 @@ pub enum ModelError {
 
     #[error("Tool call id not found in request")]
     ToolCallIdNotFound,
+
+    #[error(transparent)]
+    AuthorizationError(#[from] AuthorizationError),
+}
+
+#[derive(Error, Debug)]
+pub enum AuthorizationError {
+    #[error("Invalid API Key")]
+    InvalidApiKey,
 }
 
 #[derive(Error, Debug)]
@@ -61,6 +67,7 @@ pub enum AnthropicError {
     #[error("Error building request: {0}")]
     RequestError(String),
 }
+
 #[derive(Error, Debug)]
 pub enum BedrockError {
     #[error(" {0:?}")]

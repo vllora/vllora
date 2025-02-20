@@ -1,4 +1,4 @@
-use super::error::ModelError;
+use super::error::{AuthorizationError, ModelError};
 use super::tools::Tool;
 use super::types::{
     LLMContentEvent, LLMFinishEvent, LLMStartEvent, ModelEvent, ModelEventType, ModelFinishReason,
@@ -74,7 +74,7 @@ pub fn openai_client(
     let api_key = if let Some(credentials) = credentials {
         credentials.api_key.clone()
     } else {
-        std::env::var("LANGDB_OPENAI_API_KEY").map_err(|_| ModelError::InvalidApiKey)?
+        std::env::var("LANGDB_OPENAI_API_KEY").map_err(|_| AuthorizationError::InvalidApiKey)?
     };
     config = config.with_api_key(api_key);
 
@@ -295,6 +295,7 @@ impl OpenAIModel {
                     }
                 }
                 Err(err) => {
+                    tracing::warn!("OpenAI API error: {err}");
                     return Err(ModelError::OpenAIApi(err).into());
                 }
             }
