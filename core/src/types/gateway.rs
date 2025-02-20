@@ -83,6 +83,7 @@ pub struct RequestUser {
     #[serde(alias = "user_name")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    #[serde(alias = "user_tags")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<Vec<String>>,
 }
