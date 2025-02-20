@@ -77,9 +77,14 @@ pub struct ChatCompletionRequestWithTools<T> {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequestUser {
-    pub id: String,
-    pub name: String,
-    pub tags: Vec<String>,
+    #[serde(alias = "user_id")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(alias = "user_name")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tags: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, Default)]
