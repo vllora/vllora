@@ -18,6 +18,14 @@ use crate::{
     error::GatewayError,
     types::gateway::{McpDefinition, McpTool, ServerTools, ToolsFilter},
 };
+
+fn validate_server_name(name: &str) -> Result<(), GatewayError> {
+    match name {
+        "websearch" => Ok(()),
+        _ => Err(GatewayError::CustomError("Invalid server name".to_string())),
+    }
+}
+
 async fn async_server(name: &str, transport: ServerInMemoryTransport) -> Result<(), GatewayError> {
     match name {
         "websearch" => {
@@ -69,6 +77,7 @@ macro_rules! with_transport {
                     .map_err(|e| GatewayError::CustomError(e.to_string()))
             }
             crate::types::gateway::McpTransportType::InMemory { name } => {
+                validate_server_name(&name)?;
                 let client_transport = ClientInMemoryTransport::new(move |t| {
                     let name = name.clone();
                     tokio::spawn(async move {
