@@ -58,6 +58,12 @@ impl ChatCompletionRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Extra {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<RequestUser>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatCompletionRequestWithTools<T> {
     #[serde(flatten)]
     pub request: ChatCompletionRequest,
@@ -65,9 +71,18 @@ pub struct ChatCompletionRequestWithTools<T> {
     pub mcp_servers: Option<Vec<McpDefinition>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub router: Option<DynamicRouter<T>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extra: Option<Extra>,
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Debug, Clone, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RequestUser {
+    pub id: String,
+    pub name: String,
+    pub tags: Vec<String>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
 pub struct DynamicRouter<T> {
     #[serde(flatten)]
     pub strategy: T,
