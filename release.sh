@@ -10,18 +10,45 @@ fi
 
 VERSION_TYPE=$1
 
-# Install standard-version if not already installed
-if ! command -v npx &> /dev/null; then
-    echo "Installing npx..."
-    npm install -g npx
+# Install cargo-edit if not already installed
+if ! cargo set-version --help >/dev/null 2>&1; then
+    echo "Installing cargo-edit..."
+    cargo install cargo-edit
 fi
 
-# Generate CHANGELOG and bump version
-echo "Generating CHANGELOG and bumping version..."
-npx standard-version --release-as $VERSION_TYPE
+# Get current version from gateway Cargo.toml
+CURRENT_VERSION=$(grep -m1 '^version = ' gateway/Cargo.toml | cut -d '"' -f2)
 
-# Get the new version from package.json (or you can parse from git tags)
-NEW_VERSION=$(git describe --tags --abbrev=0)
+# Calculate new version based on version type
+case $VERSION_TYPE in
+    major)
+        NEW_VERSION=$(echo $CURRENT_VERSION | awk -F. '{$1 = $1 + 1; $2 = 0; $3 = 0} 1' OFS=.)
+        ;;
+    minor)
+        NEW_VERSION=$(echo $CURRENT_VERSION | awk -F. '{$2 = $2 + 1; $3 = 0} 1' OFS=.)
+        ;;
+    patch)
+        NEW_VERSION=$(echo $CURRENT_VERSION | awk -F. '{$3 = $3 + 1} 1' OFS=.)
+        ;;
+    *)
+        echo "Invalid version type. Use major, minor, or patch"
+        exit 1
+        ;;
+esac
+
+# Update version in Cargo.toml files
+echo "Updating version to $NEW_VERSION in Cargo.toml files..."
+(cd core && cargo set-version $NEW_VERSION)
+(cd udfs && cargo set-version $NEW_VERSION)
+(cd gateway && cargo set-version $NEW_VERSION)
+
+# Generate CHANGELOG
+echo "Generating CHANGELOG..."
+npx standard-version --release-as $NEW_VERSION --skip.tag true
+
+# Create git tag
+echo "Creating git tag v$NEW_VERSION..."
+git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
 
 # Build the artifacts
 echo "Building artifacts..."
@@ -41,8 +68,8 @@ cp target/aarch64-unknown-linux-gnu/release/langdb_gateway $TEMP_DIR/langdb_gate
 
 # Create GitHub release and upload assets
 echo "Creating GitHub release..."
-gh release create $NEW_VERSION \
-    --title "Release $NEW_VERSION" \
+gh release create "v$NEW_VERSION" \
+    --title "Release v$NEW_VERSION" \
     --notes-file CHANGELOG.md \
     $TEMP_DIR/langdb_udf-x86_64 \
     $TEMP_DIR/langdb_udf-aarch64 \
@@ -54,15 +81,15 @@ rm -rf $TEMP_DIR
 
 # Create and push PR for version bump and CHANGELOG
 echo "Creating PR for version bump..."
-BRANCH_NAME="release/$NEW_VERSION"
+BRANCH_NAME="release/v$NEW_VERSION"
 git checkout -b $BRANCH_NAME
-git add CHANGELOG.md package.json
-git commit -m "chore: release $NEW_VERSION"
+git add CHANGELOG.md core/Cargo.toml udfs/Cargo.toml gateway/Cargo.toml
+git commit -m "chore: release v$NEW_VERSION"
 git push origin $BRANCH_NAME
 
 gh pr create \
-    --title "Release $NEW_VERSION" \
-    --body "Automated PR for version $NEW_VERSION release" \
+    --title "Release v$NEW_VERSION" \
+    --body "Automated PR for version v$NEW_VERSION release" \
     --base main \
     --head $BRANCH_NAME
 
