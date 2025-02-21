@@ -63,8 +63,8 @@ echo "Preparing release artifacts..."
 cp target/x86_64-unknown-linux-gnu/release/langdb_udf $TEMP_DIR/langdb_udf-x86_64
 cp target/aarch64-unknown-linux-gnu/release/langdb_udf $TEMP_DIR/langdb_udf-aarch64
 
-cp target/x86_64-unknown-linux-gnu/release/langdb_gateway $TEMP_DIR/langdb_gateway-x86_64
-cp target/aarch64-unknown-linux-gnu/release/langdb_gateway $TEMP_DIR/langdb_gateway-aarch64
+cp target/x86_64-unknown-linux-gnu/release/ai-gateway $TEMP_DIR/ai-gateway-x86_64
+cp target/aarch64-unknown-linux-gnu/release/ai-gateway $TEMP_DIR/ai-gateway-aarch64
 
 # Create GitHub release and upload assets
 echo "Creating GitHub release..."
@@ -73,8 +73,8 @@ gh release create "v$NEW_VERSION" \
     --notes-file CHANGELOG.md \
     $TEMP_DIR/langdb_udf-x86_64 \
     $TEMP_DIR/langdb_udf-aarch64 \
-    $TEMP_DIR/langdb_gateway-x86_64 \
-    $TEMP_DIR/langdb_gateway-aarch64
+    $TEMP_DIR/ai-gateway-x86_64 \
+    $TEMP_DIR/ai-gateway-aarch64
 
 # Cleanup
 rm -rf $TEMP_DIR
