@@ -28,7 +28,7 @@ uuid = "1.13.1"
 
 [[bin]]
 path = "src/main.rs"
-name = "udf"
+name = "langdb_udf"
 
 [dev-dependencies]
 mockall = "0.11"
