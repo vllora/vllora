@@ -22,3 +22,6 @@ SETTINGS index_granularity = 8192;
 
 -- Add bloom filter index for thread_id
 ALTER TABLE langdb.traces ADD INDEX idx_thread_id thread_id TYPE bloom_filter GRANULARITY 4;
+
+-- Add composite index for tenant_id, project_id, and operation_name
+ALTER TABLE langdb.traces ADD INDEX idx_tenant_project_op (tenant_id, project_id, operation_name) TYPE bloom_filter GRANULARITY 4;
