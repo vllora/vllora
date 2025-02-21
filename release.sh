@@ -25,10 +25,6 @@ if [ "$1" = "--publish" ]; then
     echo "Creating git tag v$NEW_VERSION..."
     git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
     git push origin "v$NEW_VERSION"
-
-    echo "Generating CHANGELOG..."
-    npx standard-version --release-as $NEW_VERSION --skip.tag true
-
     # Create temporary directory for release assets
     TEMP_DIR=$(mktemp -d)
 
