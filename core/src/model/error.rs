@@ -73,6 +73,9 @@ pub enum BedrockError {
     #[error(" {0:?}")]
     CustomError(String),
 
+    #[error("Validation Error: {0}")]
+    ValidationError(String),
+
     #[error("{}", DisplayErrorContext(.0))]
     SmithyError(
         #[from]
