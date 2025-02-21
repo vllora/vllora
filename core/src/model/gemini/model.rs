@@ -700,7 +700,12 @@ impl GeminiModel {
                                     .collect::<Result<Vec<Part>, GatewayError>>()?,
                             })
                         } else {
-                            Some(Content::model(m.content.clone().unwrap_or_default()))
+                            match &m.content {
+                                Some(content) if !content.is_empty() => {
+                                    Some(Content::model(content.clone()))
+                                }
+                                _ => None,
+                            }
                         }
                     }
                     MessageType::HumanMessage => Some(construct_user_message(&m.clone().into())),

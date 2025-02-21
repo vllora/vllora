@@ -839,10 +839,7 @@ impl BedrockModel {
             .await
             .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
-            let response = builder
-                .send()
-                .await
-                .map_err(map_converse_stream_error)?;
+            let response = builder.send().await.map_err(map_converse_stream_error)?;
             let (stop_reason, msg, usage) = self
                 .process_stream(response, &tx)
                 .instrument(span.clone())
@@ -1063,24 +1060,17 @@ fn replace_version(model: &str) -> String {
         .to_string()
 }
 
-fn map_converse_stream_error(e: aws_smithy_runtime_api::client::result::SdkError<
-    aws_sdk_bedrockruntime::operation::converse_stream::ConverseStreamError,
-    aws_smithy_runtime_api::http::Response,
->) -> ModelError {
+fn map_converse_stream_error(
+    e: aws_smithy_runtime_api::client::result::SdkError<
+        aws_sdk_bedrockruntime::operation::converse_stream::ConverseStreamError,
+        aws_smithy_runtime_api::http::Response,
+    >,
+) -> ModelError {
     match e.as_service_error() {
-        Some(converse_error) => {
-            match converse_error {
-                ConverseStreamError::ValidationException(e) => {
-                    match e.message() {
-                        Some(msg) => ModelError::Bedrock(BedrockError::ValidationError(msg.to_string())),
-                        None => ModelError::Bedrock(BedrockError::ValidationError(e.to_string())),
-                    }
-                }
-                _ => ModelError::Bedrock(e.into()),
-            }
-        }
-        None => {
-            ModelError::Bedrock(e.into())
-        }
+        Some(ConverseStreamError::ValidationException(e)) => match e.message() {
+            Some(msg) => ModelError::Bedrock(BedrockError::ValidationError(msg.to_string())),
+            None => ModelError::Bedrock(BedrockError::ValidationError(e.to_string())),
+        },
+        _ => ModelError::Bedrock(e.into()),
     }
 }
