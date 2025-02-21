@@ -57,6 +57,14 @@ fi
 
 VERSION_TYPE=$1
 
+# Get current version from core/Cargo.toml
+CURRENT_VERSION=$(grep '^version = ' core/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+
+if [ -z "$CURRENT_VERSION" ]; then
+    echo "Error: Could not determine current version from core/Cargo.toml"
+    exit 1
+fi
+
 # Calculate new version based on version type
 case $VERSION_TYPE in
     major)
