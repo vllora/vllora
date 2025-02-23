@@ -62,9 +62,25 @@ pub async fn completions(
 
     let request = request.build()?;
 
-    // Create client and send request
+    // Create client and send request with retries
     let client = async_openai::Client::with_config(config.config.clone());
-    let response = client.chat().create(request).await?;
+    let mut retries = 0;
+    const MAX_RETRIES: u32 = 3;
+    const RETRY_DELAY_MS: u64 = 1000;
+
+    let response = loop {
+        match client.chat().create(request.clone()).await {
+            Ok(resp) => break resp,
+            Err(e) => {
+                if retries >= MAX_RETRIES {
+                    return Err(InvokeError::Other(format!("Failed after {} retries: {}", MAX_RETRIES, e)));
+                }
+                retries += 1;
+                tokio::time::sleep(tokio::time::Duration::from_millis(RETRY_DELAY_MS * retries as u64)).await;
+                continue;
+            }
+        }
+    };
 
     // Extract the first choice's message content
     let content = response

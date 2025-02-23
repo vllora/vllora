@@ -17,7 +17,9 @@
 
     <format>JSONCompactEachRow</format>
     <command>langdb_udf completions</command>
-    <command_read_timeout>1000000</command_read_timeout>
+    <command_read_timeout>10000000</command_read_timeout>
+    <command_write_timeout>10000000</command_write_timeout>
+    <max_command_execution_time>1000000</max_command_execution_time>
     <return_type>String</return_type>
     <stderr_reaction>throw</stderr_reaction>
     <check_exit_code>1</check_exit_code>
