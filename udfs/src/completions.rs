@@ -73,10 +73,16 @@ pub async fn completions(
             Ok(resp) => break resp,
             Err(e) => {
                 if retries >= MAX_RETRIES {
-                    return Err(InvokeError::Other(format!("Failed after {} retries: {}", MAX_RETRIES, e)));
+                    return Err(InvokeError::Other(format!(
+                        "Failed after {} retries: {}",
+                        MAX_RETRIES, e
+                    )));
                 }
                 retries += 1;
-                tokio::time::sleep(tokio::time::Duration::from_millis(RETRY_DELAY_MS * retries as u64)).await;
+                tokio::time::sleep(tokio::time::Duration::from_millis(
+                    RETRY_DELAY_MS * retries as u64,
+                ))
+                .await;
                 continue;
             }
         }
