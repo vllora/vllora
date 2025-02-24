@@ -12,6 +12,10 @@ use udfs::parse_function_config;
 use udfs::InvokeError;
 
 use udfs::FunctionConfig;
+
+const PARALLEL: usize = 100;
+const MAX_RETRIES: u32 = 3;
+const BACKOFF_MS: u64 = 1000;
 async fn process_line(
     config: &FunctionConfig,
     values: &mut std::slice::Iter<'_, String>,
@@ -25,9 +29,9 @@ async fn process_line(
 
     let val = match &config {
         FunctionConfig::Completion(config) => completions(values, config).await,
-
         FunctionConfig::Embedding(config) => embed(values, config).await,
     }?;
+
     let max_tokens = config.max_tokens();
     if let Some(max_tokens) = max_tokens {
         let val = tokens.fetch_add(val.usage.total_tokens, std::sync::atomic::Ordering::Relaxed);
@@ -38,13 +42,30 @@ async fn process_line(
             )));
         }
     }
+
     let response = val.response;
     let values: Vec<Value> = vec![response];
     let mut writer = writer.lock().await;
-    write(&mut *writer, values).await
+    let mut retries = 0;
+
+    loop {
+        match write(&mut *writer, values.clone()).await {
+            Ok(_) => break Ok(()),
+            Err(e) => {
+                if retries >= MAX_RETRIES {
+                    break Err(e);
+                }
+                retries += 1;
+                tokio::time::sleep(tokio::time::Duration::from_millis(
+                    BACKOFF_MS * retries as u64,
+                ))
+                .await;
+                continue;
+            }
+        }
+    }
 }
 
-const PARALLEL: usize = 100;
 async fn execute_udf<R, W>(udf: &str, mut reader: R, writer: W) -> Result<(), InvokeError>
 where
     R: tokio::io::AsyncBufRead + std::marker::Unpin,
@@ -114,12 +135,25 @@ where
 async fn process_ordered_futures(
     futures: &mut Vec<(u64, tokio::task::JoinHandle<Result<(), InvokeError>>)>,
 ) -> Result<(), InvokeError> {
+    use tokio::time::{sleep, Duration};
+    const BATCH_SIZE: usize = 10;
+    const BATCH_DELAY_MS: u64 = 100;
     // Sort by line number to maintain order
     futures.sort_by_key(|(num, _)| *num);
 
-    // Remove and process the first future
-    let (_, future) = futures.remove(0);
-    future.await??;
+    // Process futures in small batches with delay
+    let batch_size = std::cmp::min(BATCH_SIZE, futures.len());
+    let batch: Vec<_> = futures.drain(0..batch_size).collect();
+
+    for (_, future) in batch {
+        match future.await {
+            Ok(result) => result?,
+            Err(e) => return Err(InvokeError::from(e)),
+        }
+    }
+
+    // Add small delay between batches
+    sleep(Duration::from_millis(BATCH_DELAY_MS)).await;
 
     Ok(())
 }
