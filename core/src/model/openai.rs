@@ -42,7 +42,6 @@ use futures::StreamExt;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::field;
 use tracing::Instrument;
 use tracing::Span;
@@ -232,14 +231,9 @@ impl OpenAIModel {
                 Ok(mut response) => {
                     if !*first_response_received {
                         *first_response_received = true;
-                        // current time in nanoseconds
-                        let now: u64 = SystemTime::now()
-                            .duration_since(UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_micros() as u64;
                         tx.send(Some(ModelEvent::new(
                             &Span::current(),
-                            ModelEventType::LlmFirstToken(LLMFirstToken { ttft: now }),
+                            ModelEventType::LlmFirstToken(LLMFirstToken {}),
                         )))
                         .await
                         .map_err(|e| GatewayError::CustomError(e.to_string()))?;

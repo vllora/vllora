@@ -61,15 +61,8 @@ pub async fn stream_chunks(
             let forward_fut = async {
                 let mut assistant_msg = String::new();
                 while let Some(Some(mut msg)) = rx.recv().await {
-                    match &mut msg.event {
-                        ModelEventType::LlmContent(event) => {
-                            assistant_msg.push_str(event.content.as_str());
-                        }
-                        ModelEventType::LlmFirstToken(event) => {
-                            let span = Span::current();
-                            span.record("ttft", event.ttft);
-                        }
-                        _ => (),
+                    if let ModelEventType::LlmContent(event) = &mut msg.event {
+                        assistant_msg.push_str(event.content.as_str());
                     }
 
                     callback_handler

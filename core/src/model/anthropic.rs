@@ -33,7 +33,6 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::field;
 use tracing::Instrument;
 use tracing::Span;
@@ -207,14 +206,10 @@ impl AnthropicModel {
             let r = stream.next().await.transpose();
             if !first_response_received {
                 first_response_received = true;
-                let now: u64 = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_micros() as u64;
                 let _ = tx
                     .send(Some(ModelEvent::new(
                         &Span::current(),
-                        ModelEventType::LlmFirstToken(LLMFirstToken { ttft: now }),
+                        ModelEventType::LlmFirstToken(LLMFirstToken {}),
                     )))
                     .await;
             }

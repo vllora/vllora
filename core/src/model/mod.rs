@@ -307,9 +307,13 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
         let cost_calculator = self.cost_calculator.clone();
         tokio::spawn(
             async move {
+                let mut start_time = None;
                 while let Some(Some(msg)) = rx.recv().await {
                     if let Some(cost_calculator) = cost_calculator.as_ref() {
                         match &msg.event {
+                            ModelEventType::LlmStart(_) => {
+                                start_time = Some(msg.timestamp.timestamp_micros() as u64);
+                            }
                             ModelEventType::LlmStop(llmfinish_event) => {
                                 if let Some(u) = &llmfinish_event.usage {
                                     let s = tracing::Span::current();
@@ -336,9 +340,14 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
                                     s.record("usage", serde_json::to_string(u).unwrap());
                                 }
                             }
-                            ModelEventType::LlmFirstToken(llmfirst_token) => {
-                                let s = tracing::Span::current();
-                                s.record("ttft", llmfirst_token.ttft);
+                            ModelEventType::LlmFirstToken(_) => {
+                                if let Some(start_time) = start_time {
+                                    let current_span = tracing::Span::current();
+                                    current_span.record(
+                                        "ttft",
+                                        msg.timestamp.timestamp_micros() as u64 - start_time,
+                                    );
+                                }
                             }
                             _ => (),
                         }
@@ -425,18 +434,27 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
             let (tx, mut rx) = channel(outer_tx.max_capacity());
             let mut output = String::new();
             let mut events = Vec::new();
+            let mut start_time = None;
             let result = join(
                 self.inner
                     .stream(input_vars, tx, previous_messages, tags.clone()),
                 async {
                     while let Some(Some(msg)) = rx.recv().await {
                         match &msg.event {
+                            ModelEventType::LlmStart(_event) => {
+                                start_time = Some(msg.timestamp.timestamp_micros() as u64);
+                            }
                             ModelEventType::LlmContent(event) => {
                                 output.push_str(event.content.as_str());
                             }
-                            ModelEventType::LlmFirstToken(event) => {
-                                let current_span = tracing::Span::current();
-                                current_span.record("ttft", event.ttft);
+                            ModelEventType::LlmFirstToken(_) => {
+                                if let Some(start_time) = start_time {
+                                    let current_span = tracing::Span::current();
+                                    current_span.record(
+                                        "ttft",
+                                        msg.timestamp.timestamp_micros() as u64 - start_time,
+                                    );
+                                }
                             }
                             ModelEventType::LlmStop(llmfinish_event) => {
                                 if let Some(cost_calculator) = cost_calculator.as_ref() {

@@ -78,21 +78,12 @@ pub async fn handle_image_generation(
     let handle = tokio::spawn(async move {
         let mut stop_event = None;
         while let Some(Some(msg)) = rx.recv().await {
-            match &msg {
-                ModelEvent {
-                    event: ModelEventType::ImageGenerationFinish(e),
-                    ..
-                } => {
-                    stop_event = Some(e.clone());
-                }
-                ModelEvent {
-                    event: ModelEventType::LlmFirstToken(e),
-                    ..
-                } => {
-                    let current_span = Span::current();
-                    current_span.record("ttft", e.ttft);
-                }
-                _ => (),
+            if let ModelEvent {
+                event: ModelEventType::ImageGenerationFinish(e),
+                ..
+            } = &msg
+            {
+                stop_event = Some(e.clone());
             }
 
             callback_handler.on_message(ModelEventWithDetails::new(msg, db_model.clone()));

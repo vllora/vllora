@@ -196,15 +196,6 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
                 tool_calls.as_mut().unwrap().push(e.clone());
             }
 
-            if let ModelEvent {
-                event: ModelEventType::LlmFirstToken(e),
-                ..
-            } = &msg
-            {
-                let current_span = Span::current();
-                current_span.record("ttft", e.ttft);
-            }
-
             ch.on_message(ModelEventWithDetails::new(msg, db_model.clone()));
         }
 
