@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### 0.1.3 (2025-02-24)
+
+
+### Bug Fixes
+
+* Fix clickhouse connection timeout ([a4d50a6](https://github.com/langdb/langdb-cloud/commit/a4d50a6a3a036822075b33d99d11e09c3f3e74ee))
+
 ### 0.1.2 (2025-02-21)
 
 
