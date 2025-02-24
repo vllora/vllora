@@ -42,7 +42,6 @@ use serde::Serialize;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::log::info;
 use tracing::{field, Instrument, Span};
 use valuable::Valuable;
@@ -687,13 +686,9 @@ impl BedrockModel {
             let output = result.map_err(|e| ModelError::Bedrock(e.into()))?;
             if !first_response_received {
                 first_response_received = true;
-                let now: u64 = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_micros() as u64;
                 tx.send(Some(ModelEvent::new(
                     &Span::current(),
-                    ModelEventType::LlmFirstToken(LLMFirstToken { ttft: now }),
+                    ModelEventType::LlmFirstToken(LLMFirstToken {}),
                 )))
                 .await
                 .map_err(|e| GatewayError::CustomError(e.to_string()))?;

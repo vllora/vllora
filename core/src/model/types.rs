@@ -73,9 +73,7 @@ pub struct LLMStartEvent {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 
-pub struct LLMFirstToken {
-    pub ttft: u64,
-}
+pub struct LLMFirstToken {}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 
