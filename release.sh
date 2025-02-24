@@ -92,7 +92,7 @@ fi
 
 # Generate CHANGELOG
 echo "Generating CHANGELOG..."
-npx standard-version --release-as $NEW_VERSION --skip.tag true
+npx standard-version --release-as "$NEW_VERSION" --tag-prefix "v" --skip.tag true
 
 # Create and push PR for version bump and CHANGELOG
 echo "Creating PR for version bump..."
