@@ -1248,6 +1248,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "clust"
+version = "0.9.0"
+source = "git+https://github.com/langdb/clust?branch=feat%2Fsonnet-3.7#856153ee795d8f46f1d13541bab4aa8b249ed0a5"
+dependencies = [
+ "bytes",
+ "futures-core",
+ "pin-project",
+ "reqwest",
+ "serde",
+ "serde-json-fmt",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "colorchoice"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2645,22 +2660,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "langdb_clust"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b33c4b2376b8030a7b6791479ec85aa767a6d78665d651006c74b8f379e7514"
-dependencies = [
- "bytes",
- "futures-core",
- "pin-project",
- "reqwest",
- "serde",
- "serde-json-fmt",
- "serde_json",
- "thiserror 1.0.69",
-]
-
-[[package]]
 name = "langdb_core"
 version = "0.1.3"
 dependencies = [
@@ -2677,13 +2676,13 @@ dependencies = [
  "bytemuck",
  "bytes",
  "chrono",
+ "clust",
  "dashmap",
  "deno_core",
  "either",
  "futures",
  "indexmap 2.7.1",
  "langdb_clickhouse",
- "langdb_clust",
  "minijinja",
  "openssh",
  "opentelemetry",
