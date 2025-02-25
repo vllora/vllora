@@ -96,9 +96,8 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         }
     }
 
-    let thinking = request.thinking.clone();
+    let provider_specific = request.provider_specific.clone();
     let mut request = request.request.clone();
-
     request.model = llm_model.inference_provider.model_name.clone();
 
     let user: String = request
@@ -123,7 +122,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         &llm_model,
         &request,
         key.clone(),
-        thinking.as_ref(),
+        provider_specific.as_ref(),
     )?;
 
     let tools = ModelTools(request_tools);

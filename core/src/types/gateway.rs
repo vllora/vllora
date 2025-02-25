@@ -79,8 +79,17 @@ pub struct ChatCompletionRequestWithTools<T> {
     pub router: Option<DynamicRouter<T>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extra: Option<Extra>,
+    #[serde(flatten)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider_specific: Option<ProviderSpecificRequest>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderSpecificRequest {
+    // Anthropic request
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking: Option<Thinking>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub top_k: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

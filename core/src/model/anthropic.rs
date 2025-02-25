@@ -166,6 +166,18 @@ impl AnthropicModel {
             builder
         };
 
+        let builder = if let Some(top_p) = model_params.top_p {
+            builder.top_p(top_p)
+        } else {
+            builder
+        };
+
+        let builder = if let Some(stop) = &model_params.stop_sequences {
+            builder.stop_sequences(stop.clone())
+        } else {
+            builder
+        };
+
         let builder = if let Some(thinking) = &model_params.thinking {
             builder.thinking(thinking.clone())
         } else {

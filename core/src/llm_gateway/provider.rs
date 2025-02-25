@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use clust::messages::StopSequence;
+
 use crate::{
     models::ModelDefinition,
     types::{
@@ -8,7 +10,7 @@ use crate::{
             AnthropicModelParams, BedrockModelParams, ClaudeModel, CompletionEngineParams,
             GeminiModelParams, ImageGenerationEngineParams, OpenAiModelParams,
         },
-        gateway::{ChatCompletionRequest, CreateImageRequest},
+        gateway::{ChatCompletionRequest, CreateImageRequest, ProviderSpecificRequest},
         provider::{BedrockProvider, InferenceModelProvider},
     },
 };
@@ -22,7 +24,7 @@ impl Provider {
         model: &ModelDefinition,
         request: &ChatCompletionRequest,
         credentials: Option<Credentials>,
-        thinking: Option<&crate::types::gateway::Thinking>,
+        provider_specific: Option<&ProviderSpecificRequest>,
     ) -> Result<CompletionEngineParams, GatewayError> {
         match model.inference_provider.provider {
             InferenceModelProvider::OpenAI | InferenceModelProvider::Proxy(_) => {
@@ -100,7 +102,10 @@ impl Provider {
                             Some(x) => Some(clust::messages::MaxTokens::new(x, model.model)?),
                             None => None,
                         },
-                        stop_sequences: None,
+                        stop_sequences: request
+                            .stop
+                            .as_ref()
+                            .map(|s| s.iter().map(StopSequence::new).collect()),
                         stream: None,
                         temperature: match request.temperature {
                             Some(t) => Some(clust::messages::Temperature::new(t)?),
@@ -110,10 +115,15 @@ impl Provider {
                             Some(p) => Some(clust::messages::TopP::new(p)?),
                             None => None,
                         },
-                        top_k: None,
-                        thinking: thinking.map(|thinking| clust::messages::Thinking {
-                            r#type: thinking.r#type.clone(),
-                            budget_tokens: thinking.budget_tokens,
+                        top_k: provider_specific
+                            .and_then(|ps| ps.top_k.map(clust::messages::TopK::new)),
+                        thinking: provider_specific.and_then(|ps| {
+                            ps.thinking
+                                .as_ref()
+                                .map(|thinking| clust::messages::Thinking {
+                                    r#type: thinking.r#type.clone(),
+                                    budget_tokens: thinking.budget_tokens,
+                                })
                         }),
                     },
                 })
