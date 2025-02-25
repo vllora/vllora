@@ -1250,7 +1250,7 @@ dependencies = [
 [[package]]
 name = "clust"
 version = "0.9.0"
-source = "git+https://github.com/langdb/clust?branch=feat%2Fsonnet-3.7#856153ee795d8f46f1d13541bab4aa8b249ed0a5"
+source = "git+https://github.com/langdb/clust?branch=feat%2Fthinking#925947607492113cea68e8d8a74678fcdd14070e"
 dependencies = [
  "bytes",
  "futures-core",

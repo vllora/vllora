@@ -166,6 +166,12 @@ impl AnthropicModel {
             builder
         };
 
+        let builder = if let Some(thinking) = &model_params.thinking {
+            builder.thinking(thinking.clone())
+        } else {
+            builder
+        };
+
         let builder = builder.messages(messages.clone());
 
         let builder = match stream {
@@ -226,6 +232,16 @@ impl AnthropicModel {
                             .await
                             .map_err(|e| GatewayError::CustomError(e.to_string()))?;
                         }
+                        clust::messages::ContentBlockStart::ThinkingContentBlock(thinking) => {
+                            tx.send(Some(ModelEvent::new(
+                                &tracing::Span::current(),
+                                ModelEventType::LlmContent(LLMContentEvent {
+                                    content: format!("thinking: {}", thinking.thinking),
+                                }),
+                            )))
+                            .await
+                            .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+                        }
                         clust::messages::ContentBlockStart::ToolUseContentBlock(tool_use_block) => {
                             tool_call_states.insert(block.index, tool_use_block.tool_use);
                             json_states.insert(block.index, String::new());
@@ -242,6 +258,17 @@ impl AnthropicModel {
                             .await
                             .map_err(|e| GatewayError::CustomError(e.to_string()))?;
                         }
+                        clust::messages::ContentBlockDelta::ThinkingDeltaContentBlock(delta) => {
+                            tx.send(Some(ModelEvent::new(
+                                &tracing::Span::current(),
+                                ModelEventType::LlmContent(LLMContentEvent {
+                                    content: delta.thinking,
+                                }),
+                            )))
+                            .await
+                            .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+                        }
+                        clust::messages::ContentBlockDelta::SignatureDeltaContentBlock(_) => {}
                         clust::messages::ContentBlockDelta::InputJsonDeltaBlock(
                             input_json_block,
                         ) => {
@@ -410,6 +437,12 @@ impl AnthropicModel {
                                 match b {
                                     ContentBlock::Text(text) => {
                                         final_text.push_str(&text.text);
+                                    }
+                                    ContentBlock::Thinking(thinking) => {
+                                        final_text.push_str(&format!(
+                                            "thinking: {}\n\n",
+                                            thinking.thinking
+                                        ));
                                     }
                                     _ => {
                                         return Err(GatewayError::ModelError(

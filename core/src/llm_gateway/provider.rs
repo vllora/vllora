@@ -22,6 +22,7 @@ impl Provider {
         model: &ModelDefinition,
         request: &ChatCompletionRequest,
         credentials: Option<Credentials>,
+        thinking: Option<&crate::types::gateway::Thinking>,
     ) -> Result<CompletionEngineParams, GatewayError> {
         match model.inference_provider.provider {
             InferenceModelProvider::OpenAI | InferenceModelProvider::Proxy(_) => {
@@ -89,19 +90,31 @@ impl Provider {
                     _ => None,
                 });
                 let model_name = get_anthropic_model(&model.inference_provider.model_name);
+                let model = serde_json::from_str::<ClaudeModel>(&format!("\"{model_name}\""))?;
                 Ok(CompletionEngineParams::Anthropic {
                     credentials: api_key_credentials,
                     execution_options: Default::default(),
                     params: AnthropicModelParams {
-                        model: Some(serde_json::from_str::<ClaudeModel>(&format!(
-                            "\"{model_name}\""
-                        ))?),
-                        max_tokens: None,
+                        model: Some(model.clone()),
+                        max_tokens: match request.max_tokens {
+                            Some(x) => Some(clust::messages::MaxTokens::new(x, model.model)?),
+                            None => None,
+                        },
                         stop_sequences: None,
                         stream: None,
-                        temperature: None,
-                        top_p: None,
+                        temperature: match request.temperature {
+                            Some(t) => Some(clust::messages::Temperature::new(t)?),
+                            None => None,
+                        },
+                        top_p: match request.top_p {
+                            Some(p) => Some(clust::messages::TopP::new(p)?),
+                            None => None,
+                        },
                         top_k: None,
+                        thinking: thinking.map(|thinking| clust::messages::Thinking {
+                            r#type: thinking.r#type.clone(),
+                            budget_tokens: thinking.budget_tokens,
+                        }),
                     },
                 })
             }

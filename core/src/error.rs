@@ -22,4 +22,8 @@ pub enum GatewayError {
     ReqwestError(#[from] reqwest::Error),
     #[error(transparent)]
     BoxedError(#[from] Box<dyn std::error::Error + Send + Sync>),
+    #[error(transparent)]
+    ValidationF32Error(#[from] clust::ValidationError<f32>),
+    #[error(transparent)]
+    ValidationU32Error(#[from] clust::ValidationError<u32>),
 }

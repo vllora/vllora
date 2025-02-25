@@ -57,6 +57,12 @@ impl ChatCompletionRequest {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Thinking {
+    pub r#type: String,
+    pub budget_tokens: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Extra {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -73,6 +79,8 @@ pub struct ChatCompletionRequestWithTools<T> {
     pub router: Option<DynamicRouter<T>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extra: Option<Extra>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<Thinking>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

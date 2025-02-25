@@ -616,7 +616,7 @@ pub enum ProviderModelParams {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(from = "claude::ClaudeModel", into = "claude::ClaudeModel")]
 pub struct ClaudeModel {
-    model: claude::ClaudeModel,
+    pub model: claude::ClaudeModel,
     string: String,
 }
 
@@ -688,6 +688,8 @@ pub struct AnthropicModelParams {
     /// Recommended for advanced use cases only. You usually only need to use temperature.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub top_k: Option<claude::TopK>,
+
+    pub thinking: Option<claude::Thinking>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

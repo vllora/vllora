@@ -96,6 +96,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         }
     }
 
+    let thinking = request.thinking.clone();
     let mut request = request.request.clone();
 
     request.model = llm_model.inference_provider.model_name.clone();
@@ -118,7 +119,12 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         providers_config.as_ref(),
         &llm_model.inference_provider.provider.to_string(),
     );
-    let engine = Provider::get_completion_engine_for_model(&llm_model, &request, key.clone())?;
+    let engine = Provider::get_completion_engine_for_model(
+        &llm_model,
+        &request,
+        key.clone(),
+        thinking.as_ref(),
+    )?;
 
     let tools = ModelTools(request_tools);
 
