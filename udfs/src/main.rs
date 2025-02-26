@@ -161,7 +161,7 @@ async fn process_ordered_futures(
 #[tokio::main]
 async fn main() -> Result<(), InvokeError> {
     // Initialize tracing once at program start
-    if let Err(e) = init_tracing(Some("info")) {
+    if let Err(e) = init_tracing(None) {
         eprintln!("Failed to initialize tracing: {}", e);
     }
 
