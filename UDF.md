@@ -30,6 +30,13 @@ export LANGDB_PROJECT_ID=your_project_id
 export LANGDB_API_KEY=your_api_key
 ```
 
+3. Enable debug log if neccessary. By default, log is sent to stderr. If `UDF_FILE_LOGGING` is set, log is sent to `./logs` folder. 
+
+```bash
+export RUST_LOG="debug"
+export UDF_FILE_LOGGING=true
+```
+
 ## Installation
 
 ```bash
