@@ -58,6 +58,12 @@ impl ChatCompletionRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Extra {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<RequestUser>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatCompletionRequestWithTools<T> {
     #[serde(flatten)]
     pub request: ChatCompletionRequest,
@@ -65,9 +71,24 @@ pub struct ChatCompletionRequestWithTools<T> {
     pub mcp_servers: Option<Vec<McpDefinition>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub router: Option<DynamicRouter<T>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extra: Option<Extra>,
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Debug, Clone, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RequestUser {
+    #[serde(alias = "user_id")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(alias = "user_name")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(alias = "user_tags")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tags: Option<Vec<String>>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
 pub struct DynamicRouter<T> {
     #[serde(flatten)]
     pub strategy: T,
@@ -90,23 +111,44 @@ pub struct ToolSelector {
     pub description: Option<String>,
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum McpServerType {
-    #[default]
-    Sse,
-    Ws,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase", tag = "type")]
+pub enum McpTransportType {
+    Sse {
+        server_url: String,
+        #[serde(default)]
+        headers: HashMap<String, String>,
+    },
+    Ws {
+        server_url: String,
+        #[serde(default)]
+        headers: HashMap<String, String>,
+    },
+    #[serde(rename = "in-memory")]
+    InMemory {
+        #[serde(default = "default_in_memory_name")]
+        name: String,
+    },
+}
+fn default_in_memory_name() -> String {
+    "langdb".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpDefinition {
     #[serde(default = "default_tools_filter")]
     pub filter: ToolsFilter,
-    pub server_url: String,
-    #[serde(default)]
-    pub r#type: McpServerType,
-    #[serde(default)]
-    pub headers: HashMap<String, String>,
+    #[serde(flatten)]
+    pub r#type: McpTransportType,
+}
+impl McpDefinition {
+    pub fn server_name(&self) -> String {
+        match &self.r#type {
+            McpTransportType::InMemory { name, .. } => name.clone(),
+            McpTransportType::Sse { server_url, .. } => server_url.clone(),
+            McpTransportType::Ws { server_url, .. } => server_url.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -14,6 +14,7 @@ use crate::error::GatewayError;
 use crate::events::JsonValue;
 use crate::events::SPAN_GEMINI;
 use crate::events::{self, RecordResult};
+use crate::model::error::AuthorizationError;
 use crate::model::gemini::types::{FunctionDeclaration, GenerationConfig, Role, Tools};
 use crate::model::handler::handle_tool_call;
 use crate::model::types::LLMFirstToken;
@@ -54,7 +55,7 @@ pub fn gemini_client(credentials: Option<&ApiKeyCredentials>) -> Result<Client, 
     let api_key = if let Some(credentials) = credentials {
         credentials.api_key.clone()
     } else {
-        std::env::var("LANGDB_GEMINI_API_KEY").map_err(|_| ModelError::InvalidApiKey)?
+        std::env::var("LANGDB_GEMINI_API_KEY").map_err(|_| AuthorizationError::InvalidApiKey)?
     };
     Ok(Client::new(api_key))
 }
@@ -699,7 +700,12 @@ impl GeminiModel {
                                     .collect::<Result<Vec<Part>, GatewayError>>()?,
                             })
                         } else {
-                            Some(Content::model(m.content.clone().unwrap_or_default()))
+                            match &m.content {
+                                Some(content) if !content.is_empty() => {
+                                    Some(Content::model(content.clone()))
+                                }
+                                _ => None,
+                            }
                         }
                     }
                     MessageType::HumanMessage => Some(construct_user_message(&m.clone().into())),

@@ -1,4 +1,4 @@
-use super::error::ModelError;
+use super::error::{AuthorizationError, ModelError};
 use super::tools::Tool;
 use super::types::{
     LLMContentEvent, LLMFinishEvent, LLMStartEvent, ModelEvent, ModelEventType, ModelFinishReason,
@@ -40,7 +40,7 @@ use async_openai::Client;
 use futures::Stream;
 use futures::StreamExt;
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::field;
@@ -74,7 +74,7 @@ pub fn openai_client(
     let api_key = if let Some(credentials) = credentials {
         credentials.api_key.clone()
     } else {
-        std::env::var("LANGDB_OPENAI_API_KEY").map_err(|_| ModelError::InvalidApiKey)?
+        std::env::var("LANGDB_OPENAI_API_KEY").map_err(|_| AuthorizationError::InvalidApiKey)?
     };
     config = config.with_api_key(api_key);
 
@@ -295,6 +295,7 @@ impl OpenAIModel {
                     }
                 }
                 Err(err) => {
+                    tracing::warn!("OpenAI API error: {err}");
                     return Err(ModelError::OpenAIApi(err).into());
                 }
             }
@@ -360,7 +361,8 @@ impl OpenAIModel {
                 let content = first_choice.message.content;
                 let tool_calls_str = serde_json::to_string(&tool_calls)?;
 
-                let tools_span = tracing::info_span!(target: target!(), parent: span.clone(), events::SPAN_TOOLS, tool_calls=tool_calls_str, label=tool_calls.iter().map(|t| t.function.name.clone()).collect::<Vec<String>>().join(","));
+                let label = map_tool_names_to_labels(&tool_calls);
+                let tools_span = tracing::info_span!(target: target!(), parent: span.clone(), events::SPAN_TOOLS, tool_calls=tool_calls_str, label=label);
                 tools_span.follows_from(span.id());
 
                 let tool_name = tool_calls[0].function.name.clone();
@@ -594,7 +596,8 @@ impl OpenAIModel {
                     .get(tool_calls[0].function.name.as_str())
                     .unwrap();
 
-                let tools_span = tracing::info_span!(target: target!(), parent: span.clone(), events::SPAN_TOOLS, tool_calls=field::Empty, label=tool_calls.iter().map(|t| t.function.name.clone()).collect::<Vec<String>>().join(","));
+                let label = map_tool_names_to_labels(&tool_calls);
+                let tools_span = tracing::info_span!(target: target!(), parent: span.clone(), events::SPAN_TOOLS, tool_calls=field::Empty, label=label);
                 tools_span.follows_from(span.id());
 
                 if tool.stop_at_call() {
@@ -888,4 +891,14 @@ fn construct_user_message(m: &InnerMessage) -> ChatCompletionRequestMessage {
 pub fn record_map_err(e: impl Into<GatewayError> + ToString, span: tracing::Span) -> GatewayError {
     span.record("error", e.to_string());
     e.into()
+}
+
+fn map_tool_names_to_labels(tool_calls: &[ChatCompletionMessageToolCall]) -> String {
+    tool_calls
+        .iter()
+        .map(|tool_call| tool_call.function.name.clone())
+        .collect::<HashSet<String>>()
+        .into_iter()
+        .collect::<Vec<String>>()
+        .join(",")
 }

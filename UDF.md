@@ -59,8 +59,11 @@ SET param_system_prompt = 'You are a helpful assistant. You will return only a s
 
 -- Run completion
 SELECT ai_completions
-('{"model": "gpt-4o-mini", "max_tokens": 1000}') 
-({system_prompt:String}, 'You are very rude') as score
+(
+  '{"model": "gpt-4o-mini", "max_tokens": 1000}',
+  {system_prompt:String}, 
+  'You are very rude'
+) as score
 ```
 
 ### Advanced Parameters
@@ -78,15 +81,18 @@ SET param_run_id = '06b66882-e42e-4b17-ba93-4b5260a10ad8';
 
 -- Run completion with parameters
 SELECT ai_completions
-('{"model": "gpt-4o-mini", "max_tokens": 1000, "thread_id": "' || {thread_id:String} || '", "run_id": "' || {run_id:String} || '"}')
-({system_prompt:String}, 'You are very rude') as score
+(
+  '{"model": "gpt-4o-mini", "max_tokens": 1000, "thread_id": "' || {thread_id:String} || '", "run_id": "' || {run_id:String} || '"}',
+  {system_prompt:String}, 
+  'You are very rude'
+) as score
 ```
 
 ### Using `ai_embed`
 
 Generate embeddings from text:
 ```sql
-SELECT ai_embed('{"model":"text-embedding-3-small"}')('Life is beautiful') as embed_text
+SELECT ai_embed('{"model":"text-embedding-3-small"}', 'Life is beautiful') as embed_text
 ```
 
 ## Real-world Example: Content Moderation
@@ -118,11 +124,16 @@ SELECT
     id, 
     left(text, 100) as text_clip, 
     ai_completions
-    ('{"model": "gpt-4o-mini", "max_tokens": 1000, "thread_id": "' || {thread_id:String} || '", "run_id": "' || {run_id:String} || '"}')
-    ({system_prompt:String}, text) as gpt_4o_mini_score,
+    (
+      '{"model": "gpt-4o-mini", "max_tokens": 1000, "thread_id": "' || {thread_id:String} || '", "run_id": "' || {run_id:String} || '"}',
+      {system_prompt:String}, text
+    ) as gpt_4o_mini_score,
     ai_completions
-    ('{"model": "gemini/gemini-1.5-flash-8b", "max_tokens": 1000, "thread_id": "' || {thread_id:String} || '", "run_id": "' || {run_id:String} || '"}')
-    ({system_prompt:String}, text) as gemini_15flash_score
+    (
+      '{"model": "gemini/gemini-1.5-flash-8b", "max_tokens": 1000, "thread_id": "' || {thread_id:String} || '", "run_id": "' || {run_id:String} || '"}',
+      {system_prompt:String}, 
+      text
+    ) as gemini_15flash_score
 FROM tbl 
 FORMAT PrettySpace
 ```

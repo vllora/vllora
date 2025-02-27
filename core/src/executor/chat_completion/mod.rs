@@ -8,7 +8,7 @@ use std::sync::Arc;
 use crate::executor::ProvidersConfig;
 use crate::llm_gateway::message_mapper::MessageMapper;
 use crate::llm_gateway::provider::Provider;
-use crate::model::mcp::get_mcp_tools;
+use crate::model::mcp::get_tools;
 use crate::model::tools::{GatewayTool, Tool};
 use crate::model::types::ModelEvent;
 use crate::models::ModelDefinition;
@@ -85,7 +85,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
     }
 
     let mcp_tools = match &request.mcp_servers {
-        Some(tools) => get_mcp_tools(tools).await?,
+        Some(tools) => get_tools(tools).await?,
         None => Vec::new(),
     };
 

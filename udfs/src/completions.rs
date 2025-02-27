@@ -7,12 +7,16 @@ use async_openai::types::{
 };
 
 pub async fn completions(
-    input: String,
+    values: &mut std::slice::Iter<'_, String>,
     config: &CompletionConfig,
 ) -> Result<CommonResponse, InvokeError> {
-    let input = serde_json::from_str::<Vec<String>>(&input)?;
-    let system_prompt = input[0].to_string();
-    let input = input[1].to_string();
+    let system_prompt = values.next().cloned();
+    let input = values
+        .next()
+        .cloned()
+        .ok_or_else(|| InvokeError::CustomError("No input provided".to_string()))?;
+    tracing::debug!("Calling completions with input: {}", input);
+
     // Create the message
     let message =
         async_openai::types::ChatCompletionRequestMessage::User(ChatCompletionRequestUserMessage {
@@ -20,16 +24,17 @@ pub async fn completions(
             name: None,
         });
 
-    // Create the completion request with optional parameters
-    let messages = [
-        async_openai::types::ChatCompletionRequestMessage::System(
+    let mut messages = vec![];
+    if let Some(system_prompt) = system_prompt {
+        messages.push(async_openai::types::ChatCompletionRequestMessage::System(
             ChatCompletionRequestSystemMessage {
                 content: ChatCompletionRequestSystemMessageContent::Text(system_prompt),
                 name: None,
             },
-        ),
-        message,
-    ];
+        ));
+    }
+
+    messages.push(message);
     let mut request = CreateChatCompletionRequestArgs::default();
 
     request = request.model(&config.model_settings.model).to_owned();
@@ -57,9 +62,31 @@ pub async fn completions(
 
     let request = request.build()?;
 
-    // Create client and send request
+    // Create client and send request with retries
     let client = async_openai::Client::with_config(config.config.clone());
-    let response = client.chat().create(request).await?;
+    let mut retries = 0;
+    const MAX_RETRIES: u32 = 3;
+    const RETRY_DELAY_MS: u64 = 1000;
+
+    let response = loop {
+        match client.chat().create(request.clone()).await {
+            Ok(resp) => break resp,
+            Err(e) => {
+                if retries >= MAX_RETRIES {
+                    return Err(InvokeError::Other(format!(
+                        "Failed after {} retries: {}",
+                        MAX_RETRIES, e
+                    )));
+                }
+                retries += 1;
+                tokio::time::sleep(tokio::time::Duration::from_millis(
+                    RETRY_DELAY_MS * retries as u64,
+                ))
+                .await;
+                continue;
+            }
+        }
+    };
 
     // Extract the first choice's message content
     let content = response
@@ -86,12 +113,12 @@ mod tests {
     async fn test_model() {
         let config =
             serde_json::from_str::<CompletionConfig>("{\"model\":\"gpt-4o-mini\"}").unwrap();
-        let response = completions(
-            "[\"you are a helpful assistant,\"what is the capital of the moon?\"]".to_string(),
-            &config,
-        )
-        .await
-        .unwrap();
+        let items = [
+            "you are a helpful assistant".to_string(),
+            "what is the capital of the moon?".to_string(),
+        ];
+
+        let response = completions(&mut items.iter(), &config).await.unwrap();
         println!("{:?}", response);
     }
 }

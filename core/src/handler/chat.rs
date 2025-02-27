@@ -1,13 +1,16 @@
 use std::collections::HashMap;
 
+use crate::events::JsonValue;
 use crate::routing::RoutingStrategy;
 use crate::types::gateway::ChatCompletionRequestWithTools;
 use crate::types::gateway::CompletionModelUsage;
+use crate::types::gateway::Extra;
 use crate::usage::InMemoryStorage;
 use actix_web::{web, HttpRequest, HttpResponse};
 use bytes::Bytes;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use valuable::Valuable;
 
 use crate::types::gateway::{
     ChatCompletionChunk, ChatCompletionChunkChoice, ChatCompletionDelta, ChatCompletionUsage,
@@ -44,7 +47,15 @@ pub async fn create_chat_completion(
         error = tracing::field::Empty,
         thread_id = tracing::field::Empty,
         message_id = tracing::field::Empty,
+        user = tracing::field::Empty,
     ));
+
+    if let Some(Extra { user: Some(user) }) = &request.extra {
+        span.record(
+            "user",
+            JsonValue(&serde_json::to_value(user.clone())?).as_value(),
+        );
+    }
 
     let memory_storage = req.app_data::<Arc<Mutex<InMemoryStorage>>>().cloned();
 

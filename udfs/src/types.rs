@@ -30,12 +30,6 @@ impl FunctionConfig {
             FunctionConfig::Embedding(_) => "embedding",
         }
     }
-    pub fn parallel(&self) -> usize {
-        match self {
-            FunctionConfig::Completion(config) => config.model_settings.parallel,
-            FunctionConfig::Embedding(config) => config.model_settings.parallel,
-        }
-    }
 
     pub fn max_tokens(&self) -> Option<usize> {
         match self {
@@ -53,19 +47,11 @@ pub struct EmbeddingConfig {
     pub model_settings: EmbeddingSettings,
 }
 
-fn default_parallel() -> usize {
-    100
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct EmbeddingSettings {
     /// The model to use for embedding
     #[serde(default = "default_embedding_model")]
     pub model: String,
-
-    /// Number of parallel requests to make to the model
-    #[serde(default = "default_parallel")]
-    pub parallel: usize,
 
     /// The maximum number of [tokens]
     #[serde(default)]
@@ -80,10 +66,6 @@ pub struct ModelSettings {
     /// The model to use for completion
     #[serde(default = "default_model")]
     pub model: String,
-
-    /// Number of parallel requests to make to the model
-    #[serde(default = "default_parallel")]
-    pub parallel: usize,
 
     /// Number between -2.0 and 2.0. Positive values penalize new tokens based on their existing frequency in the text so far, decreasing the model's likelihood to repeat the same line verbatim.
     ///

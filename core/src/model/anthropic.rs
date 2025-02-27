@@ -1,4 +1,4 @@
-use super::error::ModelError;
+use super::error::{AuthorizationError, ModelError};
 use super::tools::Tool;
 use super::types::{
     LLMContentEvent, LLMFinishEvent, LLMStartEvent, ModelEvent, ModelEventType, ModelFinishReason,
@@ -58,7 +58,7 @@ pub fn anthropic_client(
     let api_key = if let Some(credentials) = credentials {
         credentials.api_key.clone()
     } else {
-        std::env::var("LANGDB_ANTHROPIC_API_KEY").map_err(|_| ModelError::InvalidApiKey)?
+        std::env::var("LANGDB_ANTHROPIC_API_KEY").map_err(|_| AuthorizationError::InvalidApiKey)?
     };
     let client = Client::from_api_key(clust::ApiKey::new(api_key));
     Ok(client)

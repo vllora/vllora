@@ -1,6 +1,6 @@
 [package]
 name = "udfs"
-version = "0.1.0"
+version = "0.1.3"
 edition = "2021"
 
 [dependencies]
@@ -28,7 +28,7 @@ uuid = "1.13.1"
 
 [[bin]]
 path = "src/main.rs"
-name = "udf"
+name = "langdb_udf"
 
 [dev-dependencies]
 mockall = "0.11"

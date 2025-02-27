@@ -12,9 +12,13 @@ use udfs::parse_function_config;
 use udfs::InvokeError;
 
 use udfs::FunctionConfig;
+
+const PARALLEL: usize = 100;
+const MAX_RETRIES: u32 = 3;
+const BACKOFF_MS: u64 = 1000;
 async fn process_line(
     config: &FunctionConfig,
-    input: String,
+    values: &mut std::slice::Iter<'_, String>,
     writer: Arc<Mutex<impl AsyncWriteExt + Send + Unpin>>,
     tokens: Arc<AtomicUsize>,
 ) -> Result<(), InvokeError> {
@@ -23,18 +27,11 @@ async fn process_line(
         std::env::args().collect::<Vec<_>>()
     );
 
-    let val = match config {
-        FunctionConfig::Completion(config) => {
-            tracing::debug!("Calling completions with input: {}", input);
-
-            completions(input, config).await
-        }
-
-        FunctionConfig::Embedding(config) => {
-            tracing::debug!("Calling embeddings with input: {}", input);
-            embed(input, config).await
-        }
+    let val = match &config {
+        FunctionConfig::Completion(config) => completions(values, config).await,
+        FunctionConfig::Embedding(config) => embed(values, config).await,
     }?;
+
     let max_tokens = config.max_tokens();
     if let Some(max_tokens) = max_tokens {
         let val = tokens.fetch_add(val.usage.total_tokens, std::sync::atomic::Ordering::Relaxed);
@@ -45,10 +42,28 @@ async fn process_line(
             )));
         }
     }
+
     let response = val.response;
     let values: Vec<Value> = vec![response];
     let mut writer = writer.lock().await;
-    write(&mut *writer, values).await
+    let mut retries = 0;
+
+    loop {
+        match write(&mut *writer, values.clone()).await {
+            Ok(_) => break Ok(()),
+            Err(e) => {
+                if retries >= MAX_RETRIES {
+                    break Err(e);
+                }
+                retries += 1;
+                tokio::time::sleep(tokio::time::Duration::from_millis(
+                    BACKOFF_MS * retries as u64,
+                ))
+                .await;
+                continue;
+            }
+        }
+    }
 }
 
 async fn execute_udf<R, W>(udf: &str, mut reader: R, writer: W) -> Result<(), InvokeError>
@@ -58,12 +73,10 @@ where
 {
     let writer = Arc::new(Mutex::new(writer));
     let mut line = String::new();
-    let last = std::env::args().last().unwrap_or_default().replace("'", "");
-    let config = parse_function_config(udf, &last)?;
 
     let tokens = Arc::new(AtomicUsize::new(0));
     // Create a buffer to store futures with their order
-    let mut futures = Vec::with_capacity(config.parallel());
+    let mut futures = Vec::with_capacity(PARALLEL);
     let mut line_number = 0u64;
 
     loop {
@@ -77,20 +90,33 @@ where
 
                 let line_clone = line.trim().to_string();
                 let writer_clone = writer.clone();
-                let config_clone = config.clone();
+
                 let tokens_clone = tokens.clone();
-                // Store the future with its order
+
+                let values: Vec<String> = serde_json::from_str(line_clone.as_str())?;
+                let config = values.first().cloned().ok_or_else(|| {
+                    InvokeError::CustomError("No configuration provided".to_string())
+                })?;
+                let config = parse_function_config(udf, &config)?;
+                let remaining_values = values[1..].to_vec();
+
                 futures.push((
                     line_number,
                     tokio::spawn(async move {
-                        process_line(&config_clone, line_clone, writer_clone, tokens_clone).await
+                        process_line(
+                            &config,
+                            &mut remaining_values.iter(),
+                            writer_clone,
+                            tokens_clone,
+                        )
+                        .await
                     }),
                 ));
 
                 line_number += 1;
 
                 // Process results when we hit the parallel limit or on last line
-                if futures.len() >= config.parallel() {
+                if futures.len() >= PARALLEL {
                     process_ordered_futures(&mut futures).await?;
                 }
             }
@@ -109,12 +135,25 @@ where
 async fn process_ordered_futures(
     futures: &mut Vec<(u64, tokio::task::JoinHandle<Result<(), InvokeError>>)>,
 ) -> Result<(), InvokeError> {
+    use tokio::time::{sleep, Duration};
+    const BATCH_SIZE: usize = 10;
+    const BATCH_DELAY_MS: u64 = 100;
     // Sort by line number to maintain order
     futures.sort_by_key(|(num, _)| *num);
 
-    // Remove and process the first future
-    let (_, future) = futures.remove(0);
-    future.await??;
+    // Process futures in small batches with delay
+    let batch_size = std::cmp::min(BATCH_SIZE, futures.len());
+    let batch: Vec<_> = futures.drain(0..batch_size).collect();
+
+    for (_, future) in batch {
+        match future.await {
+            Ok(result) => result?,
+            Err(e) => return Err(InvokeError::from(e)),
+        }
+    }
+
+    // Add small delay between batches
+    sleep(Duration::from_millis(BATCH_DELAY_MS)).await;
 
     Ok(())
 }

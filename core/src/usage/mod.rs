@@ -99,11 +99,15 @@ impl LimitPeriod {
 #[derive(Debug, Default, Serialize, Clone)]
 pub struct Metrics {
     pub requests: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub input_tokens: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub output_tokens: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub total_tokens: Option<f64>,
     pub latency: Option<f64>,
     pub ttft: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub llm_usage: Option<f64>,
     pub tps: Option<f64>,
     pub error_rate: Option<f64>,
@@ -112,9 +116,8 @@ pub struct Metrics {
 #[derive(Debug, Default, Serialize, Clone)]
 pub struct TimeMetrics {
     pub total: Metrics,
-    pub monthly: BTreeMap<String, Metrics>, // Format: "YYYY-MM"
-    pub daily: BTreeMap<String, Metrics>,   // Format: "YYYY-MM-DD"
-    pub hourly: BTreeMap<String, Metrics>,  // Format: "YYYY-MM-DD-HH"
+    pub last_15_minutes: Metrics,
+    pub last_hour: Metrics,
 }
 
 #[derive(Debug, Default, Serialize, Clone)]
@@ -217,9 +220,6 @@ impl InMemoryStorage {
 
             let metrics = match period {
                 Some(p) if p == "total" => &mut model_metrics.metrics.total,
-                Some(p) if p.len() == 7 => model_metrics.metrics.monthly.entry(p).or_default(), // YYYY-MM
-                Some(p) if p.len() == 10 => model_metrics.metrics.daily.entry(p).or_default(), // YYYY-MM-DD
-                Some(p) if p.len() == 13 => model_metrics.metrics.hourly.entry(p).or_default(), // YYYY-MM-DD-HH
                 _ => continue,
             };
 

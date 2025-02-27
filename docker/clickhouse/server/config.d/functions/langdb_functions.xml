@@ -3,6 +3,10 @@
     <type>executable</type>
     <name>ai_completions</name>
     <argument>
+      <type>Nullable(String)</type>
+      <name>config</name>
+    </argument>
+    <argument>
       <type>String</type>
       <name>input</name>
     </argument>
@@ -10,13 +14,12 @@
       <type>Nullable(String)</type>
       <name>system_prompt</name>
     </argument>
-    <parameter>
-      <type>String</type>
-      <name>config</name>
-    </parameter>
+
     <format>JSONCompactEachRow</format>
-    <command>langdb_udf completions {config:String}</command>
-    <command_read_timeout>1000000</command_read_timeout>
+    <command>langdb_udf completions</command>
+    <command_read_timeout>10000000</command_read_timeout>
+    <command_write_timeout>10000000</command_write_timeout>
+    <max_command_execution_time>1000000</max_command_execution_time>
     <return_type>String</return_type>
     <stderr_reaction>throw</stderr_reaction>
     <check_exit_code>1</check_exit_code>
@@ -25,11 +28,16 @@
     <type>executable</type>
     <name>ai_embed</name>
     <argument>
+      <type>Nullable(String)</type>
+      <name>config</name>
+    </argument>
+    <argument>
       <type>String</type>
       <name>input</name>
     </argument>
+
     <format>JSONCompactEachRow</format>
-    <command>langdb_udf embed {config:String}</command>
+    <command>langdb_udf embed</command>
     <command_read_timeout>1000000</command_read_timeout>
     <return_type>`Array`(`Float32`)</return_type>
     <stderr_reaction>throw</stderr_reaction>

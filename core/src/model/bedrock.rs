@@ -5,6 +5,7 @@ use super::types::{
 use super::{CredentialsIdent, ModelInstance};
 use crate::error::GatewayError;
 use crate::events::{self, JsonValue, RecordResult, SPAN_BEDROCK};
+use crate::model::error::BedrockError;
 use crate::model::handler::handle_tool_call;
 use crate::model::types::LLMFirstToken;
 use crate::model::Tool as LangdbTool;
@@ -23,7 +24,7 @@ use crate::types::threads::Message as LMessage;
 use crate::GatewayResult;
 use async_trait::async_trait;
 use aws_sdk_bedrockruntime::operation::converse::builders::ConverseFluentBuilder;
-use aws_sdk_bedrockruntime::operation::converse_stream;
+use aws_sdk_bedrockruntime::operation::converse_stream::{self, ConverseStreamError};
 use aws_sdk_bedrockruntime::types::builders::ImageBlockBuilder;
 use aws_sdk_bedrockruntime::types::ConverseOutput::Message as MessageVariant;
 use aws_sdk_bedrockruntime::types::{
@@ -838,10 +839,7 @@ impl BedrockModel {
             .await
             .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
-            let response = builder
-                .send()
-                .await
-                .map_err(|e| ModelError::Bedrock(e.into()))?;
+            let response = builder.send().await.map_err(map_converse_stream_error)?;
             let (stop_reason, msg, usage) = self
                 .process_stream(response, &tx)
                 .instrument(span.clone())
@@ -1060,4 +1058,19 @@ fn replace_version(model: &str) -> String {
             )
         })
         .to_string()
+}
+
+fn map_converse_stream_error(
+    e: aws_smithy_runtime_api::client::result::SdkError<
+        aws_sdk_bedrockruntime::operation::converse_stream::ConverseStreamError,
+        aws_smithy_runtime_api::http::Response,
+    >,
+) -> ModelError {
+    match e.as_service_error() {
+        Some(ConverseStreamError::ValidationException(e)) => match e.message() {
+            Some(msg) => ModelError::Bedrock(BedrockError::ValidationError(msg.to_string())),
+            None => ModelError::Bedrock(BedrockError::ValidationError(e.to_string())),
+        },
+        _ => ModelError::Bedrock(e.into()),
+    }
 }
