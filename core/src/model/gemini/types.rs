@@ -176,14 +176,15 @@ pub struct FunctionParameters {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct FunctionParametersProperty {
-    pub r#type: String,
+    pub r#type: FunctionParametersPropertyType,
     pub description: String,
-    items: Option<PropertyItems>,
+    items: Option<Box<FunctionParametersProperty>>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct PropertyItems {
-    r#type: String,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FunctionParametersPropertyType {
+    Single(String),
+    List(Vec<String>),
 }
 
 impl From<FP> for FunctionParameters {
@@ -197,16 +198,42 @@ impl From<FP> for FunctionParameters {
                     (
                         name.clone(),
                         FunctionParametersProperty {
-                            r#type: p.r#type.clone(),
+                            r#type: match &p.r#type {
+                                crate::types::gateway::PropertyType::Single(t) => {
+                                    FunctionParametersPropertyType::Single(t.clone())
+                                }
+                                crate::types::gateway::PropertyType::List(t) => {
+                                    FunctionParametersPropertyType::List(t.clone())
+                                }
+                            },
                             description: p.description.clone().unwrap_or_default(),
-                            items: p.items.as_ref().map(|p| PropertyItems {
-                                r#type: p.r#type.clone(),
+                            items: p.items.as_ref().map(|item| {
+                                Box::new(FunctionParametersProperty::from(*item.clone()))
                             }),
                         },
                     )
                 })
                 .collect(),
-            required: val.required.clone(),
+            required: val.required,
+        }
+    }
+}
+
+impl From<crate::types::gateway::Property> for FunctionParametersProperty {
+    fn from(val: crate::types::gateway::Property) -> Self {
+        Self {
+            r#type: match val.r#type {
+                crate::types::gateway::PropertyType::Single(t) => {
+                    FunctionParametersPropertyType::Single(t)
+                }
+                crate::types::gateway::PropertyType::List(t) => {
+                    FunctionParametersPropertyType::List(t)
+                }
+            },
+            description: val.description.unwrap_or_default(),
+            items: val
+                .items
+                .map(|item| Box::new(FunctionParametersProperty::from(*item))),
         }
     }
 }

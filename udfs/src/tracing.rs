@@ -8,11 +8,11 @@ pub fn get_default_filter(filter: &str) -> String {
 pub fn init_tracing(override_env: Option<&str>) -> crate::Result<()> {
     let enable_file_logging = std::env::var("UDF_FILE_LOGGING").is_ok();
     let log_writer = move || -> Box<dyn std::io::Write + Send> {
-    if enable_file_logging {
-        Box::new(rolling::minutely("./logs", "logs"))
-    } else {
-        Box::new(std::io::stderr())
-    }
+        if enable_file_logging {
+            Box::new(rolling::minutely("./logs", "logs"))
+        } else {
+            Box::new(std::io::stderr())
+        }
     };
 
     let f = tracing_subscriber::fmt::format::Format::default()

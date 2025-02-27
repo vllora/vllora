@@ -344,16 +344,18 @@ impl Default for FunctionParameters {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Property {
-    pub r#type: String,
+    pub r#type: PropertyType,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub items: Option<Items>,
+    pub items: Option<Box<Property>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Items {
-    pub r#type: String,
+#[serde(untagged)]
+pub enum PropertyType {
+    Single(String),
+    List(Vec<String>),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -712,5 +714,28 @@ mod tests {
         assert!(serde_json::from_str::<ImageSize>(r#""800x""#).is_err());
         assert!(serde_json::from_str::<ImageSize>(r#""x600""#).is_err());
         assert!(serde_json::from_str::<ImageSize>(r#""axb""#).is_err());
+    }
+
+    #[test]
+    fn deserialize_nested() {
+        let json = r#"
+            {
+                "description": "2D array",
+                "type": "array",
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": ["string", "number", "boolean", "null"],
+                        "description": "A single value"
+                    }
+                }
+            }
+        "#;
+        let v: Property = serde_json::from_str(json).unwrap();
+
+        println!("{v:#?}");
+
+        let v = serde_json::to_string(&v).unwrap();
+        println!("{v}");
     }
 }
