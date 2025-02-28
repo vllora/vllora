@@ -120,13 +120,9 @@ pub struct DollarUsage {
 pub trait LimitCheck {
     async fn can_execute_llm(
         &mut self,
-        scope: &str,
-        identifier: &str,
     ) -> Result<bool, Box<dyn std::error::Error>>;
     async fn get_usage(
         &self,
-        scope: &str,
-        identifier: &str,
     ) -> Result<DollarUsage, Box<dyn std::error::Error>>;
 }
 
@@ -138,15 +134,12 @@ pub struct LimitCheckWrapper {
 impl LimitCheckWrapper {
     pub async fn can_execute_llm(
         &self,
-        identifiers: &[(String, String)],
     ) -> Result<bool, Box<dyn std::error::Error>> {
         for checker in &self.checkers {
             let mut checker = checker.lock().await;
 
-            for (scope, identifier) in identifiers {
-                if !checker.can_execute_llm(scope, identifier).await? {
-                    return Ok(false);
-                }
+            if !checker.can_execute_llm().await? {
+                return Ok(false);
             }
         }
 
@@ -155,15 +148,13 @@ impl LimitCheckWrapper {
 
     pub async fn get_usage(
         &self,
-        scope: &str,
-        identifier: &str,
     ) -> Result<DollarUsage, Box<dyn std::error::Error>> {
         let first_checker = self
             .checkers
             .first()
             .expect("At least one checker is defined");
         let checker = first_checker.lock().await;
-        checker.get_usage(scope, identifier).await
+        checker.get_usage().await
     }
 }
 
@@ -180,16 +171,12 @@ pub struct DefaultLimitCheck;
 impl LimitCheck for DefaultLimitCheck {
     async fn can_execute_llm(
         &mut self,
-        _scope: &str,
-        _identifier: &str,
     ) -> Result<bool, Box<dyn std::error::Error>> {
         Ok(true)
     }
 
     async fn get_usage(
         &self,
-        _scope: &str,
-        _identifier: &str,
     ) -> Result<DollarUsage, Box<dyn std::error::Error>> {
         unimplemented!()
     }
@@ -205,9 +192,7 @@ pub(crate) async fn can_execute_llm_for_request(req: &HttpRequest) -> Result<(),
     let limit_checker = req.app_data::<Option<LimitCheckWrapper>>();
     if let Some(Some(l)) = limit_checker {
         let can_execute = l
-            .can_execute_llm(
-                &[("company_id".to_string(), "default".to_string())]
-            )
+            .can_execute_llm()
             .await
             .map_err(|e| GatewayApiError::CustomError(e.to_string()))?;
         if !can_execute {
