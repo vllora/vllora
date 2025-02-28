@@ -120,13 +120,13 @@ pub struct DollarUsage {
 pub trait LimitCheck {
     async fn can_execute_llm(
         &mut self,
-        tenant_name: &str,
-        project_id: &str,
+        scope: &str,
+        identifier: &str,
     ) -> Result<bool, Box<dyn std::error::Error>>;
     async fn get_usage(
         &self,
-        tenant_name: &str,
-        project_id: &str,
+        scope: &str,
+        identifier: &str,
     ) -> Result<DollarUsage, Box<dyn std::error::Error>>;
 }
 
@@ -138,14 +138,15 @@ pub struct LimitCheckWrapper {
 impl LimitCheckWrapper {
     pub async fn can_execute_llm(
         &self,
-        tenant_name: &str,
-        project_id: &str,
+        identifiers: &[(String, String)],
     ) -> Result<bool, Box<dyn std::error::Error>> {
         for checker in &self.checkers {
             let mut checker = checker.lock().await;
 
-            if !checker.can_execute_llm(tenant_name, project_id).await? {
-                return Ok(false);
+            for (scope, identifier) in identifiers {
+                if !checker.can_execute_llm(scope, identifier).await? {
+                    return Ok(false);
+                }
             }
         }
 
@@ -154,15 +155,15 @@ impl LimitCheckWrapper {
 
     pub async fn get_usage(
         &self,
-        tenant_name: &str,
-        project_id: &str,
+        scope: &str,
+        identifier: &str,
     ) -> Result<DollarUsage, Box<dyn std::error::Error>> {
         let first_checker = self
             .checkers
             .first()
             .expect("At least one checker is defined");
         let checker = first_checker.lock().await;
-        checker.get_usage(tenant_name, project_id).await
+        checker.get_usage(scope, identifier).await
     }
 }
 
@@ -179,16 +180,16 @@ pub struct DefaultLimitCheck;
 impl LimitCheck for DefaultLimitCheck {
     async fn can_execute_llm(
         &mut self,
-        _tenant_name: &str,
-        _project_id: &str,
+        _scope: &str,
+        _identifier: &str,
     ) -> Result<bool, Box<dyn std::error::Error>> {
         Ok(true)
     }
 
     async fn get_usage(
         &self,
-        _tenant_name: &str,
-        _project_id: &str,
+        _scope: &str,
+        _identifier: &str,
     ) -> Result<DollarUsage, Box<dyn std::error::Error>> {
         unimplemented!()
     }
@@ -204,7 +205,9 @@ pub(crate) async fn can_execute_llm_for_request(req: &HttpRequest) -> Result<(),
     let limit_checker = req.app_data::<Option<LimitCheckWrapper>>();
     if let Some(Some(l)) = limit_checker {
         let can_execute = l
-            .can_execute_llm("default", "")
+            .can_execute_llm(
+                &[("company_id".to_string(), "default".to_string())]
+            )
             .await
             .map_err(|e| GatewayApiError::CustomError(e.to_string()))?;
         if !can_execute {
