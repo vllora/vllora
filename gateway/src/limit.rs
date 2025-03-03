@@ -24,25 +24,22 @@ impl GatewayLimitChecker {
 }
 
 impl GatewayLimitChecker {
-    pub async fn _get_limits(
-        &self,
-        tenant_name: &str,
-    ) -> Result<DollarUsage, Box<dyn std::error::Error>> {
+    pub async fn _get_limits(&self) -> Result<DollarUsage, Box<dyn std::error::Error>> {
         let total_usage: Option<f64> =
             self.storage
                 .lock()
                 .await
-                .get_value(&LimitPeriod::Total, tenant_name, LLM_USAGE);
+                .get_value(&LimitPeriod::Total, "gateway", LLM_USAGE);
         let monthly_usage: Option<f64> =
             self.storage
                 .lock()
                 .await
-                .get_value(&LimitPeriod::Month, tenant_name, LLM_USAGE);
+                .get_value(&LimitPeriod::Month, "gateway", LLM_USAGE);
         let daily_usage: Option<f64> =
             self.storage
                 .lock()
                 .await
-                .get_value(&LimitPeriod::Day, tenant_name, LLM_USAGE);
+                .get_value(&LimitPeriod::Day, "gateway", LLM_USAGE);
 
         Ok(DollarUsage {
             daily: daily_usage.unwrap_or(0.0),
@@ -57,22 +54,14 @@ impl GatewayLimitChecker {
 
 #[async_trait::async_trait]
 impl LimitCheck for GatewayLimitChecker {
-    async fn can_execute_llm(
-        &mut self,
-        tenant_name: &str,
-        project_id: &str,
-    ) -> Result<bool, Box<dyn std::error::Error>> {
-        self.get_usage(tenant_name, project_id).await.map(|usage| {
+    async fn can_execute_llm(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
+        self.get_usage().await.map(|usage| {
             usage.daily < usage.daily_limit.unwrap_or(f64::MAX)
                 && usage.monthly < usage.monthly_limit.unwrap_or(f64::MAX)
                 && usage.total < (usage.total_limit.unwrap_or(f64::MAX))
         })
     }
-    async fn get_usage(
-        &self,
-        tenant_name: &str,
-        _project_id: &str,
-    ) -> Result<DollarUsage, Box<dyn std::error::Error>> {
-        self._get_limits(tenant_name).await
+    async fn get_usage(&self) -> Result<DollarUsage, Box<dyn std::error::Error>> {
+        self._get_limits().await
     }
 }

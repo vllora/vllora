@@ -118,12 +118,8 @@ pub struct DollarUsage {
 
 #[async_trait::async_trait]
 pub trait LimitCheck {
-    async fn can_execute_llm(
-        &mut self,
-    ) -> Result<bool, Box<dyn std::error::Error>>;
-    async fn get_usage(
-        &self,
-    ) -> Result<DollarUsage, Box<dyn std::error::Error>>;
+    async fn can_execute_llm(&mut self) -> Result<bool, Box<dyn std::error::Error>>;
+    async fn get_usage(&self) -> Result<DollarUsage, Box<dyn std::error::Error>>;
 }
 
 #[derive(Clone)]
@@ -132,9 +128,7 @@ pub struct LimitCheckWrapper {
 }
 
 impl LimitCheckWrapper {
-    pub async fn can_execute_llm(
-        &self,
-    ) -> Result<bool, Box<dyn std::error::Error>> {
+    pub async fn can_execute_llm(&self) -> Result<bool, Box<dyn std::error::Error>> {
         for checker in &self.checkers {
             let mut checker = checker.lock().await;
 
@@ -146,9 +140,7 @@ impl LimitCheckWrapper {
         Ok(true)
     }
 
-    pub async fn get_usage(
-        &self,
-    ) -> Result<DollarUsage, Box<dyn std::error::Error>> {
+    pub async fn get_usage(&self) -> Result<DollarUsage, Box<dyn std::error::Error>> {
         let first_checker = self
             .checkers
             .first()
@@ -169,15 +161,11 @@ pub struct DefaultLimitCheck;
 
 #[async_trait::async_trait]
 impl LimitCheck for DefaultLimitCheck {
-    async fn can_execute_llm(
-        &mut self,
-    ) -> Result<bool, Box<dyn std::error::Error>> {
+    async fn can_execute_llm(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
         Ok(true)
     }
 
-    async fn get_usage(
-        &self,
-    ) -> Result<DollarUsage, Box<dyn std::error::Error>> {
+    async fn get_usage(&self) -> Result<DollarUsage, Box<dyn std::error::Error>> {
         unimplemented!()
     }
 }
