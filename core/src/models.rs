@@ -272,5 +272,5 @@ pub struct ModelDefinition {
     pub description: String,
     pub parameters: Option<serde_json::Value>,
     #[serde(default)]
-    pub is_virtual: bool,
+    pub virtual_model_id: Option<String>,
 }
