@@ -271,4 +271,6 @@ pub struct ModelDefinition {
     pub limits: Limits,
     pub description: String,
     pub parameters: Option<serde_json::Value>,
+    #[serde(default)]
+    pub is_virtual: bool,
 }
