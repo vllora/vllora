@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use crate::events::JsonValue;
+use crate::executor::context::ExecutorContext;
 use crate::routing::RoutingStrategy;
 use crate::types::gateway::ChatCompletionRequestWithTools;
 use crate::types::gateway::CompletionModelUsage;
@@ -59,16 +60,17 @@ pub async fn create_chat_completion(
 
     let memory_storage = req.app_data::<Arc<Mutex<InMemoryStorage>>>().cloned();
 
+    let executor_context = ExecutorContext::new(
+        callback_handler.get_ref().clone(),
+        cost_calculator.into_inner(),
+        provided_models.get_ref().clone(),
+        memory_storage,
+        &req,
+    )?;
+
     let executor = RoutedExecutor::new(request.clone());
     executor
-        .execute(
-            callback_handler.get_ref(),
-            traces.get_ref(),
-            &req,
-            provided_models.get_ref(),
-            cost_calculator.into_inner(),
-            memory_storage.as_ref(),
-        )
+        .execute(&executor_context, traces.get_ref())
         .instrument(span.clone())
         .await
 }

@@ -15,7 +15,7 @@ use langdb_core::handler::image::create_image;
 use langdb_core::handler::middleware::rate_limit::{RateLimitMiddleware, RateLimiting};
 use langdb_core::handler::models::list_gateway_models;
 use langdb_core::handler::{AvailableModels, CallbackHandlerFn, LimitCheckWrapper};
-use langdb_core::models::ModelDefinition;
+use langdb_core::models::ModelMetadata;
 use langdb_core::otel::{TraceMap, TraceServiceImpl, TraceServiceServer};
 use langdb_core::types::gateway::CostCalculator;
 use serde::{Deserialize, Serialize};
@@ -102,7 +102,7 @@ impl ApiServer {
     }
     pub async fn start(
         self,
-        models: Vec<ModelDefinition>,
+        models: Vec<ModelMetadata>,
         storage: Option<Arc<Mutex<InMemoryStorage>>>,
     ) -> Result<impl Future<Output = Result<(), ServerError>>, ServerError> {
         let trace_senders = Arc::new(TraceMap::new());
@@ -179,7 +179,7 @@ impl ApiServer {
         cors: Cors,
         in_memory_storage: Option<Arc<Mutex<InMemoryStorage>>>,
         trace_senders: Arc<TraceMap>,
-        models: Vec<ModelDefinition>,
+        models: Vec<ModelMetadata>,
         callback: CallbackHandlerFn,
         cost_calculator: GatewayCostCalculator,
         limit_checker: Option<LimitCheckWrapper>,

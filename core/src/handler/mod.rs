@@ -6,7 +6,7 @@ pub mod models;
 
 use crate::error::GatewayError;
 use crate::model::types::ModelEvent;
-use crate::models::ModelDefinition;
+use crate::models::ModelMetadata;
 use crate::types::engine::Model;
 use crate::GatewayApiError;
 use actix_web::HttpRequest;
@@ -15,12 +15,12 @@ use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
 
 #[derive(Debug, Clone)]
-pub struct AvailableModels(pub Vec<ModelDefinition>);
+pub struct AvailableModels(pub Vec<ModelMetadata>);
 
 pub fn find_model_by_full_name(
     model_name: &str,
     provided_models: &AvailableModels,
-) -> Result<ModelDefinition, GatewayApiError> {
+) -> Result<ModelMetadata, GatewayApiError> {
     let model_parts = model_name.split('/').collect::<Vec<&str>>();
 
     let llm_model = if model_parts.len() == 1 {

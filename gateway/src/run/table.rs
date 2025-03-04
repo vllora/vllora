@@ -1,7 +1,7 @@
-use langdb_core::{models::ModelDefinition, types::provider::ModelPrice};
+use langdb_core::{models::ModelMetadata, types::provider::ModelPrice};
 use prettytable::{row, Table};
 
-pub fn pretty_print_models(models: Vec<ModelDefinition>) {
+pub fn pretty_print_models(models: Vec<ModelMetadata>) {
     let mut table = Table::new();
 
     // Add header row

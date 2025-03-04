@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use clust::messages::StopSequence;
 
 use crate::{
-    models::ModelDefinition,
+    models::ModelMetadata,
     types::{
         credentials::Credentials,
         engine::{
@@ -21,7 +21,7 @@ pub struct Provider {}
 
 impl Provider {
     pub fn get_completion_engine_for_model(
-        model: &ModelDefinition,
+        model: &ModelMetadata,
         request: &ChatCompletionRequest,
         credentials: Option<Credentials>,
         provider_specific: Option<&ProviderSpecificRequest>,
@@ -160,7 +160,7 @@ impl Provider {
     }
 
     pub fn get_image_engine_for_model(
-        model: &ModelDefinition,
+        model: &ModelMetadata,
         request: &CreateImageRequest,
         credentials: Option<&Credentials>,
     ) -> Result<ImageGenerationEngineParams, GatewayError> {

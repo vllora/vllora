@@ -1,5 +1,5 @@
 use directories::BaseDirs;
-use langdb_core::models::ModelDefinition;
+use langdb_core::models::ModelMetadata;
 use reqwest;
 use serde_yaml;
 use std::fs;
@@ -17,14 +17,14 @@ pub enum ModelsLoadError {
 }
 
 /// Load models configuration from the filesystem, fetching it first if it doesn't exist
-pub async fn load_models(force_update: bool) -> Result<Vec<ModelDefinition>, ModelsLoadError> {
+pub async fn load_models(force_update: bool) -> Result<Vec<ModelMetadata>, ModelsLoadError> {
     let models_yaml = if force_update {
         // Force fetch and store new models
         fetch_and_store_models().await?
     } else {
         get_models_path()?
     };
-    let models: Vec<ModelDefinition> = serde_yaml::from_str(&models_yaml)?;
+    let models: Vec<ModelMetadata> = serde_yaml::from_str(&models_yaml)?;
     Ok(models)
 }
 

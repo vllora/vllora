@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 
+use context::ExecutorContext;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    models::ModelDefinition,
+    models::ModelMetadata,
     types::{
         credentials::{ApiKeyCredentials, Credentials},
         provider::InferenceModelProvider,
@@ -12,6 +13,7 @@ use crate::{
 };
 
 pub mod chat_completion;
+pub mod context;
 pub mod embeddings;
 pub mod image_generation;
 
@@ -51,13 +53,13 @@ pub fn get_langdb_proxy_key(
 }
 
 pub fn use_langdb_proxy(
-    key_credentials: Option<Credentials>,
-    mut llm_model: ModelDefinition,
-    providers_config: Option<&ProvidersConfig>,
-) -> (Option<Credentials>, ModelDefinition) {
+    executor_context: &ExecutorContext,
+    mut llm_model: ModelMetadata,
+) -> (Option<Credentials>, ModelMetadata) {
     let (key_credentials, endpoint) = match (
-        key_credentials,
-        providers_config
+        &executor_context.key_credentials,
+        executor_context
+            .providers_config
             .as_ref()
             .and_then(|p| p.0.get("langdb_proxy")),
     ) {
@@ -70,7 +72,7 @@ pub fn use_langdb_proxy(
                     .unwrap_or(LANGDB_API_URL.to_string())
             )),
         ),
-        (credentials, _) => (credentials, None),
+        (credentials, _) => (credentials.clone(), None),
     };
 
     if let Some(ref endpoint) = endpoint {

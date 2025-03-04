@@ -28,7 +28,7 @@ pub async fn execute(
     tags: HashMap<String, String>,
     tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
     span: Span,
-    handle: tokio::task::JoinHandle<(Option<LLMFinishEvent>, Option<Vec<ToolStartEvent>>)>,
+    handle: Option<tokio::task::JoinHandle<(Option<LLMFinishEvent>, Option<Vec<ToolStartEvent>>)>>,
 ) -> Result<ChatCompletionResponse, GatewayApiError> {
     let result = model
         .invoke(HashMap::new(), tx, messages.clone(), tags.clone())
@@ -51,7 +51,11 @@ pub async fn execute(
         ))),
     }?;
 
-    let (u, _) = handle.await.unwrap();
+    let (u, _) = if let Some(handle) = handle {
+        handle.await.unwrap()
+    } else {
+        (None, None)
+    };
     let model_usage = u.and_then(|u| u.usage);
     let usage: ChatCompletionUsage = match model_usage {
         Some(u) => ChatCompletionUsage {

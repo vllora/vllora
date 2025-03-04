@@ -2,52 +2,45 @@ pub mod basic_executor;
 pub mod routed_executor;
 pub mod stream_executor;
 
-use std::collections::HashMap;
-use std::sync::Arc;
-
-use crate::executor::ProvidersConfig;
 use crate::llm_gateway::message_mapper::MessageMapper;
 use crate::llm_gateway::provider::Provider;
 use crate::model::mcp::get_tools;
 use crate::model::tools::{GatewayTool, Tool};
 use crate::model::types::ModelEvent;
-use crate::models::ModelDefinition;
+use crate::model::ModelInstance;
+use crate::models::ModelMetadata;
 use crate::types::gateway::{ChatCompletionRequestWithTools, CompletionModelUsage};
-use actix_web::{HttpMessage, HttpRequest};
 use either::Either::{self, Left, Right};
 use futures::Stream;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::{
     model::types::ModelEventType,
     types::{
-        credentials::Credentials,
         engine::{
             CompletionModelDefinition, CompletionModelParams, ExecutionOptions, Model, ModelTool,
             ModelTools, ModelType, Prompt,
         },
-        gateway::{ChatCompletionDelta, ChatCompletionResponse, CostCalculator},
+        gateway::{ChatCompletionDelta, ChatCompletionResponse},
     },
 };
 use tracing::Span;
 use tracing_futures::Instrument;
 
 use crate::executor::chat_completion::stream_executor::stream_chunks;
-use crate::handler::extract_tags;
-use crate::handler::{CallbackHandlerFn, ModelEventWithDetails};
+use crate::handler::{find_model_by_full_name, ModelEventWithDetails};
 use crate::GatewayApiError;
 
+use super::context::ExecutorContext;
 use super::{get_key_credentials, use_langdb_proxy};
 use std::fmt::Debug;
 
 pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
     request: &ChatCompletionRequestWithTools<T>,
-    callback_handler: &CallbackHandlerFn,
-    req: HttpRequest,
-    cost_calculator: Arc<Box<dyn CostCalculator>>,
-    llm_model: &ModelDefinition,
+    executor_context: &ExecutorContext,
     router_span: tracing::Span,
 ) -> Result<
     Either<
@@ -65,7 +58,6 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
     GatewayApiError,
 > {
     let span = Span::current();
-    let tags = extract_tags(&req)?;
 
     let mut request_tools = vec![];
     let mut tools_map = HashMap::new();
@@ -96,75 +88,21 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         }
     }
 
-    let provider_specific = request.provider_specific.clone();
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<Option<ModelEvent>>(1000);
+
+    let tools = ModelTools(request_tools);
+
+    let resolved_model_context =
+        resolve_model_instance(executor_context, request, tools_map, tools, router_span).await?;
+
     let mut request = request.request.clone();
+    let llm_model = find_model_by_full_name(&request.model, &executor_context.provided_models)?;
     request.model = llm_model.inference_provider.model_name.clone();
 
     let user: String = request
         .user
         .as_ref()
         .map_or(Uuid::new_v4().to_string(), |v| v.clone());
-
-    let key_credentials = req.extensions().get::<Credentials>().cloned();
-    let providers_config = req.app_data::<ProvidersConfig>().cloned();
-    let (key_credentials, llm_model) = use_langdb_proxy(
-        key_credentials,
-        llm_model.clone(),
-        providers_config.as_ref(),
-    );
-
-    let key = get_key_credentials(
-        key_credentials.as_ref(),
-        providers_config.as_ref(),
-        &llm_model.inference_provider.provider.to_string(),
-    );
-    let engine = Provider::get_completion_engine_for_model(
-        &llm_model,
-        &request,
-        key.clone(),
-        provider_specific.as_ref(),
-    )?;
-
-    let tools = ModelTools(request_tools);
-
-    let db_model = Model {
-        name: request.model.clone(),
-        description: Some("Generated model for chat completion".to_string()),
-        provider_name: llm_model.inference_provider.provider.to_string(),
-        prompt_name: None,
-        model_params: HashMap::new(),
-        execution_options: ExecutionOptions::default(),
-        tools: tools.clone(),
-        model_type: ModelType::Completions,
-        response_schema: None,
-        credentials: key,
-    };
-
-    let completion_model_definition = CompletionModelDefinition {
-        name: format!(
-            "{}/{}",
-            llm_model.inference_provider.provider, llm_model.model
-        ),
-        model_params: CompletionModelParams {
-            engine: engine.clone(),
-            provider_name: llm_model.model_provider.to_string(),
-            prompt_name: None,
-        },
-        prompt: Prompt::empty(),
-        tools,
-        db_model: db_model.clone(),
-    };
-
-    let model = crate::model::init_completion_model_instance(
-        completion_model_definition.clone(),
-        tools_map,
-        Some(cost_calculator.clone()),
-        llm_model.inference_provider.endpoint.as_deref(),
-        Some(&llm_model.inference_provider.provider.to_string()),
-        router_span.clone(),
-    )
-    .await
-    .map_err(|e| GatewayApiError::CustomError(e.to_string()))?;
 
     let mut messages = vec![];
 
@@ -175,9 +113,8 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
             &user.to_string(),
         )?);
     }
-    let (tx, mut rx) = tokio::sync::mpsc::channel::<Option<ModelEvent>>(1000);
-
-    let ch = callback_handler.clone();
+    let ch = executor_context.callbackhandler.clone();
+    let db_model = resolved_model_context.db_model.clone();
     let handle = tokio::spawn(async move {
         let mut stop_event = None;
         let mut tool_calls = None;
@@ -210,11 +147,11 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
     if request.stream.unwrap_or(false) {
         Ok(Left(
             stream_chunks(
-                completion_model_definition,
-                model,
+                resolved_model_context.completion_model_definition,
+                resolved_model_context.model_instance,
                 messages.clone(),
-                callback_handler.clone().into(),
-                tags.clone(),
+                executor_context.callbackhandler.clone().into(),
+                executor_context.tags.clone(),
             )
             .instrument(span)
             .await,
@@ -223,15 +160,95 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         Ok(Right(
             basic_executor::execute(
                 request,
-                model,
+                resolved_model_context.model_instance,
                 messages.clone(),
-                tags.clone(),
+                executor_context.tags.clone(),
                 tx,
                 span.clone(),
-                handle,
+                Some(handle),
             )
             .instrument(span)
             .await,
         ))
     }
+}
+
+pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Clone>(
+    executor_context: &ExecutorContext,
+    request: &ChatCompletionRequestWithTools<T>,
+    tools_map: HashMap<String, Box<dyn Tool>>,
+    tools: ModelTools,
+    router_span: Span,
+) -> Result<ResolvedModelContext, GatewayApiError> {
+    let llm_model =
+        find_model_by_full_name(&request.request.model, &executor_context.provided_models)?;
+    let (key_credentials, llm_model) = use_langdb_proxy(executor_context, llm_model.clone());
+
+    let key = get_key_credentials(
+        key_credentials.as_ref(),
+        executor_context.providers_config.as_ref(),
+        &llm_model.inference_provider.provider.to_string(),
+    );
+    let provider_specific = request.provider_specific.clone();
+    let request = request.request.clone();
+
+    let engine = Provider::get_completion_engine_for_model(
+        &llm_model,
+        &request,
+        key.clone(),
+        provider_specific.as_ref(),
+    )?;
+
+    let db_model = Model {
+        name: request.model.clone(),
+        description: Some("Generated model for chat completion".to_string()),
+        provider_name: llm_model.inference_provider.provider.to_string(),
+        prompt_name: None,
+        model_params: HashMap::new(),
+        execution_options: ExecutionOptions::default(),
+        tools: tools.clone(),
+        model_type: ModelType::Completions,
+        response_schema: None,
+        credentials: key,
+    };
+
+    let completion_model_definition = CompletionModelDefinition {
+        name: format!(
+            "{}/{}",
+            llm_model.inference_provider.provider, llm_model.model
+        ),
+        model_params: CompletionModelParams {
+            engine: engine.clone(),
+            provider_name: llm_model.model_provider.to_string(),
+            prompt_name: None,
+        },
+        prompt: Prompt::empty(),
+        tools,
+        db_model: db_model.clone(),
+    };
+
+    let model_instance = crate::model::init_completion_model_instance(
+        completion_model_definition.clone(),
+        tools_map,
+        Some(executor_context.cost_calculator.clone()),
+        llm_model.inference_provider.endpoint.as_deref(),
+        Some(&llm_model.inference_provider.provider.to_string()),
+        router_span.clone(),
+    )
+    .await
+    .map_err(|e| GatewayApiError::CustomError(e.to_string()))?;
+
+    Ok(ResolvedModelContext {
+        completion_model_definition,
+        model_instance,
+        db_model,
+        llm_model,
+    })
+}
+
+pub struct ResolvedModelContext {
+    pub completion_model_definition: CompletionModelDefinition,
+    pub model_instance: Box<dyn ModelInstance>,
+    pub db_model: Model,
+    pub llm_model: ModelMetadata,
 }
