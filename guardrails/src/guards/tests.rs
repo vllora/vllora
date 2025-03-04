@@ -1,16 +1,14 @@
 use std::collections::HashMap;
 
+use crate::guards::config::{load_default_guards, load_guards_from_yaml};
 use crate::guards::llm_judge::LlmJudgeEvaluator;
-use crate::types::Evaluator;
-use crate::{
-    guards::config::{load_default_guards, load_guards_from_yaml},
-    types::{GuardAction, GuardDefinition, GuardStage},
-};
 use langdb_core::model::types::ModelEvent;
 use langdb_core::model::ModelInstance;
 use langdb_core::types::gateway::{
-    ChatCompletionContent, ChatCompletionMessage, ChatCompletionRequest, ChatCompletionResponse,
+    ChatCompletionContent, ChatCompletionMessage, ChatCompletionRequest,
 };
+use langdb_core::types::guardrails::Evaluator;
+use langdb_core::types::guardrails::{GuardAction, GuardDefinition, GuardStage};
 use langdb_core::types::threads::Message;
 use langdb_core::GatewayResult;
 use serde_json::Value;
@@ -92,14 +90,18 @@ async fn test_guard_evaluation() {
 
     let evaluator = LlmJudgeEvaluator::new(Box::new(|_| Box::new(MockModelInstance)));
 
-    let toxic_result = evaluator.evaluate(&toxic_text.0, &toxicity_guard);
-    let safe_result = evaluator.evaluate(&safe_text.0, &toxicity_guard);
+    let toxic_result = evaluator.evaluate(&toxic_text.0, toxicity_guard);
+    let safe_result = evaluator.evaluate(&safe_text.0, toxicity_guard);
 
-    if let crate::types::GuardResult::Boolean { passed, .. } = toxic_result.await.unwrap() {
+    if let langdb_core::types::guardrails::GuardResult::Boolean { passed, .. } =
+        toxic_result.await.unwrap()
+    {
         assert!(!passed, "Toxic text should not pass");
     }
 
-    if let crate::types::GuardResult::Boolean { passed, .. } = safe_result.await.unwrap() {
+    if let langdb_core::types::guardrails::GuardResult::Boolean { passed, .. } =
+        safe_result.await.unwrap()
+    {
         assert!(passed, "Safe text should pass");
     }
 
@@ -107,14 +109,17 @@ async fn test_guard_evaluation() {
     let competitor_text: TestText = "You should try Competitor A's product".into();
     let non_competitor_text: TestText = "Our product is the best".into();
 
-    let competitor_result = evaluator.evaluate(&competitor_text.0, &competitor_guard);
-    let non_competitor_result = evaluator.evaluate(&non_competitor_text.0, &competitor_guard);
+    let competitor_result = evaluator.evaluate(&competitor_text.0, competitor_guard);
+    let non_competitor_result = evaluator.evaluate(&non_competitor_text.0, competitor_guard);
 
-    if let crate::types::GuardResult::Text { passed, .. } = competitor_result.await.unwrap() {
+    if let langdb_core::types::guardrails::GuardResult::Text { passed, .. } =
+        competitor_result.await.unwrap()
+    {
         assert!(!passed, "Text with competitor should not pass");
     }
 
-    if let crate::types::GuardResult::Boolean { passed, .. } = non_competitor_result.await.unwrap()
+    if let langdb_core::types::guardrails::GuardResult::Boolean { passed, .. } =
+        non_competitor_result.await.unwrap()
     {
         assert!(passed, "Text without competitor should pass");
     }
@@ -123,14 +128,18 @@ async fn test_guard_evaluation() {
     let pii_text: TestText = "Contact me at test@example.com or 555-123-4567".into();
     let non_pii_text: TestText = "Hello, how are you today?".into();
 
-    let pii_result = evaluator.evaluate(&pii_text.0, &pii_guard);
-    let non_pii_result = evaluator.evaluate(&non_pii_text.0, &pii_guard);
+    let pii_result = evaluator.evaluate(&pii_text.0, pii_guard);
+    let non_pii_result = evaluator.evaluate(&non_pii_text.0, pii_guard);
 
-    if let crate::types::GuardResult::Text { passed, .. } = pii_result.await.unwrap() {
+    if let langdb_core::types::guardrails::GuardResult::Text { passed, .. } =
+        pii_result.await.unwrap()
+    {
         assert!(!passed, "Text with PII should not pass");
     }
 
-    if let crate::types::GuardResult::Boolean { passed, .. } = non_pii_result.await.unwrap() {
+    if let langdb_core::types::guardrails::GuardResult::Boolean { passed, .. } =
+        non_pii_result.await.unwrap()
+    {
         assert!(passed, "Text without PII should pass");
     }
 }

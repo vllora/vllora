@@ -1,4 +1,4 @@
-use crate::types::*;
+use langdb_core::types::guardrails::*;
 use serde_json::json;
 
 #[test]

@@ -1,4 +1,4 @@
-use crate::types::{Evaluator, Guard, GuardDefinition, GuardResult};
+use langdb_core::types::guardrails::{Evaluator, Guard, GuardDefinition, GuardResult};
 
 use langdb_core::{
     error::GatewayError,
@@ -107,7 +107,7 @@ impl Evaluator for LlmJudgeEvaluator {
                 Err(err) => Err(format!("LLM evaluation failed: {}", err)),
             }
         } else {
-            Err(format!("Guard definition is not a LlmJudge"))
+            Err("Guard definition is not a LlmJudge".to_string())
         }
     }
 }

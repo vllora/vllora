@@ -1,9 +1,4 @@
-use std::collections::HashMap;
-
-use langdb_core::types::{
-    gateway::{ChatCompletionRequest, ChatCompletionRequestWithTools},
-    threads::Message,
-};
+use crate::types::gateway::ChatCompletionRequest;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 

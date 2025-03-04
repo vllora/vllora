@@ -1,6 +1,8 @@
 use langdb_core::types::gateway::ChatCompletionRequest;
 
-use crate::types::{DatasetLoader, Evaluator, Guard, GuardDefinition, GuardExample, GuardResult};
+use langdb_core::types::guardrails::{
+    DatasetLoader, Evaluator, Guard, GuardDefinition, GuardExample, GuardResult,
+};
 
 pub struct DatasetEvaluator {
     pub loader: Box<dyn DatasetLoader + Send + Sync>,
@@ -19,7 +21,7 @@ impl Evaluator for DatasetEvaluator {
         {
             let text = self.request_to_text(request)?;
             match dataset {
-                crate::types::DatasetSource::Examples(examples) => {
+                langdb_core::types::guardrails::DatasetSource::Examples(examples) => {
                     // Simple similarity check (in a real implementation, this would use embeddings)
                     let mut best_match = None;
                     let mut best_score = 0.0;
@@ -46,9 +48,9 @@ impl Evaluator for DatasetEvaluator {
                         confidence: Some(1.0 - best_score),
                     })
                 }
-                crate::types::DatasetSource::Source(source) => {
+                langdb_core::types::guardrails::DatasetSource::Source(source) => {
                     // Load dataset from source
-                    match self.loader.load(&source).await {
+                    match self.loader.load(source).await {
                         Ok(examples) => {
                             // Simple similarity check
                             let mut best_match = None;

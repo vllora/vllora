@@ -121,7 +121,7 @@ impl RoutedExecutor {
                     }
                 }
             } else {
-                let result = Self::execute_request(&request, &executor_context, traces).await;
+                let result = Self::execute_request(&request, executor_context, traces).await;
 
                 match result {
                     Ok(response) => return Ok(response),

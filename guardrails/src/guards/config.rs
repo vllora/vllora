@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::types::Guard;
+use langdb_core::types::guardrails::Guard;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
