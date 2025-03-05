@@ -77,7 +77,13 @@ pub struct Extra {
 #[serde(untagged)]
 pub enum GuardOrName {
     Guard(Box<Guard>),
-    Name(String),
+    GuardWithParameters(GuardWithParameters),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GuardWithParameters {
+    pub id: String,
+    pub parameters: Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

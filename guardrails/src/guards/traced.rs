@@ -30,14 +30,12 @@ impl Evaluator for TracedGuard {
         request: &ChatCompletionRequest,
         guard: &Guard,
     ) -> Result<GuardResult, String> {
-        let guard_value = serde_json::to_value(guard.clone()).map_err(|e| e.to_string())?;
-
         let span = info_span!(
             target: "langdb::user_tracing::guard",
             SPAN_GUARD_EVAULATION,
-            guard = JsonValue(&guard_value).as_value(),
             id = guard.id,
             label = guard.name,
+            user_input = JsonValue(&serde_json::to_value(&guard.user_input).map_err(|e| e.to_string())?).as_value(),
             result = field::Empty
         );
 

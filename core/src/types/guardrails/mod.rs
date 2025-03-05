@@ -83,8 +83,9 @@ pub struct Guard {
     pub definition: GuardDefinition,
     /// User defined metadata for the guard
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Value>,
+    pub user_input: Option<Value>,
 }
+
 /// The main Guard type that encompasses all guard types
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -112,6 +113,7 @@ pub enum GuardDefinition {
         embedding_model: String,
         threshold: f64,
         dataset: DatasetSource,
+        schema: Value,
     },
 }
 
@@ -173,6 +175,14 @@ impl GuardDefinition {
             GuardDefinition::Schema { config, .. } => &config.definition_name,
             GuardDefinition::LlmJudge { config, .. } => &config.definition_id,
             GuardDefinition::Dataset { config, .. } => &config.definition_name,
+        }
+    }
+
+    pub fn schema(&self) -> &Value {
+        match self {
+            GuardDefinition::Schema { schema, .. } => schema,
+            GuardDefinition::LlmJudge { parameters, .. } => parameters,
+            GuardDefinition::Dataset { schema, .. } => schema,
         }
     }
 }

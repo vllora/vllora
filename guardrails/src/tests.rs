@@ -94,6 +94,7 @@ fn test_dataset_guard_serialization() {
                 embedding: None,
             },
         ]),
+        schema: json!({}),
     };
 
     let serialized = serde_json::to_string_pretty(&guard).unwrap();

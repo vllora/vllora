@@ -41,15 +41,13 @@ impl Evaluator for LlmJudgeEvaluator {
         if let GuardDefinition::LlmJudge {
             model,
             system_prompt,
-
-            parameters,
             ..
         } = &guard.definition
         {
             // Create a model instance
             let model_instance = self.model_factory.init(model).await;
 
-            let input_vars = match guard.metadata.as_ref() {
+            let input_vars = match guard.user_input.as_ref() {
                 Some(metadata) => match serde_json::from_value(metadata.clone()) {
                     Ok(input_vars) => input_vars,
                     Err(e) => {
@@ -99,8 +97,12 @@ impl Evaluator for LlmJudgeEvaluator {
                     // Try to parse as JSON
                     match serde_json::from_str::<Value>(&content) {
                         Ok(json) => {
+                            let params = match &guard.user_input {
+                                Some(m) => m,
+                                None => &serde_json::Value::Null,
+                            };
                             // Use the parameters to determine how to interpret the response
-                            Ok(interpret_json_response(json, parameters))
+                            Ok(interpret_json_response(json, params))
                         }
                         Err(_) => {
                             // If it's not JSON, just return the text
@@ -145,6 +147,7 @@ fn extract_text_content(response: &ChatCompletionMessage) -> Result<String, Stri
 
 // Interpret JSON response based on parameters
 fn interpret_json_response(json: Value, parameters: &Value) -> GuardResult {
+    tracing::warn!("Interpreting JSON response: {:#?}", parameters);
     // Check for common result fields first
     if let Some(passed) = json.get("passed").and_then(|v| v.as_bool()) {
         let confidence = json.get("confidence").and_then(|v| v.as_f64());

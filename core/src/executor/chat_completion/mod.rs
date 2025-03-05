@@ -10,7 +10,7 @@ use crate::model::types::ModelEvent;
 use crate::model::ModelInstance;
 use crate::models::ModelMetadata;
 use crate::types::gateway::{
-    ChatCompletionRequestWithTools, CompletionModelUsage, Extra, GuardOrName,
+    ChatCompletionRequestWithTools, CompletionModelUsage, Extra, GuardOrName, GuardWithParameters,
 };
 use crate::types::guardrails::service::GuardrailsEvaluator;
 use crate::types::guardrails::{Guard, GuardError, GuardStage};
@@ -162,15 +162,19 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
                 for guardrail in guardrails {
                     let guard_stage = match guardrail {
                         GuardOrName::Guard(guard) => guard.definition.stage(),
-                        GuardOrName::Name(name) => executor_context
-                            .guards
-                            .as_ref()
-                            .and_then(|guards| guards.get(name))
-                            .ok_or_else(|| {
-                                GatewayApiError::GuardError(GuardError::GuardNotFound(name.clone()))
-                            })?
-                            .definition
-                            .stage(),
+                        GuardOrName::GuardWithParameters(GuardWithParameters { id, .. }) => {
+                            executor_context
+                                .guards
+                                .as_ref()
+                                .and_then(|guards| guards.get(id))
+                                .ok_or_else(|| {
+                                    GatewayApiError::GuardError(GuardError::GuardNotFound(
+                                        id.clone(),
+                                    ))
+                                })?
+                                .definition
+                                .stage()
+                        }
                     };
 
                     if guard_stage == &GuardStage::Output {
@@ -237,17 +241,23 @@ pub async fn apply_input_guardrails<T: Serialize + DeserializeOwned + Debug + Cl
 
     for guardrail in guardrails {
         let guard = match guardrail {
-            GuardOrName::Guard(guard) => guard,
-            GuardOrName::Name(name) => {
-                guards.and_then(|guards| guards.get(name)).ok_or_else(|| {
-                    GatewayApiError::GuardError(GuardError::GuardNotFound(name.clone()))
-                })?
+            GuardOrName::Guard(guard) => guard.clone(),
+            GuardOrName::GuardWithParameters(GuardWithParameters { id, parameters }) => {
+                let mut base_guard = guards
+                    .and_then(|guards| guards.get(id))
+                    .ok_or_else(|| {
+                        GatewayApiError::GuardError(GuardError::GuardNotFound(id.clone()))
+                    })?
+                    .clone();
+
+                base_guard.user_input = Some(parameters.clone());
+                Box::new(base_guard.clone())
             }
         };
 
         if guard.definition.stage() == &GuardStage::Input {
             let result = evaluator
-                .evaluate(&request.request, guard, executor_context)
+                .evaluate(&request.request, &guard, executor_context)
                 .await
                 .map_err(|e| GatewayApiError::GuardError(GuardError::GuardEvaluationError(e)))?;
 
