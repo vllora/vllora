@@ -15,6 +15,9 @@ pub enum GuardError {
 
     #[error("Output guardrails not supported in streaming")]
     OutputGuardrailsNotSupportedInStreaming,
+
+    #[error("Request stopped after guard evaluation: {0}")]
+    RequestStoppedAfterGuardEvaluation(String),
 }
 
 /// Enum representing when a guard should be applied

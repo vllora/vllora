@@ -21,6 +21,9 @@ use uuid::Uuid;
 use crate::handler::record_map_err;
 use crate::GatewayApiError;
 
+pub type FinishEventHandle =
+    tokio::task::JoinHandle<(Option<LLMFinishEvent>, Option<Vec<ToolStartEvent>>)>;
+
 pub async fn execute(
     request: ChatCompletionRequest,
     model: Box<dyn ModelInstance>,
@@ -28,7 +31,7 @@ pub async fn execute(
     tags: HashMap<String, String>,
     tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
     span: Span,
-    handle: Option<tokio::task::JoinHandle<(Option<LLMFinishEvent>, Option<Vec<ToolStartEvent>>)>>,
+    handle: Option<FinishEventHandle>,
 ) -> Result<ChatCompletionResponse, GatewayApiError> {
     let result = model
         .invoke(HashMap::new(), tx, messages.clone(), tags.clone())

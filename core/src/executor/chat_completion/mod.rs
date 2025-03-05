@@ -40,6 +40,7 @@ use crate::GatewayApiError;
 
 use super::context::ExecutorContext;
 use super::{get_key_credentials, use_langdb_proxy};
+use crate::types::guardrails::GuardResult;
 use std::fmt::Debug;
 
 pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
@@ -244,10 +245,23 @@ pub async fn apply_input_guardrails<T: Serialize + DeserializeOwned + Debug + Cl
         };
 
         if guard.definition.stage() == &GuardStage::Input {
-            evaluator
+            let result = evaluator
                 .evaluate(&request.request, guard, executor_context)
                 .await
                 .map_err(|e| GatewayApiError::GuardError(GuardError::GuardEvaluationError(e)))?;
+
+            match result {
+                GuardResult::Json { passed, .. }
+                | GuardResult::Boolean { passed, .. }
+                | GuardResult::Text { passed, .. }
+                    if !passed =>
+                {
+                    return Err(GatewayApiError::GuardError(
+                        GuardError::RequestStoppedAfterGuardEvaluation(guard.name.clone()),
+                    ));
+                }
+                _ => {}
+            }
         }
     }
 
