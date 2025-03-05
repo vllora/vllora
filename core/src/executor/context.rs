@@ -1,7 +1,8 @@
+use crate::types::guardrails::service::GuardrailsEvaluator;
 use crate::{
     error::GatewayError,
     handler::{extract_tags, AvailableModels, CallbackHandlerFn},
-    types::{credentials::Credentials, gateway::CostCalculator},
+    types::{credentials::Credentials, gateway::CostCalculator, guardrails::Guard},
     usage::InMemoryStorage,
 };
 use actix_web::{HttpMessage, HttpRequest};
@@ -20,7 +21,13 @@ pub struct ExecutorContext {
     pub headers: HashMap<String, String>,
     pub key_credentials: Option<Credentials>,
     pub providers_config: Option<ProvidersConfig>,
+    pub guards: Option<HashMap<String, Guard>>,
+    pub evaluator_service: Arc<Box<dyn GuardrailsEvaluator>>,
 }
+
+// Implement Send + Sync since all fields are Send + Sync
+unsafe impl Send for ExecutorContext {}
+unsafe impl Sync for ExecutorContext {}
 
 impl ExecutorContext {
     pub fn new(
@@ -29,6 +36,8 @@ impl ExecutorContext {
         provided_models: AvailableModels,
         memory_storage: Option<Arc<Mutex<InMemoryStorage>>>,
         req: &HttpRequest,
+        guards: Option<HashMap<String, Guard>>,
+        evaluator_service: Arc<Box<dyn GuardrailsEvaluator>>,
     ) -> Result<Self, GatewayError> {
         let tags = extract_tags(req)?;
         let headers = req
@@ -49,6 +58,8 @@ impl ExecutorContext {
             headers,
             key_credentials,
             providers_config,
+            guards,
+            evaluator_service,
         })
     }
 }

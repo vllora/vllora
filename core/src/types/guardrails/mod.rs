@@ -1,6 +1,21 @@
-use crate::types::gateway::ChatCompletionRequest;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use thiserror::Error;
+
+pub mod evaluator;
+pub mod service;
+
+#[derive(Debug, Error)]
+pub enum GuardError {
+    #[error("Guard not found: {0}")]
+    GuardNotFound(String),
+
+    #[error("Guard evaluation error: {0}")]
+    GuardEvaluationError(String),
+
+    #[error("Output guardrails not supported in streaming")]
+    OutputGuardrailsNotSupportedInStreaming,
+}
 
 /// Enum representing when a guard should be applied
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -62,11 +77,11 @@ pub struct Guard {
     #[serde(flatten)]
     pub definition: GuardDefinition,
     /// User defined metadata for the guard
-    pub metadata: Value,
+    pub metadata: Option<Value>,
 }
 /// The main Guard type that encompasses all guard types
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum GuardDefinition {
     /// Schema-based guard using JSON schema for validation
     Schema {
@@ -109,30 +124,6 @@ pub struct GuardExample {
     pub text: String,
     pub label: bool,
     pub embedding: Option<Vec<f32>>,
-}
-
-/// Trait for evaluating text against a guard
-#[async_trait::async_trait]
-pub trait Evaluator {
-    async fn evaluate(
-        &self,
-        request: &ChatCompletionRequest,
-        guard: &Guard,
-    ) -> Result<GuardResult, String>;
-
-    fn request_to_text(&self, request: &ChatCompletionRequest) -> Result<String, String> {
-        let text = request
-            .messages
-            .last()
-            .ok_or("No message in request")?
-            .content
-            .as_ref()
-            .ok_or("No content in message")?
-            .as_string()
-            .ok_or("No text in content")?;
-
-        Ok(text)
-    }
 }
 
 /// Trait for loading datasets

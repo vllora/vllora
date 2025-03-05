@@ -358,7 +358,7 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
                         msg.trace_id,
                         msg.event.as_str()
                     );
-                    outer_tx.send(Some(msg)).await.unwrap();
+                    let _ = outer_tx.send(Some(msg)).await;
                 }
             }
             .instrument(span.clone()),

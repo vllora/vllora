@@ -1,3 +1,10 @@
+use crate::callback_handler::init_callback_handler;
+use crate::config::{load_langdb_proxy_config, Config};
+use crate::cost::GatewayCostCalculator;
+use crate::guardrails::GuardrailsService;
+use crate::limit::GatewayLimitChecker;
+use crate::middleware::trace_logger::TraceLogger;
+use crate::otel::DummyTraceWritterTransport;
 use actix_cors::Cors;
 use actix_web::Scope as ActixScope;
 use actix_web::{
@@ -9,6 +16,7 @@ use actix_web::{
 use futures::{future::try_join, Future, TryFutureExt};
 use langdb_core::database::clickhouse::ClickhouseHttp;
 use langdb_core::database::DatabaseTransportClone;
+use langdb_core::executor::ProvidersConfig;
 use langdb_core::handler::chat::create_chat_completion;
 use langdb_core::handler::embedding::embeddings_handler;
 use langdb_core::handler::image::create_image;
@@ -16,24 +24,18 @@ use langdb_core::handler::middleware::rate_limit::{RateLimitMiddleware, RateLimi
 use langdb_core::handler::models::list_gateway_models;
 use langdb_core::handler::{AvailableModels, CallbackHandlerFn, LimitCheckWrapper};
 use langdb_core::models::ModelMetadata;
+use langdb_core::otel::database::DatabaseSpanWritter;
+use langdb_core::otel::SpanWriterTransport;
 use langdb_core::otel::{TraceMap, TraceServiceImpl, TraceServiceServer};
 use langdb_core::types::gateway::CostCalculator;
+use langdb_core::types::guardrails::service::GuardrailsEvaluator;
+use langdb_core::usage::InMemoryStorage;
+use langdb_guardrails::load_default_guards;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::signal;
 use tokio::sync::Mutex;
-
-use crate::callback_handler::init_callback_handler;
-use crate::config::{load_langdb_proxy_config, Config};
-use crate::cost::GatewayCostCalculator;
-use crate::limit::GatewayLimitChecker;
-use crate::middleware::trace_logger::TraceLogger;
-use crate::otel::DummyTraceWritterTransport;
-use langdb_core::executor::ProvidersConfig;
-use langdb_core::otel::database::DatabaseSpanWritter;
-use langdb_core::otel::SpanWriterTransport;
-use langdb_core::usage::InMemoryStorage;
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 #[serde(crate = "serde")]
@@ -205,6 +207,8 @@ impl ApiServer {
             service = service.app_data(providers.clone());
         }
 
+        let guards = load_default_guards().unwrap();
+        let guardrails_service = Box::new(GuardrailsService::new()) as Box<dyn GuardrailsEvaluator>;
         app.wrap(TraceLogger)
             .service(
                 service
@@ -216,6 +220,8 @@ impl ApiServer {
                         Box::new(cost_calculator) as Box<dyn CostCalculator>
                     ))
                     .app_data(rate_limit)
+                    .app_data(Data::new(guards))
+                    .app_data(Data::new(guardrails_service))
                     .wrap(RateLimitMiddleware),
             )
             .wrap(cors)

@@ -9,7 +9,11 @@ use crate::model::tools::{GatewayTool, Tool};
 use crate::model::types::ModelEvent;
 use crate::model::ModelInstance;
 use crate::models::ModelMetadata;
-use crate::types::gateway::{ChatCompletionRequestWithTools, CompletionModelUsage};
+use crate::types::gateway::{
+    ChatCompletionRequestWithTools, CompletionModelUsage, Extra, GuardOrName,
+};
+use crate::types::guardrails::service::GuardrailsEvaluator;
+use crate::types::guardrails::{Guard, GuardError, GuardStage};
 use either::Either::{self, Left, Right};
 use futures::Stream;
 use serde::de::DeserializeOwned;
@@ -39,7 +43,7 @@ use super::{get_key_credentials, use_langdb_proxy};
 use std::fmt::Debug;
 
 pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
-    request: &ChatCompletionRequestWithTools<T>,
+    request_with_tools: &ChatCompletionRequestWithTools<T>,
     executor_context: &ExecutorContext,
     router_span: tracing::Span,
 ) -> Result<
@@ -61,7 +65,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
 
     let mut request_tools = vec![];
     let mut tools_map = HashMap::new();
-    if let Some(tools) = &request.request.tools {
+    if let Some(tools) = &request_with_tools.request.tools {
         for tool in tools {
             request_tools.push(ModelTool {
                 name: tool.function.name.clone(),
@@ -76,7 +80,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         }
     }
 
-    let mcp_tools = match &request.mcp_servers {
+    let mcp_tools = match &request_with_tools.mcp_servers {
         Some(tools) => get_tools(tools).await?,
         None => Vec::new(),
     };
@@ -92,10 +96,16 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
 
     let tools = ModelTools(request_tools);
 
-    let resolved_model_context =
-        resolve_model_instance(executor_context, request, tools_map, tools, router_span).await?;
+    let resolved_model_context = resolve_model_instance(
+        executor_context,
+        request_with_tools,
+        tools_map,
+        tools,
+        router_span,
+    )
+    .await?;
 
-    let mut request = request.request.clone();
+    let mut request = request_with_tools.request.clone();
     let llm_model = find_model_by_full_name(&request.model, &executor_context.provided_models)?;
     request.model = llm_model.inference_provider.model_name.clone();
 
@@ -144,7 +154,43 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         (stop_event, tool_calls)
     });
 
-    if request.stream.unwrap_or(false) {
+    let is_stream = request.stream.unwrap_or(false);
+    if is_stream {
+        if let Some(Extra { guardrails, .. }) = &request_with_tools.extra {
+            if !guardrails.is_empty() {
+                for guardrail in guardrails {
+                    let guard_stage = match guardrail {
+                        GuardOrName::Guard(guard) => guard.definition.stage(),
+                        GuardOrName::Name(name) => executor_context
+                            .guards
+                            .as_ref()
+                            .and_then(|guards| guards.get(name))
+                            .ok_or_else(|| {
+                                GatewayApiError::GuardError(GuardError::GuardNotFound(name.clone()))
+                            })?
+                            .definition
+                            .stage(),
+                    };
+
+                    if guard_stage == &GuardStage::Output {
+                        return Err(GatewayApiError::GuardError(
+                            GuardError::OutputGuardrailsNotSupportedInStreaming,
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    apply_input_guardrails(
+        request_with_tools,
+        executor_context.guards.as_ref(),
+        executor_context.evaluator_service.as_ref().as_ref(),
+        executor_context,
+    )
+    .await?;
+
+    if is_stream {
         Ok(Left(
             stream_chunks(
                 resolved_model_context.completion_model_definition,
@@ -157,20 +203,55 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
             .await,
         ))
     } else {
-        Ok(Right(
-            basic_executor::execute(
-                request,
-                resolved_model_context.model_instance,
-                messages.clone(),
-                executor_context.tags.clone(),
-                tx,
-                span.clone(),
-                Some(handle),
-            )
-            .instrument(span)
-            .await,
-        ))
+        let result = basic_executor::execute(
+            request,
+            resolved_model_context.model_instance,
+            messages.clone(),
+            executor_context.tags.clone(),
+            tx,
+            span.clone(),
+            Some(handle),
+        )
+        .instrument(span)
+        .await;
+
+        if let Ok(_rr) = &result {
+            // Placeholder for output guardrails
+        }
+
+        Ok(Right(result))
     }
+}
+
+pub async fn apply_input_guardrails<T: Serialize + DeserializeOwned + Debug + Clone>(
+    request: &ChatCompletionRequestWithTools<T>,
+    guards: Option<&HashMap<String, Guard>>,
+    evaluator: &dyn GuardrailsEvaluator,
+    executor_context: &ExecutorContext,
+) -> Result<(), GatewayApiError> {
+    let Some(Extra { guardrails, .. }) = &request.extra else {
+        return Ok(());
+    };
+
+    for guardrail in guardrails {
+        let guard = match guardrail {
+            GuardOrName::Guard(guard) => guard,
+            GuardOrName::Name(name) => {
+                guards.and_then(|guards| guards.get(name)).ok_or_else(|| {
+                    GatewayApiError::GuardError(GuardError::GuardNotFound(name.clone()))
+                })?
+            }
+        };
+
+        if guard.definition.stage() == &GuardStage::Input {
+            evaluator
+                .evaluate(&request.request, guard, executor_context)
+                .await
+                .map_err(|e| GatewayApiError::GuardError(GuardError::GuardEvaluationError(e)))?;
+        }
+    }
+
+    Ok(())
 }
 
 pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Clone>(

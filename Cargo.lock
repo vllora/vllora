@@ -272,6 +272,7 @@ dependencies = [
  "futures",
  "futures-util",
  "langdb_core",
+ "langdb_guardrails",
  "minijinja",
  "open",
  "opentelemetry",
@@ -2799,7 +2800,9 @@ dependencies = [
  "serde_yaml",
  "tokio",
  "tracing",
+ "tracing-futures",
  "tracing-subscriber",
+ "valuable",
 ]
 
 [[package]]

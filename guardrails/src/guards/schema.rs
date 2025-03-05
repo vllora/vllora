@@ -1,6 +1,6 @@
 use jsonschema::{Draft, JSONSchema};
 use langdb_core::types::gateway::ChatCompletionRequest;
-use langdb_core::types::guardrails::{Evaluator, Guard, GuardDefinition, GuardResult};
+use langdb_core::types::guardrails::{evaluator::Evaluator, Guard, GuardDefinition, GuardResult};
 use serde_json::Value;
 
 pub struct SchemaEvaluator;

@@ -1,4 +1,4 @@
-use langdb_core::types::guardrails::{Evaluator, Guard, GuardDefinition, GuardResult};
+use langdb_core::types::guardrails::{evaluator::Evaluator, Guard, GuardDefinition, GuardResult};
 
 use langdb_core::{
     error::GatewayError,
@@ -15,13 +15,18 @@ use serde_json::Value;
 use std::collections::HashMap;
 use tokio::sync::mpsc;
 
+#[async_trait::async_trait]
+pub trait GuardModelInstanceFactory: Send + Sync {
+    async fn init(&self, name: &str) -> Box<dyn ModelInstance>;
+}
+
 pub struct LlmJudgeEvaluator {
     // We'll use this to create model instances for evaluation
-    pub model_factory: Box<dyn Fn(&str) -> Box<dyn ModelInstance> + Send + Sync>,
+    pub model_factory: Box<dyn GuardModelInstanceFactory + Send + Sync>,
 }
 
 impl LlmJudgeEvaluator {
-    pub fn new(model_factory: Box<dyn Fn(&str) -> Box<dyn ModelInstance> + Send + Sync>) -> Self {
+    pub fn new(model_factory: Box<dyn GuardModelInstanceFactory + Send + Sync>) -> Self {
         Self { model_factory }
     }
 }
@@ -42,13 +47,16 @@ impl Evaluator for LlmJudgeEvaluator {
         } = &guard.definition
         {
             // Create a model instance
-            let model_instance = (self.model_factory)(model);
+            let model_instance = self.model_factory.init(model).await;
 
-            let input_vars = match serde_json::from_value(guard.metadata.clone()) {
-                Ok(input_vars) => input_vars,
-                Err(e) => {
-                    return Err(format!("Error parsing guard metadata: {}", e));
-                }
+            let input_vars = match guard.metadata.as_ref() {
+                Some(metadata) => match serde_json::from_value(metadata.clone()) {
+                    Ok(input_vars) => input_vars,
+                    Err(e) => {
+                        return Err(format!("Error parsing guard metadata: {}", e));
+                    }
+                },
+                None => HashMap::new(),
             };
 
             // Create a channel for model events

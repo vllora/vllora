@@ -15,6 +15,7 @@ pub mod types;
 
 use crate::error::GatewayError;
 use crate::types::gateway::CostCalculatorError;
+use crate::types::guardrails::GuardError;
 use actix_web::http::header::ContentType;
 use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
@@ -55,6 +56,9 @@ pub enum GatewayApiError {
 
     #[error(transparent)]
     RoutedExecutorError(#[from] RoutedExecutorError),
+
+    #[error(transparent)]
+    GuardError(#[from] GuardError),
 }
 
 impl actix_web::error::ResponseError for GatewayApiError {
@@ -79,6 +83,7 @@ impl actix_web::error::ResponseError for GatewayApiError {
             GatewayApiError::RouteError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             GatewayApiError::RoutedExecutorError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             GatewayApiError::TokenUsageLimit => StatusCode::BAD_REQUEST,
+            GatewayApiError::GuardError(_) => StatusCode::BAD_REQUEST,
         }
     }
 }

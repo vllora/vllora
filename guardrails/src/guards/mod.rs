@@ -2,6 +2,8 @@ pub mod config;
 pub mod dataset;
 pub mod llm_judge;
 pub mod schema;
+pub mod traced;
+
 #[cfg(test)]
 pub mod tests;
 

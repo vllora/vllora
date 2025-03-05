@@ -7,11 +7,13 @@ use langdb_core::model::ModelInstance;
 use langdb_core::types::gateway::{
     ChatCompletionContent, ChatCompletionMessage, ChatCompletionRequest,
 };
-use langdb_core::types::guardrails::Evaluator;
+use langdb_core::types::guardrails::evaluator::Evaluator;
 use langdb_core::types::guardrails::{GuardAction, GuardDefinition, GuardStage};
 use langdb_core::types::threads::Message;
 use langdb_core::GatewayResult;
 use serde_json::Value;
+
+use super::llm_judge::GuardModelInstanceFactory;
 
 #[test]
 fn test_load_guards_from_yaml() {
@@ -88,7 +90,7 @@ async fn test_guard_evaluation() {
     let toxic_text: TestText = "I hate you and want to kill you".into();
     let safe_text: TestText = "Hello, how are you today?".into();
 
-    let evaluator = LlmJudgeEvaluator::new(Box::new(|_| Box::new(MockModelInstance)));
+    let evaluator = LlmJudgeEvaluator::new(Box::new(MockGuardModelInstanceFactory {}));
 
     let toxic_result = evaluator.evaluate(&toxic_text.0, toxicity_guard);
     let safe_result = evaluator.evaluate(&safe_text.0, toxicity_guard);
@@ -189,5 +191,14 @@ impl ModelInstance for MockModelInstance {
         _tags: HashMap<String, String>,
     ) -> GatewayResult<()> {
         todo!()
+    }
+}
+
+struct MockGuardModelInstanceFactory;
+
+#[async_trait::async_trait]
+impl GuardModelInstanceFactory for MockGuardModelInstanceFactory {
+    async fn init(&self, _name: &str) -> Box<dyn ModelInstance> {
+        Box::new(MockModelInstance)
     }
 }

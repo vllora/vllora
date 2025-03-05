@@ -1,7 +1,7 @@
 use langdb_core::types::gateway::ChatCompletionRequest;
 
 use langdb_core::types::guardrails::{
-    DatasetLoader, Evaluator, Guard, GuardDefinition, GuardExample, GuardResult,
+    evaluator::Evaluator, DatasetLoader, Guard, GuardDefinition, GuardExample, GuardResult,
 };
 
 pub struct DatasetEvaluator {
