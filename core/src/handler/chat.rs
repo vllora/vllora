@@ -72,7 +72,6 @@ pub async fn create_chat_completion(
         callback_handler.get_ref().clone(),
         cost_calculator.into_inner(),
         provided_models.get_ref().clone(),
-        memory_storage,
         &req,
         Some(guards.get_ref().clone()),
         guardrails_evaluator_service,
@@ -80,7 +79,7 @@ pub async fn create_chat_completion(
 
     let executor = RoutedExecutor::new(request.clone());
     executor
-        .execute(&executor_context, traces.get_ref())
+        .execute(&executor_context, traces.get_ref(), memory_storage)
         .instrument(span.clone())
         .await
 }

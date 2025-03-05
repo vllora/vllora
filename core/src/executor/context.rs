@@ -3,11 +3,9 @@ use crate::{
     error::GatewayError,
     handler::{extract_tags, AvailableModels, CallbackHandlerFn},
     types::{credentials::Credentials, gateway::CostCalculator, guardrails::Guard},
-    usage::InMemoryStorage,
 };
 use actix_web::{HttpMessage, HttpRequest};
 use std::{collections::HashMap, sync::Arc};
-use tokio::sync::Mutex;
 
 use super::ProvidersConfig;
 
@@ -16,7 +14,6 @@ pub struct ExecutorContext {
     pub callbackhandler: CallbackHandlerFn,
     pub cost_calculator: Arc<Box<dyn CostCalculator>>,
     pub provided_models: AvailableModels,
-    pub memory_storage: Option<Arc<Mutex<InMemoryStorage>>>,
     pub tags: HashMap<String, String>,
     pub headers: HashMap<String, String>,
     pub key_credentials: Option<Credentials>,
@@ -34,7 +31,6 @@ impl ExecutorContext {
         callbackhandler: CallbackHandlerFn,
         cost_calculator: Arc<Box<dyn CostCalculator>>,
         provided_models: AvailableModels,
-        memory_storage: Option<Arc<Mutex<InMemoryStorage>>>,
         req: &HttpRequest,
         guards: Option<HashMap<String, Guard>>,
         evaluator_service: Arc<Box<dyn GuardrailsEvaluator>>,
@@ -53,7 +49,6 @@ impl ExecutorContext {
             callbackhandler,
             cost_calculator,
             provided_models,
-            memory_storage,
             tags,
             headers,
             key_credentials,

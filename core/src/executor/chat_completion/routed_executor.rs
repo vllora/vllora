@@ -1,8 +1,10 @@
 use crate::executor::context::ExecutorContext;
 use crate::handler::chat::map_sso_event;
 use crate::routing::RoutingStrategy;
+use crate::usage::InMemoryStorage;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::executor::chat_completion::execute;
 use crate::routing::RouteStrategy;
@@ -19,6 +21,7 @@ use thiserror::Error;
 
 use opentelemetry::trace::TraceContextExt as _;
 use tokio::sync::broadcast;
+use tokio::sync::Mutex;
 use tracing::Span;
 use tracing_futures::Instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt as _;
@@ -56,6 +59,7 @@ impl RoutedExecutor {
         &self,
         executor_context: &ExecutorContext,
         traces: &TraceMap,
+        memory_storage: Option<Arc<Mutex<InMemoryStorage>>>,
     ) -> Result<HttpResponse, GatewayApiError> {
         let span = Span::current();
 
@@ -92,7 +96,7 @@ impl RoutedExecutor {
                     metrics_duration: None,
                 };
 
-                let metrics = match &executor_context.memory_storage {
+                let metrics = match &memory_storage {
                     Some(storage) => {
                         let guard = storage.lock().await;
                         guard.get_all_counters().await
