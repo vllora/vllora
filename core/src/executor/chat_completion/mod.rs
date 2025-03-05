@@ -189,6 +189,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         executor_context.evaluator_service.as_ref().as_ref(),
         executor_context,
     )
+    .instrument(span.clone())
     .await?;
 
     if is_stream {

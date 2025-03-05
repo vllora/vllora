@@ -47,12 +47,14 @@ pub enum GuardResult {
     /// Pass/fail result
     Boolean {
         passed: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
         confidence: Option<f64>,
     },
     /// Text result for observation
     Text {
         text: String,
         passed: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
         confidence: Option<f64>,
     },
     /// Structured JSON result
@@ -80,6 +82,7 @@ pub struct Guard {
     #[serde(flatten)]
     pub definition: GuardDefinition,
     /// User defined metadata for the guard
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<Value>,
 }
 /// The main Guard type that encompasses all guard types
@@ -97,6 +100,7 @@ pub enum GuardDefinition {
         #[serde(flatten)]
         config: GuardConfig,
         model: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
         system_prompt: Option<String>,
         user_prompt_template: String,
         parameters: Value,
