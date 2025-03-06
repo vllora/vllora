@@ -161,7 +161,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
             if !guardrails.is_empty() {
                 for guardrail in guardrails {
                     let guard_stage = match guardrail {
-                        GuardOrName::Guard(guard) => guard.definition.stage(),
+                        GuardOrName::Guard(guard) => guard.stage(),
                         GuardOrName::GuardWithParameters(GuardWithParameters { id, .. }) => {
                             executor_context
                                 .guards
@@ -172,7 +172,6 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
                                         id.clone(),
                                     ))
                                 })?
-                                .definition
                                 .stage()
                         }
                     };
@@ -250,12 +249,12 @@ pub async fn apply_input_guardrails<T: Serialize + DeserializeOwned + Debug + Cl
                     })?
                     .clone();
 
-                base_guard.user_input = Some(parameters.clone());
+                base_guard.set_parameters(parameters.clone());
                 Box::new(base_guard.clone())
             }
         };
 
-        if guard.definition.stage() == &GuardStage::Input {
+        if guard.stage() == &GuardStage::Input {
             let result = evaluator
                 .evaluate(&request.request, &guard, executor_context)
                 .await
@@ -268,7 +267,7 @@ pub async fn apply_input_guardrails<T: Serialize + DeserializeOwned + Debug + Cl
                     if !passed =>
                 {
                     return Err(GatewayApiError::GuardError(
-                        GuardError::RequestStoppedAfterGuardEvaluation(guard.name.clone()),
+                        GuardError::RequestStoppedAfterGuardEvaluation(guard.name().clone()),
                     ));
                 }
                 _ => {}

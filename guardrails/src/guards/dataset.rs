@@ -1,7 +1,7 @@
 use langdb_core::types::gateway::ChatCompletionRequest;
 
 use langdb_core::types::guardrails::{
-    evaluator::Evaluator, DatasetLoader, Guard, GuardDefinition, GuardExample, GuardResult,
+    evaluator::Evaluator, DatasetLoader, Guard, GuardExample, GuardResult,
 };
 
 pub struct DatasetEvaluator {
@@ -15,9 +15,9 @@ impl Evaluator for DatasetEvaluator {
         request: &ChatCompletionRequest,
         guard: &Guard,
     ) -> Result<GuardResult, String> {
-        if let GuardDefinition::Dataset {
+        if let Guard::Dataset {
             threshold, dataset, ..
-        } = &guard.definition
+        } = &guard
         {
             let text = self.request_to_text(request)?;
             match dataset {

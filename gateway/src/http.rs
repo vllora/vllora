@@ -29,9 +29,10 @@ use langdb_core::otel::SpanWriterTransport;
 use langdb_core::otel::{TraceMap, TraceServiceImpl, TraceServiceServer};
 use langdb_core::types::gateway::CostCalculator;
 use langdb_core::types::guardrails::service::GuardrailsEvaluator;
+use langdb_core::types::guardrails::Guard;
 use langdb_core::usage::InMemoryStorage;
-use langdb_guardrails::load_default_guards;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::signal;
@@ -141,6 +142,7 @@ impl ApiServer {
                 storage.clone(),
                 trace_senders_inner.clone(),
                 models.clone(),
+                server_config.config.guards.clone(),
                 callback.clone(),
                 cost_calculator.clone(),
                 limit_checker.clone(),
@@ -182,6 +184,7 @@ impl ApiServer {
         in_memory_storage: Option<Arc<Mutex<InMemoryStorage>>>,
         trace_senders: Arc<TraceMap>,
         models: Vec<ModelMetadata>,
+        guards: Option<HashMap<String, Guard>>,
         callback: CallbackHandlerFn,
         cost_calculator: GatewayCostCalculator,
         limit_checker: Option<LimitCheckWrapper>,
@@ -207,7 +210,6 @@ impl ApiServer {
             service = service.app_data(providers.clone());
         }
 
-        let guards = load_default_guards().unwrap();
         let guardrails_service = Box::new(GuardrailsService::new()) as Box<dyn GuardrailsEvaluator>;
         app.wrap(TraceLogger)
             .service(

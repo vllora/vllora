@@ -11,7 +11,6 @@ use langdb_core::types::gateway::DynamicRouter;
 use langdb_core::types::guardrails::evaluator::Evaluator;
 use langdb_core::types::guardrails::service::GuardrailsEvaluator;
 use langdb_core::types::guardrails::Guard;
-use langdb_core::types::guardrails::GuardDefinition;
 use langdb_core::types::guardrails::GuardResult;
 use langdb_guardrails::guards::llm_judge::GuardModelInstanceFactory;
 use langdb_guardrails::guards::traced::TracedGuard;
@@ -73,16 +72,16 @@ impl GuardrailsService {
         guard: &Guard,
         executor_context: &ExecutorContext,
     ) -> Result<TracedGuard, String> {
-        let evaluator = match &guard.definition {
-            GuardDefinition::Schema { .. } => Box::new(SchemaEvaluator {}) as Box<dyn Evaluator>,
-            GuardDefinition::LlmJudge { .. } => {
+        let evaluator = match &guard {
+            Guard::Schema { .. } => Box::new(SchemaEvaluator {}) as Box<dyn Evaluator>,
+            Guard::LlmJudge { .. } => {
                 let factory = GuardModelFactory::new(executor_context.clone());
                 let evaluator = LlmJudgeEvaluator::new(
                     Box::new(factory) as Box<dyn GuardModelInstanceFactory + Send + Sync>
                 );
                 Box::new(evaluator) as Box<dyn Evaluator>
             }
-            GuardDefinition::Dataset { .. } => Box::new(DatasetEvaluator {
+            Guard::Dataset { .. } => Box::new(DatasetEvaluator {
                 loader: Box::new(FileDatasetLoader {}),
             }) as Box<dyn Evaluator>,
         };

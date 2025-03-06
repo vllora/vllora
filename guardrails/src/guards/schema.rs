@@ -1,6 +1,6 @@
 use jsonschema::{Draft, JSONSchema};
 use langdb_core::types::gateway::ChatCompletionRequest;
-use langdb_core::types::guardrails::{evaluator::Evaluator, Guard, GuardDefinition, GuardResult};
+use langdb_core::types::guardrails::{evaluator::Evaluator, Guard, GuardResult};
 use serde_json::Value;
 
 pub struct SchemaEvaluator;
@@ -13,7 +13,11 @@ impl Evaluator for SchemaEvaluator {
         guard: &Guard,
     ) -> Result<GuardResult, String> {
         let text = self.request_to_text(request)?;
-        if let GuardDefinition::Schema { schema, .. } = &guard.definition {
+        if let Guard::Schema {
+            user_defined_schema,
+            ..
+        } = &guard
+        {
             // Try to parse the text as JSON
             let json_result = serde_json::from_str::<Value>(&text);
 
@@ -22,7 +26,7 @@ impl Evaluator for SchemaEvaluator {
                     // Compile the schema
                     let compiled_schema = match JSONSchema::options()
                         .with_draft(Draft::Draft7)
-                        .compile(schema)
+                        .compile(&user_defined_schema)
                     {
                         Ok(schema) => schema,
                         Err(e) => {

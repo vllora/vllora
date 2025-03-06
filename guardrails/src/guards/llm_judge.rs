@@ -1,4 +1,4 @@
-use langdb_core::types::guardrails::{evaluator::Evaluator, Guard, GuardDefinition, GuardResult};
+use langdb_core::types::guardrails::{evaluator::Evaluator, Guard, GuardResult};
 
 use langdb_core::{
     error::GatewayError,
@@ -38,16 +38,16 @@ impl Evaluator for LlmJudgeEvaluator {
         request: &ChatCompletionRequest,
         guard: &Guard,
     ) -> Result<GuardResult, String> {
-        if let GuardDefinition::LlmJudge {
+        if let Guard::LlmJudge {
             model,
             system_prompt,
             ..
-        } = &guard.definition
+        } = &guard
         {
             // Create a model instance
             let model_instance = self.model_factory.init(model).await;
 
-            let input_vars = match guard.user_input.as_ref() {
+            let input_vars = match guard.parameters() {
                 Some(metadata) => match serde_json::from_value(metadata.clone()) {
                     Ok(input_vars) => input_vars,
                     Err(e) => {
@@ -97,7 +97,7 @@ impl Evaluator for LlmJudgeEvaluator {
                     // Try to parse as JSON
                     match serde_json::from_str::<Value>(&content) {
                         Ok(json) => {
-                            let params = match &guard.user_input {
+                            let params = match &guard.parameters() {
                                 Some(m) => m,
                                 None => &serde_json::Value::Null,
                             };

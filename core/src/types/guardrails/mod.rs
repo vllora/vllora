@@ -65,36 +65,24 @@ pub enum GuardResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub struct GuardConfig {
-    pub definition_id: String,
-    pub definition_name: String,
+    pub id: String,
+    pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub stage: GuardStage,
     pub action: GuardAction,
-}
-
-/// A guard that has been configured with input variables
-/// This is used to evaluate the guard
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Guard {
-    pub id: String,
-    pub name: String,
-    #[serde(flatten)]
-    pub definition: GuardDefinition,
-    /// User defined metadata for the guard
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub user_input: Option<Value>,
+    pub user_defined_parameters: Option<Value>,
 }
-
 /// The main Guard type that encompasses all guard types
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum GuardDefinition {
+pub enum Guard {
     /// Schema-based guard using JSON schema for validation
     Schema {
         #[serde(flatten)]
         config: GuardConfig,
-        schema: Value,
+        user_defined_schema: Value,
     },
     /// LLM-based guard that uses another LLM as a judge
     LlmJudge {
@@ -104,7 +92,6 @@ pub enum GuardDefinition {
         #[serde(skip_serializing_if = "Option::is_none")]
         system_prompt: Option<String>,
         user_prompt_template: String,
-        parameters: Value,
     },
     /// Dataset-based guard that uses vector similarity to examples
     Dataset {
@@ -135,54 +122,69 @@ pub struct GuardExample {
     pub embedding: Option<Vec<f32>>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GuardTemplate {
+    pub name: String,
+    pub description: String,
+    pub r#type: String,
+    pub tags: Vec<String>,
+    pub parameters: Value,
+}
+
 /// Trait for loading datasets
 #[async_trait::async_trait]
 pub trait DatasetLoader: Send + Sync {
     async fn load(&self, source: &str) -> Result<Vec<GuardExample>, String>;
 }
 
-impl GuardDefinition {
+impl Guard {
     /// Returns the stage at which this guard should be applied
     pub fn stage(&self) -> &GuardStage {
         match self {
-            GuardDefinition::Schema { config, .. } => &config.stage,
-            GuardDefinition::LlmJudge { config, .. } => &config.stage,
-            GuardDefinition::Dataset { config, .. } => &config.stage,
+            Guard::Schema { config, .. } => &config.stage,
+            Guard::LlmJudge { config, .. } => &config.stage,
+            Guard::Dataset { config, .. } => &config.stage,
         }
     }
 
     /// Returns the action this guard should take
     pub fn action(&self) -> &GuardAction {
         match self {
-            GuardDefinition::Schema { config, .. } => &config.action,
-            GuardDefinition::LlmJudge { config, .. } => &config.action,
-            GuardDefinition::Dataset { config, .. } => &config.action,
+            Guard::Schema { config, .. } => &config.action,
+            Guard::LlmJudge { config, .. } => &config.action,
+            Guard::Dataset { config, .. } => &config.action,
         }
     }
 
     /// Returns the ID of this guard
     pub fn id(&self) -> &String {
         match self {
-            GuardDefinition::Schema { config, .. } => &config.definition_id,
-            GuardDefinition::LlmJudge { config, .. } => &config.definition_id,
-            GuardDefinition::Dataset { config, .. } => &config.definition_id,
+            Guard::Schema { config, .. } => &config.id,
+            Guard::LlmJudge { config, .. } => &config.id,
+            Guard::Dataset { config, .. } => &config.id,
         }
     }
 
     /// Returns the name of this guard
     pub fn name(&self) -> &String {
         match self {
-            GuardDefinition::Schema { config, .. } => &config.definition_name,
-            GuardDefinition::LlmJudge { config, .. } => &config.definition_id,
-            GuardDefinition::Dataset { config, .. } => &config.definition_name,
+            Guard::Schema { config, .. } => &config.name,
+            Guard::LlmJudge { config, .. } => &config.id,
+            Guard::Dataset { config, .. } => &config.name,
         }
     }
-
-    pub fn schema(&self) -> &Value {
+    pub fn parameters(&self) -> Option<&Value> {
         match self {
-            GuardDefinition::Schema { schema, .. } => schema,
-            GuardDefinition::LlmJudge { parameters, .. } => parameters,
-            GuardDefinition::Dataset { schema, .. } => schema,
+            Guard::Schema { config, .. } => config.user_defined_parameters.as_ref(),
+            Guard::LlmJudge { config, .. } => config.user_defined_parameters.as_ref(),
+            Guard::Dataset { config, .. } => config.user_defined_parameters.as_ref(),
+        }
+    }
+    pub fn set_parameters(&mut self, parameters: Value) {
+        match self {
+            Guard::Schema { config, .. } => config.user_defined_parameters = Some(parameters),
+            Guard::LlmJudge { config, .. } => config.user_defined_parameters = Some(parameters),
+            Guard::Dataset { config, .. } => config.user_defined_parameters = Some(parameters),
         }
     }
 }

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::guards::config::{load_default_guards, load_guards_from_yaml};
+use crate::guards::config::{load_guard_templates, load_guards_from_yaml};
 use crate::guards::llm_judge::LlmJudgeEvaluator;
 use langdb_core::model::types::ModelEvent;
 use langdb_core::model::ModelInstance;
@@ -8,40 +8,39 @@ use langdb_core::types::gateway::{
     ChatCompletionContent, ChatCompletionMessage, ChatCompletionRequest,
 };
 use langdb_core::types::guardrails::evaluator::Evaluator;
-use langdb_core::types::guardrails::{GuardAction, GuardDefinition, GuardStage};
+use langdb_core::types::guardrails::{Guard, GuardAction, GuardStage};
 use langdb_core::types::threads::Message;
 use langdb_core::GatewayResult;
 use serde_json::Value;
 
 use super::llm_judge::GuardModelInstanceFactory;
 
-#[test]
-fn test_load_guards_from_yaml() {
+fn default_test_guards() -> Result<HashMap<String, Guard>, serde_yaml::Error> {
     let yaml = r#"
         guards:
-          - type: llm_judge
-            config:
-              id: test-toxicity
-              name: Test Toxicity
-              description: Test toxicity guard
-              stage: output
-              action: validate
-            model: gpt-3.5-turbo
-            system_prompt: Test system prompt
-            user_prompt_template: Test user prompt
-            parameters:
-              threshold: 0.5
-              categories:
-                - hate
-                - violence
+            toxicity-1:
+                type: toxicity
+                id: toxicity-1
+                name: Toxicity Detection
+                description: Detects toxic, harmful, or inappropriate content
+                stage: output
+                action: validate
+                model: gpt-3.5-turbo
+                system_prompt: Test system prompt
+                user_prompt_template: Test user prompt
+                parameters:
+                threshold: 0.5
+                categories:
+                    - hate
+                    - violence
           
-          - type: schema
-            config:
-              id: test-schema
-              name: Test Schema
-              description: Test schema guard
-              stage: output
-              action: validate
+          schema-1:
+            type: schema
+            id: schema-1
+            name: Test Schema
+            description: Test schema guard
+            stage: output
+            action: validate
             schema:
               type: object
               properties:
@@ -49,13 +48,17 @@ fn test_load_guards_from_yaml() {
                   type: string
         "#;
 
-    let guards = load_guards_from_yaml(yaml).unwrap();
-    assert_eq!(guards.len(), 2);
+    load_guards_from_yaml(yaml)
+}
 
+#[test]
+fn test_load_guards_from_yaml() {
+    let guards = default_test_guards().unwrap();
+    assert_eq!(guards.len(), 2);
     // Check first guard is LlmJudge
-    if let GuardDefinition::LlmJudge { config, model, .. } = &guards[0].definition {
-        assert_eq!(config.definition_id, "test-toxicity");
-        assert_eq!(config.definition_name, "Test Toxicity");
+    if let Guard::LlmJudge { config, model, .. } = &guards["toxicity-1"] {
+        assert_eq!(config.id, "toxicity-1");
+        assert_eq!(config.name, "Toxicity Detection");
         assert_eq!(config.stage, GuardStage::Output);
         assert_eq!(config.action, GuardAction::Validate);
         assert_eq!(model, "gpt-3.5-turbo");
@@ -64,9 +67,9 @@ fn test_load_guards_from_yaml() {
     }
 
     // Check second guard is schema
-    if let GuardDefinition::Schema { config, .. } = &guards[1].definition {
-        assert_eq!(config.definition_id, "test-schema");
-        assert_eq!(config.definition_name, "Test Schema");
+    if let Guard::Schema { config, .. } = &guards["schema-1"] {
+        assert_eq!(config.id, "schema-1");
+        assert_eq!(config.name, "Test Schema");
         assert_eq!(config.stage, GuardStage::Output);
         assert_eq!(config.action, GuardAction::Validate);
     } else {
@@ -77,7 +80,7 @@ fn test_load_guards_from_yaml() {
 #[tokio::test]
 async fn test_guard_evaluation() {
     // Load default guards
-    let guards = load_default_guards().unwrap();
+    let guards = default_test_guards().unwrap();
 
     // Find the guards we need by their IDs
     let toxicity_guard = guards.get("toxicity-1").unwrap();

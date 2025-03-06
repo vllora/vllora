@@ -33,9 +33,9 @@ impl Evaluator for TracedGuard {
         let span = info_span!(
             target: "langdb::user_tracing::guard",
             SPAN_GUARD_EVAULATION,
-            id = guard.id,
-            label = guard.name,
-            user_input = JsonValue(&serde_json::to_value(&guard.user_input).map_err(|e| e.to_string())?).as_value(),
+            id = guard.id(),
+            label = guard.name(),
+            user_input = JsonValue(&serde_json::to_value(&guard.parameters()).map_err(|e| e.to_string())?).as_value(),
             result = field::Empty
         );
 

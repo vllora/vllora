@@ -3,6 +3,7 @@ use crate::session::Credentials;
 use langdb_core::executor::ProvidersConfig;
 use langdb_core::handler::middleware::rate_limit::RateLimiting;
 use langdb_core::types::credentials::ApiKeyCredentials;
+use langdb_core::types::guardrails::Guard;
 use minijinja::Environment;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -42,6 +43,8 @@ pub struct Config {
     pub rate_limit: Option<RateLimiting>,
     #[serde(default)]
     pub providers: Option<ProvidersConfig>,
+    #[serde(default)]
+    pub guards: Option<HashMap<String, Guard>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
