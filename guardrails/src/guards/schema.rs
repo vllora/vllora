@@ -26,7 +26,7 @@ impl Evaluator for SchemaEvaluator {
                     // Compile the schema
                     let compiled_schema = match JSONSchema::options()
                         .with_draft(Draft::Draft7)
-                        .compile(&user_defined_schema)
+                        .compile(user_defined_schema)
                     {
                         Ok(schema) => schema,
                         Err(e) => {

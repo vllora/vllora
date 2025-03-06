@@ -1,9 +1,13 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
 pub mod evaluator;
 pub mod service;
+
+pub type Model = HashMap<String, serde_json::Value>;
 
 #[derive(Debug, Error)]
 pub enum GuardError {
@@ -67,6 +71,7 @@ pub enum GuardResult {
 pub struct GuardConfig {
     pub id: String,
     pub name: String,
+    pub template_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub stage: GuardStage,
@@ -88,10 +93,7 @@ pub enum Guard {
     LlmJudge {
         #[serde(flatten)]
         config: GuardConfig,
-        model: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        system_prompt: Option<String>,
-        user_prompt_template: String,
+        model: Model,
     },
     /// Dataset-based guard that uses vector similarity to examples
     Dataset {
@@ -185,6 +187,14 @@ impl Guard {
             Guard::Schema { config, .. } => config.user_defined_parameters = Some(parameters),
             Guard::LlmJudge { config, .. } => config.user_defined_parameters = Some(parameters),
             Guard::Dataset { config, .. } => config.user_defined_parameters = Some(parameters),
+        }
+    }
+
+    pub fn termplate_id(&self) -> &String {
+        match self {
+            Guard::Schema { config, .. } => &config.template_id,
+            Guard::LlmJudge { config, .. } => &config.template_id,
+            Guard::Dataset { config, .. } => &config.template_id,
         }
     }
 }

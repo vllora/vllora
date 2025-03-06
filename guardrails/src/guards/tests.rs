@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::guards::config::{load_guard_templates, load_guards_from_yaml};
+use crate::guards::config::load_guards_from_yaml;
 use crate::guards::llm_judge::LlmJudgeEvaluator;
 use langdb_core::model::types::ModelEvent;
 use langdb_core::model::ModelInstance;
@@ -25,9 +25,10 @@ fn default_test_guards() -> Result<HashMap<String, Guard>, serde_yaml::Error> {
                 description: Detects toxic, harmful, or inappropriate content
                 stage: output
                 action: validate
-                model: gpt-3.5-turbo
-                system_prompt: Test system prompt
-                user_prompt_template: Test user prompt
+                model: 
+                    model: gpt-3.5-turbo
+                    system_prompt: Test system prompt
+                    user_prompt_template: Test user prompt
                 parameters:
                 threshold: 0.5
                 categories:
@@ -61,7 +62,10 @@ fn test_load_guards_from_yaml() {
         assert_eq!(config.name, "Toxicity Detection");
         assert_eq!(config.stage, GuardStage::Output);
         assert_eq!(config.action, GuardAction::Validate);
-        assert_eq!(model, "gpt-3.5-turbo");
+        assert_eq!(
+            model.get("model").unwrap().as_str().unwrap(),
+            "gpt-3.5-turbo"
+        );
     } else {
         panic!("First guard should be LlmJudge");
     }

@@ -29,7 +29,6 @@ use crate::GatewayApiError;
 use super::can_execute_llm_for_request;
 
 use crate::executor::chat_completion::routed_executor::RoutedExecutor;
-use crate::types::guardrails::Guard;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn create_chat_completion(
@@ -40,7 +39,6 @@ pub async fn create_chat_completion(
     provided_models: web::Data<AvailableModels>,
     cost_calculator: web::Data<Box<dyn CostCalculator>>,
     evaluator_service: web::Data<Box<dyn GuardrailsEvaluator>>,
-    guards: web::Data<HashMap<String, Guard>>,
 ) -> Result<HttpResponse, GatewayApiError> {
     can_execute_llm_for_request(&req).await?;
 
@@ -73,7 +71,6 @@ pub async fn create_chat_completion(
         cost_calculator.into_inner(),
         provided_models.get_ref().clone(),
         &req,
-        Some(guards.get_ref().clone()),
         guardrails_evaluator_service,
     )?;
 

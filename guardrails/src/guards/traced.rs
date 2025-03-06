@@ -35,7 +35,7 @@ impl Evaluator for TracedGuard {
             SPAN_GUARD_EVAULATION,
             id = guard.id(),
             label = guard.name(),
-            user_input = JsonValue(&serde_json::to_value(&guard.parameters()).map_err(|e| e.to_string())?).as_value(),
+            user_input = JsonValue(&serde_json::to_value(guard.parameters()).map_err(|e| e.to_string())?).as_value(),
             result = field::Empty
         );
 

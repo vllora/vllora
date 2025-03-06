@@ -38,14 +38,14 @@ impl Evaluator for LlmJudgeEvaluator {
         request: &ChatCompletionRequest,
         guard: &Guard,
     ) -> Result<GuardResult, String> {
-        if let Guard::LlmJudge {
-            model,
-            system_prompt,
-            ..
-        } = &guard
-        {
+        if let Guard::LlmJudge { model, .. } = &guard {
             // Create a model instance
-            let model_instance = self.model_factory.init(model).await;
+            let name = model
+                .get("model")
+                .expect("model not found in guard")
+                .as_str()
+                .expect("model not found in guard");
+            let model_instance = self.model_factory.init(name).await;
 
             let input_vars = match guard.parameters() {
                 Some(metadata) => match serde_json::from_value(metadata.clone()) {
@@ -56,20 +56,19 @@ impl Evaluator for LlmJudgeEvaluator {
                 },
                 None => HashMap::new(),
             };
-
             // Create a channel for model events
             let (tx, _rx) = mpsc::channel(10);
 
-            let mut messages = vec![];
-            if let Some(system_prompt) = system_prompt {
-                messages.push(ChatCompletionMessage {
-                    role: "system".to_string(),
-                    content: Some(ChatCompletionContent::Text(system_prompt.clone())),
-                    ..Default::default()
-                });
-            }
-            if let Some(msg) = request.messages.last() {
-                messages.push(msg.clone());
+            let mut messages = serde_json::from_value::<Vec<ChatCompletionMessage>>(
+                model
+                    .get("messages")
+                    .unwrap_or(&serde_json::Value::Object(serde_json::Map::new()))
+                    .clone(),
+            )
+            .unwrap_or_default();
+
+            if let Some(message) = request.messages.last() {
+                messages.push(message.clone());
             }
 
             let messages = messages

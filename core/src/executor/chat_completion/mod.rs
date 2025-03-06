@@ -13,7 +13,7 @@ use crate::types::gateway::{
     ChatCompletionRequestWithTools, CompletionModelUsage, Extra, GuardOrName, GuardWithParameters,
 };
 use crate::types::guardrails::service::GuardrailsEvaluator;
-use crate::types::guardrails::{Guard, GuardError, GuardStage};
+use crate::types::guardrails::{GuardError, GuardStage};
 use either::Either::{self, Left, Right};
 use futures::Stream;
 use serde::de::DeserializeOwned;
@@ -157,40 +157,40 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
 
     let is_stream = request.stream.unwrap_or(false);
     if is_stream {
-        if let Some(Extra { guardrails, .. }) = &request_with_tools.extra {
-            if !guardrails.is_empty() {
-                for guardrail in guardrails {
-                    let guard_stage = match guardrail {
-                        GuardOrName::Guard(guard) => guard.stage(),
-                        GuardOrName::GuardWithParameters(GuardWithParameters { id, .. }) => {
-                            executor_context
-                                .guards
-                                .as_ref()
-                                .and_then(|guards| guards.get(id))
-                                .ok_or_else(|| {
-                                    GatewayApiError::GuardError(GuardError::GuardNotFound(
-                                        id.clone(),
-                                    ))
-                                })?
-                                .stage()
-                        }
-                    };
+        // if let Some(Extra { guards, .. }) = &request_with_tools.extra {
+        //     if !guardrails.is_empty() {
+        //         for guardrail in guardrails {
+        //             let guard_stage = match guardrail {
+        //                 GuardOrName::Guard(guard) => guard.stage(),
+        //                 GuardOrName::GuardWithParameters(GuardWithParameters { id, .. }) => {
+        //                     executor_context
+        //                         .guards
+        //                         .as_ref()
+        //                         .and_then(|guards| guards.get(id))
+        //                         .ok_or_else(|| {
+        //                             GatewayApiError::GuardError(GuardError::GuardNotFound(
+        //                                 id.clone(),
+        //                             ))
+        //                         })?
+        //                         .stage()
+        //                 }
+        //             };
 
-                    if guard_stage == &GuardStage::Output {
-                        return Err(GatewayApiError::GuardError(
-                            GuardError::OutputGuardrailsNotSupportedInStreaming,
-                        ));
-                    }
-                }
-            }
-        }
+        //             if guard_stage == &GuardStage::Output {
+        //                 return Err(GatewayApiError::GuardError(
+        //                     GuardError::OutputGuardrailsNotSupportedInStreaming,
+        //                 ));
+        //             }
+        //         }
+        //     }
+        // }
     }
 
     apply_input_guardrails(
         request_with_tools,
-        executor_context.guards.as_ref(),
         executor_context.evaluator_service.as_ref().as_ref(),
         executor_context,
+        GuardStage::Input,
     )
     .instrument(span.clone())
     .await?;
@@ -230,48 +230,44 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
 
 pub async fn apply_input_guardrails<T: Serialize + DeserializeOwned + Debug + Clone>(
     request: &ChatCompletionRequestWithTools<T>,
-    guards: Option<&HashMap<String, Guard>>,
     evaluator: &dyn GuardrailsEvaluator,
     executor_context: &ExecutorContext,
+    guard_action: GuardStage,
 ) -> Result<(), GatewayApiError> {
-    let Some(Extra { guardrails, .. }) = &request.extra else {
+    let Some(Extra { guards, .. }) = &request.extra else {
         return Ok(());
     };
 
-    for guardrail in guardrails {
-        let guard = match guardrail {
-            GuardOrName::Guard(guard) => guard.clone(),
+    for guard in guards {
+        let (guard_id, parameters) = match guard {
+            GuardOrName::GuardId(guard_id) => (guard_id, None),
             GuardOrName::GuardWithParameters(GuardWithParameters { id, parameters }) => {
-                let mut base_guard = guards
-                    .and_then(|guards| guards.get(id))
-                    .ok_or_else(|| {
-                        GatewayApiError::GuardError(GuardError::GuardNotFound(id.clone()))
-                    })?
-                    .clone();
-
-                base_guard.set_parameters(parameters.clone());
-                Box::new(base_guard.clone())
+                (id, Some(parameters))
             }
         };
 
-        if guard.stage() == &GuardStage::Input {
-            let result = evaluator
-                .evaluate(&request.request, &guard, executor_context)
-                .await
-                .map_err(|e| GatewayApiError::GuardError(GuardError::GuardEvaluationError(e)))?;
+        let result = evaluator
+            .evaluate(
+                &request.request,
+                guard_id,
+                executor_context,
+                parameters,
+                &guard_action,
+            )
+            .await
+            .map_err(|e| GatewayApiError::GuardError(GuardError::GuardEvaluationError(e)))?;
 
-            match result {
-                GuardResult::Json { passed, .. }
-                | GuardResult::Boolean { passed, .. }
-                | GuardResult::Text { passed, .. }
-                    if !passed =>
-                {
-                    return Err(GatewayApiError::GuardError(
-                        GuardError::RequestStoppedAfterGuardEvaluation(guard.name().clone()),
-                    ));
-                }
-                _ => {}
+        match result {
+            GuardResult::Json { passed, .. }
+            | GuardResult::Boolean { passed, .. }
+            | GuardResult::Text { passed, .. }
+                if !passed =>
+            {
+                return Err(GatewayApiError::GuardError(
+                    GuardError::RequestStoppedAfterGuardEvaluation(guard_id.clone()),
+                ));
             }
+            _ => {}
         }
     }
 

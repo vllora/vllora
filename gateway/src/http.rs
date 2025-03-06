@@ -210,7 +210,8 @@ impl ApiServer {
             service = service.app_data(providers.clone());
         }
 
-        let guardrails_service = Box::new(GuardrailsService::new()) as Box<dyn GuardrailsEvaluator>;
+        let guardrails_service = Box::new(GuardrailsService::new(guards.unwrap_or_default()))
+            as Box<dyn GuardrailsEvaluator>;
         app.wrap(TraceLogger)
             .service(
                 service
@@ -222,7 +223,6 @@ impl ApiServer {
                         Box::new(cost_calculator) as Box<dyn CostCalculator>
                     ))
                     .app_data(rate_limit)
-                    .app_data(Data::new(guards))
                     .app_data(Data::new(guardrails_service))
                     .wrap(RateLimitMiddleware),
             )

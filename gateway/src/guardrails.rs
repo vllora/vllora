@@ -12,12 +12,16 @@ use langdb_core::types::guardrails::evaluator::Evaluator;
 use langdb_core::types::guardrails::service::GuardrailsEvaluator;
 use langdb_core::types::guardrails::Guard;
 use langdb_core::types::guardrails::GuardResult;
+use langdb_core::types::guardrails::GuardStage;
+use langdb_core::types::guardrails::GuardTemplate;
+use langdb_guardrails::guards::config::load_guard_templates;
 use langdb_guardrails::guards::llm_judge::GuardModelInstanceFactory;
 use langdb_guardrails::guards::traced::TracedGuard;
 use langdb_guardrails::guards::DatasetEvaluator;
 use langdb_guardrails::guards::FileDatasetLoader;
 use langdb_guardrails::guards::LlmJudgeEvaluator;
 use langdb_guardrails::guards::SchemaEvaluator;
+use serde_json::{Map, Value};
 use tracing::Span;
 
 pub struct GuardModelFactory {
@@ -56,15 +60,19 @@ impl GuardModelInstanceFactory for GuardModelFactory {
     }
 }
 
-pub struct GuardrailsService;
+pub struct GuardrailsService {
+    guards: HashMap<String, Guard>,
+    templates: HashMap<String, GuardTemplate>,
+}
 
 // Implement Send + Sync since all fields are Send + Sync
 unsafe impl Send for GuardrailsService {}
 unsafe impl Sync for GuardrailsService {}
 
 impl GuardrailsService {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(guards: HashMap<String, Guard>) -> Self {
+        let templates = load_guard_templates().unwrap_or_default();
+        Self { guards, templates }
     }
 
     fn get_evaluator(
@@ -95,10 +103,73 @@ impl GuardrailsEvaluator for GuardrailsService {
     async fn evaluate(
         &self,
         request: &ChatCompletionRequest,
-        guard: &Guard,
+        guard_id: &str,
         executor_context: &ExecutorContext,
+        parameters: Option<&serde_json::Value>,
+        stage: &GuardStage,
     ) -> Result<GuardResult, String> {
-        let evaluator = self.get_evaluator(guard, executor_context)?;
-        evaluator.evaluate(request, guard).await
+        let mut guard = self
+            .guards
+            .get(guard_id)
+            .ok_or("Guard not found".to_string())
+            .cloned()?;
+
+        if stage != guard.stage() {
+            return Ok(GuardResult::Boolean {
+                passed: true,
+                confidence: None,
+            });
+        }
+
+        let template = self
+            .templates
+            .get(guard.termplate_id())
+            .ok_or("Guard template not found".to_string())?;
+
+        // Extract default values from template parameters
+        let default_params = template
+            .parameters
+            .get("properties")
+            .and_then(|props| props.as_object())
+            .map(|props| {
+                let mut defaults = Map::new();
+                for (key, value) in props {
+                    if let Some(default) = value.get("default") {
+                        defaults.insert(key.clone(), default.clone());
+                    }
+                }
+                Value::Object(defaults)
+            })
+            .unwrap_or(Value::Object(Map::new()));
+
+        // Start with user defined parameters from guard config
+        let mut final_params = guard
+            .parameters()
+            .cloned()
+            .and_then(|v| v.as_object().cloned())
+            .unwrap_or_default();
+
+        // Merge runtime parameters if provided
+        if let Some(runtime_params) = parameters {
+            if let Some(runtime_obj) = runtime_params.as_object() {
+                for (key, value) in runtime_obj {
+                    final_params.insert(key.clone(), value.clone());
+                }
+            }
+        }
+
+        // Finally merge with defaults for any missing values
+        let empty_map = Map::new();
+        let default_obj = default_params.as_object().unwrap_or(&empty_map);
+        for (key, value) in default_obj {
+            if !final_params.contains_key(key) {
+                final_params.insert(key.clone(), value.clone());
+            }
+        }
+
+        guard.set_parameters(Value::Object(final_params));
+
+        let evaluator = self.get_evaluator(&guard, executor_context)?;
+        evaluator.evaluate(request, &guard).await
     }
 }

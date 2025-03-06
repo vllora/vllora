@@ -2,7 +2,7 @@ use crate::types::guardrails::service::GuardrailsEvaluator;
 use crate::{
     error::GatewayError,
     handler::{extract_tags, AvailableModels, CallbackHandlerFn},
-    types::{credentials::Credentials, gateway::CostCalculator, guardrails::Guard},
+    types::{credentials::Credentials, gateway::CostCalculator},
 };
 use actix_web::{HttpMessage, HttpRequest};
 use std::{collections::HashMap, sync::Arc};
@@ -18,7 +18,6 @@ pub struct ExecutorContext {
     pub headers: HashMap<String, String>,
     pub key_credentials: Option<Credentials>,
     pub providers_config: Option<ProvidersConfig>,
-    pub guards: Option<HashMap<String, Guard>>,
     pub evaluator_service: Arc<Box<dyn GuardrailsEvaluator>>,
 }
 
@@ -32,7 +31,6 @@ impl ExecutorContext {
         cost_calculator: Arc<Box<dyn CostCalculator>>,
         provided_models: AvailableModels,
         req: &HttpRequest,
-        guards: Option<HashMap<String, Guard>>,
         evaluator_service: Arc<Box<dyn GuardrailsEvaluator>>,
     ) -> Result<Self, GatewayError> {
         let tags = extract_tags(req)?;
@@ -53,7 +51,6 @@ impl ExecutorContext {
             headers,
             key_credentials,
             providers_config,
-            guards,
             evaluator_service,
         })
     }

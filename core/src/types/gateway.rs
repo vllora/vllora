@@ -6,7 +6,6 @@ use std::fmt::Display;
 use thiserror::Error;
 
 use super::engine::ModelTool;
-use super::guardrails::Guard;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ChatCompletionRequest {
@@ -70,13 +69,13 @@ pub struct Extra {
     pub user: Option<RequestUser>,
 
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub guardrails: Vec<GuardOrName>,
+    pub guards: Vec<GuardOrName>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum GuardOrName {
-    Guard(Box<Guard>),
+    GuardId(String),
     GuardWithParameters(GuardWithParameters),
 }
 
