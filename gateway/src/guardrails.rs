@@ -11,6 +11,7 @@ use langdb_core::types::gateway::DynamicRouter;
 use langdb_core::types::guardrails::evaluator::Evaluator;
 use langdb_core::types::guardrails::service::GuardrailsEvaluator;
 use langdb_core::types::guardrails::Guard;
+use langdb_core::types::guardrails::GuardAction;
 use langdb_core::types::guardrails::GuardResult;
 use langdb_core::types::guardrails::GuardStage;
 use langdb_core::types::guardrails::GuardTemplate;
@@ -170,6 +171,14 @@ impl GuardrailsEvaluator for GuardrailsService {
         guard.set_parameters(Value::Object(final_params));
 
         let evaluator = self.get_evaluator(&guard, executor_context)?;
-        evaluator.evaluate(request, &guard).await
+        let result = evaluator.evaluate(request, &guard).await?;
+
+        match guard.action() {
+            GuardAction::Validate => Ok(result),
+            GuardAction::Observe => Ok(GuardResult::Boolean {
+                passed: true,
+                confidence: None,
+            }),
+        }
     }
 }

@@ -13,6 +13,6 @@ pub trait GuardrailsEvaluator: Send + Sync {
         guard_id: &str,
         executor_context: &ExecutorContext,
         parameters: Option<&serde_json::Value>,
-        evaluation_stage: &GuardStage,
+        guard_stage: &GuardStage,
     ) -> Result<GuardResult, String>;
 }

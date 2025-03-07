@@ -186,7 +186,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         // }
     }
 
-    apply_input_guardrails(
+    apply_guardrails(
         request_with_tools,
         executor_context.evaluator_service.as_ref().as_ref(),
         executor_context,
@@ -228,11 +228,11 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
     }
 }
 
-pub async fn apply_input_guardrails<T: Serialize + DeserializeOwned + Debug + Clone>(
+pub async fn apply_guardrails<T: Serialize + DeserializeOwned + Debug + Clone>(
     request: &ChatCompletionRequestWithTools<T>,
     evaluator: &dyn GuardrailsEvaluator,
     executor_context: &ExecutorContext,
-    guard_action: GuardStage,
+    guard_stage: GuardStage,
 ) -> Result<(), GatewayApiError> {
     let Some(Extra { guards, .. }) = &request.extra else {
         return Ok(());
@@ -252,7 +252,7 @@ pub async fn apply_input_guardrails<T: Serialize + DeserializeOwned + Debug + Cl
                 guard_id,
                 executor_context,
                 parameters,
-                &guard_action,
+                &guard_stage,
             )
             .await
             .map_err(|e| GatewayApiError::GuardError(GuardError::GuardEvaluationError(e)))?;
