@@ -55,7 +55,7 @@ pub enum AuthorizationError {
 
 #[derive(Error, Debug)]
 pub enum ToolError {
-    #[error(" Credentials for '{0}' are invalid or missing")]
+    #[error("Credentials for '{0}' are invalid or missing")]
     CredentialsError(String),
 }
 
@@ -70,11 +70,17 @@ pub enum AnthropicError {
 
 #[derive(Error, Debug)]
 pub enum BedrockError {
-    #[error(" {0:?}")]
+    #[error("Custom Error: {0}")]
     CustomError(String),
 
     #[error("Validation Error: {0}")]
     ValidationError(String),
+
+    #[error("Timeout occurred: {0}")]
+    TimeoutError(String), // Adding a more specific error for timeout issues
+
+    #[error("Invalid credentials: {0}")]
+    AuthenticationError(String), // Adding a specific error for authentication failures
 
     #[error("{}", DisplayErrorContext(.0))]
     SmithyError(
@@ -93,6 +99,7 @@ pub enum BedrockError {
             aws_smithy_runtime_api::http::Response,
         >,
     ),
+    
     #[error("{}", DisplayErrorContext(.0))]
     ResponseError(
         #[from]
