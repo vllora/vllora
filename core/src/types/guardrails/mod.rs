@@ -171,7 +171,7 @@ impl Guard {
     pub fn name(&self) -> &String {
         match self {
             Guard::Schema { config, .. } => &config.name,
-            Guard::LlmJudge { config, .. } => &config.id,
+            Guard::LlmJudge { config, .. } => &config.name,
             Guard::Dataset { config, .. } => &config.name,
         }
     }
