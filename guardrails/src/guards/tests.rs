@@ -99,8 +99,8 @@ async fn test_guard_evaluation() {
 
     let evaluator = LlmJudgeEvaluator::new(Box::new(MockGuardModelInstanceFactory {}));
 
-    let toxic_result = evaluator.evaluate(&toxic_text.0, toxicity_guard);
-    let safe_result = evaluator.evaluate(&safe_text.0, toxicity_guard);
+    let toxic_result = evaluator.evaluate(&toxic_text.0.messages, toxicity_guard);
+    let safe_result = evaluator.evaluate(&safe_text.0.messages, toxicity_guard);
 
     if let langdb_core::types::guardrails::GuardResult::Boolean { passed, .. } =
         toxic_result.await.unwrap()
@@ -118,8 +118,9 @@ async fn test_guard_evaluation() {
     let competitor_text: TestText = "You should try Competitor A's product".into();
     let non_competitor_text: TestText = "Our product is the best".into();
 
-    let competitor_result = evaluator.evaluate(&competitor_text.0, competitor_guard);
-    let non_competitor_result = evaluator.evaluate(&non_competitor_text.0, competitor_guard);
+    let competitor_result = evaluator.evaluate(&competitor_text.0.messages, competitor_guard);
+    let non_competitor_result =
+        evaluator.evaluate(&non_competitor_text.0.messages, competitor_guard);
 
     if let langdb_core::types::guardrails::GuardResult::Text { passed, .. } =
         competitor_result.await.unwrap()
@@ -137,8 +138,8 @@ async fn test_guard_evaluation() {
     let pii_text: TestText = "Contact me at test@example.com or 555-123-4567".into();
     let non_pii_text: TestText = "Hello, how are you today?".into();
 
-    let pii_result = evaluator.evaluate(&pii_text.0, pii_guard);
-    let non_pii_result = evaluator.evaluate(&non_pii_text.0, pii_guard);
+    let pii_result = evaluator.evaluate(&pii_text.0.messages, pii_guard);
+    let non_pii_result = evaluator.evaluate(&non_pii_text.0.messages, pii_guard);
 
     if let langdb_core::types::guardrails::GuardResult::Text { passed, .. } =
         pii_result.await.unwrap()

@@ -1,4 +1,4 @@
-use crate::types::gateway::ChatCompletionRequest;
+use crate::types::gateway::ChatCompletionMessage;
 use crate::types::guardrails::Guard;
 use crate::types::guardrails::GuardResult;
 
@@ -7,13 +7,12 @@ use crate::types::guardrails::GuardResult;
 pub trait Evaluator: Send + Sync {
     async fn evaluate(
         &self,
-        request: &ChatCompletionRequest,
+        messages: &[ChatCompletionMessage],
         guard: &Guard,
     ) -> Result<GuardResult, String>;
 
-    fn request_to_text(&self, request: &ChatCompletionRequest) -> Result<String, String> {
-        let text = request
-            .messages
+    fn messages_to_text(&self, messages: &[ChatCompletionMessage]) -> Result<String, String> {
+        let text = messages
             .last()
             .ok_or("No message in request")?
             .content

@@ -1,5 +1,5 @@
 use jsonschema::{Draft, JSONSchema};
-use langdb_core::types::gateway::ChatCompletionRequest;
+use langdb_core::types::gateway::ChatCompletionMessage;
 use langdb_core::types::guardrails::{evaluator::Evaluator, Guard, GuardResult};
 use serde_json::Value;
 
@@ -9,10 +9,10 @@ pub struct SchemaEvaluator;
 impl Evaluator for SchemaEvaluator {
     async fn evaluate(
         &self,
-        request: &ChatCompletionRequest,
+        messages: &[ChatCompletionMessage],
         guard: &Guard,
     ) -> Result<GuardResult, String> {
-        let text = self.request_to_text(request)?;
+        let text = self.messages_to_text(messages)?;
         if let Guard::Schema {
             user_defined_schema,
             ..

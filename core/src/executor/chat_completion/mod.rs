@@ -10,7 +10,8 @@ use crate::model::types::ModelEvent;
 use crate::model::ModelInstance;
 use crate::models::ModelMetadata;
 use crate::types::gateway::{
-    ChatCompletionRequestWithTools, CompletionModelUsage, Extra, GuardOrName, GuardWithParameters,
+    ChatCompletionMessage, ChatCompletionRequestWithTools, CompletionModelUsage, Extra,
+    GuardOrName, GuardWithParameters,
 };
 use crate::types::guardrails::service::GuardrailsEvaluator;
 use crate::types::guardrails::{GuardError, GuardStage};
@@ -187,7 +188,8 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
     }
 
     apply_guardrails(
-        request_with_tools,
+        &request_with_tools.request.messages,
+        request_with_tools.extra.as_ref(),
         executor_context.evaluator_service.as_ref().as_ref(),
         executor_context,
         GuardStage::Input,
@@ -220,21 +222,31 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         .instrument(span)
         .await;
 
-        if let Ok(_rr) = &result {
-            // Placeholder for output guardrails
+        if let Ok(ChatCompletionResponse { choices, .. }) = &result {
+            for choice in choices {
+                apply_guardrails(
+                    &[choice.message.clone()],
+                    request_with_tools.extra.as_ref(),
+                    executor_context.evaluator_service.as_ref().as_ref(),
+                    executor_context,
+                    GuardStage::Output,
+                )
+                .await?;
+            }
         }
 
         Ok(Right(result))
     }
 }
 
-pub async fn apply_guardrails<T: Serialize + DeserializeOwned + Debug + Clone>(
-    request: &ChatCompletionRequestWithTools<T>,
+pub async fn apply_guardrails(
+    messages: &[ChatCompletionMessage],
+    extra: Option<&Extra>,
     evaluator: &dyn GuardrailsEvaluator,
     executor_context: &ExecutorContext,
     guard_stage: GuardStage,
 ) -> Result<(), GatewayApiError> {
-    let Some(Extra { guards, .. }) = &request.extra else {
+    let Some(Extra { guards, .. }) = extra else {
         return Ok(());
     };
 
@@ -248,7 +260,7 @@ pub async fn apply_guardrails<T: Serialize + DeserializeOwned + Debug + Clone>(
 
         let result = evaluator
             .evaluate(
-                &request.request,
+                messages,
                 guard_id,
                 executor_context,
                 parameters,

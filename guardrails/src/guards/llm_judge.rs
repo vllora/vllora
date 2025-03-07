@@ -5,9 +5,7 @@ use langdb_core::{
     llm_gateway::message_mapper::MessageMapper,
     model::ModelInstance,
     types::{
-        gateway::{
-            ChatCompletionContent, ChatCompletionMessage, ChatCompletionRequest, ContentType,
-        },
+        gateway::{ChatCompletionContent, ChatCompletionMessage, ContentType},
         threads::Message,
     },
 };
@@ -35,17 +33,17 @@ impl LlmJudgeEvaluator {
 impl Evaluator for LlmJudgeEvaluator {
     async fn evaluate(
         &self,
-        request: &ChatCompletionRequest,
+        messages: &[ChatCompletionMessage],
         guard: &Guard,
     ) -> Result<GuardResult, String> {
         if let Guard::LlmJudge { model, .. } = &guard {
             // Create a model instance
-            let name = model
+            let model_name = model
                 .get("model")
                 .expect("model not found in guard")
                 .as_str()
                 .expect("model not found in guard");
-            let model_instance = self.model_factory.init(name).await;
+            let model_instance = self.model_factory.init(model_name).await;
 
             let input_vars = match guard.parameters() {
                 Some(metadata) => match serde_json::from_value(metadata.clone()) {
@@ -59,7 +57,7 @@ impl Evaluator for LlmJudgeEvaluator {
             // Create a channel for model events
             let (tx, _rx) = mpsc::channel(10);
 
-            let mut messages = serde_json::from_value::<Vec<ChatCompletionMessage>>(
+            let mut guard_messages = serde_json::from_value::<Vec<ChatCompletionMessage>>(
                 model
                     .get("messages")
                     .unwrap_or(&serde_json::Value::Object(serde_json::Map::new()))
@@ -67,17 +65,15 @@ impl Evaluator for LlmJudgeEvaluator {
             )
             .unwrap_or_default();
 
-            if let Some(message) = request.messages.last() {
-                messages.push(message.clone());
+            if let Some(message) = messages.last() {
+                guard_messages.push(message.clone());
             }
 
             let messages = messages
                 .iter()
                 .map(|message| {
                     MessageMapper::map_completions_message_to_langdb_message(
-                        message,
-                        &request.model,
-                        "judge",
+                        message, model_name, "judge",
                     )
                 })
                 .collect::<Result<Vec<Message>, GatewayError>>()

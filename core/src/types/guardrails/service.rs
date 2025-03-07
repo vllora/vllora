@@ -1,5 +1,5 @@
 use crate::executor::context::ExecutorContext;
-use crate::types::gateway::ChatCompletionRequest;
+use crate::types::gateway::ChatCompletionMessage;
 use crate::types::guardrails::GuardResult;
 
 use super::GuardStage;
@@ -9,7 +9,7 @@ use super::GuardStage;
 pub trait GuardrailsEvaluator: Send + Sync {
     async fn evaluate(
         &self,
-        request: &ChatCompletionRequest,
+        messages: &[ChatCompletionMessage],
         guard_id: &str,
         executor_context: &ExecutorContext,
         parameters: Option<&serde_json::Value>,

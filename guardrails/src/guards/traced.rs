@@ -1,6 +1,6 @@
 use langdb_core::events::JsonValue;
 use langdb_core::events::SPAN_GUARD_EVAULATION;
-use langdb_core::types::gateway::ChatCompletionRequest;
+use langdb_core::types::gateway::ChatCompletionMessage;
 use langdb_core::types::guardrails::evaluator::Evaluator;
 use langdb_core::types::guardrails::Guard;
 use langdb_core::types::guardrails::GuardResult;
@@ -27,7 +27,7 @@ impl TracedGuard {
 impl Evaluator for TracedGuard {
     async fn evaluate(
         &self,
-        request: &ChatCompletionRequest,
+        messages: &[ChatCompletionMessage],
         guard: &Guard,
     ) -> Result<GuardResult, String> {
         let span = info_span!(
@@ -41,7 +41,7 @@ impl Evaluator for TracedGuard {
 
         let result = self
             .inner
-            .evaluate(request, guard)
+            .evaluate(messages, guard)
             .instrument(span.clone())
             .await;
         let result_value = serde_json::to_value(result.clone()).map_err(|e| e.to_string())?;

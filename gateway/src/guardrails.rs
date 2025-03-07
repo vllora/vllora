@@ -5,6 +5,7 @@ use langdb_core::executor::context::ExecutorContext;
 use langdb_core::model::ModelInstance;
 use langdb_core::routing::RoutingStrategy;
 use langdb_core::types::engine::ModelTools;
+use langdb_core::types::gateway::ChatCompletionMessage;
 use langdb_core::types::gateway::ChatCompletionRequest;
 use langdb_core::types::gateway::ChatCompletionRequestWithTools;
 use langdb_core::types::gateway::DynamicRouter;
@@ -103,7 +104,7 @@ impl GuardrailsService {
 impl GuardrailsEvaluator for GuardrailsService {
     async fn evaluate(
         &self,
-        request: &ChatCompletionRequest,
+        messages: &[ChatCompletionMessage],
         guard_id: &str,
         executor_context: &ExecutorContext,
         parameters: Option<&serde_json::Value>,
@@ -171,7 +172,7 @@ impl GuardrailsEvaluator for GuardrailsService {
         guard.set_parameters(Value::Object(final_params));
 
         let evaluator = self.get_evaluator(&guard, executor_context)?;
-        let result = evaluator.evaluate(request, &guard).await?;
+        let result = evaluator.evaluate(messages, &guard).await?;
 
         match guard.action() {
             GuardAction::Validate => Ok(result),

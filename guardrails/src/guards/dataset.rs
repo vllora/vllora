@@ -1,4 +1,4 @@
-use langdb_core::types::gateway::ChatCompletionRequest;
+use langdb_core::types::gateway::ChatCompletionMessage;
 
 use langdb_core::types::guardrails::{
     evaluator::Evaluator, DatasetLoader, Guard, GuardExample, GuardResult,
@@ -12,14 +12,14 @@ pub struct DatasetEvaluator {
 impl Evaluator for DatasetEvaluator {
     async fn evaluate(
         &self,
-        request: &ChatCompletionRequest,
+        messages: &[ChatCompletionMessage],
         guard: &Guard,
     ) -> Result<GuardResult, String> {
         if let Guard::Dataset {
             threshold, dataset, ..
         } = &guard
         {
-            let text = self.request_to_text(request)?;
+            let text = self.messages_to_text(messages)?;
             match dataset {
                 langdb_core::types::guardrails::DatasetSource::Examples(examples) => {
                     // Simple similarity check (in a real implementation, this would use embeddings)
