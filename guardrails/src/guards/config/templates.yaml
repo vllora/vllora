@@ -193,9 +193,10 @@ templates:
       properties:
         patterns:
           type: array
-          default:
-            - pattern: "^[A-Za-z0-9\\s.,!?]+$"
-              description: "Alphanumeric characters with basic punctuation"
+          items: 
+            type: string
+          default: 
+            - "^[A-Za-z0-9\\s.,!?]+$"
           description: List of regex patterns to validate against
         match_type:
           type: string
