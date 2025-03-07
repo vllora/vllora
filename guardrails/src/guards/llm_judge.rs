@@ -69,7 +69,7 @@ impl Evaluator for LlmJudgeEvaluator {
                 guard_messages.push(message.clone());
             }
 
-            let messages = messages
+            let messages = guard_messages
                 .iter()
                 .map(|message| {
                     MessageMapper::map_completions_message_to_langdb_message(
