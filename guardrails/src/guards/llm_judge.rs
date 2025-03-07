@@ -69,7 +69,7 @@ impl Evaluator for LlmJudgeEvaluator {
                 guard_messages.push(message.clone());
             }
 
-            let messages = guard_messages
+            let guard_messages = guard_messages
                 .iter()
                 .map(|message| {
                     MessageMapper::map_completions_message_to_langdb_message(
@@ -81,7 +81,7 @@ impl Evaluator for LlmJudgeEvaluator {
 
             // Call the model
             let result = model_instance
-                .invoke(input_vars, tx, messages, HashMap::new())
+                .invoke(input_vars, tx, guard_messages, HashMap::new())
                 .await;
 
             match result {
