@@ -1,3 +1,4 @@
+use langdb_core::types::guardrails::GuardModel;
 use langdb_core::types::guardrails::{evaluator::Evaluator, Guard, GuardResult};
 
 use langdb_core::{
@@ -13,6 +14,8 @@ use serde_json::Value;
 use std::collections::HashMap;
 use tokio::sync::mpsc;
 
+use super::config::load_prompts_from_yaml;
+
 #[async_trait::async_trait]
 pub trait GuardModelInstanceFactory: Send + Sync {
     async fn init(&self, name: &str) -> Box<dyn ModelInstance>;
@@ -21,11 +24,17 @@ pub trait GuardModelInstanceFactory: Send + Sync {
 pub struct LlmJudgeEvaluator {
     // We'll use this to create model instances for evaluation
     pub model_factory: Box<dyn GuardModelInstanceFactory + Send + Sync>,
+    pub models: HashMap<String, GuardModel>,
 }
 
 impl LlmJudgeEvaluator {
     pub fn new(model_factory: Box<dyn GuardModelInstanceFactory + Send + Sync>) -> Self {
-        Self { model_factory }
+        let models = include_str!("./config/models.yaml");
+        let models = load_prompts_from_yaml(models).unwrap();
+        Self {
+            model_factory,
+            models,
+        }
     }
 }
 
@@ -36,16 +45,25 @@ impl Evaluator for LlmJudgeEvaluator {
         messages: &[ChatCompletionMessage],
         guard: &Guard,
     ) -> Result<GuardResult, String> {
-        if let Guard::LlmJudge { model, .. } = &guard {
+        if let Guard::LlmJudge {
+            model: guard_model,
+            config,
+            ..
+        } = &guard
+        {
             // Create a model instance
-            let model_name = model
-                .get("model")
-                .expect("model not found in guard")
-                .as_str()
-                .expect("model not found in guard");
-            let model_instance = self.model_factory.init(model_name).await;
 
-            let input_vars = match guard.parameters() {
+            let model = match (guard_model, self.models.get(config.template_id.as_str())) {
+                (Some(guard_model), _) => guard_model,
+                (None, Some(model)) => model,
+                _ => {
+                    return Err(format!("Model not found in guard: {}", config.template_id));
+                }
+            };
+
+            let model_instance = self.model_factory.init(&model.model).await;
+
+            let input_vars: HashMap<String, Value> = match guard.parameters() {
                 Some(metadata) => match serde_json::from_value(metadata.clone()) {
                     Ok(input_vars) => input_vars,
                     Err(e) => {
@@ -57,23 +75,39 @@ impl Evaluator for LlmJudgeEvaluator {
             // Create a channel for model events
             let (tx, _rx) = mpsc::channel(10);
 
-            let mut guard_messages = serde_json::from_value::<Vec<ChatCompletionMessage>>(
-                model
-                    .get("messages")
-                    .unwrap_or(&serde_json::Value::Object(serde_json::Map::new()))
-                    .clone(),
-            )
-            .unwrap_or_default();
-
-            if let Some(message) = messages.last() {
-                guard_messages.push(message.clone());
+            let mut guard_messages = vec![];
+            if let Some(system_prompt) = &model.system_prompt {
+                guard_messages.push(ChatCompletionMessage {
+                    role: "system".to_string(),
+                    content: Some(ChatCompletionContent::Text(system_prompt.clone())),
+                    ..Default::default()
+                });
             }
+
+            let mut user_prompt_template = model.user_prompt_template.clone();
+
+            for var in input_vars.keys() {
+                user_prompt_template = user_prompt_template
+                    .replace(&format!("{{{}}}", var), &input_vars[var].to_string());
+            }
+            if let Some(message) = messages.last() {
+                let text = extract_text_content(message)?;
+                user_prompt_template = user_prompt_template.replace("{{text}}", &text);
+            }
+
+            guard_messages.push(ChatCompletionMessage {
+                role: "user".to_string(),
+                content: Some(ChatCompletionContent::Text(user_prompt_template)),
+                ..Default::default()
+            });
 
             let guard_messages = guard_messages
                 .iter()
                 .map(|message| {
                     MessageMapper::map_completions_message_to_langdb_message(
-                        message, model_name, "judge",
+                        message,
+                        &model.model,
+                        "judge",
                     )
                 })
                 .collect::<Result<Vec<Message>, GatewayError>>()

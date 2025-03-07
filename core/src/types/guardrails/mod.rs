@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
@@ -7,7 +5,18 @@ use thiserror::Error;
 pub mod evaluator;
 pub mod service;
 
-pub type Model = HashMap<String, serde_json::Value>;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GuardModel {
+    #[serde(rename = "model", default = "default_model_guardrails")]
+    pub model: String,
+    #[serde(rename = "system_prompt")]
+    pub system_prompt: Option<String>,
+    #[serde(rename = "user_prompt_template")]
+    pub user_prompt_template: String,
+}
+fn default_model_guardrails() -> String {
+    "gpt-4o".to_string()
+}
 
 #[derive(Debug, Error)]
 pub enum GuardError {
@@ -93,7 +102,7 @@ pub enum Guard {
     LlmJudge {
         #[serde(flatten)]
         config: GuardConfig,
-        model: Model,
+        model: Option<GuardModel>,
     },
     /// Dataset-based guard that uses vector similarity to examples
     Dataset {
