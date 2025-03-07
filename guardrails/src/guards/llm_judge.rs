@@ -146,7 +146,11 @@ fn extract_text_content(response: &ChatCompletionMessage) -> Result<String, Stri
 
 // Interpret JSON response based on parameters
 fn interpret_json_response(json: Value, parameters: &Value) -> GuardResult {
-    tracing::info!("Interpreting JSON response: {:#?} and guard parameters is {:#?}", json, parameters);
+    tracing::info!(
+        "Interpreting JSON response: {:#?} and guard parameters is {:#?}",
+        json,
+        parameters
+    );
     // Check for common result fields first
     if let Some(passed) = json.get("passed").and_then(|v| v.as_bool()) {
         let confidence = json.get("confidence").and_then(|v| v.as_f64());
