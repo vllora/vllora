@@ -62,10 +62,7 @@ fn test_load_guards_from_yaml() {
         assert_eq!(config.name, "Toxicity Detection");
         assert_eq!(config.stage, GuardStage::Output);
         assert_eq!(config.action, GuardAction::Validate);
-        assert_eq!(
-            model.get("model").unwrap().as_str().unwrap(),
-            "gpt-3.5-turbo"
-        );
+        assert_eq!(model.as_ref().unwrap().model, "gpt-4o");
     } else {
         panic!("First guard should be LlmJudge");
     }
