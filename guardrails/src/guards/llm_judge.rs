@@ -14,7 +14,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use tokio::sync::mpsc;
 
-use super::config::load_prompts_from_yaml;
+use super::config::{default_suffix, load_prompts_from_yaml};
 
 #[async_trait::async_trait]
 pub trait GuardModelInstanceFactory: Send + Sync {
@@ -90,6 +90,9 @@ impl Evaluator for LlmJudgeEvaluator {
                 user_prompt_template = user_prompt_template
                     .replace(&format!("{{{}}}", var), &input_vars[var].to_string());
             }
+
+            user_prompt_template = format!("{}{}", user_prompt_template, default_suffix());
+
             if let Some(message) = messages.last() {
                 let text = extract_text_content(message)?;
                 user_prompt_template = user_prompt_template.replace("{{text}}", &text);

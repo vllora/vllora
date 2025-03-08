@@ -5,6 +5,9 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use thiserror::Error;
 
+pub use async_openai::types::ResponseFormat as OpenaiResponseFormat;
+pub use async_openai::types::ResponseFormatJsonSchema;
+
 use super::engine::ModelTool;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

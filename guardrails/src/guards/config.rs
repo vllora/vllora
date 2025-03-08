@@ -52,29 +52,28 @@ pub fn default_suffix() -> String {
 
 pub fn default_response_schema() -> serde_json::Value {
     serde_json::json!({
-      "schema": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "text",
-          "passed",
-          "confidence"
-        ],
-        "properties": {
-          "text": {
-            "type": "string",
-            "description": "The analyzed text"
-          },
-          "passed": {
-            "type": "boolean",
-            "description": "Whether the content passed the guard check"
-          },
-          "confidence": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 1,
-            "description": "Confidence score of the decision"
-          }
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text",
+        "passed",
+        "confidence"
+      ],
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "The analyzed text"
+        },
+        "passed": {
+          "type": "boolean",
+          "description": "Whether the content passed the guard check"
+        },
+        "confidence": {
+          "type": "number",
+          // Openai doesnt support
+          // "minimum": 0,
+          // "maximum": 1,
+          "description": "Confidence score of the decision"
         }
       }
     })
