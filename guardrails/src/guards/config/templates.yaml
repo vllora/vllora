@@ -49,17 +49,19 @@ templates:
       - format
       - structure
     parameters:
-      schema:
-        type: object
-        default:
-          # Replace this with your own JSON schema
+      type: object
+      properties:
+        schema:
           type: object
-          properties:
-            # Define your properties here
-            example_property:
-              type: string
-          required: []
-        description: Custom JSON schema to validate against (replace with your own schema)
+          default:
+            # Replace this with your own JSON schema
+            type: object
+            properties:
+              # Define your properties here
+              example_property:
+                type: string
+            required: []
+          description: Custom JSON schema to validate against (replace with your own schema)
 
   content-competitor-mentions:
     name: Competitor Mention Check
