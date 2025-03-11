@@ -23,6 +23,7 @@ use langdb_guardrails::guards::DatasetEvaluator;
 use langdb_guardrails::guards::FileDatasetLoader;
 use langdb_guardrails::guards::LlmJudgeEvaluator;
 use langdb_guardrails::guards::SchemaEvaluator;
+use langdb_guardrails::guards::WordCountEvaluator;
 use serde_json::{Map, Value};
 use tracing::Span;
 
@@ -94,6 +95,7 @@ impl GuardrailsService {
             Guard::Dataset { .. } => Box::new(DatasetEvaluator {
                 loader: Box::new(FileDatasetLoader {}),
             }) as Box<dyn Evaluator>,
+            Guard::WordCount { .. } => Box::new(WordCountEvaluator {}) as Box<dyn Evaluator>,
         };
 
         Ok(TracedGuard::new(evaluator))
