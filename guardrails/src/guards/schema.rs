@@ -54,7 +54,7 @@ impl Evaluator for SchemaEvaluator {
                         }
                     }
                 }
-                Err(e) => Err(format!("Invalid JSON: {}", e)),
+                Err(e) => Err(format!("Invalid response JSON: {}", e)),
             }
         } else {
             Err("Invalid guard definition".to_string())
