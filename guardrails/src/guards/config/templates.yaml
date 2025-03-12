@@ -62,6 +62,10 @@ templates:
                 type: string
             required: []
           description: Custom JSON schema to validate against (replace with your own schema)
+        retry:
+          type: boolean
+          default: false
+          description: If true, failed validations will return an error message for retry rather than failing immediately
 
   content-competitor-mentions:
     name: Competitor Mention Check

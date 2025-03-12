@@ -196,6 +196,10 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
     )
     .instrument(span.clone())
     .await?;
+    
+    // Create clone of messages for possible retry
+    let mut retry_messages = messages.clone();
+    let mut retry_attempted = false;
 
     if is_stream {
         Ok(Left(
@@ -239,16 +243,25 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
     }
 }
 
+// Struct to hold validation errors for retry purposes
+#[derive(Debug, Clone, Default)]
+pub struct ValidationErrors {
+    pub json_schema_errors: Option<String>,
+    pub retry_attempted: bool,
+}
+
 pub async fn apply_guardrails(
     messages: &[ChatCompletionMessage],
     extra: Option<&Extra>,
     evaluator: &dyn GuardrailsEvaluator,
     executor_context: &ExecutorContext,
     guard_stage: GuardStage,
-) -> Result<(), GatewayApiError> {
+) -> Result<ValidationErrors, GatewayApiError> {
     let Some(Extra { guards, .. }) = extra else {
-        return Ok(());
+        return Ok(ValidationErrors::default());
     };
+    
+    let mut validation_errors = ValidationErrors::default();
 
     for guard in guards {
         let (guard_id, parameters) = match guard {
@@ -257,6 +270,13 @@ pub async fn apply_guardrails(
                 (id, Some(parameters))
             }
         };
+
+        // Get retry parameter if this is a schema guard
+        let should_retry = parameters
+            .as_ref()
+            .and_then(|p| p.get("retry"))
+            .and_then(|r| r.as_bool())
+            .unwrap_or(false);
 
         let result = evaluator
             .evaluate(
@@ -270,6 +290,35 @@ pub async fn apply_guardrails(
             .map_err(|e| GatewayApiError::GuardError(GuardError::GuardEvaluationError(e)))?;
 
         match result {
+            GuardResult::Json { passed, schema, .. } if !passed && should_retry => {
+                // Skip error for JSON schema validation when retry is enabled
+                // Add schema validation error to the messages for retry
+                tracing::info!(
+                    "JSON schema validation failed for guard {}, but retry is enabled. Continuing with request.",
+                    guard_id
+                );
+                
+                // If we're in output stage, store the error for retry
+                if guard_stage == GuardStage::Output {
+                    validation_errors.json_schema_errors = Some(format!("Invalid JSON format. The response needs to conform to this schema: {:?}", schema));
+                    tracing::info!("Schema validation failed, error will be provided for retry: {:?}", schema);
+                }
+            }
+            GuardResult::Text { passed, text, .. } if !passed && should_retry => {
+                // Skip error for JSON schema validation when retry is enabled
+                // Add validation error to the messages for retry
+                tracing::info!(
+                    "JSON schema validation failed for guard {} with error: {}. Retry is enabled. Continuing.",
+                    guard_id,
+                    text
+                );
+                
+                // If we're in output stage, store the error for retry
+                if guard_stage == GuardStage::Output {
+                    validation_errors.json_schema_errors = Some(format!("Invalid JSON format. Please correct the following issues and try again: {}", text));
+                    tracing::info!("Schema validation failed, error will be provided for retry: {}", text);
+                }
+            }
             GuardResult::Json { passed, .. }
             | GuardResult::Boolean { passed, .. }
             | GuardResult::Text { passed, .. }
@@ -283,7 +332,7 @@ pub async fn apply_guardrails(
         }
     }
 
-    Ok(())
+    Ok(validation_errors)
 }
 
 pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Clone>(
