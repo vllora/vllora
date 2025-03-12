@@ -119,8 +119,12 @@ async fn test_guard_evaluation() {
     let toxic_text: TestText = "I hate you and want to kill you".into();
     let safe_text: TestText = "Hello, how are you today?".into();
 
-    let safe_evaluator = LlmJudgeEvaluator::new(Box::new(MockGuardModelInstanceFactory("{\"passed\":true}".to_string())));
-    let toxic_evaluator = LlmJudgeEvaluator::new(Box::new(MockGuardModelInstanceFactory("{\"passed\":false}".to_string())));
+    let safe_evaluator = LlmJudgeEvaluator::new(Box::new(MockGuardModelInstanceFactory(
+        "{\"passed\":true}".to_string(),
+    )));
+    let toxic_evaluator = LlmJudgeEvaluator::new(Box::new(MockGuardModelInstanceFactory(
+        "{\"passed\":false}".to_string(),
+    )));
 
     let toxic_result = toxic_evaluator.evaluate(&toxic_text.0.messages, toxicity_guard);
     let safe_result = safe_evaluator.evaluate(&safe_text.0.messages, toxicity_guard);
@@ -137,16 +141,21 @@ async fn test_guard_evaluation() {
         assert!(passed, "Safe text should pass");
     }
 
-    let competitor_evaluator = LlmJudgeEvaluator::new(Box::new(MockGuardModelInstanceFactory("{\"mentions_competitor\":true}".to_string())));
-    let non_competitor_evaluator = LlmJudgeEvaluator::new(Box::new(MockGuardModelInstanceFactory("{\"mentions_competitor\":false}".to_string())));
+    let competitor_evaluator = LlmJudgeEvaluator::new(Box::new(MockGuardModelInstanceFactory(
+        "{\"mentions_competitor\":true}".to_string(),
+    )));
+    let non_competitor_evaluator = LlmJudgeEvaluator::new(Box::new(MockGuardModelInstanceFactory(
+        "{\"mentions_competitor\":false}".to_string(),
+    )));
 
     // Test competitor guard
     let competitor_text: TestText = "You should try Competitor A's product".into();
     let non_competitor_text: TestText = "Our product is the best".into();
 
-    let competitor_result = competitor_evaluator.evaluate(&competitor_text.0.messages, competitor_guard);
+    let competitor_result =
+        competitor_evaluator.evaluate(&competitor_text.0.messages, competitor_guard);
     let non_competitor_result =
-    non_competitor_evaluator.evaluate(&non_competitor_text.0.messages, competitor_guard);
+        non_competitor_evaluator.evaluate(&non_competitor_text.0.messages, competitor_guard);
 
     if let langdb_core::types::guardrails::GuardResult::Text { passed, .. } =
         competitor_result.await.unwrap()
@@ -160,8 +169,12 @@ async fn test_guard_evaluation() {
         assert!(passed, "Text without competitor should pass");
     }
 
-    let pii_evaluator = LlmJudgeEvaluator::new(Box::new(MockGuardModelInstanceFactory("{\"contains_pii\":true}".to_string())));
-    let non_pii_evaluator = LlmJudgeEvaluator::new(Box::new(MockGuardModelInstanceFactory("{\"contains_pii\":false}".to_string())));
+    let pii_evaluator = LlmJudgeEvaluator::new(Box::new(MockGuardModelInstanceFactory(
+        "{\"contains_pii\":true}".to_string(),
+    )));
+    let non_pii_evaluator = LlmJudgeEvaluator::new(Box::new(MockGuardModelInstanceFactory(
+        "{\"contains_pii\":false}".to_string(),
+    )));
 
     // Test PII guard
     let pii_text: TestText = "Contact me at test@example.com or 555-123-4567".into();
