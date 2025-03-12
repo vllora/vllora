@@ -133,9 +133,16 @@ pub enum Guard {
 #[serde(rename_all = "lowercase", untagged)]
 pub enum DatasetSource {
     /// A dataset of examples without labels
-    Examples { examples: Vec<GuardExample> },
+    Examples {
+        examples: Vec<GuardExample>,
+    },
     /// A dataset name that will be loaded from a source
-    Source { source: String },
+    Source {
+        source: String,
+    },
+    Managed {
+        config: serde_json::Value,
+    },
 }
 
 /// Example entry for dataset-based guard

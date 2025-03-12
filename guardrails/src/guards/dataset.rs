@@ -81,6 +81,9 @@ impl Evaluator for DatasetEvaluator {
                         Err(e) => Err(format!("Error loading dataset: {}", e)),
                     }
                 }
+                langdb_core::types::guardrails::DatasetSource::Managed { .. } => {
+                    unimplemented!("Managed datasets are not yet supported. Please use a cloud solution instead.")
+                }
             }
         } else {
             Err("Invalid guard definition".to_string())
