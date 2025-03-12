@@ -99,7 +99,7 @@ pub enum BedrockError {
             aws_smithy_runtime_api::http::Response,
         >,
     ),
-    
+
     #[error("{}", DisplayErrorContext(.0))]
     ResponseError(
         #[from]
