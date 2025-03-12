@@ -1,4 +1,4 @@
-use langdb_core::types::gateway::{ChatCompletionMessage, ChatCompletionContent};
+use langdb_core::types::gateway::{ChatCompletionContent, ChatCompletionMessage};
 use langdb_core::types::guardrails::evaluator::Evaluator;
 use langdb_core::types::guardrails::{Guard, GuardResult};
 use regex::Regex;
@@ -28,7 +28,9 @@ impl Evaluator for WordCountEvaluator {
         };
 
         if let Guard::WordCount { config } = guard {
-            let parameters = config.user_defined_parameters.as_ref()
+            let parameters = config
+                .user_defined_parameters
+                .as_ref()
                 .ok_or("No parameters provided for word count guard")?;
 
             let min_words = parameters["min_words"]
@@ -39,15 +41,13 @@ impl Evaluator for WordCountEvaluator {
                 .as_f64()
                 .map(|n| n as usize)
                 .unwrap_or(500);
-            let count_method = parameters["count_method"]
-                .as_str()
-                .unwrap_or("split");
+            let count_method = parameters["count_method"].as_str().unwrap_or("split");
 
             let word_count = match count_method {
                 "regex" => count_words_regex(text),
                 _ => count_words_split(text),
             };
-            
+
             let passed = word_count >= min_words && word_count <= max_words;
 
             Ok(GuardResult::Boolean {
