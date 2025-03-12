@@ -22,6 +22,7 @@ use langdb_guardrails::guards::traced::TracedGuard;
 use langdb_guardrails::guards::DatasetEvaluator;
 use langdb_guardrails::guards::FileDatasetLoader;
 use langdb_guardrails::guards::LlmJudgeEvaluator;
+use langdb_guardrails::guards::RegexEvaluator;
 use langdb_guardrails::guards::SchemaEvaluator;
 use langdb_guardrails::guards::WordCountEvaluator;
 use serde_json::{Map, Value};
@@ -70,7 +71,6 @@ pub struct GuardrailsService {
 
 // Implement Send + Sync since all fields are Send + Sync
 unsafe impl Send for GuardrailsService {}
-unsafe impl Sync for GuardrailsService {}
 
 impl GuardrailsService {
     pub fn new(guards: HashMap<String, Guard>) -> Self {
@@ -95,6 +95,7 @@ impl GuardrailsService {
             Guard::Dataset { .. } => Box::new(DatasetEvaluator {
                 loader: Box::new(FileDatasetLoader {}),
             }) as Box<dyn Evaluator>,
+            Guard::Regex { .. } => Box::new(RegexEvaluator {}) as Box<dyn Evaluator>,
             Guard::WordCount { .. } => Box::new(WordCountEvaluator {}) as Box<dyn Evaluator>,
         };
 
