@@ -19,34 +19,60 @@ fn default_test_guards() -> Result<HashMap<String, Guard>, serde_yaml::Error> {
     let yaml = r#"
         guards:
             toxicity-1:
-                type: toxicity
+                type: llm_judge
                 id: toxicity-1
                 name: Toxicity Detection
+                template_id: content-toxicity
                 description: Detects toxic, harmful, or inappropriate content
                 stage: output
                 action: validate
-                model: 
-                    model: gpt-3.5-turbo
-                    system_prompt: Test system prompt
-                    user_prompt_template: Test user prompt
-                parameters:
-                threshold: 0.5
-                categories:
-                    - hate
-                    - violence
-          
-          schema-1:
-            type: schema
-            id: schema-1
-            name: Test Schema
-            description: Test schema guard
-            stage: output
-            action: validate
-            schema:
-              type: object
-              properties:
-                test:
-                  type: string
+                user_defined_parameters:
+                    threshold: 0.5
+                    categories:
+                        - hate
+                        - violence
+
+            competitor-1:
+                type: llm_judge
+                id: competitor-1
+                name: Toxicity Detection
+                template_id: content-competitor-mentions
+                description: Detects toxic, harmful, or inappropriate content
+                stage: output
+                action: validate
+                user_defined_parameters:
+                    threshold: 0.5
+                    competitors:
+                        - Competitor A
+                        - Competitor B
+
+            pii-1:
+                type: llm_judge
+                id: pii-1
+                name: Toxicity Detection
+                template_id: security-pii-detection
+                description: Detects toxic, harmful, or inappropriate content
+                stage: output
+                action: validate
+                user_defined_parameters:
+                    threshold: 0.5
+                    pii_types:
+                        - email
+                        - phone
+                        - name
+            schema-1:
+                type: schema
+                id: schema-1
+                template_id: validation-json-schema
+                name: Test Schema
+                description: Test schema guard
+                stage: output
+                action: validate
+                user_defined_schema:
+                    type: object
+                    properties:
+                        - name: test
+                          type: string
         "#;
 
     load_guards_from_yaml(yaml)
@@ -55,14 +81,13 @@ fn default_test_guards() -> Result<HashMap<String, Guard>, serde_yaml::Error> {
 #[test]
 fn test_load_guards_from_yaml() {
     let guards = default_test_guards().unwrap();
-    assert_eq!(guards.len(), 2);
+    assert_eq!(guards.len(), 4);
     // Check first guard is LlmJudge
-    if let Guard::LlmJudge { config, model, .. } = &guards["toxicity-1"] {
+    if let Guard::LlmJudge { config, .. } = &guards["toxicity-1"] {
         assert_eq!(config.id, "toxicity-1");
         assert_eq!(config.name, "Toxicity Detection");
         assert_eq!(config.stage, GuardStage::Output);
         assert_eq!(config.action, GuardAction::Validate);
-        assert_eq!(model.as_ref().unwrap().model, "gpt-4o");
     } else {
         panic!("First guard should be LlmJudge");
     }
@@ -94,10 +119,11 @@ async fn test_guard_evaluation() {
     let toxic_text: TestText = "I hate you and want to kill you".into();
     let safe_text: TestText = "Hello, how are you today?".into();
 
-    let evaluator = LlmJudgeEvaluator::new(Box::new(MockGuardModelInstanceFactory {}));
+    let safe_evaluator = LlmJudgeEvaluator::new(Box::new(MockGuardModelInstanceFactory("{\"passed\":true}".to_string())));
+    let toxic_evaluator = LlmJudgeEvaluator::new(Box::new(MockGuardModelInstanceFactory("{\"passed\":false}".to_string())));
 
-    let toxic_result = evaluator.evaluate(&toxic_text.0.messages, toxicity_guard);
-    let safe_result = evaluator.evaluate(&safe_text.0.messages, toxicity_guard);
+    let toxic_result = toxic_evaluator.evaluate(&toxic_text.0.messages, toxicity_guard);
+    let safe_result = safe_evaluator.evaluate(&safe_text.0.messages, toxicity_guard);
 
     if let langdb_core::types::guardrails::GuardResult::Boolean { passed, .. } =
         toxic_result.await.unwrap()
@@ -111,13 +137,16 @@ async fn test_guard_evaluation() {
         assert!(passed, "Safe text should pass");
     }
 
+    let competitor_evaluator = LlmJudgeEvaluator::new(Box::new(MockGuardModelInstanceFactory("{\"mentions_competitor\":true}".to_string())));
+    let non_competitor_evaluator = LlmJudgeEvaluator::new(Box::new(MockGuardModelInstanceFactory("{\"mentions_competitor\":false}".to_string())));
+
     // Test competitor guard
     let competitor_text: TestText = "You should try Competitor A's product".into();
     let non_competitor_text: TestText = "Our product is the best".into();
 
-    let competitor_result = evaluator.evaluate(&competitor_text.0.messages, competitor_guard);
+    let competitor_result = competitor_evaluator.evaluate(&competitor_text.0.messages, competitor_guard);
     let non_competitor_result =
-        evaluator.evaluate(&non_competitor_text.0.messages, competitor_guard);
+    non_competitor_evaluator.evaluate(&non_competitor_text.0.messages, competitor_guard);
 
     if let langdb_core::types::guardrails::GuardResult::Text { passed, .. } =
         competitor_result.await.unwrap()
@@ -131,12 +160,15 @@ async fn test_guard_evaluation() {
         assert!(passed, "Text without competitor should pass");
     }
 
+    let pii_evaluator = LlmJudgeEvaluator::new(Box::new(MockGuardModelInstanceFactory("{\"contains_pii\":true}".to_string())));
+    let non_pii_evaluator = LlmJudgeEvaluator::new(Box::new(MockGuardModelInstanceFactory("{\"contains_pii\":false}".to_string())));
+
     // Test PII guard
     let pii_text: TestText = "Contact me at test@example.com or 555-123-4567".into();
     let non_pii_text: TestText = "Hello, how are you today?".into();
 
-    let pii_result = evaluator.evaluate(&pii_text.0.messages, pii_guard);
-    let non_pii_result = evaluator.evaluate(&non_pii_text.0.messages, pii_guard);
+    let pii_result = pii_evaluator.evaluate(&pii_text.0.messages, pii_guard);
+    let non_pii_result = non_pii_evaluator.evaluate(&non_pii_text.0.messages, pii_guard);
 
     if let langdb_core::types::guardrails::GuardResult::Text { passed, .. } =
         pii_result.await.unwrap()
@@ -170,7 +202,7 @@ fn get_request_from_text(text: &str) -> ChatCompletionRequest {
     }
 }
 
-struct MockModelInstance;
+struct MockModelInstance(String);
 
 #[async_trait::async_trait]
 impl ModelInstance for MockModelInstance {
@@ -183,7 +215,7 @@ impl ModelInstance for MockModelInstance {
     ) -> GatewayResult<ChatCompletionMessage> {
         Ok(ChatCompletionMessage {
             role: "assistant".to_string(),
-            content: Some(ChatCompletionContent::Text("Hello, world!".to_string())),
+            content: Some(ChatCompletionContent::Text(self.0.clone())),
             ..Default::default()
         })
     }
@@ -199,11 +231,11 @@ impl ModelInstance for MockModelInstance {
     }
 }
 
-struct MockGuardModelInstanceFactory;
+struct MockGuardModelInstanceFactory(String);
 
 #[async_trait::async_trait]
 impl GuardModelInstanceFactory for MockGuardModelInstanceFactory {
     async fn init(&self, _name: &str) -> Box<dyn ModelInstance> {
-        Box::new(MockModelInstance)
+        Box::new(MockModelInstance(self.0.clone()))
     }
 }
