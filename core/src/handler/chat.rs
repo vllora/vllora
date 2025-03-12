@@ -30,6 +30,12 @@ use super::can_execute_llm_for_request;
 
 use crate::executor::chat_completion::routed_executor::RoutedExecutor;
 
+pub type SSOChatEvent = (
+    Option<ChatCompletionDelta>,
+    Option<CompletionModelUsage>,
+    Option<String>,
+);
+
 #[allow(clippy::too_many_arguments)]
 pub async fn create_chat_completion(
     request: web::Json<ChatCompletionRequestWithTools<RoutingStrategy>>,
@@ -82,13 +88,13 @@ pub async fn create_chat_completion(
 }
 
 pub fn map_sso_event(
-    delta: Result<(Option<ChatCompletionDelta>, Option<CompletionModelUsage>), GatewayApiError>,
+    delta: Result<SSOChatEvent, GatewayApiError>,
     model_name: String,
 ) -> Result<Bytes, GatewayApiError> {
     let model_name = model_name.clone();
     let chunk = match delta {
-        Ok((None, None)) => Ok(None),
-        Ok((delta, usage)) => {
+        Ok((None, None, _)) => Ok(None),
+        Ok((delta, usage, finish_reason)) => {
             let chunk = ChatCompletionChunk {
                 id: uuid::Uuid::new_v4().to_string(),
                 object: "chat.completion.chunk".to_string(),
@@ -98,7 +104,7 @@ pub fn map_sso_event(
                     vec![ChatCompletionChunkChoice {
                         index: 0,
                         delta: d.clone(),
-                        finish_reason: None,
+                        finish_reason,
                         logprobs: None,
                     }]
                 }),

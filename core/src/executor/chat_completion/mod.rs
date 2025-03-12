@@ -14,8 +14,8 @@ use crate::types::engine::{
 };
 use crate::types::gateway::{
     ChatCompletionChoice, ChatCompletionContent, ChatCompletionDelta, ChatCompletionMessage,
-    ChatCompletionRequestWithTools, ChatCompletionResponse, ChatCompletionUsage,
-    CompletionModelUsage, Extra, GuardOrName, GuardWithParameters,
+    ChatCompletionRequestWithTools, ChatCompletionResponse, ChatCompletionUsage, Extra,
+    GuardOrName, GuardWithParameters,
 };
 use crate::types::guardrails::service::GuardrailsEvaluator;
 use crate::types::guardrails::{GuardError, GuardResult, GuardStage};
@@ -389,6 +389,7 @@ fn stream_response_to_stream(
                             tool_calls: None,
                         }),
                         None,
+                        choice.finish_reason.clone(),
                     )))
                     .await;
             } else {
@@ -407,44 +408,11 @@ fn stream_response_to_stream(
                                 tool_calls: None,
                             }),
                             None,
-                        )))
-                        .await;
-                }
-
-                // Send tool calls if present
-                if let Some(tool_calls) = &choice.message.tool_calls {
-                    let _ = tx
-                        .send(Ok((
-                            Some(ChatCompletionDelta {
-                                role: Some("assistant".to_string()),
-                                content: None,
-                                tool_calls: Some(tool_calls.clone()),
-                            }),
-                            None,
+                            choice.finish_reason.clone(),
                         )))
                         .await;
                 }
             }
-
-            // Send final delta with usage
-            let _ = tx
-                .send(Ok((
-                    Some(ChatCompletionDelta {
-                        role: None,
-                        content: None,
-                        tool_calls: None,
-                    }),
-                    Some(CompletionModelUsage {
-                        input_tokens: response.usage.prompt_tokens as u32,
-                        output_tokens: response.usage.completion_tokens as u32,
-                        prompt_tokens_details: None,
-                        completion_tokens_details: None,
-                        total_tokens: (response.usage.prompt_tokens
-                            + response.usage.completion_tokens)
-                            as u32,
-                    }),
-                )))
-                .await;
         }
     });
 

@@ -108,6 +108,7 @@ pub async fn stream_chunks(
                             tool_calls: None,
                         }),
                         None,
+                        None,
                     )),
                     ModelEventType::ToolStart(tool_call) => Ok((
                         Some(ChatCompletionDelta {
@@ -122,6 +123,7 @@ pub async fn stream_chunks(
                                 },
                             }]),
                         }),
+                        None,
                         None,
                     )),
                     ModelEventType::LlmStop(LLMFinishEvent {
@@ -151,7 +153,7 @@ pub async fn stream_chunks(
                             _ => None,
                         };
 
-                        Ok((ev, usage))
+                        Ok((ev, usage, None))
                     }
                     _ => Err(GatewayApiError::CustomError(
                         "Unsupported event".to_string(),
