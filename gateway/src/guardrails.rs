@@ -71,7 +71,6 @@ pub struct GuardrailsService {
 // Implement Send + Sync since all fields are Send + Sync
 unsafe impl Send for GuardrailsService {}
 
-
 impl GuardrailsService {
     pub fn new(guards: HashMap<String, Guard>) -> Self {
         let templates = load_guard_templates().unwrap_or_default();

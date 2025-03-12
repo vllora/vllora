@@ -11,23 +11,19 @@ impl Evaluator for RegexEvaluator {
         guard: &Guard,
     ) -> Result<GuardResult, String> {
         let text = self.messages_to_text(messages)?;
-        if let Guard::Regex {
-            parameters,
-            ..
-        } = &guard
-        {
+        if let Guard::Regex { parameters, .. } = &guard {
             // Extract patterns array from parameters
             let patterns = parameters
                 .get("patterns")
                 .and_then(|p| p.as_array())
                 .ok_or("Missing 'patterns' parameter or not an array".to_string())?;
-            
+
             // Extract match_type from parameters (default to "all" if not specified)
             let match_type = parameters
                 .get("match_type")
                 .and_then(|m| m.as_str())
                 .unwrap_or("all");
-            
+
             // Compile all regex patterns
             let compiled_patterns: Result<Vec<Regex>, String> = patterns
                 .iter()
@@ -39,9 +35,9 @@ impl Evaluator for RegexEvaluator {
                         })
                 })
                 .collect();
-            
+
             let compiled_patterns = compiled_patterns?;
-            
+
             // Check pattern matches based on match_type
             let (passed, result_text) = match match_type {
                 "all" => {
@@ -84,7 +80,7 @@ impl Evaluator for RegexEvaluator {
                     return Err(format!("Invalid match_type: {}", match_type));
                 }
             };
-            
+
             Ok(GuardResult::Text {
                 text: result_text,
                 passed,
