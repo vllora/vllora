@@ -4,6 +4,7 @@ pub mod llm_judge;
 pub mod regex;
 pub mod schema;
 pub mod traced;
+pub mod word_count;
 
 #[cfg(test)]
 pub mod tests;
@@ -13,3 +14,4 @@ pub use dataset::{DatasetEvaluator, FileDatasetLoader};
 pub use llm_judge::LlmJudgeEvaluator;
 pub use regex::RegexEvaluator;
 pub use schema::SchemaEvaluator;
+pub use word_count::WordCountEvaluator;
