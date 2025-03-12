@@ -21,7 +21,7 @@ impl Evaluator for DatasetEvaluator {
         {
             let text = self.messages_to_text(messages)?;
             match dataset {
-                langdb_core::types::guardrails::DatasetSource::Examples(examples) => {
+                langdb_core::types::guardrails::DatasetSource::Examples { examples } => {
                     // Simple similarity check (in a real implementation, this would use embeddings)
                     let mut best_match = None;
                     let mut best_score = 0.0;
@@ -48,7 +48,7 @@ impl Evaluator for DatasetEvaluator {
                         confidence: Some(1.0 - best_score),
                     })
                 }
-                langdb_core::types::guardrails::DatasetSource::Source(source) => {
+                langdb_core::types::guardrails::DatasetSource::Source { source } => {
                     // Load dataset from source
                     match self.loader.load(source).await {
                         Ok(examples) => {

@@ -54,7 +54,14 @@ impl Evaluator for SchemaEvaluator {
                         }
                     }
                 }
-                Err(e) => Err(format!("Invalid response JSON: {}", e)),
+                Err(e) => {
+                    tracing::error!("Invalid response JSON: {}", e);
+                    Ok(GuardResult::Text {
+                        text: e.to_string(),
+                        passed: false,
+                        confidence: Some(1.0),
+                    })
+                }
             }
         } else {
             Err("Invalid guard definition".to_string())

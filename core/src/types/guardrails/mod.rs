@@ -127,12 +127,12 @@ pub enum Guard {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase", tag = "type")]
+#[serde(rename_all = "lowercase", untagged)]
 pub enum DatasetSource {
     /// A dataset of examples without labels
-    Examples(Vec<GuardExample>),
+    Examples { examples: Vec<GuardExample> },
     /// A dataset name that will be loaded from a source
-    Source(String),
+    Source { source: String },
 }
 
 /// Example entry for dataset-based guard
