@@ -31,6 +31,9 @@ pub enum GuardError {
 
     #[error("Request stopped after guard evaluation: {0}")]
     RequestStoppedAfterGuardEvaluation(String),
+
+    #[error("Guard '{0}' not passed")]
+    GuardNotPassed(String, GuardResult),
 }
 
 /// Enum representing when a guard should be applied

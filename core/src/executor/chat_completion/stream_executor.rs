@@ -3,10 +3,9 @@ use std::sync::Arc;
 
 use crate::model::types::LLMFinishEvent;
 use crate::model::types::ModelEvent;
-use crate::types::gateway::CompletionModelUsage;
 use futures::future::join;
+use futures::StreamExt;
 use futures::TryStreamExt;
-use futures::{Stream, StreamExt};
 
 use crate::{
     model::{
@@ -23,6 +22,8 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::Span;
 use tracing_futures::Instrument;
 
+use super::stream_wrapper::wrap_stream;
+use crate::executor::chat_completion::ChatCompletionStream;
 use crate::handler::{CallbackHandlerFn, ModelEventWithDetails};
 use crate::types::engine::CompletionModelDefinition;
 use crate::types::engine::ParentDefinition;
@@ -34,12 +35,7 @@ pub async fn stream_chunks(
     messages: Vec<Message>,
     callback_handler: Arc<CallbackHandlerFn>,
     tags: HashMap<String, String>,
-) -> Result<
-    impl Stream<
-        Item = Result<(Option<ChatCompletionDelta>, Option<CompletionModelUsage>), GatewayApiError>,
-    >,
-    GatewayApiError,
-> {
+) -> Result<ChatCompletionStream, GatewayApiError> {
     let parent_definition =
         ParentDefinition::CompletionModel(Box::new(completion_model_definition.clone()));
     let model_options = ParentCompletionOptions {
@@ -168,5 +164,5 @@ pub async fn stream_chunks(
             }
         });
 
-    Ok(event_stream)
+    Ok(wrap_stream(event_stream))
 }

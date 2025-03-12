@@ -102,6 +102,7 @@ pub struct ChatCompletionRequestWithTools<T> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider_specific: Option<ProviderSpecificRequest>,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderSpecificRequest {
     // Anthropic request
@@ -166,6 +167,7 @@ pub enum McpTransportType {
         name: String,
     },
 }
+
 fn default_in_memory_name() -> String {
     "langdb".to_string()
 }
@@ -177,6 +179,7 @@ pub struct McpDefinition {
     #[serde(flatten)]
     pub r#type: McpTransportType,
 }
+
 impl McpDefinition {
     pub fn server_name(&self) -> String {
         match &self.r#type {
@@ -195,6 +198,7 @@ pub struct ServerTools {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpTool(pub async_mcp::types::Tool, pub McpDefinition);
+
 // Helper functions for serde defaults
 fn default_tools_filter() -> ToolsFilter {
     ToolsFilter::All
@@ -434,6 +438,7 @@ pub struct PromptTokensDetails {
     cached_tokens: u32,
     audio_tokens: u32,
 }
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CompletionTokensDetails {
     accepted_prediction_tokens: u32,
