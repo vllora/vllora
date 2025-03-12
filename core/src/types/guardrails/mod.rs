@@ -113,15 +113,26 @@ pub enum Guard {
         dataset: DatasetSource,
         schema: Value,
     },
+    /// Regex-based guard that validates text against regex patterns
+    Regex {
+        #[serde(flatten)]
+        config: GuardConfig,
+        parameters: Value,
+    },
+    /// Word count guard that validates text length
+    WordCount {
+        #[serde(flatten)]
+        config: GuardConfig,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase", tag = "type")]
+#[serde(rename_all = "lowercase", untagged)]
 pub enum DatasetSource {
     /// A dataset of examples without labels
-    Examples(Vec<GuardExample>),
+    Examples { examples: Vec<GuardExample> },
     /// A dataset name that will be loaded from a source
-    Source(String),
+    Source { source: String },
 }
 
 /// Example entry for dataset-based guard
@@ -155,6 +166,8 @@ impl Guard {
             Guard::Schema { config, .. } => &config.stage,
             Guard::LlmJudge { config, .. } => &config.stage,
             Guard::Dataset { config, .. } => &config.stage,
+            Guard::WordCount { config } => &config.stage,
+            Guard::Regex { config, .. } => &config.stage,
         }
     }
 
@@ -164,6 +177,8 @@ impl Guard {
             Guard::Schema { config, .. } => &config.action,
             Guard::LlmJudge { config, .. } => &config.action,
             Guard::Dataset { config, .. } => &config.action,
+            Guard::Regex { config, .. } => &config.action,
+            Guard::WordCount { config } => &config.action,
         }
     }
 
@@ -173,6 +188,8 @@ impl Guard {
             Guard::Schema { config, .. } => &config.id,
             Guard::LlmJudge { config, .. } => &config.id,
             Guard::Dataset { config, .. } => &config.id,
+            Guard::Regex { config, .. } => &config.id,
+            Guard::WordCount { config } => &config.id,
         }
     }
 
@@ -182,6 +199,8 @@ impl Guard {
             Guard::Schema { config, .. } => &config.name,
             Guard::LlmJudge { config, .. } => &config.name,
             Guard::Dataset { config, .. } => &config.name,
+            Guard::Regex { config, .. } => &config.name,
+            Guard::WordCount { config } => &config.name,
         }
     }
     pub fn parameters(&self) -> Option<&Value> {
@@ -189,6 +208,8 @@ impl Guard {
             Guard::Schema { config, .. } => config.user_defined_parameters.as_ref(),
             Guard::LlmJudge { config, .. } => config.user_defined_parameters.as_ref(),
             Guard::Dataset { config, .. } => config.user_defined_parameters.as_ref(),
+            Guard::Regex { config, .. } => config.user_defined_parameters.as_ref(),
+            Guard::WordCount { config } => config.user_defined_parameters.as_ref(),
         }
     }
     pub fn set_parameters(&mut self, parameters: Value) {
@@ -196,6 +217,8 @@ impl Guard {
             Guard::Schema { config, .. } => config.user_defined_parameters = Some(parameters),
             Guard::LlmJudge { config, .. } => config.user_defined_parameters = Some(parameters),
             Guard::Dataset { config, .. } => config.user_defined_parameters = Some(parameters),
+            Guard::Regex { config, .. } => config.user_defined_parameters = Some(parameters),
+            Guard::WordCount { config } => config.user_defined_parameters = Some(parameters),
         }
     }
 
@@ -204,6 +227,8 @@ impl Guard {
             Guard::Schema { config, .. } => &config.template_id,
             Guard::LlmJudge { config, .. } => &config.template_id,
             Guard::Dataset { config, .. } => &config.template_id,
+            Guard::Regex { config, .. } => &config.template_id,
+            Guard::WordCount { config } => &config.template_id,
         }
     }
 }
