@@ -16,17 +16,17 @@ name = "langdb_core"
 path = "src/lib.rs"
 
 [dependencies]
-tokio = { version = "1.37.0", features = ["sync"] }
+tokio = { workspace = true }
 tokio-stream = { version = "0.1.15", features = ["io-util"] }
-tracing-futures = { version = "0.2", features = ["futures-03"] }
-tracing-opentelemetry = { version = "0.25", default-features = false }
+tracing-futures = { workspace = true }
+tracing-opentelemetry = { workspace = true }
 uuid = { version = "1.8.0", features = ["serde", "v4"] }
-serde = { version = "1.0.199", features = ["serde_derive"] }
-serde_json = "1.0"
-chrono = { version = "0.4.38", features = ["serde"] }
-async-trait = "0.1.82"
-thiserror = "2.0.11"
-async-openai = { version = "0.27.3", package = "async-openai-compat" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+async-openai = { workspace = true }
 futures = "0.3"
 
 serde_with = { version = "3.8.1", features = ["json"] }
@@ -57,15 +57,11 @@ tonic = "0.12.0"
 dashmap = "6.0.1"
 bytes = { version = "1", features = ["serde"] }
 either = "1.13.0"
-tracing = { version = "0.1.40", features = ["log", "valuable"] }
-tracing-subscriber = { version = "0.3.0", features = [
-  "env-filter",
-  "tracing-log",
-  "valuable",
-] }
-valuable = { version = "0.1", features = ["derive"] }
-opentelemetry = "0.24"
-opentelemetry_sdk = { version = "0.24.0", features = ["rt-tokio"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+valuable = { workspace = true }
+opentelemetry = { workspace = true }
+opentelemetry_sdk = { workspace = true }
 opentelemetry-proto = { version = "0.7.0", features = [
   "gen-tonic",
   "trace",

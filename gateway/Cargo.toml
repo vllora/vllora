@@ -18,11 +18,12 @@ path = "src/main.rs"
 [dependencies]
 langdb_core = { path = "../core", version = "0.1.3" }
 langdb_guardrails = { path = "../guardrails", version = "0.1.0" }
-tokio = { version = "1.37.0", features = ["sync"] }
-serde = { version = "1.0.199", features = ["serde_derive"] }
-serde_json = "1.0"
-async-trait = "0.1.82"
-thiserror = "2.0.11"
+
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
 futures = "0.3.30"
 actix-cors = "0.7.0"
 
@@ -33,16 +34,12 @@ reqwest = { version = "0.12.2", default-features = false, features = [
 ] }
 actix-web = "4"
 tonic = "0.12.0"
-tracing = { version = "0.1.40", features = ["log", "valuable"] }
-tracing-subscriber = { version = "0.3.0", features = [
-  "env-filter",
-  "tracing-log",
-  "valuable",
-] }
-opentelemetry = "0.24"
-opentelemetry-otlp = { version = "0.17", features = ["tls"] }
-opentelemetry_sdk = { version = "0.24.0", features = ["rt-tokio"] }
-serde_yaml = "0.9"
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+opentelemetry = { workspace = true }
+opentelemetry-otlp = { workspace = true }
+opentelemetry_sdk = { workspace = true }
+serde_yaml = { workspace = true }
 clap = { version = "4.5", features = ["derive"] }
 directories = "6.0"
 prettytable-rs = "0.10.0"
@@ -53,4 +50,4 @@ ratatui = "0.24.0"
 crossterm = "0.27.0"
 open = "5.3.2"
 
-chrono = "0.4"
+chrono = { workspace = true }
