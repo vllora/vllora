@@ -12,6 +12,7 @@ mod callback_handler;
 mod cli;
 mod config;
 mod cost;
+mod guardrails;
 mod http;
 mod limit;
 mod middleware;

@@ -6,7 +6,7 @@ use crate::handler::ModelEventWithDetails;
 use crate::llm_gateway::provider::Provider;
 use crate::model::image_generation::initialize_image_generation;
 use crate::model::types::ModelEvent;
-use crate::models::ModelDefinition;
+use crate::models::ModelMetadata;
 use crate::types::engine::ImageGenerationModelDefinition;
 use crate::types::gateway::CreateImageRequest;
 use crate::types::image::ImagesResponse;
@@ -30,7 +30,7 @@ use super::ProvidersConfig;
 pub async fn handle_image_generation(
     mut request: CreateImageRequest,
     callback_handler: &CallbackHandlerFn,
-    llm_model: &ModelDefinition,
+    llm_model: &ModelMetadata,
     key_credentials: Option<&Credentials>,
     cost_calculator: Arc<Box<dyn CostCalculator>>,
     tags: HashMap<String, String>,

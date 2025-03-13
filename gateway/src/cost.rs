@@ -1,5 +1,5 @@
 use langdb_core::{
-    models::ModelDefinition,
+    models::ModelMetadata,
     pricing::calculator::{calculate_image_price, calculate_tokens_cost},
     types::{
         gateway::{CostCalculationResult, CostCalculator, CostCalculatorError, Usage},
@@ -9,14 +9,14 @@ use langdb_core::{
 
 #[derive(Clone)]
 pub struct GatewayCostCalculator {
-    models: Vec<ModelDefinition>,
+    models: Vec<ModelMetadata>,
     default_image_cost: f64,
     default_input_cost: f64,
     default_output_cost: f64,
 }
 
 impl GatewayCostCalculator {
-    pub fn new(models: Vec<ModelDefinition>) -> Self {
+    pub fn new(models: Vec<ModelMetadata>) -> Self {
         Self {
             models,
             default_image_cost: 0.0,

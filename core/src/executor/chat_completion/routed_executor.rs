@@ -1,32 +1,33 @@
+use crate::executor::context::ExecutorContext;
 use crate::handler::chat::map_sso_event;
 use crate::routing::RoutingStrategy;
+use crate::usage::InMemoryStorage;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::executor::chat_completion::execute;
 use crate::routing::RouteStrategy;
 use crate::types::gateway::ChatCompletionRequestWithTools;
-use crate::usage::InMemoryStorage;
+
 use crate::GatewayError;
-use actix_web::{HttpRequest, HttpResponse};
+use actix_web::HttpResponse;
 use bytes::Bytes;
 use either::Either::{Left, Right};
 use futures::StreamExt;
 use futures::TryStreamExt;
-use std::sync::Arc;
-use thiserror::Error;
-use tokio::sync::Mutex;
 
-use crate::types::gateway::CostCalculator;
+use thiserror::Error;
+
 use opentelemetry::trace::TraceContextExt as _;
 use tokio::sync::broadcast;
+use tokio::sync::Mutex;
 use tracing::Span;
 use tracing_futures::Instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt as _;
 
 use crate::handler::find_model_by_full_name;
-use crate::handler::AvailableModels;
-use crate::handler::CallbackHandlerFn;
+
 use crate::otel::{trace_id_uuid, TraceMap};
 use crate::routing::LlmRouter;
 use crate::GatewayApiError;
@@ -56,12 +57,9 @@ impl RoutedExecutor {
 
     pub async fn execute(
         &self,
-        callback_handler: &CallbackHandlerFn,
+        executor_context: &ExecutorContext,
         traces: &TraceMap,
-        req: &HttpRequest,
-        available_models: &AvailableModels,
-        cost_calculator: Arc<Box<dyn CostCalculator>>,
-        memory_storage: Option<&Arc<Mutex<InMemoryStorage>>>,
+        memory_storage: Option<Arc<Mutex<InMemoryStorage>>>,
     ) -> Result<HttpResponse, GatewayApiError> {
         let span = Span::current();
 
@@ -98,7 +96,7 @@ impl RoutedExecutor {
                     metrics_duration: None,
                 };
 
-                let metrics = match memory_storage {
+                let metrics = match &memory_storage {
                     Some(storage) => {
                         let guard = storage.lock().await;
                         guard.get_all_counters().await
@@ -109,11 +107,8 @@ impl RoutedExecutor {
                 let executor_result = llm_router
                     .route(
                         request.request.clone(),
-                        available_models,
-                        req.headers()
-                            .into_iter()
-                            .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
-                            .collect(),
+                        &executor_context.provided_models,
+                        executor_context.headers.clone(),
                         metrics,
                     )
                     .instrument(span.clone())
@@ -130,15 +125,7 @@ impl RoutedExecutor {
                     }
                 }
             } else {
-                let result = Self::execute_request(
-                    &request,
-                    callback_handler,
-                    traces,
-                    req,
-                    available_models,
-                    cost_calculator.clone(),
-                )
-                .await;
+                let result = Self::execute_request(&request, executor_context, traces).await;
 
                 match result {
                     Ok(response) => return Ok(response),
@@ -161,11 +148,8 @@ impl RoutedExecutor {
 
     async fn execute_request(
         request: &ChatCompletionRequestWithTools<RoutingStrategy>,
-        callback_handler: &CallbackHandlerFn,
+        executor_context: &ExecutorContext,
         traces: &TraceMap,
-        req: &HttpRequest,
-        available_models: &AvailableModels,
-        cost_calculator: Arc<Box<dyn CostCalculator>>,
     ) -> Result<HttpResponse, GatewayApiError> {
         let span = tracing::Span::current();
         span.record("request", &serde_json::to_string(&request)?);
@@ -176,18 +160,11 @@ impl RoutedExecutor {
 
         let model_name = request.request.model.clone();
 
-        let llm_model = find_model_by_full_name(&request.request.model, available_models)?;
-
-        let response = execute(
-            request,
-            callback_handler,
-            req.clone(),
-            cost_calculator,
-            &llm_model,
-            span.clone(),
-        )
-        .instrument(span.clone())
-        .await?;
+        let llm_model =
+            find_model_by_full_name(&request.request.model, &executor_context.provided_models)?;
+        let response = execute(request, executor_context, span.clone())
+            .instrument(span.clone())
+            .await?;
 
         let mut response_builder = HttpResponse::Ok();
         let builder = response_builder

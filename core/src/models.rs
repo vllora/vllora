@@ -259,7 +259,7 @@ pub struct InferenceProvider {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct ModelDefinition {
+pub struct ModelMetadata {
     pub model: String,
     pub model_provider: String,
     pub inference_provider: InferenceProvider,

@@ -33,6 +33,8 @@ pub const SPAN_OPENAI_SPEC: &str = "openai_spec";
 
 pub const SPAN_REQUEST_ROUTING: &str = "request_routing";
 
+pub const SPAN_GUARD_EVAULATION: &str = "guard_evaluation";
+
 #[derive(Debug)]
 pub struct BaggageSpanProcessor<const N: usize> {
     keys: [&'static str; N],

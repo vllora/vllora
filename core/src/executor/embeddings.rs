@@ -4,7 +4,7 @@ use crate::embed_mod::Embed;
 use crate::embed_mod::OpenAIEmbed;
 use crate::error::GatewayError;
 use crate::model::types::ModelEvent;
-use crate::models::ModelDefinition;
+use crate::models::ModelMetadata;
 use crate::types::credentials::Credentials;
 use actix_web::HttpRequest;
 use async_openai::types::EmbeddingInput;
@@ -25,7 +25,7 @@ use super::ProvidersConfig;
 pub async fn handle_embeddings_invoke(
     mut request: CreateEmbeddingRequest,
     callback_handler: &CallbackHandlerFn,
-    llm_model: &ModelDefinition,
+    llm_model: &ModelMetadata,
     key_credentials: Option<&Credentials>,
     req: HttpRequest,
 ) -> Result<async_openai::types::CreateEmbeddingResponse, GatewayError> {

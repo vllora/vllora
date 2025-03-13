@@ -1,5 +1,5 @@
-use crate::routing::strategy::script::ScriptError;
-use crate::routing::strategy::script::ScriptStrategy;
+// use crate::routing::strategy::script::ScriptError;
+// use crate::routing::strategy::script::ScriptStrategy;
 use crate::types::gateway::ChatCompletionRequest;
 use crate::{handler::AvailableModels, usage::ProviderMetrics};
 use std::collections::{BTreeMap, HashMap};
@@ -9,9 +9,8 @@ pub mod strategy;
 
 #[derive(Error, Debug)]
 pub enum RouterError {
-    #[error(transparent)]
-    ScriptError(#[from] ScriptError),
-
+    // #[error(transparent)]
+    // ScriptError(#[from] ScriptError),
     #[error("Unknown metric for routing: {0}")]
     UnkwownMetric(String),
 
@@ -63,11 +62,11 @@ pub enum RoutingStrategy {
         targets_percentages: Vec<f64>,
     },
     Random,
-    Script {
-        script: String,
-        // js function. Context is passed in parameters
-        // transform_request({request, models, metrics, headers}) -> request
-    },
+    // Script {
+    //     script: String,
+    //     // js function. Context is passed in parameters
+    //     // transform_request({request, models, metrics, headers}) -> request
+    // },
     Optimized {
         metric: strategy::metric::MetricSelector,
     },
@@ -107,9 +106,9 @@ pub trait RouteStrategy {
 impl RouteStrategy for LlmRouter {
     async fn route(
         &self,
-        request: ChatCompletionRequest,
-        available_models: &AvailableModels,
-        headers: HashMap<String, String>,
+        _request: ChatCompletionRequest,
+        _available_models: &AvailableModels,
+        _headers: HashMap<String, String>,
         metrics: BTreeMap<String, ProviderMetrics>,
     ) -> Result<Targets, RouterError> {
         match &self.strategy {
@@ -147,15 +146,15 @@ impl RouteStrategy for LlmRouter {
 
                 Ok(vec![target])
             }
-            RoutingStrategy::Script { script } => {
-                let result =
-                    ScriptStrategy::run(script, &request, &headers, available_models, &metrics)?;
+            // RoutingStrategy::Script { script } => {
+            //     let result =
+            //         ScriptStrategy::run(script, &request, &headers, available_models, &metrics)?;
 
-                let r = serde_json::from_value(result)
-                    .map_err(RouterError::FailedToDeserializeRequestResult)?;
+            //     let r = serde_json::from_value(result)
+            //         .map_err(RouterError::FailedToDeserializeRequestResult)?;
 
-                Ok(vec![r])
-            }
+            //     Ok(vec![r])
+            // }
             RoutingStrategy::Optimized { metric } => {
                 let models = self
                     .targets
@@ -184,7 +183,6 @@ impl RouteStrategy for LlmRouter {
 
 #[cfg(test)]
 mod tests {
-    use crate::types::gateway::ChatCompletionMessage;
 
     use super::*;
 
@@ -234,105 +232,105 @@ mod tests {
         eprintln!("{}", serde_json::to_string_pretty(&router).unwrap());
     }
 
-    #[tokio::test]
-    async fn test_script_router() {
-        let router = LlmRouter {
-            name: "test".to_string(),
-            strategy: RoutingStrategy::Script {
-                script: r#"
-                    function route(params) {
-                        const { request, models, metrics } = params;
-                        if (request.messages.length > 5) {
-                            return { ...request, model: "openai/gpt-4" };
-                        }
-                        return { ...request, model: "openai/gpt-3.5-turbo" };
-                    }
-                "#
-                .to_string(),
-            },
-            targets: vec![],
-            metrics_duration: None,
-        };
+    // #[tokio::test]
+    // async fn test_script_router() {
+    //     let router = LlmRouter {
+    //         name: "test".to_string(),
+    //         strategy: RoutingStrategy::Script {
+    //             script: r#"
+    //                 function route(params) {
+    //                     const { request, models, metrics } = params;
+    //                     if (request.messages.length > 5) {
+    //                         return { ...request, model: "openai/gpt-4" };
+    //                     }
+    //                     return { ...request, model: "openai/gpt-3.5-turbo" };
+    //                 }
+    //             "#
+    //             .to_string(),
+    //         },
+    //         targets: vec![],
+    //         metrics_duration: None,
+    //     };
 
-        // Test case 1: Short conversation (≤ 5 messages)
-        let request = ChatCompletionRequest {
-            model: "router/test".to_string(),
-            messages: vec![
-                ChatCompletionMessage::new_text("user".to_string(), "Hello".to_string()),
-                ChatCompletionMessage::new_text("assistant".to_string(), "Hi there!".to_string()),
-            ],
-            ..Default::default()
-        };
+    //     // Test case 1: Short conversation (≤ 5 messages)
+    //     let request = ChatCompletionRequest {
+    //         model: "router/test".to_string(),
+    //         messages: vec![
+    //             ChatCompletionMessage::new_text("user".to_string(), "Hello".to_string()),
+    //             ChatCompletionMessage::new_text("assistant".to_string(), "Hi there!".to_string()),
+    //         ],
+    //         ..Default::default()
+    //     };
 
-        let headers = HashMap::new();
-        let available_models = AvailableModels(vec![]);
-        let metrics = BTreeMap::new();
+    //     let headers = HashMap::new();
+    //     let available_models = AvailableModels(vec![]);
+    //     let metrics = BTreeMap::new();
 
-        let result = router
-            .route(
-                request.clone(),
-                &available_models,
-                headers.clone(),
-                metrics.clone(),
-            )
-            .await;
+    //     let result = router
+    //         .route(
+    //             request.clone(),
+    //             &available_models,
+    //             headers.clone(),
+    //             metrics.clone(),
+    //         )
+    //         .await;
 
-        assert!(result.is_ok());
-        assert_eq!(
-            result
-                .unwrap()
-                .first()
-                .expect("No targets")
-                .get("model")
-                .expect("No model")
-                .as_str()
-                .expect("No model string")
-                .to_string(),
-            "openai/gpt-3.5-turbo"
-        );
+    //     assert!(result.is_ok());
+    //     assert_eq!(
+    //         result
+    //             .unwrap()
+    //             .first()
+    //             .expect("No targets")
+    //             .get("model")
+    //             .expect("No model")
+    //             .as_str()
+    //             .expect("No model string")
+    //             .to_string(),
+    //         "openai/gpt-3.5-turbo"
+    //     );
 
-        // Test case 2: Long conversation (> 5 messages)
-        let long_request = ChatCompletionRequest {
-            model: "router/test".to_string(),
-            messages: vec![
-                ChatCompletionMessage::new_text("user".to_string(), "Message 1".to_string()),
-                ChatCompletionMessage::new_text("assistant".to_string(), "Response 1".to_string()),
-                ChatCompletionMessage::new_text("user".to_string(), "Message 2".to_string()),
-                ChatCompletionMessage::new_text("assistant".to_string(), "Response 2".to_string()),
-                ChatCompletionMessage::new_text("user".to_string(), "Message 3".to_string()),
-                ChatCompletionMessage::new_text("assistant".to_string(), "Response 3".to_string()),
-            ],
-            ..Default::default()
-        };
+    //     // Test case 2: Long conversation (> 5 messages)
+    //     let long_request = ChatCompletionRequest {
+    //         model: "router/test".to_string(),
+    //         messages: vec![
+    //             ChatCompletionMessage::new_text("user".to_string(), "Message 1".to_string()),
+    //             ChatCompletionMessage::new_text("assistant".to_string(), "Response 1".to_string()),
+    //             ChatCompletionMessage::new_text("user".to_string(), "Message 2".to_string()),
+    //             ChatCompletionMessage::new_text("assistant".to_string(), "Response 2".to_string()),
+    //             ChatCompletionMessage::new_text("user".to_string(), "Message 3".to_string()),
+    //             ChatCompletionMessage::new_text("assistant".to_string(), "Response 3".to_string()),
+    //         ],
+    //         ..Default::default()
+    //     };
 
-        let result = router
-            .route(long_request, &available_models, headers, metrics)
-            .await;
+    //     let result = router
+    //         .route(long_request, &available_models, headers, metrics)
+    //         .await;
 
-        assert!(result.is_ok());
-        assert_eq!(
-            result
-                .unwrap()
-                .first()
-                .expect("No targets")
-                .get("model")
-                .expect("No model")
-                .as_str()
-                .expect("No model string")
-                .to_string(),
-            "openai/gpt-4"
-        );
+    //     assert!(result.is_ok());
+    //     assert_eq!(
+    //         result
+    //             .unwrap()
+    //             .first()
+    //             .expect("No targets")
+    //             .get("model")
+    //             .expect("No model")
+    //             .as_str()
+    //             .expect("No model string")
+    //             .to_string(),
+    //         "openai/gpt-4"
+    //     );
 
-        // Test serialization
-        let serialized = serde_json::to_string_pretty(&router).unwrap();
-        let deserialized: LlmRouter = serde_json::from_str(&serialized).unwrap();
-        assert_eq!(router.name, deserialized.name);
-        assert_eq!(router.targets, deserialized.targets);
-        match (&router.strategy, &deserialized.strategy) {
-            (RoutingStrategy::Script { script: s1 }, RoutingStrategy::Script { script: s2 }) => {
-                assert_eq!(s1, s2);
-            }
-            _ => panic!("Deserialized strategy does not match"),
-        }
-    }
+    //     // Test serialization
+    //     let serialized = serde_json::to_string_pretty(&router).unwrap();
+    //     let deserialized: LlmRouter = serde_json::from_str(&serialized).unwrap();
+    //     assert_eq!(router.name, deserialized.name);
+    //     assert_eq!(router.targets, deserialized.targets);
+    //     match (&router.strategy, &deserialized.strategy) {
+    //         (RoutingStrategy::Script { script: s1 }, RoutingStrategy::Script { script: s2 }) => {
+    //             assert_eq!(s1, s2);
+    //         }
+    //         _ => panic!("Deserialized strategy does not match"),
+    //     }
+    // }
 }

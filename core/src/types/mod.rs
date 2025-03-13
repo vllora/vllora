@@ -4,6 +4,7 @@ pub mod db_connection;
 pub mod embed;
 pub mod engine;
 pub mod gateway;
+pub mod guardrails;
 pub mod image;
 pub mod json;
 pub mod message;
