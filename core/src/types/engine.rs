@@ -178,8 +178,7 @@ pub struct ExecutionOptions {
     pub max_retries: Option<i32>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub enum EngineType {
     #[default]
     OpenAI,
@@ -187,15 +186,85 @@ pub enum EngineType {
     Anthropic,
     Gemini,
     AwsLambda,
-    #[serde(rename = "langdbfunctions")]
     LangDBFunctions,
     Routing,
     Secrets,
+    Proxy(String),
+}
+
+impl<'de> Deserialize<'de> for EngineType {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct EngineTypeVisitor;
+
+        impl serde::de::Visitor<'_> for EngineTypeVisitor {
+            type Value = EngineType;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a string representing an engine type")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                // Try standard deserialization first
+                match value.to_lowercase().as_str() {
+                    "openai" => Ok(EngineType::OpenAI),
+                    "bedrock" => Ok(EngineType::Bedrock),
+                    "anthropic" => Ok(EngineType::Anthropic),
+                    "gemini" => Ok(EngineType::Gemini),
+                    "awslambda" => Ok(EngineType::AwsLambda),
+                    "langdbfunctions" => Ok(EngineType::LangDBFunctions),
+                    "routing" => Ok(EngineType::Routing),
+                    "secrets" => Ok(EngineType::Secrets),
+                    // For any unknown value, keep the original string
+                    _ => Ok(EngineType::Proxy(value.to_string())),
+                }
+            }
+        }
+
+        // Use our custom visitor to handle deserialization
+        deserializer.deserialize_str(EngineTypeVisitor)
+    }
+}
+
+impl Serialize for EngineType {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            EngineType::OpenAI => serializer.serialize_str("openai"),
+            EngineType::Bedrock => serializer.serialize_str("bedrock"),
+            EngineType::Anthropic => serializer.serialize_str("anthropic"),
+            EngineType::Gemini => serializer.serialize_str("gemini"),
+            EngineType::AwsLambda => serializer.serialize_str("awslambda"),
+            EngineType::LangDBFunctions => serializer.serialize_str("langdbfunctions"),
+            EngineType::Routing => serializer.serialize_str("routing"),
+            EngineType::Secrets => serializer.serialize_str("secrets"),
+            // For Proxy, serialize the original string directly
+            EngineType::Proxy(name) => serializer.serialize_str(name),
+        }
+    }
 }
 
 impl Display for EngineType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&serde_json::to_string(self).unwrap())
+        match self {
+            EngineType::OpenAI => write!(f, "openai"),
+            EngineType::Bedrock => write!(f, "bedrock"),
+            EngineType::Anthropic => write!(f, "anthropic"),
+            EngineType::Gemini => write!(f, "gemini"),
+            EngineType::AwsLambda => write!(f, "awslambda"),
+            EngineType::LangDBFunctions => write!(f, "langdbfunctions"),
+            EngineType::Routing => write!(f, "routing"),
+            EngineType::Secrets => write!(f, "secrets"),
+            // For Proxy, display the original string directly
+            EngineType::Proxy(name) => write!(f, "{}", name),
+        }
     }
 }
 
@@ -260,6 +329,8 @@ impl EngineType {
             | (EngineType::Gemini, EngineFeature::Completions)
             | (EngineType::Bedrock, EngineFeature::Completions)
             | (EngineType::OpenAI, EngineFeature::Embeddings)
+            | (EngineType::Proxy(_), EngineFeature::Completions)
+            | (EngineType::Proxy(_), EngineFeature::Embeddings)
             | (EngineType::AwsLambda, EngineFeature::Functions)
             | (EngineType::LangDBFunctions, EngineFeature::Functions) => true,
 
@@ -277,6 +348,7 @@ impl EngineType {
             EngineType::Gemini => &[EngineFeature::Completions],
             EngineType::Routing => &[EngineFeature::Completions],
             EngineType::Secrets => &[EngineFeature::Integrations],
+            EngineType::Proxy(_) => &[EngineFeature::Completions, EngineFeature::Embeddings],
         }
     }
 }
@@ -849,13 +921,6 @@ impl From<RoutingModelOptions> for ParentCompletionOptions {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct ImageGenerationModelDefinition {
-    pub name: String,
-    pub engine: ImageGenerationEngineParams,
-    pub db_model: Model,
-}
-
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum ParentDefinition {
     CompletionModel(Box<CompletionModelDefinition>),
@@ -890,4 +955,11 @@ impl ParentDefinition {
             }
         }
     }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ImageGenerationModelDefinition {
+    pub name: String,
+    pub engine: ImageGenerationEngineParams,
+    pub db_model: Model,
 }
