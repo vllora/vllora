@@ -311,6 +311,7 @@ impl TraceService for TraceServiceImpl {
                             span.name,
                             attributes
                         );
+                        continue;
                     }
 
                     let project_id = attributes
