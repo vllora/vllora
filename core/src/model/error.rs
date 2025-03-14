@@ -45,6 +45,9 @@ pub enum ModelError {
 
     #[error(transparent)]
     AuthorizationError(#[from] AuthorizationError),
+
+    #[error("System prompt is missing")]
+    SystemPromptMissing,
 }
 
 #[derive(Error, Debug)]

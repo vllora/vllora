@@ -911,9 +911,7 @@ impl AnthropicModel {
         }
 
         let Some(system_message) = system_message else {
-            return Err(GatewayError::CustomError(
-                "System prompt is missing".to_string(),
-            ));
+            return Err(GatewayError::ModelError(ModelError::SystemPromptMissing));
         };
 
         let previous_messages = Self::map_previous_messages(previous_messages)?;
