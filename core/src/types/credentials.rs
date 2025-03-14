@@ -1,20 +1,21 @@
 use std::collections::HashMap;
-use std::fmt::Display;
-use std::str::FromStr;
 
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
-use serde_with::serde_as;
-use serde_with::DisplayFromStr;
 
-#[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(untagged)]
 pub enum Credentials {
-    ApiKey(#[serde_as(as = "DisplayFromStr")] ApiKeyCredentials),
+    ApiKey(ApiKeyCredentials),
+    ApiKeyWithEndpoint {
+        #[serde(alias = "ApiKey")]
+        api_key: String,
+        endpoint: String,
+    },
     Aws(AwsCredentials),
     // Hosted LangDB AWS
-    #[serde(other)]
+    // #[serde(other)]
     LangDb,
 }
 
@@ -22,26 +23,12 @@ pub enum Credentials {
 pub struct IntegrationCredentials {
     pub secrets: HashMap<String, Value>,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct ApiKeyCredentials {
+    #[serde(alias = "ApiKey")]
     pub api_key: String,
-}
-
-impl Display for ApiKeyCredentials {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.api_key)
-    }
-}
-
-impl FromStr for ApiKeyCredentials {
-    type Err = std::string::ParseError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(ApiKeyCredentials {
-            api_key: s.to_string(),
-        })
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
@@ -51,4 +38,27 @@ pub struct AwsCredentials {
     pub access_secret: String,
     // Defaults tp us-east-1
     pub region: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::types::credentials::{ApiKeyCredentials, Credentials};
+
+    #[test]
+    fn test_serialization() {
+        let credentials = Credentials::ApiKey(ApiKeyCredentials {
+            api_key: "api_key".to_string(),
+        });
+        let serialized = serde_json::to_string(&credentials).unwrap();
+        let deserialized: Credentials = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(credentials, deserialized);
+
+        let credentials = Credentials::ApiKeyWithEndpoint {
+            api_key: "api_key".to_string(),
+            endpoint: "https://my_own_endpoint.com".to_string(),
+        };
+        let serialized = serde_json::to_string(&credentials).unwrap();
+        let deserialized: Credentials = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(credentials, deserialized);
+    }
 }

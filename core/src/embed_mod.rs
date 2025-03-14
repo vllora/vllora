@@ -54,8 +54,9 @@ impl OpenAIEmbed {
     pub fn new(
         params: OpenAiEmbeddingParams,
         credentials: Option<&ApiKeyCredentials>,
+        endpoint: Option<&str>,
     ) -> Result<Self, ModelError> {
-        let client = openai_client(credentials)?;
+        let client = openai_client(credentials, endpoint)?;
 
         let credentials_ident = credentials
             .map(|_c| CredentialsIdent::Own)

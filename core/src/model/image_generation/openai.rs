@@ -51,12 +51,13 @@ impl OpenAIImageGeneration {
     pub fn new(
         credentials: Option<&ApiKeyCredentials>,
         client: Option<Client<OpenAIConfig>>,
+        endpoint: Option<&str>,
     ) -> Result<Self, ModelError> {
         Ok(OpenAIImageGeneration {
             credentials_ident: credentials
                 .map(|_c| CredentialsIdent::Own)
                 .unwrap_or(CredentialsIdent::Langdb),
-            client: client.unwrap_or(openai_client(credentials)?),
+            client: client.unwrap_or(openai_client(credentials, endpoint)?),
         })
     }
 

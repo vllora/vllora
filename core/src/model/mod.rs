@@ -98,6 +98,7 @@ pub async fn init_completion_model_instance(
             params,
             execution_options,
             credentials,
+            endpoint,
         } => Ok(Box::new(TracedModel {
             inner: OpenAIModel::new(
                 params.clone(),
@@ -106,6 +107,7 @@ pub async fn init_completion_model_instance(
                 definition.prompt.clone(),
                 tools,
                 None,
+                endpoint.as_ref().map(|x| x.as_str()),
             )?,
             definition,
             cost_calculator: cost_calculator.clone(),

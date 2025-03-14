@@ -52,6 +52,7 @@ impl OpenAISpecModel {
             prompt,
             tools,
             Some(client),
+            None,
         )?;
 
         Ok(Self { openai_model })
