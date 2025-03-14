@@ -41,13 +41,19 @@ fn initialize_image_generation_model_instance(
     provider_name: Option<&str>,
 ) -> Result<Box<dyn ImageGenerationModelInstance>, ModelError> {
     match &definition.engine {
-        ImageGenerationEngineParams::OpenAi { credentials, .. } => {
-            Ok(Box::new(TracedImageGenerationModel {
-                inner: OpenAIImageGeneration::new(credentials.clone().as_ref(), None)?,
-                definition: definition.clone(),
-                cost_calculator: cost_calculator.clone(),
-            }))
-        }
+        ImageGenerationEngineParams::OpenAi {
+            credentials,
+            endpoint,
+            ..
+        } => Ok(Box::new(TracedImageGenerationModel {
+            inner: OpenAIImageGeneration::new(
+                credentials.clone().as_ref(),
+                None,
+                endpoint.as_ref().map(|s| s.as_str()),
+            )?,
+            definition: definition.clone(),
+            cost_calculator: cost_calculator.clone(),
+        })),
         ImageGenerationEngineParams::LangdbOpen { credentials, .. } => {
             Ok(Box::new(TracedImageGenerationModel {
                 inner: OpenAISpecModel::new(

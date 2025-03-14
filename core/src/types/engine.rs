@@ -359,6 +359,7 @@ pub enum CompletionEngineParams {
         params: OpenAiModelParams,
         execution_options: ExecutionOptions,
         credentials: Option<ApiKeyCredentials>,
+        endpoint: Option<String>,
     },
     Bedrock {
         credentials: Option<AwsCredentials>,
@@ -426,6 +427,7 @@ impl CompletionEngineParams {
 pub enum ImageGenerationEngineParams {
     OpenAi {
         credentials: Option<ApiKeyCredentials>,
+        endpoint: Option<String>,
         model_name: String,
     },
     LangdbOpen {

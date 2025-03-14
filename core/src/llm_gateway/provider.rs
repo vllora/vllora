@@ -5,7 +5,7 @@ use clust::messages::StopSequence;
 use crate::{
     models::ModelMetadata,
     types::{
-        credentials::Credentials,
+        credentials::{ApiKeyCredentials, Credentials},
         engine::{
             AnthropicModelParams, BedrockModelParams, ClaudeModel, CompletionEngineParams,
             GeminiModelParams, ImageGenerationEngineParams, OpenAiModelParams,
@@ -43,8 +43,16 @@ impl Provider {
                     user: request.user.clone(),
                     response_format: request.response_format.clone(),
                 };
+                let mut custom_endpoint = None;
                 let api_key_credentials = credentials.and_then(|cred| match cred {
                     Credentials::ApiKey(key) => Some(key),
+                    Credentials::ApiKeyWithEndpoint {
+                        api_key: key,
+                        endpoint,
+                    } => {
+                        custom_endpoint = Some(endpoint);
+                        Some(ApiKeyCredentials { api_key: key })
+                    }
                     _ => None,
                 });
                 if model.inference_provider.provider == InferenceModelProvider::OpenAI {
@@ -52,6 +60,7 @@ impl Provider {
                         params,
                         execution_options: Default::default(),
                         credentials: api_key_credentials,
+                        endpoint: custom_endpoint,
                     })
                 } else {
                     Ok(CompletionEngineParams::Proxy {
@@ -165,13 +174,23 @@ impl Provider {
         credentials: Option<&Credentials>,
     ) -> Result<ImageGenerationEngineParams, GatewayError> {
         match model.inference_provider.provider {
-            InferenceModelProvider::OpenAI => Ok(ImageGenerationEngineParams::OpenAi {
-                credentials: credentials.and_then(|cred| match cred {
-                    Credentials::ApiKey(key) => Some(key.clone()),
-                    _ => None,
-                }),
-                model_name: request.model.clone(),
-            }),
+            InferenceModelProvider::OpenAI => {
+                let mut custom_endpoint = None;
+                Ok(ImageGenerationEngineParams::OpenAi {
+                    credentials: credentials.and_then(|cred| match cred {
+                        Credentials::ApiKey(key) => Some(key.clone()),
+                        Credentials::ApiKeyWithEndpoint { api_key, endpoint } => {
+                            custom_endpoint = Some(endpoint.clone());
+                            Some(ApiKeyCredentials {
+                                api_key: api_key.clone(),
+                            })
+                        }
+                        _ => None,
+                    }),
+                    model_name: request.model.clone(),
+                    endpoint: custom_endpoint,
+                })
+            }
             InferenceModelProvider::Proxy(_) => Ok(ImageGenerationEngineParams::LangdbOpen {
                 credentials: credentials.and_then(|cred| match cred {
                     Credentials::ApiKey(key) => Some(key.clone()),

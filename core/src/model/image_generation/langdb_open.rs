@@ -26,7 +26,7 @@ impl OpenAISpecModel {
     ) -> Result<Self, ModelError> {
         let client: Client<OpenAIConfig> =
             openai_spec_client(credentials, endpoint, provider_name)?;
-        let openai_model = OpenAIImageGeneration::new(credentials, Some(client))?;
+        let openai_model = OpenAIImageGeneration::new(credentials, Some(client), None)?;
 
         Ok(Self { openai_model })
     }

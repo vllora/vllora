@@ -5,6 +5,7 @@ use crate::embed_mod::OpenAIEmbed;
 use crate::error::GatewayError;
 use crate::model::types::ModelEvent;
 use crate::models::ModelMetadata;
+use crate::types::credentials::ApiKeyCredentials;
 use crate::types::credentials::Credentials;
 use actix_web::HttpRequest;
 use async_openai::types::EmbeddingInput;
@@ -67,16 +68,24 @@ pub async fn handle_embeddings_invoke(
     });
 
     let providers_config = req.app_data::<ProvidersConfig>().cloned();
+    let mut custom_endpoint = None;
     let key = match get_key_credentials(
         key_credentials,
         providers_config.as_ref(),
         &llm_model.inference_provider.provider.to_string(),
     ) {
         Some(Credentials::ApiKey(key)) => Some(key),
+        Some(Credentials::ApiKeyWithEndpoint {
+            api_key: key,
+            endpoint,
+        }) => {
+            custom_endpoint = Some(endpoint);
+            Some(ApiKeyCredentials { api_key: key })
+        }
         _ => None,
     };
 
-    let embed = OpenAIEmbed::new(params, key.as_ref())?;
+    let embed = OpenAIEmbed::new(params, key.as_ref(), custom_endpoint.as_deref())?;
     embed
         .invoke(input, Some(tx.clone()))
         .instrument(span.clone())

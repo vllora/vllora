@@ -67,6 +67,7 @@ fn custom_err(e: impl ToString) -> ModelError {
 
 pub fn openai_client(
     credentials: Option<&ApiKeyCredentials>,
+    endpoint: Option<&str>,
 ) -> Result<async_openai::Client<async_openai::config::OpenAIConfig>, ModelError> {
     let mut config = OpenAIConfig::new();
 
@@ -76,6 +77,10 @@ pub fn openai_client(
         std::env::var("LANGDB_OPENAI_API_KEY").map_err(|_| AuthorizationError::InvalidApiKey)?
     };
     config = config.with_api_key(api_key);
+
+    if let Some(endpoint) = endpoint {
+        config = config.with_api_base(endpoint);
+    }
 
     Ok(Client::with_config(config))
 }
@@ -98,12 +103,15 @@ impl OpenAIModel {
         prompt: Prompt,
         tools: HashMap<String, Box<dyn Tool>>,
         client: Option<Client<OpenAIConfig>>,
+        endpoint: Option<&str>,
     ) -> Result<Self, ModelError> {
+        let client = client.unwrap_or(openai_client(credentials, endpoint)?);
+
         Ok(Self {
             params,
             execution_options,
             prompt,
-            client: client.unwrap_or(openai_client(credentials)?),
+            client,
             tools: Arc::new(tools),
             credentials_ident: credentials
                 .map(|_c| CredentialsIdent::Own)
