@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::model::error::ModelError;
 use langdb_open::OpenAISpecModel;
 use openai::OpenAIImageGeneration;
 use serde::Serialize;
@@ -10,7 +11,6 @@ use tracing_futures::Instrument;
 use valuable::Valuable;
 
 use crate::events::{JsonValue, RecordResult, SPAN_MODEL_CALL};
-use crate::model::error::ToolError;
 use crate::model::types::ModelEventType;
 use crate::types::engine::{ImageGenerationEngineParams, ImageGenerationModelDefinition};
 use crate::types::gateway::{CostCalculator, CreateImageRequest, ImageGenerationModelUsage, Usage};
@@ -39,12 +39,11 @@ fn initialize_image_generation_model_instance(
     cost_calculator: Option<Arc<Box<dyn CostCalculator>>>,
     endpoint: Option<&str>,
     provider_name: Option<&str>,
-) -> Result<Box<dyn ImageGenerationModelInstance>, ToolError> {
+) -> Result<Box<dyn ImageGenerationModelInstance>, ModelError> {
     match &definition.engine {
         ImageGenerationEngineParams::OpenAi { credentials, .. } => {
             Ok(Box::new(TracedImageGenerationModel {
-                inner: OpenAIImageGeneration::new(credentials.clone().as_ref(), None)
-                    .map_err(|e| ToolError::CredentialsError(e.to_string()))?,
+                inner: OpenAIImageGeneration::new(credentials.clone().as_ref(), None)?,
                 definition: definition.clone(),
                 cost_calculator: cost_calculator.clone(),
             }))
@@ -55,8 +54,7 @@ fn initialize_image_generation_model_instance(
                     credentials.clone().as_ref(),
                     endpoint,
                     provider_name.unwrap(),
-                )
-                .map_err(|e| ToolError::CredentialsError(e.to_string()))?,
+                )?,
                 definition: definition.clone(),
                 cost_calculator: cost_calculator.clone(),
             }))
@@ -69,7 +67,7 @@ pub async fn initialize_image_generation(
     cost_calculator: Option<Arc<Box<dyn CostCalculator>>>,
     endpoint: Option<&str>,
     provider_name: Option<&str>,
-) -> Result<Box<dyn ImageGenerationModelInstance>, ToolError> {
+) -> Result<Box<dyn ImageGenerationModelInstance>, ModelError> {
     initialize_image_generation_model_instance(definition, cost_calculator, endpoint, provider_name)
 }
 pub struct TracedImageGenerationModel<Inner: ImageGenerationModelInstance> {

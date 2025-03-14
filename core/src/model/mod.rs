@@ -1,6 +1,6 @@
 use crate::events::{JsonValue, RecordResult, SPAN_MODEL_CALL};
 use crate::model::bedrock::BedrockModel;
-use crate::model::error::ToolError;
+use crate::model::error::ModelError;
 use crate::types::engine::{CompletionEngineParams, CompletionModelParams};
 use crate::types::engine::{CompletionModelDefinition, ModelTools, ModelType};
 use crate::types::gateway::{
@@ -73,7 +73,7 @@ pub async fn init_completion_model_instance(
     endpoint: Option<&str>,
     provider_name: Option<&str>,
     router_span: tracing::Span,
-) -> Result<Box<dyn ModelInstance>, ToolError> {
+) -> Result<Box<dyn ModelInstance>, ModelError> {
     match &definition.model_params.engine {
         CompletionEngineParams::Bedrock {
             params,
@@ -89,8 +89,7 @@ pub async fn init_completion_model_instance(
                 tools,
                 provider.clone(),
             )
-            .await
-            .map_err(|_| ToolError::CredentialsError("Bedrock".into()))?,
+            .await?,
             definition,
             cost_calculator: cost_calculator.clone(),
             router_span: router_span.clone(),
@@ -107,8 +106,7 @@ pub async fn init_completion_model_instance(
                 definition.prompt.clone(),
                 tools,
                 None,
-            )
-            .map_err(|_| ToolError::CredentialsError("Openai".into()))?,
+            )?,
             definition,
             cost_calculator: cost_calculator.clone(),
             router_span: router_span.clone(),
@@ -128,8 +126,7 @@ pub async fn init_completion_model_instance(
                     tools,
                     endpoint,
                     provider_name,
-                )
-                .map_err(|_| ToolError::CredentialsError(provider_name.into()))?,
+                )?,
                 definition,
                 cost_calculator: cost_calculator.clone(),
                 router_span: router_span.clone(),
@@ -146,8 +143,7 @@ pub async fn init_completion_model_instance(
                 credentials.as_ref(),
                 definition.prompt.clone(),
                 tools,
-            )
-            .map_err(|_| ToolError::CredentialsError("Anthropic".into()))?,
+            )?,
             definition,
             cost_calculator: cost_calculator.clone(),
             router_span: router_span.clone(),
@@ -163,8 +159,7 @@ pub async fn init_completion_model_instance(
                 credentials.as_ref(),
                 definition.prompt.clone(),
                 tools,
-            )
-            .map_err(|_| ToolError::CredentialsError("Gemini".into()))?,
+            )?,
             definition,
             cost_calculator: cost_calculator.clone(),
             router_span: router_span.clone(),
@@ -177,7 +172,7 @@ pub async fn initialize_completion(
     cost_calculator: Option<Arc<Box<dyn CostCalculator>>>,
     provider_name: Option<&str>,
     router_span: tracing::Span,
-) -> Result<Box<dyn ModelInstance>, ToolError> {
+) -> Result<Box<dyn ModelInstance>, ModelError> {
     let tools: HashMap<_, Box<(dyn Tool + 'static)>> = HashMap::new();
 
     init_completion_model_instance(

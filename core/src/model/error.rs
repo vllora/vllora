@@ -4,6 +4,9 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum ModelError {
+    #[error("Credentials for '{0}' are invalid or missing")]
+    CredentialsError(String),
+
     #[error("Model stopped with error: {0}")]
     FinishError(String),
 
@@ -54,12 +57,6 @@ pub enum ModelError {
 pub enum AuthorizationError {
     #[error("Invalid API Key")]
     InvalidApiKey,
-}
-
-#[derive(Error, Debug)]
-pub enum ToolError {
-    #[error("Credentials for '{0}' are invalid or missing")]
-    CredentialsError(String),
 }
 
 #[derive(Error, Debug)]

@@ -1,4 +1,5 @@
 use crate::model::async_trait;
+use crate::model::error::ModelError;
 use crate::model::openai_spec_client::openai_spec_client;
 use crate::model::types::ModelEvent;
 use crate::types::credentials::ApiKeyCredentials;
@@ -22,7 +23,7 @@ impl OpenAISpecModel {
         credentials: Option<&ApiKeyCredentials>,
         endpoint: Option<&str>,
         provider_name: &str,
-    ) -> GatewayResult<Self> {
+    ) -> Result<Self, ModelError> {
         let client: Client<OpenAIConfig> =
             openai_spec_client(credentials, endpoint, provider_name)?;
         let openai_model = OpenAIImageGeneration::new(credentials, Some(client))?;

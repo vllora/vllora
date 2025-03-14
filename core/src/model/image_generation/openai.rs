@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use crate::events::SPAN_OPENAI;
+use crate::model::error::ModelError;
 use async_openai::config::Config;
 use async_openai::{config::OpenAIConfig, Client};
 
@@ -50,7 +51,7 @@ impl OpenAIImageGeneration {
     pub fn new(
         credentials: Option<&ApiKeyCredentials>,
         client: Option<Client<OpenAIConfig>>,
-    ) -> GatewayResult<Self> {
+    ) -> Result<Self, ModelError> {
         Ok(OpenAIImageGeneration {
             credentials_ident: credentials
                 .map(|_c| CredentialsIdent::Own)
