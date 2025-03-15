@@ -1,6 +1,6 @@
 [package]
 name = "langdb_core"
-version = "0.1.3"
+version = "0.2.0"
 edition = "2021"
 authors = ["LangDB Team<api@langdb.ai>"]
 description = "AI gateway Core for LangDB AI Gateway."
