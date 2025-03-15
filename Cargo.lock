@@ -1171,21 +1171,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "clust"
-version = "0.9.0"
-source = "git+https://github.com/langdb/clust?branch=feat%2Fthinking#925947607492113cea68e8d8a74678fcdd14070e"
-dependencies = [
- "bytes",
- "futures-core",
- "pin-project",
- "reqwest 0.12.12",
- "serde",
- "serde-json-fmt",
- "serde_json",
- "thiserror 1.0.69",
-]
-
-[[package]]
 name = "colorchoice"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2030,6 +2015,7 @@ dependencies = [
  "tokio",
  "tokio-rustls 0.26.1",
  "tower-service",
+ "webpki-roots",
 ]
 
 [[package]]
@@ -2475,6 +2461,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "langdb_clust"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "20864bec3c7a2645aafc7190a9284a0397918efee392f8b1cabeaf28d945b1c3"
+dependencies = [
+ "bytes",
+ "futures-core",
+ "pin-project",
+ "reqwest 0.12.12",
+ "serde",
+ "serde-json-fmt",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "langdb_core"
 version = "0.2.0"
 dependencies = [
@@ -2491,12 +2493,12 @@ dependencies = [
  "bytemuck",
  "bytes",
  "chrono",
- "clust",
  "dashmap",
  "either",
  "futures",
  "indexmap 2.7.1",
  "langdb_clickhouse",
+ "langdb_clust",
  "minijinja",
  "openssh",
  "opentelemetry",
@@ -3551,6 +3553,7 @@ dependencies = [
  "wasm-bindgen-futures",
  "wasm-streams",
  "web-sys",
+ "webpki-roots",
  "windows-registry",
 ]
 
@@ -5015,6 +5018,15 @@ checksum = "5a6580f308b1fad9207618087a65c04e7a10bc77e02c8e84e9b00dd4b12fa0bb"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "webpki-roots"
+version = "0.26.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2210b291f7ea53617fbafcc4939f10914214ec15aace5ba62293a668f322c5c9"
+dependencies = [
+ "rustls-pki-types",
 ]
 
 [[package]]
