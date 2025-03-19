@@ -1,3 +1,5 @@
+use crate::types::http::response::GuardValidationError;
+use actix_web::{http, HttpResponse, ResponseError};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
@@ -29,11 +31,50 @@ pub enum GuardError {
     #[error("Output guardrails not supported in streaming")]
     OutputGuardrailsNotSupportedInStreaming,
 
-    #[error("Request stopped after guard evaluation: {0}")]
-    RequestStoppedAfterGuardEvaluation(String),
-
     #[error("Guard '{0}' not passed")]
     GuardNotPassed(String, GuardResult),
+}
+
+impl ResponseError for GuardError {
+    fn status_code(&self) -> http::StatusCode {
+        match self {
+            GuardError::GuardNotFound(_) => http::StatusCode::NOT_FOUND,
+            GuardError::GuardEvaluationError(_) => http::StatusCode::INTERNAL_SERVER_ERROR,
+            GuardError::OutputGuardrailsNotSupportedInStreaming => http::StatusCode::BAD_REQUEST,
+            GuardError::GuardNotPassed(_, _) => {
+                crate::types::http::status::GuardValidationFailed::status_code()
+            }
+        }
+    }
+
+    fn error_response(&self) -> HttpResponse {
+        match self {
+            GuardError::GuardNotFound(id) => HttpResponse::NotFound().json(serde_json::json!({
+                "error": "Guard not found",
+                "guard_id": id
+            })),
+            GuardError::GuardEvaluationError(message) => {
+                HttpResponse::InternalServerError().json(serde_json::json!({
+                    "error": "Guard evaluation error",
+                    "message": message
+                }))
+            }
+            GuardError::OutputGuardrailsNotSupportedInStreaming => {
+                HttpResponse::BadRequest().json(serde_json::json!({
+                    "error": "Output guardrails not supported in streaming"
+                }))
+            }
+            GuardError::GuardNotPassed(guard_id, result) => {
+                let details = serde_json::to_value(result).ok();
+                let guard_error = GuardValidationError {
+                    message: format!("Guard '{}' not passed", guard_id),
+                    guard_id: guard_id.clone(),
+                    details,
+                };
+                guard_error.error_response()
+            }
+        }
+    }
 }
 
 /// Enum representing when a guard should be applied

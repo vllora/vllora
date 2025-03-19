@@ -5,6 +5,7 @@ pub mod embed;
 pub mod engine;
 pub mod gateway;
 pub mod guardrails;
+pub mod http;
 pub mod image;
 pub mod json;
 pub mod message;

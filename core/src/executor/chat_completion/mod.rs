@@ -13,8 +13,7 @@ use crate::types::engine::{
     ModelTools, ModelType, Prompt,
 };
 use crate::types::gateway::{
-    ChatCompletionChoice, ChatCompletionContent, ChatCompletionDelta, ChatCompletionMessage,
-    ChatCompletionRequestWithTools, ChatCompletionResponse, ChatCompletionUsage, Extra,
+    ChatCompletionMessage, ChatCompletionRequestWithTools, ChatCompletionResponse, Extra,
     GuardOrName, GuardWithParameters,
 };
 use crate::types::guardrails::service::GuardrailsEvaluator;
@@ -26,8 +25,6 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::fmt::Debug;
-use stream_wrapper::wrap_stream;
-use tokio_stream::wrappers::ReceiverStream;
 use tracing::Span;
 use tracing_futures::Instrument;
 use uuid::Uuid;
@@ -176,7 +173,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         // }
     }
 
-    let result = apply_guardrails(
+    apply_guardrails(
         &request_with_tools.request.messages,
         request_with_tools.extra.as_ref(),
         executor_context.evaluator_service.as_ref().as_ref(),
@@ -184,16 +181,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         GuardStage::Input,
     )
     .instrument(span.clone())
-    .await;
-
-    let result = resolve_guard_result(result, &GuardStage::Input, None)?;
-    if let Some(r) = result {
-        if is_stream {
-            return Ok(Left(stream_response_to_stream(r)));
-        } else {
-            return Ok(Right(Ok(r)));
-        }
-    }
+    .await?;
 
     if is_stream {
         Ok(Left(
@@ -223,23 +211,14 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         if let Ok(completion_response) = &result {
             let ChatCompletionResponse { choices, .. } = completion_response;
             for choice in choices {
-                let result = apply_guardrails(
+                apply_guardrails(
                     &[choice.message.clone()],
                     request_with_tools.extra.as_ref(),
                     executor_context.evaluator_service.as_ref().as_ref(),
                     executor_context,
                     GuardStage::Output,
                 )
-                .await;
-
-                let result = resolve_guard_result(
-                    result,
-                    &GuardStage::Output,
-                    Some(completion_response.clone()),
-                )?;
-                if let Some(r) = result {
-                    return Ok(Right(Ok(r)));
-                }
+                .await?;
             }
         }
 
@@ -370,100 +349,4 @@ pub struct ResolvedModelContext {
     pub model_instance: Box<dyn ModelInstance>,
     pub db_model: Model,
     pub llm_model: ModelMetadata,
-}
-
-fn stream_response_to_stream(
-    response: ChatCompletionResponse,
-) -> Result<ChatCompletionStream, GatewayApiError> {
-    let (tx, rx) = tokio::sync::mpsc::channel(1);
-
-    tokio::spawn(async move {
-        if let Some(choice) = response.choices.first() {
-            // Send refusal if present
-            if let Some(refusal) = &choice.message.refusal {
-                let _ = tx
-                    .send(Ok((
-                        Some(ChatCompletionDelta {
-                            role: Some("assistant".to_string()),
-                            content: Some(refusal.clone()),
-                            tool_calls: None,
-                        }),
-                        None,
-                        choice.finish_reason.clone(),
-                    )))
-                    .await;
-            } else {
-                // Send content if present
-                if let Some(content) = &choice.message.content {
-                    let content = match content {
-                        ChatCompletionContent::Text(text) => text.clone(),
-                        _ => unreachable!(), // Not supported in streaming
-                    };
-
-                    let _ = tx
-                        .send(Ok((
-                            Some(ChatCompletionDelta {
-                                role: Some("assistant".to_string()),
-                                content: Some(content),
-                                tool_calls: None,
-                            }),
-                            None,
-                            choice.finish_reason.clone(),
-                        )))
-                        .await;
-                }
-            }
-        }
-    });
-
-    Ok(wrap_stream(ReceiverStream::new(rx)))
-}
-
-fn resolve_guard_result(
-    result: Result<(), GuardError>,
-    guard_stage: &GuardStage,
-    response: Option<ChatCompletionResponse>,
-) -> Result<Option<ChatCompletionResponse>, GatewayApiError> {
-    let response = response.unwrap_or(ChatCompletionResponse {
-        id: "".to_string(),
-        object: "chat.completion".to_string(),
-        created: 0,
-        model: "".to_string(),
-        usage: ChatCompletionUsage::default(),
-        choices: vec![],
-    });
-
-    match result {
-        Ok(_) => Ok(None),
-        Err(GuardError::GuardNotPassed(_, _)) => {
-            let stage = match guard_stage {
-                GuardStage::Input => "Input",
-                GuardStage::Output => "Output",
-            };
-            let finish_reason = match guard_stage {
-                GuardStage::Input => "rejected",
-                GuardStage::Output => "stop",
-            };
-            Ok(Some(ChatCompletionResponse {
-                choices: vec![ChatCompletionChoice {
-                    message: ChatCompletionMessage {
-                        role: "assistant".to_string(),
-                        content: Some(ChatCompletionContent::Text(format!(
-                            "{} rejected by guard",
-                            stage
-                        ))),
-                        ..Default::default()
-                    },
-                    finish_reason: Some(finish_reason.to_string()),
-                    index: 0,
-                }],
-                id: response.id.clone(),
-                object: response.object.clone(),
-                created: response.created,
-                model: response.model.clone(),
-                usage: response.usage.clone(),
-            }))
-        }
-        Err(e) => Err(GatewayApiError::GuardError(e)),
-    }
 }

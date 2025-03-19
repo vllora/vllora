@@ -5,6 +5,7 @@ pub mod error;
 pub mod events;
 pub mod executor;
 pub mod handler;
+pub mod http;
 pub mod llm_gateway;
 pub mod model;
 pub mod models;
@@ -14,6 +15,7 @@ pub mod routing;
 pub mod types;
 
 use crate::error::GatewayError;
+use crate::http::status::GuardValidationFailed;
 use crate::types::gateway::CostCalculatorError;
 use crate::types::guardrails::GuardError;
 use actix_web::http::header::ContentType;
@@ -61,16 +63,29 @@ pub enum GatewayApiError {
     GuardError(#[from] GuardError),
 }
 
+impl GatewayApiError {
+    pub fn is_countable_error(&self) -> bool {
+        !matches!(
+            self,
+            GatewayApiError::GuardError(GuardError::GuardNotPassed(_, _))
+        )
+    }
+}
 impl actix_web::error::ResponseError for GatewayApiError {
     fn error_response(&self) -> HttpResponse {
         tracing::error!("API error: {:?}", self);
-        let json_error = json!({
-            "error": self.to_string(),
-        });
+        match self {
+            GatewayApiError::GuardError(e) => e.error_response(),
+            e => {
+                let json_error = json!({
+                    "error": e.to_string(),
+                });
 
-        HttpResponse::build(self.status_code())
-            .insert_header(ContentType::json())
-            .json(json_error)
+                HttpResponse::build(e.status_code())
+                    .insert_header(ContentType::json())
+                    .json(json_error)
+            }
+        }
     }
 
     fn status_code(&self) -> StatusCode {
@@ -83,7 +98,10 @@ impl actix_web::error::ResponseError for GatewayApiError {
             GatewayApiError::RouteError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             GatewayApiError::RoutedExecutorError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             GatewayApiError::TokenUsageLimit => StatusCode::BAD_REQUEST,
-            GatewayApiError::GuardError(_) => StatusCode::BAD_REQUEST,
+            GatewayApiError::GuardError(e) => match e {
+                GuardError::GuardNotPassed(_, _) => GuardValidationFailed::status_code(),
+                _ => StatusCode::INTERNAL_SERVER_ERROR,
+            },
         }
     }
 }
