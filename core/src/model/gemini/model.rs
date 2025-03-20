@@ -331,7 +331,9 @@ impl GeminiModel {
                 let tool_calls_str = serde_json::to_string(
                     &calls
                         .iter()
-                        .map(|c| ToolCall {
+                        .enumerate()
+                        .map(|(index, c)| ToolCall {
+                            index: Some(index),
                             id: c.0.clone(),
                             r#type: "function".to_string(),
                             function: crate::types::gateway::FunctionCall {
@@ -392,8 +394,10 @@ impl GeminiModel {
                             tool_calls: Some(
                                 calls
                                     .iter()
-                                    .map(|(tool_name, params)| {
+                                    .enumerate()
+                                    .map(|(index, (tool_name, params))| {
                                         Ok(ToolCall {
+                                            index: Some(index),
                                             id: tool_name.clone(),
                                             r#type: "function".to_string(),
                                             function: crate::types::gateway::FunctionCall {
@@ -611,18 +615,22 @@ impl GeminiModel {
             if !tool_calls.is_empty() {
                 let mut call_messages = vec![];
                 let mut tools = vec![];
-                for (name, args) in tool_calls.clone() {
+                for (index, (name, args)) in tool_calls.clone().iter().enumerate() {
                     tools.push(ToolCall {
+                        index: Some(index),
                         id: name.clone(),
                         r#type: "function".to_string(),
                         function: crate::types::gateway::FunctionCall {
                             name: name.clone(),
-                            arguments: serde_json::to_string(&args)?,
+                            arguments: serde_json::to_string(args)?,
                         },
                     });
                     call_messages.push(Content {
                         role: Role::Model,
-                        parts: vec![Part::FunctionCall { name, args }],
+                        parts: vec![Part::FunctionCall {
+                            name: name.clone(),
+                            args: args.clone(),
+                        }],
                     });
                 }
                 let tool_calls_str = serde_json::to_string(&tools)?;

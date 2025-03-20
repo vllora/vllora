@@ -574,8 +574,10 @@ impl AnthropicModel {
                             tool_calls: Some(
                                 tool_runs
                                     .iter()
-                                    .map(|tool_call| {
+                                    .enumerate()
+                                    .map(|(index, tool_call)| {
                                         Ok(ToolCall {
+                                            index: Some(index),
                                             id: tool_call.id.clone(),
                                             r#type: "function".to_string(),
                                             function: crate::types::gateway::FunctionCall {

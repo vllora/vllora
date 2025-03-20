@@ -115,6 +115,7 @@ pub async fn stream_chunks(
                             role: Some("assistant".to_string()),
                             content: None,
                             tool_calls: Some(vec![ToolCall {
+                                index: Some(0),
                                 id: tool_call.tool_id.clone(),
                                 r#type: "function".into(),
                                 function: FunctionCall {
@@ -139,7 +140,9 @@ pub async fn stream_chunks(
                                 tool_calls: Some(
                                     tool_calls
                                         .into_iter()
-                                        .map(|tc| ToolCall {
+                                        .enumerate()
+                                        .map(|(index, tc)| ToolCall {
+                                            index: Some(index),
                                             id: tc.tool_id.clone(),
                                             r#type: "function".into(),
                                             function: FunctionCall {

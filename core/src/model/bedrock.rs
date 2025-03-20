@@ -559,7 +559,9 @@ impl BedrockModel {
                                 )?;
                                 let tool_calls: Vec<ToolCall> = tool_uses
                                     .iter()
-                                    .map(|tool_call| ToolCall {
+                                    .enumerate()
+                                    .map(|(index, tool_call)| ToolCall {
+                                        index: Some(index),
                                         id: tool_call.tool_use_id().to_string(),
                                         r#type: "function".to_string(),
                                         function: crate::types::gateway::FunctionCall {

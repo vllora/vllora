@@ -397,7 +397,9 @@ impl OpenAIModel {
                         tool_calls: Some(
                             tool_calls
                                 .iter()
-                                .map(|tool_call| ToolCall {
+                                .enumerate()
+                                .map(|(index, tool_call)| ToolCall {
+                                    index: Some(index),
                                     id: tool_call.id.clone(),
                                     r#type: match tool_call.r#type {
                                         ChatCompletionToolType::Function => "function".to_string(),

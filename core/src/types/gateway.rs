@@ -120,7 +120,7 @@ pub struct RequestUser {
     #[serde(alias = "user_name")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    #[serde(alias = "user_tags", alias="tags")]
+    #[serde(alias = "user_tags", alias = "tags")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tiers: Option<Vec<String>>,
 }
@@ -290,6 +290,7 @@ impl ChatCompletionMessage {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ToolCall {
+    pub index: Option<usize>,
     pub id: String,
     pub r#type: String,
     pub function: FunctionCall,
