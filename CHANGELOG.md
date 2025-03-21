@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.1](https://github.com/langdb/langdb-cloud/compare/0.2.0...0.2.1) (2025-03-21)
+
+
+### Features
+
+* Return 446 error on guard rejection ([900c279](https://github.com/langdb/langdb-cloud/commit/900c2796fcf4f34273ff3d4bee3b2738c1dac971))
+
+
+### Bug Fixes
+
+* Add index to tool calls ([4d094e0](https://github.com/langdb/langdb-cloud/commit/4d094e078be1fa130daf19af039932598616011a))
+* Fix tags extraction ([81b72da](https://github.com/langdb/langdb-cloud/commit/81b72da2591adf14c75537c3396c45732a0a9980))
+* Handle empty arguments ([4211c2a](https://github.com/langdb/langdb-cloud/commit/4211c2ad7c64c1c0c5a5e47e94eca0e20c058c1a))
+
 ## 0.2.0 (2025-03-15)
 
 
