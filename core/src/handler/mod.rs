@@ -65,8 +65,10 @@ pub fn extract_tags(req: &HttpRequest) -> Result<HashMap<String, String>, Gatewa
             let tags: HashMap<String, String> = tags_str
                 .split('&')
                 .map(|tag| {
-                    let (k, v) = tag.split_once('=').unwrap();
-                    (k.to_string(), v.to_string())
+                    tag.split_once('=')
+                        .map_or((tag.to_string(), "-".to_string()), |(k, v)| {
+                            (k.to_string(), v.to_string())
+                        })
                 })
                 .collect();
             Some(tags)
