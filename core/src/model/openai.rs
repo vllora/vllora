@@ -120,15 +120,10 @@ impl OpenAIModel {
     }
 
     pub fn map_tool_call(tool_call: &ChatCompletionMessageToolCall) -> ModelToolCall {
-        let input = match tool_call.function.arguments.as_str() {
-            "" => "{}".to_string(),
-            _ => tool_call.function.arguments.clone(),
-        };
-
         ModelToolCall {
             tool_id: tool_call.id.clone(),
             tool_name: tool_call.function.name.clone(),
-            input,
+            input: tool_call.function.arguments.clone(),
         }
     }
 
@@ -403,22 +398,16 @@ impl OpenAIModel {
                             tool_calls
                                 .iter()
                                 .enumerate()
-                                .map(|(index, tool_call)| {
-                                    let arguments = match tool_call.function.arguments.as_str() {
-                                        "" => "{}".to_string(),
-                                        _ => tool_call.function.arguments.clone(),
-                                    };
-                                    ToolCall {
-                                        index: Some(index),
-                                        id: tool_call.id.clone(),
-                                        r#type: match tool_call.r#type {
-                                            ChatCompletionToolType::Function => "function".to_string(),
-                                        },
-                                        function: crate::types::gateway::FunctionCall {
-                                            name: tool_call.function.name.clone(),
-                                            arguments,
-                                        },
-                                    }
+                                .map(|(index, tool_call)| ToolCall {
+                                    index: Some(index),
+                                    id: tool_call.id.clone(),
+                                    r#type: match tool_call.r#type {
+                                        ChatCompletionToolType::Function => "function".to_string(),
+                                    },
+                                    function: crate::types::gateway::FunctionCall {
+                                        name: tool_call.function.name.clone(),
+                                        arguments: tool_call.function.arguments.clone(),
+                                    },
                                 })
                                 .collect(),
                         ),
