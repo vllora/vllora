@@ -25,6 +25,7 @@ chrono = { workspace = true }
 tracing = { workspace = true }
 tracing-futures = { workspace = true }
 valuable = { workspace = true }
+async-openai = { workspace = true }
 
 [dev-dependencies]
 tracing-subscriber = { version = "0.3.0", features = [

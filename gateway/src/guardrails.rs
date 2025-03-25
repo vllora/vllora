@@ -18,6 +18,8 @@ use langdb_core::types::guardrails::GuardStage;
 use langdb_core::types::guardrails::GuardTemplate;
 use langdb_guardrails::guards::config::load_guard_templates;
 use langdb_guardrails::guards::llm_judge::GuardModelInstanceFactory;
+use langdb_guardrails::guards::partner::PartnerEvaluator;
+use langdb_guardrails::guards::partners::openai::OpenaiGuardrailPartner;
 use langdb_guardrails::guards::traced::TracedGuard;
 use langdb_guardrails::guards::DatasetEvaluator;
 use langdb_guardrails::guards::FileDatasetLoader;
@@ -97,6 +99,9 @@ impl GuardrailsService {
             }) as Box<dyn Evaluator>,
             Guard::Regex { .. } => Box::new(RegexEvaluator {}) as Box<dyn Evaluator>,
             Guard::WordCount { .. } => Box::new(WordCountEvaluator {}) as Box<dyn Evaluator>,
+            Guard::Partner { .. } => Box::new(PartnerEvaluator::new(Box::new(
+                OpenaiGuardrailPartner::new(None).map_err(|e| e.to_string())?,
+            ))) as Box<dyn Evaluator>,
         };
 
         Ok(TracedGuard::new(evaluator))

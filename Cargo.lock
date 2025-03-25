@@ -2532,6 +2532,7 @@ dependencies = [
 name = "langdb_guardrails"
 version = "0.2.1"
 dependencies = [
+ "async-openai-compat",
  "async-trait",
  "chrono",
  "jsonschema",

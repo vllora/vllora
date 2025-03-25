@@ -5,6 +5,7 @@ use serde_json::Value;
 use thiserror::Error;
 
 pub mod evaluator;
+pub mod partner;
 pub mod service;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -168,6 +169,10 @@ pub enum Guard {
         #[serde(flatten)]
         config: GuardConfig,
     },
+    Partner {
+        #[serde(flatten)]
+        config: GuardConfig,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -219,6 +224,7 @@ impl Guard {
             Guard::Dataset { config, .. } => &config.stage,
             Guard::WordCount { config } => &config.stage,
             Guard::Regex { config, .. } => &config.stage,
+            Guard::Partner { config, .. } => &config.stage,
         }
     }
 
@@ -230,6 +236,7 @@ impl Guard {
             Guard::Dataset { config, .. } => &config.action,
             Guard::Regex { config, .. } => &config.action,
             Guard::WordCount { config } => &config.action,
+            Guard::Partner { config, .. } => &config.action,
         }
     }
 
@@ -241,6 +248,7 @@ impl Guard {
             Guard::Dataset { config, .. } => &config.id,
             Guard::Regex { config, .. } => &config.id,
             Guard::WordCount { config } => &config.id,
+            Guard::Partner { config, .. } => &config.id,
         }
     }
 
@@ -252,6 +260,7 @@ impl Guard {
             Guard::Dataset { config, .. } => &config.name,
             Guard::Regex { config, .. } => &config.name,
             Guard::WordCount { config } => &config.name,
+            Guard::Partner { config, .. } => &config.name,
         }
     }
     pub fn parameters(&self) -> Option<&Value> {
@@ -261,6 +270,7 @@ impl Guard {
             Guard::Dataset { config, .. } => config.user_defined_parameters.as_ref(),
             Guard::Regex { config, .. } => config.user_defined_parameters.as_ref(),
             Guard::WordCount { config } => config.user_defined_parameters.as_ref(),
+            Guard::Partner { config, .. } => config.user_defined_parameters.as_ref(),
         }
     }
     pub fn set_parameters(&mut self, parameters: Value) {
@@ -270,6 +280,7 @@ impl Guard {
             Guard::Dataset { config, .. } => config.user_defined_parameters = Some(parameters),
             Guard::Regex { config, .. } => config.user_defined_parameters = Some(parameters),
             Guard::WordCount { config } => config.user_defined_parameters = Some(parameters),
+            Guard::Partner { config, .. } => config.user_defined_parameters = Some(parameters),
         }
     }
 
@@ -280,6 +291,7 @@ impl Guard {
             Guard::Dataset { config, .. } => &config.template_id,
             Guard::Regex { config, .. } => &config.template_id,
             Guard::WordCount { config } => &config.template_id,
+            Guard::Partner { config, .. } => &config.template_id,
         }
     }
 }

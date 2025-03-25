@@ -335,3 +335,12 @@ templates:
             - "Cites sources when appropriate"
             - "Distinguishes between facts and opinions"
           description: Criteria used to evaluate factuality
+
+  openai-moderation:
+    name: OpenAI Moderation
+    description: Detects potentially harmful content
+    type: partner
+    tags:
+      - content
+      - moderation
+    parameters:

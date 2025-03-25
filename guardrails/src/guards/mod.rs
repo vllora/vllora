@@ -1,6 +1,8 @@
 pub mod config;
 pub mod dataset;
 pub mod llm_judge;
+pub mod partner;
+pub mod partners;
 pub mod regex;
 pub mod schema;
 pub mod traced;
