@@ -294,4 +294,15 @@ impl Guard {
             Guard::Partner { config, .. } => &config.template_id,
         }
     }
+
+    pub fn r#type(&self) -> String {
+        match self {
+            Guard::Schema { .. } => "schema".to_string(),
+            Guard::LlmJudge { .. } => "llm_judge".to_string(),
+            Guard::Dataset { .. } => "dataset".to_string(),
+            Guard::Regex { .. } => "regex".to_string(),
+            Guard::WordCount { .. } => "word_count".to_string(),
+            Guard::Partner { .. } => "partner".to_string(),
+        }
+    }
 }

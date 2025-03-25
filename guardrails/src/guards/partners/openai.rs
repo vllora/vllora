@@ -14,6 +14,7 @@ use langdb_core::{
         },
     },
 };
+use tracing::Span;
 
 pub struct OpenaiGuardrailPartner {
     api_key: String,
@@ -37,6 +38,9 @@ impl GuardPartner for OpenaiGuardrailPartner {
         &self,
         messages: &[ChatCompletionMessage],
     ) -> Result<GuardResult, GuardPartnerError> {
+        let span = Span::current();
+        span.record("partner", "openai".to_string());
+
         match messages.last() {
             Some(last_message) => {
                 let input = match &last_message.content {
@@ -86,6 +90,11 @@ impl GuardPartner for OpenaiGuardrailPartner {
 
                 match moderations {
                     Ok(moderations) => {
+                        span.record(
+                            "result_metadata",
+                            serde_json::to_string(&moderations)
+                                .expect("Failed to serialize moderations"),
+                        );
                         let moderation = moderations.results.first().ok_or(
                             GuardPartnerError::EvaluationFailed("No moderations found".to_string()),
                         )?;

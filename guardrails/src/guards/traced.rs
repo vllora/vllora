@@ -36,7 +36,11 @@ impl Evaluator for TracedGuard {
             id = guard.id(),
             label = guard.name(),
             user_input = JsonValue(&serde_json::to_value(guard.parameters()).map_err(|e| e.to_string())?).as_value(),
-            result = field::Empty
+            result = field::Empty,
+            result_metadata = field::Empty,
+            r#type = guard.r#type(),
+            partner = field::Empty,
+            error = field::Empty
         );
 
         let result = self
@@ -44,9 +48,18 @@ impl Evaluator for TracedGuard {
             .evaluate(messages, guard)
             .instrument(span.clone())
             .await;
-        let result_value = serde_json::to_value(result.clone()).map_err(|e| e.to_string())?;
-        span.record("result", JsonValue(&result_value).as_value());
 
-        result
+        match result {
+            Ok(result) => {
+                let result_value =
+                    serde_json::to_value(result.clone()).map_err(|e| e.to_string())?;
+                span.record("result", JsonValue(&result_value).as_value());
+                Ok(result)
+            }
+            Err(e) => {
+                span.record("error", e.to_string());
+                Err(e)
+            }
+        }
     }
 }
