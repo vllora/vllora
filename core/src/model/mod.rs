@@ -312,8 +312,12 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
                                 start_time = Some(msg.timestamp.timestamp_micros() as u64);
                             }
                             ModelEventType::LlmStop(llmfinish_event) => {
+                                let current_span = tracing::Span::current();
+                                if let Some(output) = &llmfinish_event.output {
+                                    current_span
+                                        .record("output", serde_json::to_string(output).unwrap());
+                                }
                                 if let Some(u) = &llmfinish_event.usage {
-                                    let s = tracing::Span::current();
                                     match cost_calculator
                                         .calculate_cost(
                                             &model_name,
@@ -323,7 +327,8 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
                                         .await
                                     {
                                         Ok(c) => {
-                                            s.record("cost", serde_json::to_string(&c).unwrap());
+                                            current_span
+                                                .record("cost", serde_json::to_string(&c).unwrap());
                                         }
                                         Err(e) => {
                                             tracing::error!(
@@ -334,7 +339,7 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
                                         }
                                     };
 
-                                    s.record("usage", serde_json::to_string(u).unwrap());
+                                    current_span.record("usage", serde_json::to_string(u).unwrap());
                                 }
                             }
                             ModelEventType::LlmFirstToken(_) => {
@@ -454,6 +459,8 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
                                 }
                             }
                             ModelEventType::LlmStop(llmfinish_event) => {
+                                let s = tracing::Span::current();
+                                s.record("output", serde_json::to_string(&output).unwrap());
                                 if let Some(cost_calculator) = cost_calculator.as_ref() {
                                     if let Some(u) = &llmfinish_event.usage {
                                         let cost = cost_calculator
@@ -464,7 +471,6 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
                                             )
                                             .await;
 
-                                        let s = tracing::Span::current();
                                         match cost {
                                             Ok(c) => {
                                                 s.record(
