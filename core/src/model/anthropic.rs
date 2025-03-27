@@ -854,7 +854,21 @@ impl ModelInstance for AnthropicModel {
         let (system_prompt, conversational_messages) =
             self.construct_messages(input_variables, previous_messages)?;
         let input = serde_json::to_string(&conversational_messages)?;
-        let call_span = tracing::info_span!(target: target!("chat"), SPAN_ANTHROPIC, input = input, output = field::Empty, error = field::Empty, ttft = field::Empty, usage = field::Empty, tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value());
+        let call_span = tracing::info_span!(
+            target: target!("chat"),
+            SPAN_ANTHROPIC,
+            input = input,
+            output = field::Empty,
+            error = field::Empty,
+            ttft = field::Empty,
+            usage = field::Empty,
+            tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
+            system_prompt = field::Empty
+        );
+        let Some(system_prompt) = system_prompt else {
+            return Err(GatewayError::ModelError(ModelError::SystemPromptMissing));
+        };
+        call_span.record("system_prompt", format!("{}", system_prompt));
         self.execute(
             system_prompt,
             conversational_messages,
@@ -877,7 +891,21 @@ impl ModelInstance for AnthropicModel {
         let (system_prompt, conversational_messages) =
             self.construct_messages(input_variables, previous_messages)?;
         let input = serde_json::to_string(&conversational_messages)?;
-        let call_span = tracing::info_span!(target: target!("chat"), SPAN_ANTHROPIC, input = input, output = field::Empty, ttft = field::Empty, error = field::Empty, usage = field::Empty, tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value());
+        let call_span = tracing::info_span!(
+            target: target!("chat"),
+            SPAN_ANTHROPIC,
+            input = input,
+            output = field::Empty,
+            ttft = field::Empty,
+            error = field::Empty,
+            usage = field::Empty,
+            tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
+            system_prompt = field::Empty
+        );
+        let Some(system_prompt) = system_prompt else {
+            return Err(GatewayError::ModelError(ModelError::SystemPromptMissing));
+        };
+        call_span.record("system_prompt", format!("{}", system_prompt));
         self.execute_stream(
             system_prompt,
             conversational_messages,
@@ -896,7 +924,7 @@ impl AnthropicModel {
         &self,
         input_variables: HashMap<String, Value>,
         previous_messages: Vec<Message>,
-    ) -> GatewayResult<(SystemPrompt, Vec<ClustMessage>)> {
+    ) -> GatewayResult<(Option<SystemPrompt>, Vec<ClustMessage>)> {
         let mut conversational_messages = vec![];
         let mut system_message = self
             .prompt
@@ -911,10 +939,6 @@ impl AnthropicModel {
                 .find(|m| m.r#type == MessageType::SystemMessage)
                 .map(|message| SystemPrompt::new(message.content.clone().unwrap_or_default()));
         }
-
-        let Some(system_message) = system_message else {
-            return Err(GatewayError::ModelError(ModelError::SystemPromptMissing));
-        };
 
         let previous_messages = Self::map_previous_messages(previous_messages)?;
         conversational_messages.extend(previous_messages);
