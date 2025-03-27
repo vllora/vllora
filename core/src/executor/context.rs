@@ -11,7 +11,7 @@ use super::ProvidersConfig;
 
 #[derive(Clone)]
 pub struct ExecutorContext {
-    pub callbackhandler: CallbackHandlerFn,
+    pub callback_handler: CallbackHandlerFn,
     pub cost_calculator: Arc<Box<dyn CostCalculator>>,
     pub provided_models: AvailableModels,
     pub tags: HashMap<String, String>,
@@ -27,7 +27,7 @@ unsafe impl Sync for ExecutorContext {}
 
 impl ExecutorContext {
     pub fn new(
-        callbackhandler: CallbackHandlerFn,
+        callback_handler: CallbackHandlerFn,
         cost_calculator: Arc<Box<dyn CostCalculator>>,
         provided_models: AvailableModels,
         req: &HttpRequest,
@@ -44,7 +44,7 @@ impl ExecutorContext {
         let providers_config = req.app_data::<ProvidersConfig>().cloned();
 
         Ok(Self {
-            callbackhandler,
+            callback_handler,
             cost_calculator,
             provided_models,
             tags,

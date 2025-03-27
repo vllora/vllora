@@ -29,6 +29,7 @@ pub use dashmap;
 
 pub mod usage;
 
+pub use async_openai;
 pub use bytes;
 
 pub type GatewayResult<T> = Result<T, GatewayError>;

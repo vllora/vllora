@@ -82,7 +82,19 @@ impl Evaluator for DatasetEvaluator {
                     }
                 }
                 langdb_core::types::guardrails::DatasetSource::Managed { .. } => {
-                    unimplemented!("Managed datasets are not yet supported. Please use a cloud solution instead.")
+                    let result = self.loader.find_best_match(messages).await?;
+
+                    if result.confidence >= *threshold {
+                        return Ok(GuardResult::Boolean {
+                            passed: false,
+                            confidence: Some(result.confidence),
+                        });
+                    }
+
+                    Ok(GuardResult::Boolean {
+                        passed: true,
+                        confidence: Some(result.confidence),
+                    })
                 }
             }
         } else {

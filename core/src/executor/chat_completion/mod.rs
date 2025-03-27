@@ -111,7 +111,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
             &user.to_string(),
         )?);
     }
-    let ch = executor_context.callbackhandler.clone();
+    let ch = executor_context.callback_handler.clone();
     let db_model = resolved_model_context.db_model.clone();
     let handle = tokio::spawn(async move {
         let mut stop_event = None;
@@ -189,7 +189,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
                 resolved_model_context.completion_model_definition,
                 resolved_model_context.model_instance,
                 messages.clone(),
-                executor_context.callbackhandler.clone().into(),
+                executor_context.callback_handler.clone().into(),
                 executor_context.tags.clone(),
             )
             .instrument(span)

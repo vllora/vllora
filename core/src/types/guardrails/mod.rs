@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
+use super::gateway::ChatCompletionMessage;
+
 pub mod evaluator;
 pub mod partner;
 pub mod service;
@@ -197,6 +199,7 @@ pub enum DatasetSource {
 pub struct GuardExample {
     pub text: String,
     pub label: bool,
+    #[serde(skip_serializing)]
     pub embedding: Option<Vec<f32>>,
 }
 
@@ -209,10 +212,23 @@ pub struct GuardTemplate {
     pub parameters: Value,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BestMatchResult {
+    pub example: GuardExample,
+    pub confidence: f64,
+}
+
 /// Trait for loading datasets
 #[async_trait::async_trait]
 pub trait DatasetLoader: Send + Sync {
     async fn load(&self, source: &str) -> Result<Vec<GuardExample>, String>;
+
+    async fn find_best_match(
+        &self,
+        _messages: &[ChatCompletionMessage],
+    ) -> Result<BestMatchResult, String> {
+        unimplemented!()
+    }
 }
 
 impl Guard {

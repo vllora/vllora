@@ -338,7 +338,7 @@ templates:
 
   openai-moderation:
     name: OpenAI Moderation
-    description: Detects potentially harmful content
+    description: Identify potentially harmful content in text and images. Uses omni-moderation-latest model from OpenAI to detect harmful content.
     type: partner
     tags:
       - content
