@@ -58,6 +58,8 @@ impl GuardModelInstanceFactory for GuardModelFactory {
             HashMap::new(),
             ModelTools(vec![]),
             Span::current(),
+            None,
+            Vec::new(),
         )
         .await
         .expect("Failed to resolve model instance");

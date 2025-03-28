@@ -15,9 +15,7 @@ pub mod routing;
 pub mod types;
 
 use crate::error::GatewayError;
-use crate::http::status::GuardValidationFailed;
 use crate::types::gateway::CostCalculatorError;
-use crate::types::guardrails::GuardError;
 use actix_web::http::header::ContentType;
 use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
@@ -30,6 +28,7 @@ pub use dashmap;
 pub mod usage;
 
 pub use bytes;
+use types::guardrails::GuardError;
 
 pub type GatewayResult<T> = Result<T, GatewayError>;
 
@@ -58,24 +57,25 @@ pub enum GatewayApiError {
 
     #[error(transparent)]
     RoutedExecutorError(#[from] RoutedExecutorError),
-
-    #[error(transparent)]
-    GuardError(#[from] GuardError),
 }
 
 impl GatewayApiError {
     pub fn is_countable_error(&self) -> bool {
         !matches!(
             self,
-            GatewayApiError::GuardError(GuardError::GuardNotPassed(_, _))
+            GatewayApiError::GatewayError(GatewayError::GuardError(GuardError::GuardNotPassed(
+                _,
+                _
+            )))
         )
     }
 }
+
 impl actix_web::error::ResponseError for GatewayApiError {
     fn error_response(&self) -> HttpResponse {
         tracing::error!("API error: {:?}", self);
         match self {
-            GatewayApiError::GuardError(e) => e.error_response(),
+            GatewayApiError::GatewayError(e) => e.error_response(),
             e => {
                 let json_error = json!({
                     "error": e.to_string(),
@@ -91,17 +91,13 @@ impl actix_web::error::ResponseError for GatewayApiError {
     fn status_code(&self) -> StatusCode {
         match self {
             GatewayApiError::JsonParseError(_) => StatusCode::BAD_REQUEST,
-            GatewayApiError::GatewayError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            GatewayApiError::GatewayError(e) => e.status_code(),
             GatewayApiError::CustomError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             GatewayApiError::CostCalculatorError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             GatewayApiError::ModelError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             GatewayApiError::RouteError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             GatewayApiError::RoutedExecutorError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             GatewayApiError::TokenUsageLimit => StatusCode::BAD_REQUEST,
-            GatewayApiError::GuardError(e) => match e {
-                GuardError::GuardNotPassed(_, _) => GuardValidationFailed::status_code(),
-                _ => StatusCode::INTERNAL_SERVER_ERROR,
-            },
         }
     }
 }

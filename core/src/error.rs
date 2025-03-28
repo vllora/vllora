@@ -1,3 +1,9 @@
+use crate::http::status::GuardValidationFailed;
+use crate::types::guardrails::GuardError;
+use actix_web::http::header::ContentType;
+use actix_web::http::StatusCode;
+use actix_web::HttpResponse;
+use serde_json::json;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -26,4 +32,33 @@ pub enum GatewayError {
     ValidationF32Error(#[from] clust::ValidationError<f32>),
     #[error(transparent)]
     ValidationU32Error(#[from] clust::ValidationError<u32>),
+    #[error(transparent)]
+    GuardError(#[from] GuardError),
+}
+
+impl actix_web::error::ResponseError for GatewayError {
+    fn error_response(&self) -> HttpResponse {
+        tracing::error!("API error: {:?}", self);
+        match self {
+            GatewayError::GuardError(e) => e.error_response(),
+            e => {
+                let json_error = json!({
+                    "error": e.to_string(),
+                });
+
+                HttpResponse::build(e.status_code())
+                    .insert_header(ContentType::json())
+                    .json(json_error)
+            }
+        }
+    }
+
+    fn status_code(&self) -> StatusCode {
+        match self {
+            GatewayError::GuardError(GuardError::GuardNotPassed(_, _)) => {
+                GuardValidationFailed::status_code()
+            }
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
 }

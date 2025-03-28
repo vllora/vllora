@@ -14,10 +14,7 @@ use crate::types::engine::{
 };
 use crate::types::gateway::{
     ChatCompletionMessage, ChatCompletionRequestWithTools, ChatCompletionResponse, Extra,
-    GuardOrName, GuardWithParameters,
 };
-use crate::types::guardrails::service::GuardrailsEvaluator;
-use crate::types::guardrails::{GuardError, GuardResult, GuardStage};
 use crate::GatewayApiError;
 
 use either::Either::{self, Left, Right};
@@ -90,6 +87,8 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         tools_map,
         tools,
         router_span,
+        request_with_tools.extra.as_ref(),
+        request_with_tools.request.messages.clone(),
     )
     .await?;
 
@@ -173,16 +172,6 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         // }
     }
 
-    apply_guardrails(
-        &request_with_tools.request.messages,
-        request_with_tools.extra.as_ref(),
-        executor_context.evaluator_service.as_ref().as_ref(),
-        executor_context,
-        GuardStage::Input,
-    )
-    .instrument(span.clone())
-    .await?;
-
     if is_stream {
         Ok(Left(
             stream_chunks(
@@ -208,67 +197,22 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         .instrument(span)
         .await;
 
-        if let Ok(completion_response) = &result {
-            let ChatCompletionResponse { choices, .. } = completion_response;
-            for choice in choices {
-                apply_guardrails(
-                    &[choice.message.clone()],
-                    request_with_tools.extra.as_ref(),
-                    executor_context.evaluator_service.as_ref().as_ref(),
-                    executor_context,
-                    GuardStage::Output,
-                )
-                .await?;
-            }
-        }
+        // if let Ok(completion_response) = &result {
+        //     let ChatCompletionResponse { choices, .. } = completion_response;
+        //     for choice in choices {
+        //         apply_guardrails(
+        //             &[choice.message.clone()],
+        //             request_with_tools.extra.as_ref(),
+        //             executor_context.evaluator_service.as_ref().as_ref(),
+        //             executor_context,
+        //             GuardStage::Output,
+        //         )
+        //         .await?;
+        //     }
+        // }
 
         Ok(Right(result))
     }
-}
-
-pub async fn apply_guardrails(
-    messages: &[ChatCompletionMessage],
-    extra: Option<&Extra>,
-    evaluator: &dyn GuardrailsEvaluator,
-    executor_context: &ExecutorContext,
-    guard_stage: GuardStage,
-) -> Result<(), GuardError> {
-    let Some(Extra { guards, .. }) = extra else {
-        return Ok(());
-    };
-
-    for guard in guards {
-        let (guard_id, parameters) = match guard {
-            GuardOrName::GuardId(guard_id) => (guard_id, None),
-            GuardOrName::GuardWithParameters(GuardWithParameters { id, parameters }) => {
-                (id, Some(parameters))
-            }
-        };
-
-        let result = evaluator
-            .evaluate(
-                messages,
-                guard_id,
-                executor_context,
-                parameters,
-                &guard_stage,
-            )
-            .await
-            .map_err(GuardError::GuardEvaluationError)?;
-
-        match result {
-            GuardResult::Json { passed, .. }
-            | GuardResult::Boolean { passed, .. }
-            | GuardResult::Text { passed, .. }
-                if !passed =>
-            {
-                return Err(GuardError::GuardNotPassed(guard_id.clone(), result));
-            }
-            _ => {}
-        }
-    }
-
-    Ok(())
 }
 
 pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Clone>(
@@ -277,6 +221,8 @@ pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Cl
     tools_map: HashMap<String, Box<dyn Tool>>,
     tools: ModelTools,
     router_span: Span,
+    extra: Option<&Extra>,
+    initial_messages: Vec<ChatCompletionMessage>,
 ) -> Result<ResolvedModelContext, GatewayApiError> {
     let llm_model =
         find_model_by_full_name(&request.request.model, &executor_context.provided_models)?;
@@ -328,10 +274,12 @@ pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Cl
     let model_instance = crate::model::init_completion_model_instance(
         completion_model_definition.clone(),
         tools_map,
-        Some(executor_context.cost_calculator.clone()),
+        executor_context,
         llm_model.inference_provider.endpoint.as_deref(),
         Some(&llm_model.inference_provider.provider.to_string()),
         router_span.clone(),
+        extra,
+        initial_messages,
     )
     .await
     .map_err(|e| GatewayApiError::CustomError(e.to_string()))?;

@@ -1,11 +1,15 @@
 use crate::events::{JsonValue, RecordResult, SPAN_MODEL_CALL};
+use crate::executor::context::ExecutorContext;
 use crate::model::bedrock::BedrockModel;
 use crate::model::error::ModelError;
 use crate::types::engine::{CompletionEngineParams, CompletionModelParams};
 use crate::types::engine::{CompletionModelDefinition, ModelTools, ModelType};
 use crate::types::gateway::{
-    ChatCompletionContent, ChatCompletionMessage, ContentType, CostCalculator, Usage,
+    ChatCompletionContent, ChatCompletionMessage, ContentType, Extra, GuardOrName,
+    GuardWithParameters, Usage,
 };
+use crate::types::guardrails::service::GuardrailsEvaluator;
+use crate::types::guardrails::{GuardError, GuardResult, GuardStage};
 use crate::types::threads::Message;
 use crate::GatewayResult;
 use anthropic::AnthropicModel;
@@ -16,7 +20,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::fmt::Display;
-use std::sync::Arc;
 use tokio::sync::mpsc::{self, channel};
 use tools::Tool;
 use tracing::{info_span, Instrument};
@@ -62,17 +65,22 @@ pub const DEFAULT_MAX_RETRIES: i32 = 5;
 pub struct TracedModel<Inner: ModelInstance> {
     inner: Inner,
     definition: CompletionModelDefinition,
-    cost_calculator: Option<Arc<Box<dyn CostCalculator>>>,
+    executor_context: ExecutorContext,
     router_span: tracing::Span,
+    extra: Option<Extra>,
+    initial_messages: Vec<ChatCompletionMessage>,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn init_completion_model_instance(
     definition: CompletionModelDefinition,
     tools: HashMap<String, Box<(dyn Tool + 'static)>>,
-    cost_calculator: Option<Arc<Box<dyn CostCalculator>>>,
+    executor_context: &ExecutorContext,
     endpoint: Option<&str>,
     provider_name: Option<&str>,
     router_span: tracing::Span,
+    extra: Option<&Extra>,
+    initial_messages: Vec<ChatCompletionMessage>,
 ) -> Result<Box<dyn ModelInstance>, ModelError> {
     match &definition.model_params.engine {
         CompletionEngineParams::Bedrock {
@@ -91,8 +99,10 @@ pub async fn init_completion_model_instance(
             )
             .await?,
             definition,
-            cost_calculator: cost_calculator.clone(),
+            executor_context: executor_context.clone(),
             router_span: router_span.clone(),
+            extra: extra.cloned(),
+            initial_messages: initial_messages.clone(),
         })),
         CompletionEngineParams::OpenAi {
             params,
@@ -110,15 +120,17 @@ pub async fn init_completion_model_instance(
                 endpoint.as_ref().map(|x| x.as_str()),
             )?,
             definition,
-            cost_calculator: cost_calculator.clone(),
+            executor_context: executor_context.clone(),
             router_span: router_span.clone(),
+            extra: extra.cloned(),
+            initial_messages: initial_messages.clone(),
         })),
         CompletionEngineParams::Proxy {
             params,
             execution_options,
             credentials,
         } => {
-            let provider_name = provider_name.expect("provider_name is expected  here");
+            let provider_name = provider_name.expect("provider_name is expected here");
             Ok(Box::new(TracedModel {
                 inner: OpenAISpecModel::new(
                     params.clone(),
@@ -130,8 +142,10 @@ pub async fn init_completion_model_instance(
                     provider_name,
                 )?,
                 definition,
-                cost_calculator: cost_calculator.clone(),
+                executor_context: executor_context.clone(),
                 router_span: router_span.clone(),
+                extra: extra.cloned(),
+                initial_messages: initial_messages.clone(),
             }))
         }
         CompletionEngineParams::Anthropic {
@@ -147,8 +161,10 @@ pub async fn init_completion_model_instance(
                 tools,
             )?,
             definition,
-            cost_calculator: cost_calculator.clone(),
+            executor_context: executor_context.clone(),
             router_span: router_span.clone(),
+            extra: extra.cloned(),
+            initial_messages: initial_messages.clone(),
         })),
         CompletionEngineParams::Gemini {
             credentials,
@@ -163,27 +179,33 @@ pub async fn init_completion_model_instance(
                 tools,
             )?,
             definition,
-            cost_calculator: cost_calculator.clone(),
+            executor_context: executor_context.clone(),
             router_span: router_span.clone(),
+            extra: extra.cloned(),
+            initial_messages: initial_messages.clone(),
         })),
     }
 }
 
 pub async fn initialize_completion(
     definition: CompletionModelDefinition,
-    cost_calculator: Option<Arc<Box<dyn CostCalculator>>>,
+    executor_context: &ExecutorContext,
     provider_name: Option<&str>,
     router_span: tracing::Span,
+    extra: Option<&Extra>,
+    initial_messages: Vec<ChatCompletionMessage>,
 ) -> Result<Box<dyn ModelInstance>, ModelError> {
     let tools: HashMap<_, Box<(dyn Tool + 'static)>> = HashMap::new();
 
     init_completion_model_instance(
         definition,
         tools,
-        cost_calculator,
+        executor_context,
         None,
         provider_name,
         router_span,
+        extra,
+        initial_messages,
     )
     .await
 }
@@ -301,58 +323,66 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
             tags = JsonValue(&serde_json::to_value(tags.clone())?).as_value(),
         );
 
-        let cost_calculator = self.cost_calculator.clone();
+        apply_guardrails(
+            &self.initial_messages,
+            self.extra.as_ref(),
+            self.executor_context.evaluator_service.as_ref().as_ref(),
+            &self.executor_context,
+            GuardStage::Input,
+        )
+        .instrument(span.clone())
+        .await?;
+
+        let cost_calculator = self.executor_context.cost_calculator.clone();
         tokio::spawn(
             async move {
                 let mut start_time = None;
                 while let Some(Some(msg)) = rx.recv().await {
-                    if let Some(cost_calculator) = cost_calculator.as_ref() {
-                        match &msg.event {
-                            ModelEventType::LlmStart(_) => {
-                                start_time = Some(msg.timestamp.timestamp_micros() as u64);
-                            }
-                            ModelEventType::LlmStop(llmfinish_event) => {
-                                let current_span = tracing::Span::current();
-                                if let Some(output) = &llmfinish_event.output {
-                                    current_span
-                                        .record("output", serde_json::to_string(output).unwrap());
-                                }
-                                if let Some(u) = &llmfinish_event.usage {
-                                    match cost_calculator
-                                        .calculate_cost(
-                                            &model_name,
-                                            &provider_name,
-                                            &Usage::CompletionModelUsage(u.clone()),
-                                        )
-                                        .await
-                                    {
-                                        Ok(c) => {
-                                            current_span
-                                                .record("cost", serde_json::to_string(&c).unwrap());
-                                        }
-                                        Err(e) => {
-                                            tracing::error!(
-                                                "Error calculating cost: {:?} {:#?}",
-                                                e,
-                                                llmfinish_event
-                                            );
-                                        }
-                                    };
-
-                                    current_span.record("usage", serde_json::to_string(u).unwrap());
-                                }
-                            }
-                            ModelEventType::LlmFirstToken(_) => {
-                                if let Some(start_time) = start_time {
-                                    let current_span = tracing::Span::current();
-                                    current_span.record(
-                                        "ttft",
-                                        msg.timestamp.timestamp_micros() as u64 - start_time,
-                                    );
-                                }
-                            }
-                            _ => (),
+                    match &msg.event {
+                        ModelEventType::LlmStart(_) => {
+                            start_time = Some(msg.timestamp.timestamp_micros() as u64);
                         }
+                        ModelEventType::LlmStop(llmfinish_event) => {
+                            let current_span = tracing::Span::current();
+                            if let Some(output) = &llmfinish_event.output {
+                                current_span
+                                    .record("output", serde_json::to_string(output).unwrap());
+                            }
+                            if let Some(u) = &llmfinish_event.usage {
+                                match cost_calculator
+                                    .calculate_cost(
+                                        &model_name,
+                                        &provider_name,
+                                        &Usage::CompletionModelUsage(u.clone()),
+                                    )
+                                    .await
+                                {
+                                    Ok(c) => {
+                                        current_span
+                                            .record("cost", serde_json::to_string(&c).unwrap());
+                                    }
+                                    Err(e) => {
+                                        tracing::error!(
+                                            "Error calculating cost: {:?} {:#?}",
+                                            e,
+                                            llmfinish_event
+                                        );
+                                    }
+                                };
+
+                                current_span.record("usage", serde_json::to_string(u).unwrap());
+                            }
+                        }
+                        ModelEventType::LlmFirstToken(_) => {
+                            if let Some(start_time) = start_time {
+                                let current_span = tracing::Span::current();
+                                current_span.record(
+                                    "ttft",
+                                    msg.timestamp.timestamp_micros() as u64 - start_time,
+                                );
+                            }
+                        }
+                        _ => (),
                     }
 
                     tracing::debug!(
@@ -390,9 +420,21 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
                 })
                 .record();
 
+            if let Ok(message) = &result {
+                apply_guardrails(
+                    &[message.clone()],
+                    self.extra.as_ref(),
+                    self.executor_context.evaluator_service.as_ref().as_ref(),
+                    &self.executor_context,
+                    GuardStage::Output,
+                )
+                .instrument(span.clone())
+                .await?;
+            }
+
             result
         }
-        .instrument(span)
+        .instrument(span.clone())
         .await
     }
 
@@ -412,7 +454,7 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
 
         let model_name = self.definition.name.clone();
         let provider_name = self.definition.db_model.provider_name.clone();
-        let cost_calculator = self.cost_calculator.clone();
+        let cost_calculator = self.executor_context.cost_calculator.clone();
 
         let span = info_span!(
             target: "langdb::user_tracing::models",
@@ -431,6 +473,16 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
             tags = JsonValue(&serde_json::to_value(tags.clone())?).as_value(),
             ttft = tracing::field::Empty,
         );
+
+        apply_guardrails(
+            &self.initial_messages,
+            self.extra.as_ref(),
+            self.executor_context.evaluator_service.as_ref().as_ref(),
+            &self.executor_context,
+            GuardStage::Input,
+        )
+        .instrument(span.clone())
+        .await?;
 
         async {
             let (tx, mut rx) = channel(outer_tx.max_capacity());
@@ -461,29 +513,24 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
                             ModelEventType::LlmStop(llmfinish_event) => {
                                 let s = tracing::Span::current();
                                 s.record("output", serde_json::to_string(&output).unwrap());
-                                if let Some(cost_calculator) = cost_calculator.as_ref() {
-                                    if let Some(u) = &llmfinish_event.usage {
-                                        let cost = cost_calculator
-                                            .calculate_cost(
-                                                &model_name,
-                                                &provider_name,
-                                                &Usage::CompletionModelUsage(u.clone()),
-                                            )
-                                            .await;
+                                if let Some(u) = &llmfinish_event.usage {
+                                    let cost = cost_calculator
+                                        .calculate_cost(
+                                            &model_name,
+                                            &provider_name,
+                                            &Usage::CompletionModelUsage(u.clone()),
+                                        )
+                                        .await;
 
-                                        match cost {
-                                            Ok(c) => {
-                                                s.record(
-                                                    "cost",
-                                                    serde_json::to_string(&c).unwrap(),
-                                                );
-                                            }
-                                            Err(e) => {
-                                                tracing::error!("Error calculating cost: {:?}", e);
-                                            }
+                                    match cost {
+                                        Ok(c) => {
+                                            s.record("cost", serde_json::to_string(&c).unwrap());
                                         }
-                                        s.record("usage", serde_json::to_string(u).unwrap());
+                                        Err(e) => {
+                                            tracing::error!("Error calculating cost: {:?}", e);
+                                        }
                                     }
+                                    s.record("usage", serde_json::to_string(u).unwrap());
                                 }
                                 events.push(msg.clone());
                             }
@@ -542,4 +589,49 @@ impl Display for CredentialsIdent {
             CredentialsIdent::Own => write!(f, "own"),
         }
     }
+}
+
+pub async fn apply_guardrails(
+    messages: &[ChatCompletionMessage],
+    extra: Option<&Extra>,
+    evaluator: &dyn GuardrailsEvaluator,
+    executor_context: &ExecutorContext,
+    guard_stage: GuardStage,
+) -> Result<(), GuardError> {
+    let Some(Extra { guards, .. }) = extra else {
+        return Ok(());
+    };
+
+    for guard in guards {
+        let (guard_id, parameters) = match guard {
+            GuardOrName::GuardId(guard_id) => (guard_id, None),
+            GuardOrName::GuardWithParameters(GuardWithParameters { id, parameters }) => {
+                (id, Some(parameters))
+            }
+        };
+
+        let result = evaluator
+            .evaluate(
+                messages,
+                guard_id,
+                executor_context,
+                parameters,
+                &guard_stage,
+            )
+            .await
+            .map_err(GuardError::GuardEvaluationError)?;
+
+        match result {
+            GuardResult::Json { passed, .. }
+            | GuardResult::Boolean { passed, .. }
+            | GuardResult::Text { passed, .. }
+                if !passed =>
+            {
+                return Err(GuardError::GuardNotPassed(guard_id.clone(), result));
+            }
+            _ => {}
+        }
+    }
+
+    Ok(())
 }
