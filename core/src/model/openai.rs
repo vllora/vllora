@@ -152,13 +152,17 @@ impl OpenAIModel {
         HashMap::from_iter(result)
     }
 
-    fn map_tool_call_results(results: HashMap<String, String>) -> Vec<ChatCompletionRequestMessage> {
+    fn map_tool_call_results(
+        results: HashMap<String, String>,
+    ) -> Vec<ChatCompletionRequestMessage> {
         results
             .into_iter()
-            .map(|(id, content)| ChatCompletionRequestMessage::Tool(ChatCompletionRequestToolMessage {
-                content: ChatCompletionRequestToolMessageContent::Text(content),
-                tool_call_id: id,
-            }))
+            .map(|(id, content)| {
+                ChatCompletionRequestMessage::Tool(ChatCompletionRequestToolMessage {
+                    content: ChatCompletionRequestToolMessageContent::Text(content),
+                    tool_call_id: id,
+                })
+            })
             .collect()
     }
 
@@ -373,9 +377,9 @@ impl OpenAIModel {
                 let label = map_tool_names_to_labels(&tool_calls);
                 let tools_span = tracing::info_span!(
                     target: target!(),
-                    parent: span.clone(), 
-                    events::SPAN_TOOLS, 
-                    tool_calls=JsonValue(&serde_json::to_value(&tool_calls)?).as_value(), 
+                    parent: span.clone(),
+                    events::SPAN_TOOLS,
+                    tool_calls=JsonValue(&serde_json::to_value(&tool_calls)?).as_value(),
                     label=label
                 );
                 tools_span.follows_from(span.id());
@@ -438,7 +442,10 @@ impl OpenAIModel {
                         Self::handle_tool_calls(tool_calls.iter(), &self.tools, tx, tags.clone())
                             .instrument(tools_span.clone())
                             .await;
-                    tools_span.record("tool_results", JsonValue(&serde_json::to_value(&result_tool_calls)?).as_value());
+                    tools_span.record(
+                        "tool_results",
+                        JsonValue(&serde_json::to_value(&result_tool_calls)?).as_value(),
+                    );
                     messages.extend(Self::map_tool_call_results(result_tool_calls));
 
                     let conversation_messages = [input_messages, messages].concat();
@@ -618,9 +625,9 @@ impl OpenAIModel {
                 let tools_span = tracing::info_span!(
                     target: target!(),
                     parent: span.clone(),
-                    events::SPAN_TOOLS, 
-                    tool_calls=JsonValue(&serde_json::to_value(&tool_calls)?).as_value(), 
-                    tool_results=field::Empty, 
+                    events::SPAN_TOOLS,
+                    tool_calls=JsonValue(&serde_json::to_value(&tool_calls)?).as_value(),
+                    tool_results=field::Empty,
                     label=label
                 );
                 tools_span.follows_from(span.id());
@@ -641,7 +648,10 @@ impl OpenAIModel {
                         Self::handle_tool_calls(tool_calls.iter(), &self.tools, tx, tags.clone())
                             .instrument(tools_span.clone())
                             .await;
-                    tools_span.record("tool_results", JsonValue(&serde_json::to_value(&result_tool_calls)?).as_value());
+                    tools_span.record(
+                        "tool_results",
+                        JsonValue(&serde_json::to_value(&result_tool_calls)?).as_value(),
+                    );
                     messages.extend(Self::map_tool_call_results(result_tool_calls));
 
                     let conversation_messages = [input_messages, messages].concat();

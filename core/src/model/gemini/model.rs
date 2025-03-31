@@ -695,9 +695,14 @@ impl GeminiModel {
                                 parts: tool_calls
                                     .iter()
                                     .map(|c| {
+                                        let args = if c.function.arguments.is_empty() {
+                                            "{}"
+                                        } else {
+                                            &c.function.arguments
+                                        };
                                         Ok(Part::FunctionCall {
                                             name: c.id.clone(),
-                                            args: serde_json::from_str(&c.function.arguments)?,
+                                            args: serde_json::from_str(args)?,
                                         })
                                     })
                                     .collect::<Result<Vec<Part>, GatewayError>>()?,

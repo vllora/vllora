@@ -46,8 +46,8 @@ impl Client {
             Method::Get => self.client.get(url),
             Method::Post => self.client.post(url),
         };
-        let resp = if let Some(p) = payload {
-            resp.json(&p)
+        let resp = if let Some(p) = &payload {
+            resp.json(p)
         } else {
             resp
         };
@@ -61,7 +61,13 @@ impl Client {
         let status = resp.status();
         if !status.is_success() {
             let msg = resp.text().await?;
-            tracing::error!(target: "gemini", "{msg}");
+            let p = if let Some(p) = payload {
+                serde_json::to_string(&p).unwrap()
+            } else {
+                String::new()
+            };
+            tracing::error!(target: "gemini", "{msg}. Payload: {p}");
+
             return Err(GatewayError::CustomError(format!(
                 "Request failed with status: {}",
                 status

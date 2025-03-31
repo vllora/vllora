@@ -178,10 +178,12 @@ pub struct FunctionParameters {
 pub struct FunctionParametersProperty {
     pub r#type: FunctionParametersPropertyType,
     pub description: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     items: Option<Box<FunctionParametersProperty>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
 pub enum FunctionParametersPropertyType {
     Single(String),
     List(Vec<String>),
