@@ -116,16 +116,16 @@ impl GeminiModel {
         let model_params = &self.params;
         let response_schema = match &model_params.response_format {
             Some(ResponseFormat::JsonSchema { json_schema }) => {
-                let mut schema = json_schema.schema.clone();
+                let schema = json_schema.schema.clone();
 
-                if let Some(s) = &mut schema {
-                    if let Some(obj) = s.as_object_mut() {
-                        obj.remove("additionalProperties");
-                    }
+                if let Some(s) = &schema {
+                    let s = replace_refs_with_defs(s.clone());
+                    let s = remove_additional_properties(s.clone());
+                    Some(s)
+                } else {
+                    schema
                 }
-
-                schema
-            },
+            }
             _ => None,
         };
         let config = GenerationConfig {
@@ -145,7 +145,7 @@ impl GeminiModel {
             } else {
                 None
             },
-            response_schema
+            response_schema,
         };
 
         let tools = if self.tools.is_empty() {
@@ -922,4 +922,109 @@ fn construct_user_message(m: &InnerMessage) -> Content {
 pub fn record_map_err(e: impl Into<GatewayError> + ToString, span: tracing::Span) -> GatewayError {
     span.record("error", e.to_string());
     e.into()
+}
+
+fn replace_refs_with_defs(schema: Value) -> Value {
+    // If schema isn't an object, return as is
+    if !schema.is_object() {
+        return schema;
+    }
+
+    // Clone schema to avoid ownership issues
+    let mut result = schema.clone();
+
+    // Extract $defs if they exist
+    let defs = if let Some(defs_obj) = result.get("$defs") {
+        if defs_obj.is_object() {
+            defs_obj.clone()
+        } else {
+            serde_json::json!({})
+        }
+    } else {
+        serde_json::json!({})
+    };
+
+    // Remove $defs from result
+    if let Some(obj) = result.as_object_mut() {
+        obj.remove("$defs");
+    }
+
+    // Function to recursively replace $ref
+    fn replace_refs(value: &mut Value, defs: &Value) {
+        match value {
+            Value::Object(obj) => {
+                // Check if this object has a $ref
+                if let Some(ref_val) = obj.get("$ref") {
+                    if let Some(ref_str) = ref_val.as_str() {
+                        // Extract the definition name from the $ref string
+                        // Example: "#/$defs/SubClass" -> "SubClass"
+                        if let Some(def_name) = ref_str.strip_prefix("#/$defs/") {
+                            // Replace object with the referenced definition
+                            if let Some(def) = defs.get(def_name) {
+                                // Deep clone the definition to avoid ownership issues
+                                let mut def_clone = def.clone();
+                                // Recursively replace any refs in the definition
+                                replace_refs(&mut def_clone, defs);
+                                *value = def_clone;
+                                return;
+                            }
+                        }
+                    }
+                }
+
+                // Process all properties in this object
+                for (_, v) in obj.iter_mut() {
+                    replace_refs(v, defs);
+                }
+            }
+            Value::Array(arr) => {
+                // Process all items in the array
+                for item in arr.iter_mut() {
+                    replace_refs(item, defs);
+                }
+            }
+            _ => {} // Primitive values don't need processing
+        }
+    }
+
+    // Start the recursive replacement
+    replace_refs(&mut result, &defs);
+    result
+}
+
+/// Removes all additionalProperties fields from a JSON schema
+fn remove_additional_properties(schema: Value) -> Value {
+    // If schema isn't an object, return as is
+    if !schema.is_object() {
+        return schema;
+    }
+
+    // Clone schema to avoid ownership issues
+    let mut result = schema.clone();
+
+    // Function to recursively remove additionalProperties
+    fn remove_props(value: &mut Value) {
+        match value {
+            Value::Object(obj) => {
+                // Remove additionalProperties from this object
+                obj.remove("additionalProperties");
+
+                // Process all properties in this object
+                for (_, v) in obj.iter_mut() {
+                    remove_props(v);
+                }
+            }
+            Value::Array(arr) => {
+                // Process all items in the array
+                for item in arr.iter_mut() {
+                    remove_props(item);
+                }
+            }
+            _ => {} // Primitive values don't need processing
+        }
+    }
+
+    // Start the recursive removal
+    remove_props(&mut result);
+    result
 }

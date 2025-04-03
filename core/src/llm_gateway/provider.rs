@@ -145,7 +145,7 @@ impl Provider {
                 Ok(CompletionEngineParams::Gemini {
                     credentials: api_key_credentials,
                     execution_options: Default::default(),
-                    params: GeminiModelParams { 
+                    params: GeminiModelParams {
                         model: Some(model.inference_provider.model_name.clone()),
                         max_output_tokens: request.max_tokens.map(|x| x as i32),
                         temperature: request.temperature,
