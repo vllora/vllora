@@ -782,6 +782,7 @@ pub struct GeminiModelParams {
     pub seed: Option<i64>,
     pub response_logprobs: Option<bool>,
     pub logprobs: Option<i32>,
+    pub response_format: Option<ResponseFormat>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

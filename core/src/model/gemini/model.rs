@@ -27,6 +27,7 @@ use crate::types::gateway::{
 use crate::types::message::{MessageType, PromptMessage};
 use crate::types::threads::{AudioFormat, InnerMessage, Message, MessageContentPartOptions};
 use crate::GatewayResult;
+use async_openai::types::ResponseFormat;
 use futures::Stream;
 use futures::StreamExt;
 use serde_json::Value;
@@ -113,6 +114,20 @@ impl GeminiModel {
 
     fn build_request(&self, messages: Vec<Content>) -> GatewayResult<GenerateContentRequest> {
         let model_params = &self.params;
+        let response_schema = match &model_params.response_format {
+            Some(ResponseFormat::JsonSchema { json_schema }) => {
+                let mut schema = json_schema.schema.clone();
+
+                if let Some(s) = &mut schema {
+                    if let Some(obj) = s.as_object_mut() {
+                        obj.remove("additionalProperties");
+                    }
+                }
+
+                schema
+            },
+            _ => None,
+        };
         let config = GenerationConfig {
             max_output_tokens: model_params.max_output_tokens,
             temperature: model_params.temperature,
@@ -125,6 +140,12 @@ impl GeminiModel {
             seed: model_params.seed,
             response_logprobs: model_params.response_logprobs,
             logprobs: model_params.logprobs,
+            response_mime_type: if response_schema.is_some() {
+                Some("application/json".to_string())
+            } else {
+                None
+            },
+            response_schema
         };
 
         let tools = if self.tools.is_empty() {

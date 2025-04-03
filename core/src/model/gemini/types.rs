@@ -72,6 +72,8 @@ pub struct GenerationConfig {
     pub seed: Option<i64>,
     pub response_logprobs: Option<bool>,
     pub logprobs: Option<i32>,
+    pub response_mime_type: Option<String>,
+    pub response_schema: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
