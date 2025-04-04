@@ -169,7 +169,7 @@ impl ClickhouseHttp {
         let port = self
             .url
             .split(':')
-            .last()
+            .next_back()
             .map(|p| p.parse::<u16>().unwrap_or(443))
             .unwrap_or(443);
 
