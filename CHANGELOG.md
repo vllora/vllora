@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.2](https://github.com/langdb/langdb-cloud/compare/0.2.1...0.2.2) (2025-04-04)
+
+
+### Features
+
+* Store openai partner moderations guard metadata ([5dbd30a](https://github.com/langdb/langdb-cloud/commit/5dbd30a331d32bfceb467ccff57f1d018bbc2f9d))
+* Store tools results in spans ([ccdc9ae](https://github.com/langdb/langdb-cloud/commit/ccdc9aea7dc50f700891b17ab647f1c58c56049d))
+
+
+### Bug Fixes
+
+* Fix gemini structured output generation ([22d914e](https://github.com/langdb/langdb-cloud/commit/22d914ee4c7d06bc1a6dc5144c9f51e1ddd12bd4))
+* Fix gemini tool calls ([61a1ea7](https://github.com/langdb/langdb-cloud/commit/61a1ea7b82d31e9f48a4fe21482b94f2eea2e7b2))
+* Fix nested gemini structured output schema ([ec914df](https://github.com/langdb/langdb-cloud/commit/ec914df60db8c2ced45429386920f84f02cfb070))
+* Handle nullable types in gemini ([169cde0](https://github.com/langdb/langdb-cloud/commit/169cde0c7e323499eadeded1ecb144f5d32bd6d6))
+* Store call information in anthropic span when system prompt is missing ([d1d6be9](https://github.com/langdb/langdb-cloud/commit/d1d6be92e7fe7208dfa3c581346be71ce62acb27))
+
 ### [0.2.1](https://github.com/langdb/langdb-cloud/compare/0.2.0...0.2.1) (2025-03-21)
 
 

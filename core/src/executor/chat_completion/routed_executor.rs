@@ -76,7 +76,7 @@ impl RoutedExecutor {
                     .request
                     .model
                     .split('/')
-                    .last()
+                    .next_back()
                     .expect("Model name should not be empty")
                     .to_string();
                 span.record("router_name", &router_name);
