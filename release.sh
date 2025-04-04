@@ -83,7 +83,7 @@ echo "Updating version to $NEW_VERSION in Cargo.toml files..."
 (cd core && cargo set-version $NEW_VERSION)
 (cd udfs && cargo set-version $NEW_VERSION)
 (cd gateway && cargo set-version $NEW_VERSION)
-(cd langdb_guardrails && cargo set-version $NEW_VERSION)
+(cd guardrails && cargo set-version $NEW_VERSION)
 
 # Install standard-version if not already installed
 if ! command -v npx &> /dev/null; then
