@@ -121,6 +121,7 @@ impl GeminiModel {
                 if let Some(s) = &schema {
                     let s = replace_refs_with_defs(s.clone());
                     let s = remove_additional_properties(s.clone());
+                    let s = normalize_nullable_types(s.clone());
                     Some(s)
                 } else {
                     schema
@@ -1026,5 +1027,89 @@ fn remove_additional_properties(schema: Value) -> Value {
 
     // Start the recursive removal
     remove_props(&mut result);
+    result
+}
+
+/// Normalizes nullable types in JSON schema
+/// When `anyOf` or `oneOf` contains `{"type": "null"}`, this function:
+/// 1. Removes the null type entry
+/// 2. Adds `nullable: true` to the remaining types
+/// 3. If only one type remains, it removes the anyOf/oneOf wrapper
+fn normalize_nullable_types(schema: Value) -> Value {
+    // If schema isn't an object or array, return as is
+    if !schema.is_object() && !schema.is_array() {
+        return schema;
+    }
+
+    // Clone schema to avoid ownership issues
+    let mut result = schema.clone();
+
+    // Function to recursively normalize nullable types
+    fn normalize(value: &mut Value) {
+        match value {
+            Value::Object(obj) => {
+                // Check if this object has anyOf or oneOf arrays
+                for type_key in ["anyOf", "oneOf"].iter() {
+                    if let Some(Value::Array(types_arr)) = obj.get_mut(*type_key) {
+                        // Look for {type: null} entry
+                        let mut has_null_type = false;
+                        let mut null_index = None;
+
+                        for (i, item) in types_arr.iter().enumerate() {
+                            if let Value::Object(item_obj) = item {
+                                if let Some(item_type) = item_obj.get("type") {
+                                    if item_type.as_str() == Some("null") {
+                                        has_null_type = true;
+                                        null_index = Some(i);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        if has_null_type {
+                            // Remove the null type entry
+                            if let Some(idx) = null_index {
+                                types_arr.remove(idx);
+                            }
+
+                            // Add nullable: true to all other entries
+                            for item in types_arr.iter_mut() {
+                                if let Value::Object(item_obj) = item {
+                                    item_obj.insert("nullable".to_string(), Value::Bool(true));
+                                }
+                            }
+
+                            // If only one type remains, replace the anyOf/oneOf with it
+                            if types_arr.len() == 1 {
+                                let single_type = types_arr.remove(0);
+                                obj.remove(*type_key);
+                                if let Value::Object(single_obj) = single_type {
+                                    for (k, v) in single_obj {
+                                        obj.insert(k, v);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Recursively process all properties in this object
+                for (_, v) in obj.iter_mut() {
+                    normalize(v);
+                }
+            }
+            Value::Array(arr) => {
+                // Process all items in the array
+                for item in arr.iter_mut() {
+                    normalize(item);
+                }
+            }
+            _ => {} // Primitive values don't need processing
+        }
+    }
+
+    // Start the recursive normalization
+    normalize(&mut result);
     result
 }
