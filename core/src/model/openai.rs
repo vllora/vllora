@@ -397,6 +397,9 @@ impl<C: Config> OpenAIModel<C> {
                         .await
                         .map_err(|e| GatewayError::CustomError(e.to_string()))?;
                     }
+                    if response.choices.is_empty() {
+                        continue;
+                    }
                     let chat_choice = response.choices.remove(0);
                     if let Some(tool_calls) = chat_choice.delta.tool_calls {
                         for tool_call in tool_calls.into_iter() {
