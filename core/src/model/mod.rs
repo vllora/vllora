@@ -13,6 +13,8 @@ use crate::types::guardrails::{GuardError, GuardResult, GuardStage};
 use crate::types::threads::Message;
 use crate::GatewayResult;
 use anthropic::AnthropicModel;
+use async_openai::config::OpenAIConfig;
+use async_openai::Client;
 use async_trait::async_trait;
 use futures::future::join;
 use gemini::GeminiModel;
@@ -109,22 +111,47 @@ pub async fn init_completion_model_instance(
             execution_options,
             credentials,
             endpoint,
-        } => Ok(Box::new(TracedModel {
-            inner: OpenAIModel::new(
-                params.clone(),
-                credentials.as_ref(),
-                execution_options.clone(),
-                definition.prompt.clone(),
-                tools,
-                None,
-                endpoint.as_ref().map(|x| x.as_str()),
-            )?,
-            definition,
-            executor_context: executor_context.clone(),
-            router_span: router_span.clone(),
-            extra: extra.cloned(),
-            initial_messages: initial_messages.clone(),
-        })),
+        } => {
+            // Check if the endpoint is an Azure OpenAI endpoint
+            if let Some(ep) = endpoint.as_ref() {
+                if ep.contains("azure.com") {
+                    // Use the Azure implementation
+                    return Ok(Box::new(TracedModel {
+                        inner: OpenAIModel::from_azure_url(
+                            params.clone(),
+                            credentials.as_ref(),
+                            execution_options.clone(),
+                            definition.prompt.clone(),
+                            tools,
+                            ep,
+                        )?,
+                        definition,
+                        executor_context: executor_context.clone(),
+                        router_span: router_span.clone(),
+                        extra: extra.cloned(),
+                        initial_messages: initial_messages.clone(),
+                    }));
+                }
+            }
+
+            // Default OpenAI implementation
+            Ok(Box::new(TracedModel {
+                inner: OpenAIModel::new(
+                    params.clone(),
+                    credentials.as_ref(),
+                    execution_options.clone(),
+                    definition.prompt.clone(),
+                    tools,
+                    None::<Client<OpenAIConfig>>,
+                    endpoint.as_ref().map(|x| x.as_str()),
+                )?,
+                definition,
+                executor_context: executor_context.clone(),
+                router_span: router_span.clone(),
+                extra: extra.cloned(),
+                initial_messages: initial_messages.clone(),
+            }))
+        }
         CompletionEngineParams::Proxy {
             params,
             execution_options,

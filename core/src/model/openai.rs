@@ -19,7 +19,8 @@ use crate::types::gateway::{ChatCompletionContent, ChatCompletionMessage, ToolCa
 use crate::types::message::{MessageType, PromptMessage};
 use crate::types::threads::{InnerMessage, Message};
 use crate::GatewayResult;
-use async_openai::config::OpenAIConfig;
+use async_openai::config::Config;
+use async_openai::config::{AzureConfig, OpenAIConfig};
 use async_openai::error::OpenAIError;
 use async_openai::types::{
     ChatCompletionMessageToolCall, ChatCompletionMessageToolCallChunk,
@@ -65,37 +66,102 @@ fn custom_err(e: impl ToString) -> ModelError {
     ModelError::CustomError(e.to_string())
 }
 
+/// Parse an Azure OpenAI URL into AzureConfig
+/// Format: https://{resource-name}.openai.azure.com/openai/deployments/{deployment-id}/chat/completions?api-version={api-version}
+fn parse_azure_url(endpoint: &str, api_key: String) -> Result<AzureConfig, ModelError> {
+    use url::Url;
+
+    let url = Url::parse(endpoint).map_err(|e| custom_err(format!("Invalid Azure URL: {}", e)))?;
+
+    // Extract the base URL (e.g., https://karol-m98i9ysd-eastus2.cognitiveservices.azure.com)
+    let api_base = format!("{}://{}", url.scheme(), url.host_str().unwrap_or_default());
+
+    // Extract the deployment ID (e.g., gpt-4o)
+    let path_segments: Vec<&str> = url.path().split('/').filter(|s| !s.is_empty()).collect();
+    let deployment_id = if path_segments.len() >= 3
+        && path_segments[0] == "openai"
+        && path_segments[1] == "deployments"
+    {
+        path_segments[2].to_string()
+    } else {
+        return Err(custom_err(
+            "Invalid Azure URL format: could not extract deployment ID",
+        ));
+    };
+
+    // Extract the API version (e.g., 2025-01-01-preview)
+    let api_version = url
+        .query_pairs()
+        .find(|(k, _)| k == "api-version")
+        .map(|(_, v)| v.to_string())
+        .unwrap_or_else(|| "2023-05-15".to_string()); // Default if not provided
+
+    let azure_config = AzureConfig::new()
+        .with_api_base(api_base)
+        .with_deployment_id(deployment_id)
+        .with_api_version(api_version)
+        .with_api_key(api_key);
+
+    Ok(azure_config)
+}
+
+/// Helper function to determine if an endpoint is for Azure OpenAI
+pub fn is_azure_endpoint(endpoint: &str) -> bool {
+    endpoint.contains("azure.com")
+}
+
+/// Create an OpenAI client with standard OpenAI configuration
+/// Note: This does not handle Azure OpenAI endpoints. Use azure_openai_client for Azure endpoints.
 pub fn openai_client(
     credentials: Option<&ApiKeyCredentials>,
     endpoint: Option<&str>,
-) -> Result<async_openai::Client<async_openai::config::OpenAIConfig>, ModelError> {
-    let mut config = OpenAIConfig::new();
-
+) -> Result<Client<OpenAIConfig>, ModelError> {
     let api_key = if let Some(credentials) = credentials {
         credentials.api_key.clone()
     } else {
         std::env::var("LANGDB_OPENAI_API_KEY").map_err(|_| AuthorizationError::InvalidApiKey)?
     };
+
+    let mut config = OpenAIConfig::new();
     config = config.with_api_key(api_key);
 
     if let Some(endpoint) = endpoint {
+        // Do not handle Azure endpoints here
+        if is_azure_endpoint(endpoint) {
+            return Err(ModelError::CustomError(format!(
+                "Azure endpoints should be handled by azure_openai_client, not openai_client: {}",
+                endpoint
+            )));
+        }
+
+        // For custom non-Azure endpoints
         config = config.with_api_base(endpoint);
     }
 
     Ok(Client::with_config(config))
 }
 
+/// Create an Azure OpenAI client from endpoint URL
+pub fn azure_openai_client(
+    api_key: String,
+    endpoint: &str,
+) -> Result<Client<AzureConfig>, ModelError> {
+    let azure_config = parse_azure_url(endpoint, api_key)?;
+    Ok(Client::with_config(azure_config))
+}
+
 #[derive(Clone)]
-pub struct OpenAIModel {
+pub struct OpenAIModel<C: Config = OpenAIConfig> {
     params: OpenAiModelParams,
     execution_options: ExecutionOptions,
     prompt: Prompt,
-    client: Client<OpenAIConfig>,
+    client: Client<C>,
     tools: Arc<HashMap<String, Box<dyn Tool>>>,
     credentials_ident: CredentialsIdent,
 }
 
-impl OpenAIModel {
+// Specific implementation for OpenAIConfig
+impl OpenAIModel<OpenAIConfig> {
     pub fn new(
         params: OpenAiModelParams,
         credentials: Option<&ApiKeyCredentials>,
@@ -105,6 +171,16 @@ impl OpenAIModel {
         client: Option<Client<OpenAIConfig>>,
         endpoint: Option<&str>,
     ) -> Result<Self, ModelError> {
+        // Return an error if this is an Azure endpoint
+        if let Some(ep) = endpoint {
+            if is_azure_endpoint(ep) {
+                return Err(ModelError::CustomError(format!(
+                    "Azure endpoints should be created via OpenAIModel::from_azure_url: {}",
+                    ep
+                )));
+            }
+        }
+
         let client = client.unwrap_or(openai_client(credentials, endpoint)?);
 
         Ok(Self {
@@ -118,7 +194,70 @@ impl OpenAIModel {
                 .unwrap_or(CredentialsIdent::Langdb),
         })
     }
+}
 
+// Specific implementation for AzureConfig
+impl OpenAIModel<AzureConfig> {
+    pub fn new_azure(
+        params: OpenAiModelParams,
+        credentials: Option<&ApiKeyCredentials>,
+        execution_options: ExecutionOptions,
+        prompt: Prompt,
+        tools: HashMap<String, Box<dyn Tool>>,
+        client: Option<Client<AzureConfig>>,
+        endpoint: Option<&str>,
+    ) -> Result<Self, ModelError> {
+        let client = if let Some(client) = client {
+            client
+        } else if let Some(endpoint) = endpoint {
+            let api_key = if let Some(credentials) = credentials {
+                credentials.api_key.clone()
+            } else {
+                std::env::var("LANGDB_OPENAI_API_KEY")
+                    .map_err(|_| AuthorizationError::InvalidApiKey)?
+            };
+            azure_openai_client(api_key, endpoint)?
+        } else {
+            return Err(ModelError::CustomError(
+                "Azure OpenAI requires an endpoint URL".to_string(),
+            ));
+        };
+
+        Ok(Self {
+            params,
+            execution_options,
+            prompt,
+            client,
+            tools: Arc::new(tools),
+            credentials_ident: credentials
+                .map(|_c| CredentialsIdent::Own)
+                .unwrap_or(CredentialsIdent::Langdb),
+        })
+    }
+
+    // Helper to create from a URL
+    pub fn from_azure_url(
+        params: OpenAiModelParams,
+        credentials: Option<&ApiKeyCredentials>,
+        execution_options: ExecutionOptions,
+        prompt: Prompt,
+        tools: HashMap<String, Box<dyn Tool>>,
+        endpoint: &str,
+    ) -> Result<Self, ModelError> {
+        Self::new_azure(
+            params,
+            credentials,
+            execution_options,
+            prompt,
+            tools,
+            None,
+            Some(endpoint),
+        )
+    }
+}
+
+// Common implementation for all Config types
+impl<C: Config> OpenAIModel<C> {
     pub fn map_tool_call(tool_call: &ChatCompletionMessageToolCall) -> ModelToolCall {
         ModelToolCall {
             tool_id: tool_call.id.clone(),
@@ -769,7 +908,7 @@ impl OpenAIModel {
 }
 
 #[async_trait]
-impl ModelInstance for OpenAIModel {
+impl<C: Config + std::marker::Sync + std::marker::Send> ModelInstance for OpenAIModel<C> {
     async fn invoke(
         &self,
         input_variables: HashMap<String, Value>,
@@ -797,7 +936,7 @@ impl ModelInstance for OpenAIModel {
     }
 }
 
-impl OpenAIModel {
+impl<C: Config> OpenAIModel<C> {
     fn construct_messages(
         &self,
         input_variables: HashMap<String, Value>,

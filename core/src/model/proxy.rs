@@ -21,8 +21,9 @@ use tracing_futures::Instrument;
 
 #[derive(Clone)]
 pub struct OpenAISpecModel {
-    openai_model: OpenAIModel,
+    openai_model: OpenAIModel<OpenAIConfig>,
 }
+
 impl OpenAISpecModel {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
