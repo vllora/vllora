@@ -12,7 +12,7 @@ serde_yaml = "0.9"
 regex = "1.8"
 lazy_static = "1.4"
 async-trait = "0.1"
-tokio = { version = "1.0", features = ["rt", "rt-multi-thread", "sync"] }
+tokio = { version = "1.43", features = ["rt", "rt-multi-thread", "sync"] }
 chrono = { version = "0.4", features = ["serde"] }
 
 tracing = { version = "0.1.40", features = ["log", "valuable"] }
