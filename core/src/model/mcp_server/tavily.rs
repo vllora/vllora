@@ -99,6 +99,7 @@ fn register_tools<T: Transport>(server: &mut ServerBuilder<T>) -> Result<(), Gat
             "required": ["query"],
             "additionalProperties": false
         }),
+        output_schema: None,
     };
 
     // Register search tool

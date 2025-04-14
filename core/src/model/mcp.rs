@@ -187,6 +187,7 @@ pub async fn execute_mcp_tool(
     def: &McpDefinition,
     tool: &async_mcp::types::Tool,
     inputs: HashMap<String, serde_json::Value>,
+    meta: Option<serde_json::Value>,
 ) -> Result<String, GatewayError> {
     let name = tool.name.clone();
     let mcp_server = def.server_name();
@@ -197,7 +198,7 @@ pub async fn execute_mcp_tool(
         let request = CallToolRequest {
             name: name.clone(),
             arguments: Some(inputs),
-            meta: None,
+            meta,
         };
 
         let params =

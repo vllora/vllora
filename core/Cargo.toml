@@ -72,7 +72,7 @@ clickhouse = { version = "0.11.6", package = "langdb_clickhouse", features = [
   "uuid",
 ], optional = true }
 tokio-util = { version = "0.7.11", optional = true }
-async-mcp = "0.0.6"
+async-mcp = { git = "https://github.com/karolisg/async-mcp.git", rev = "28e7c573d9c1b5eb1f9747ef8f9cf9211995b7a1" }
 parking_lot = "0.12.3"
 rand = "0.8.5"
 url = "2.5.4"
