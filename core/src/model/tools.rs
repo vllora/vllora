@@ -73,9 +73,9 @@ impl Tool for McpTool {
     async fn run(
         &self,
         inputs: HashMap<String, serde_json::Value>,
-        _tags: HashMap<String, String>,
+        tags: HashMap<String, String>,
     ) -> crate::GatewayResult<serde_json::Value> {
-        execute_mcp_tool(&self.1, &self.0, inputs, None)
+        execute_mcp_tool(&self.1, &self.0, inputs, Some(serde_json::to_value(tags)?))
             .await
             .map(serde_json::Value::String)
     }
