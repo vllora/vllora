@@ -213,7 +213,7 @@ pub async fn execute_mcp_tool(
             .request(
                 "tools/call",
                 Some(params),
-                RequestOptions::default().timeout(Duration::from_secs(10)),
+                RequestOptions::default().timeout(Duration::from_secs(30)),
             )
             .await
             .map_err(|e| GatewayError::CustomError(e.to_string()))?;
