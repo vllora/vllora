@@ -183,6 +183,28 @@ pub async fn get_tools(definitions: &[McpDefinition]) -> Result<Vec<ServerTools>
     Ok(all_tools)
 }
 
+pub async fn get_raw_tools(definitions: &McpDefinition) -> Result<Vec<Tool>, GatewayError> {
+    with_transport!(definitions.clone(), |transport| async move {
+        let client = ClientBuilder::new(transport).build();
+
+        let client_clone = client.clone();
+        let _handle = tokio::spawn(async move { client_clone.start().await });
+        // Get available tools
+        let response = client
+            .request(
+                "tools/list",
+                Some(json!({})),
+                RequestOptions::default().timeout(Duration::from_secs(10)),
+            )
+            .await
+            .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+        // Parse response into Vec<Tool>
+        let response: ToolsListResponse = serde_json::from_value(response)?;
+
+        Ok::<Vec<Tool>, GatewayError>(response.tools)
+    })
+}
+
 pub async fn execute_mcp_tool(
     def: &McpDefinition,
     tool: &async_mcp::types::Tool,
