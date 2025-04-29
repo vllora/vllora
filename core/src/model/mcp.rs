@@ -194,7 +194,7 @@ pub async fn get_raw_tools(definitions: &McpDefinition) -> Result<Vec<Tool>, Gat
             .request(
                 "tools/list",
                 Some(json!({})),
-                RequestOptions::default().timeout(Duration::from_secs(10)),
+                RequestOptions::default().timeout(Duration::from_secs(60)),
             )
             .await
             .map_err(|e| GatewayError::CustomError(e.to_string()))?;
