@@ -75,7 +75,12 @@ impl Tool for McpTool {
         inputs: HashMap<String, serde_json::Value>,
         tags: HashMap<String, String>,
     ) -> crate::GatewayResult<serde_json::Value> {
-        execute_mcp_tool(&self.1, &self.0, inputs, Some(serde_json::to_value(tags)?))
+        let env = self.1.env();
+        let meta = match env {
+            Some(env) => serde_json::json!({"env_vars": env}),
+            None => serde_json::to_value(tags)?,
+        };
+        execute_mcp_tool(&self.1, &self.0, inputs, Some(meta))
             .await
             .map(serde_json::Value::String)
     }

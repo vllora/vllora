@@ -45,6 +45,7 @@ macro_rules! with_transport {
             crate::types::gateway::McpTransportType::Sse {
                 server_url,
                 headers,
+                ..
             } => {
                 let mut transport = ClientSseTransport::builder(server_url);
                 for (k, v) in headers {
@@ -62,6 +63,7 @@ macro_rules! with_transport {
             crate::types::gateway::McpTransportType::Ws {
                 server_url,
                 headers,
+                ..
             } => {
                 let mut transport = ClientWsTransport::builder(server_url);
                 for (k, v) in headers {
@@ -213,7 +215,7 @@ pub async fn execute_mcp_tool(
 ) -> Result<String, GatewayError> {
     let name = tool.name.clone();
     let mcp_server = def.server_name();
-    tracing::info!("Executing tool: {name}, mcp_server: {mcp_server}");
+    tracing::info!("Executing tool: {name}, mcp_server: {mcp_server}, inputs: {inputs:?}, meta: {meta:?}");
 
     let response: serde_json::Value = with_transport!(def.clone(), |transport| async move {
         let client = ClientBuilder::new(transport).build();
