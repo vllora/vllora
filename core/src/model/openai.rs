@@ -854,6 +854,7 @@ impl<C: Config> OpenAIModel<C> {
 
     fn map_previous_messages(
         messages_dto: Vec<Message>,
+        input_variables: HashMap<String, Value>,
     ) -> GatewayResult<Vec<ChatCompletionRequestMessage>> {
         // convert serde::Map into HashMap
         let mut messages: Vec<ChatCompletionRequestMessage> = vec![];
@@ -868,7 +869,10 @@ impl<C: Config> OpenAIModel<C> {
                     ),
                     MessageType::AIMessage => {
                         let mut msg_args = ChatCompletionRequestAssistantMessageArgs::default();
-                        msg_args.content(m.content.clone().unwrap_or_default());
+                        msg_args.content(Prompt::render(
+                            m.content.clone().unwrap_or_default(),
+                            &input_variables,
+                        ));
 
                         if let Some(calls) = m.tool_calls.as_ref() {
                             msg_args.tool_calls(
@@ -889,7 +893,9 @@ impl<C: Config> OpenAIModel<C> {
                             msg_args.build().unwrap_or_default(),
                         )
                     }
-                    MessageType::HumanMessage => construct_user_message(&m.clone().into()),
+                    MessageType::HumanMessage => {
+                        construct_user_message(&m.clone().into(), input_variables.clone())
+                    }
                     MessageType::ToolResult => ChatCompletionRequestMessage::Tool(
                         ChatCompletionRequestToolMessageArgs::default()
                             .content(m.content.clone().unwrap_or_default())
@@ -955,7 +961,8 @@ impl<C: Config> OpenAIModel<C> {
         if let Some(system_message) = system_message {
             conversational_messages.push(system_message?);
         }
-        let previous_messages = Self::map_previous_messages(previous_messages)?;
+        let previous_messages =
+            Self::map_previous_messages(previous_messages, input_variables.clone())?;
         conversational_messages.extend(previous_messages);
         let human_message = self
             .prompt
@@ -977,7 +984,7 @@ fn map_chat_messages(
 ) -> GatewayResult<ChatCompletionRequestMessage> {
     let message = match prompt.r#type {
         MessageType::AIMessage => {
-            let raw_message = Prompt::render(prompt.msg, variables.clone());
+            let raw_message = Prompt::render(prompt.msg, variables);
             ChatCompletionRequestMessage::Assistant(
                 ChatCompletionRequestAssistantMessageArgs::default()
                     .content(raw_message)
@@ -993,12 +1000,12 @@ fn map_chat_messages(
                     .ok_or(GatewayError::CustomError(format!("{msg} not specified")))?;
                 serde_json::from_value(value.clone())?
             } else {
-                InnerMessage::Text(Prompt::render(msg, variables.clone()))
+                InnerMessage::Text(Prompt::render(msg, variables))
             };
-            construct_user_message(&inner_message)
+            construct_user_message(&inner_message, variables.clone())
         }
         MessageType::SystemMessage => {
-            let raw_message = Prompt::render(prompt.msg, variables.clone());
+            let raw_message = Prompt::render(prompt.msg, variables);
             ChatCompletionRequestMessage::System(
                 ChatCompletionRequestSystemMessageArgs::default()
                     .content(raw_message)
@@ -1013,17 +1020,25 @@ fn map_chat_messages(
     Ok(message)
 }
 
-fn construct_user_message(m: &InnerMessage) -> ChatCompletionRequestMessage {
+fn construct_user_message(
+    m: &InnerMessage,
+    variables: HashMap<String, Value>,
+) -> ChatCompletionRequestMessage {
     let content = match m {
         crate::types::threads::InnerMessage::Text(text) => {
-            ChatCompletionRequestUserMessageContent::Text(text.to_owned())
+            ChatCompletionRequestUserMessageContent::Text(Prompt::render(
+                text.clone(),
+                &variables.clone(),
+            ))
         }
         crate::types::threads::InnerMessage::Array(content_array) => {
             let mut messages = vec![];
             for m in content_array {
                 let msg = match m.r#type {
                     crate::types::threads::MessageContentType::Text => {
-                        ChatCompletionRequestUserMessageContentPart::Text(m.value.clone().into())
+                        ChatCompletionRequestUserMessageContentPart::Text(
+                            Prompt::render(m.value.clone(), &variables).into(),
+                        )
                     }
                     crate::types::threads::MessageContentType::ImageUrl => {
                         ChatCompletionRequestUserMessageContentPart::ImageUrl(

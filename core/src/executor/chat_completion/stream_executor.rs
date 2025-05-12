@@ -35,6 +35,7 @@ pub async fn stream_chunks(
     messages: Vec<Message>,
     callback_handler: Arc<CallbackHandlerFn>,
     tags: HashMap<String, String>,
+    input_vars: HashMap<String, serde_json::Value>,
 ) -> Result<ChatCompletionStream, GatewayApiError> {
     let parent_definition =
         ParentDefinition::CompletionModel(Box::new(completion_model_definition.clone()));
@@ -51,7 +52,7 @@ pub async fn stream_chunks(
         async move {
             let (tx, mut rx) = tokio::sync::mpsc::channel(100);
             let result_fut = model
-                .stream(HashMap::new(), tx, messages, tags)
+                .stream(input_vars, tx, messages, tags)
                 .instrument(Span::current());
 
             let forward_fut = async {

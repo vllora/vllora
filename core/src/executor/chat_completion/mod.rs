@@ -172,6 +172,16 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         // }
     }
 
+    let input_vars = request_with_tools
+        .variables
+        .as_ref()
+        .map(|v| {
+            v.iter()
+                .map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone())))
+                .collect()
+        })
+        .unwrap_or_default();
+
     if is_stream {
         Ok(Left(
             stream_chunks(
@@ -180,6 +190,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
                 messages.clone(),
                 executor_context.callbackhandler.clone().into(),
                 executor_context.tags.clone(),
+                input_vars,
             )
             .instrument(span)
             .await,
@@ -193,6 +204,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
             tx,
             span.clone(),
             Some(handle),
+            input_vars,
         )
         .instrument(span)
         .await;

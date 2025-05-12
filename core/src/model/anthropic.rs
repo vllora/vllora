@@ -957,7 +957,7 @@ impl AnthropicModel {
 }
 
 fn map_system_message(prompt: PromptMessage, variables: &HashMap<String, Value>) -> SystemPrompt {
-    let raw_message = Prompt::render(prompt.msg, variables.clone());
+    let raw_message = Prompt::render(prompt.msg.clone(), variables);
     SystemPrompt::new(raw_message)
 }
 fn map_chat_messages(
@@ -966,7 +966,7 @@ fn map_chat_messages(
 ) -> GatewayResult<ClustMessage> {
     let message = match prompt.r#type {
         MessageType::AIMessage => {
-            let raw_message = Prompt::render(prompt.msg, variables.clone());
+            let raw_message = Prompt::render(prompt.msg.clone(), variables);
             ClustMessage::assistant(Content::SingleText(raw_message))
         }
         MessageType::HumanMessage => {
@@ -977,7 +977,7 @@ fn map_chat_messages(
                     .ok_or(GatewayError::CustomError(format!("{msg} not specified")))?;
                 serde_json::from_value(value.clone())?
             } else {
-                InnerMessage::Text(Prompt::render(msg, variables.clone()))
+                InnerMessage::Text(Prompt::render(msg.clone(), variables))
             };
             construct_user_message(&inner_message)
         }

@@ -158,7 +158,7 @@ impl BedrockModel {
             .messages
             .iter()
             .filter(|m| m.r#type == MessageType::SystemMessage)
-            .map(|message| Self::map_system_message(message.to_owned(), input_vars.to_owned()))
+            .map(|message| Self::map_system_message(message.to_owned(), &input_vars))
             .collect::<Vec<_>>();
 
         for m in previous_messages.iter() {
@@ -260,7 +260,7 @@ impl BedrockModel {
     ) -> Result<Message, ModelError> {
         let message = match prompt.r#type {
             MessageType::SystemMessage | MessageType::AIMessage => {
-                let raw_message = Prompt::render(prompt.msg, variables);
+                let raw_message = Prompt::render(prompt.msg.clone(), &variables);
                 Message::builder()
                     .content(ContentBlock::Text(raw_message))
                     .role(ConversationRole::Assistant)
@@ -279,7 +279,7 @@ impl BedrockModel {
                     serde_json::from_value(value.clone())
                         .map_err(|e| ModelError::CustomError(e.to_string()))?
                 } else {
-                    InnerMessage::Text(Prompt::render(msg, variables.clone()))
+                    InnerMessage::Text(Prompt::render(msg.clone(), &variables))
                 };
 
                 construct_human_message(&inner_message)?
@@ -295,9 +295,9 @@ impl BedrockModel {
 
     pub(crate) fn map_system_message(
         message: PromptMessage,
-        variables: HashMap<String, Value>,
+        variables: &HashMap<String, Value>,
     ) -> SystemContentBlock {
-        let raw_message = Prompt::render(message.msg, variables);
+        let raw_message = Prompt::render(message.msg.clone(), variables);
 
         SystemContentBlock::Text(raw_message)
     }

@@ -850,11 +850,11 @@ fn map_chat_messages(
 ) -> GatewayResult<Content> {
     let message = match prompt.r#type {
         MessageType::AIMessage => {
-            let raw_message = Prompt::render(prompt.msg, variables.clone());
+            let raw_message = Prompt::render(prompt.msg.clone(), variables);
             Content::model(raw_message)
         }
         MessageType::SystemMessage => {
-            let raw_message = Prompt::render(prompt.msg, variables.clone());
+            let raw_message = Prompt::render(prompt.msg.clone(), variables);
             Content::user(raw_message)
         }
         MessageType::HumanMessage => {
@@ -865,7 +865,7 @@ fn map_chat_messages(
                     .ok_or(GatewayError::CustomError(format!("{msg} not specified")))?;
                 serde_json::from_value(value.clone())?
             } else {
-                InnerMessage::Text(Prompt::render(msg, variables.clone()))
+                InnerMessage::Text(Prompt::render(msg.clone(), variables))
             };
             construct_user_message(&inner_message)
         }
