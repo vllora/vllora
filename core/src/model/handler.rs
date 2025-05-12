@@ -34,10 +34,9 @@ impl<'a> LlmToolCallCarrier<'a> {
     }
 }
 
-impl<'a> Injector for LlmToolCallCarrier<'a> {
+impl Injector for LlmToolCallCarrier<'_> {
     fn set(&mut self, key: &str, value: String) {
-        self.properties
-            .insert(key.into(), value);
+        self.properties.insert(key.into(), value);
     }
 }
 

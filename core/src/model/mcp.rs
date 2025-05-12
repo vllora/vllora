@@ -214,9 +214,7 @@ pub async fn execute_mcp_tool(
     meta: Option<serde_json::Value>,
 ) -> Result<String, GatewayError> {
     let name = tool.name.clone();
-    let mcp_server = def.server_name();
-    tracing::info!("Executing tool: {name}, mcp_server: {mcp_server}, inputs: {inputs:?}, meta: {meta:?}");
-
+    
     let response: serde_json::Value = with_transport!(def.clone(), |transport| async move {
         let client = ClientBuilder::new(transport).build();
         let request = CallToolRequest {
