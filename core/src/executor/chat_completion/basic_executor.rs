@@ -24,6 +24,7 @@ use crate::GatewayApiError;
 pub type FinishEventHandle =
     tokio::task::JoinHandle<(Option<LLMFinishEvent>, Option<Vec<ToolStartEvent>>)>;
 
+#[allow(clippy::too_many_arguments)]
 pub async fn execute(
     request: ChatCompletionRequest,
     model: Box<dyn ModelInstance>,
@@ -32,9 +33,10 @@ pub async fn execute(
     tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
     span: Span,
     handle: Option<FinishEventHandle>,
+    input_vars: HashMap<String, serde_json::Value>,
 ) -> Result<ChatCompletionResponse, GatewayApiError> {
     let result = model
-        .invoke(HashMap::new(), tx, messages.clone(), tags.clone())
+        .invoke(input_vars.clone(), tx, messages.clone(), tags.clone())
         .instrument(span.clone())
         .await
         .map_err(|e| record_map_err(e, span.clone()))?;
