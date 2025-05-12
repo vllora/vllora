@@ -870,8 +870,8 @@ impl<C: Config> OpenAIModel<C> {
                     MessageType::AIMessage => {
                         let mut msg_args = ChatCompletionRequestAssistantMessageArgs::default();
                         msg_args.content(Prompt::render(
-                            m.content.clone().unwrap_or_default(),
-                            input_variables.clone(),
+                            m.content.as_ref().unwrap_or_default().to_string(),
+                            &input_variables,
                         ));
 
                         if let Some(calls) = m.tool_calls.as_ref() {
