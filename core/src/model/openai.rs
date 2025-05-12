@@ -870,7 +870,7 @@ impl<C: Config> OpenAIModel<C> {
                     MessageType::AIMessage => {
                         let mut msg_args = ChatCompletionRequestAssistantMessageArgs::default();
                         msg_args.content(Prompt::render(
-                            m.content.as_ref().unwrap_or_default().to_string(),
+                            m.content.clone().unwrap_or_default(),
                             &input_variables,
                         ));
 
@@ -984,7 +984,7 @@ fn map_chat_messages(
 ) -> GatewayResult<ChatCompletionRequestMessage> {
     let message = match prompt.r#type {
         MessageType::AIMessage => {
-            let raw_message = Prompt::render(prompt.msg, variables.clone());
+            let raw_message = Prompt::render(prompt.msg, variables);
             ChatCompletionRequestMessage::Assistant(
                 ChatCompletionRequestAssistantMessageArgs::default()
                     .content(raw_message)
@@ -1000,12 +1000,12 @@ fn map_chat_messages(
                     .ok_or(GatewayError::CustomError(format!("{msg} not specified")))?;
                 serde_json::from_value(value.clone())?
             } else {
-                InnerMessage::Text(Prompt::render(msg, variables.clone()))
+                InnerMessage::Text(Prompt::render(msg, variables))
             };
             construct_user_message(&inner_message, variables.clone())
         }
         MessageType::SystemMessage => {
-            let raw_message = Prompt::render(prompt.msg, variables.clone());
+            let raw_message = Prompt::render(prompt.msg, variables);
             ChatCompletionRequestMessage::System(
                 ChatCompletionRequestSystemMessageArgs::default()
                     .content(raw_message)
@@ -1028,7 +1028,7 @@ fn construct_user_message(
         crate::types::threads::InnerMessage::Text(text) => {
             ChatCompletionRequestUserMessageContent::Text(Prompt::render(
                 text.clone(),
-                variables.clone(),
+                &variables.clone(),
             ))
         }
         crate::types::threads::InnerMessage::Array(content_array) => {
@@ -1037,7 +1037,7 @@ fn construct_user_message(
                 let msg = match m.r#type {
                     crate::types::threads::MessageContentType::Text => {
                         ChatCompletionRequestUserMessageContentPart::Text(
-                            Prompt::render(m.value.clone(), variables.clone()).into(),
+                            Prompt::render(m.value.clone(), &variables).into(),
                         )
                     }
                     crate::types::threads::MessageContentType::ImageUrl => {

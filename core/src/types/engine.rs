@@ -123,7 +123,7 @@ impl Prompt {
             .collect()
     }
 
-    pub fn render(template: String, variables: HashMap<String, Value>) -> String {
+    pub fn render(template: String, variables: &HashMap<String, Value>) -> String {
         let env = Environment::new();
         let tmpl = env.template_from_str(&template).unwrap();
         tmpl.render(variables).unwrap()
