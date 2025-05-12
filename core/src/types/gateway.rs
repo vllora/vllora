@@ -155,11 +155,15 @@ pub enum McpTransportType {
         server_url: String,
         #[serde(default)]
         headers: HashMap<String, String>,
+        #[serde(default)]
+        env: Option<HashMap<String, String>>,
     },
     Ws {
         server_url: String,
         #[serde(default)]
         headers: HashMap<String, String>,
+        #[serde(default)]
+        env: Option<HashMap<String, String>>,
     },
     #[serde(rename = "in-memory")]
     InMemory {
@@ -186,6 +190,14 @@ impl McpDefinition {
             McpTransportType::InMemory { name, .. } => name.clone(),
             McpTransportType::Sse { server_url, .. } => server_url.clone(),
             McpTransportType::Ws { server_url, .. } => server_url.clone(),
+        }
+    }
+
+    pub fn env(&self) -> Option<HashMap<String, String>> {
+        match &self.r#type {
+            McpTransportType::InMemory { .. } => None,
+            McpTransportType::Sse { env, .. } => env.clone(),
+            McpTransportType::Ws { env, .. } => env.clone(),
         }
     }
 }

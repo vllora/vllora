@@ -10,8 +10,10 @@ use super::{
     types::{ModelEvent, ModelEventType, ModelToolCall, ToolResultEvent, ToolStartEvent},
     Tool,
 };
+use opentelemetry::propagation::Injector;
 use serde_json::Value;
 use tracing::Span;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 // macro_rules! target {
 //     () => {
@@ -22,11 +24,27 @@ use tracing::Span;
 //     };
 // }
 
+pub(crate) struct LlmToolCallCarrier<'a> {
+    properties: &'a mut HashMap<String, String>,
+}
+
+impl<'a> LlmToolCallCarrier<'a> {
+    pub fn new(properties: &'a mut HashMap<String, String>) -> Self {
+        LlmToolCallCarrier { properties }
+    }
+}
+
+impl Injector for LlmToolCallCarrier<'_> {
+    fn set(&mut self, key: &str, value: String) {
+        self.properties.insert(key.into(), value);
+    }
+}
+
 pub(crate) async fn handle_tool_call(
     tool_use: &ModelToolCall,
     tools: &HashMap<String, Box<dyn Tool>>,
     tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
-    tags: HashMap<String, String>,
+    mut tags: HashMap<String, String>,
 ) -> GatewayResult<String> {
     let tool_name = tool_use.tool_name.clone();
     let arguments = tool_use.input.clone();
@@ -57,6 +75,11 @@ pub(crate) async fn handle_tool_call(
         )))
         .await
         .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+        let span_context = Span::current().context();
+        opentelemetry::global::get_text_map_propagator(|propagator| {
+            propagator.inject_context(&span_context, &mut LlmToolCallCarrier::new(&mut tags))
+        });
+
         let result = tool.run(arguments_value, tags).await;
         let _ = result.as_ref().map(JsonValue).record();
         let result = result.map(|v| v.to_string());

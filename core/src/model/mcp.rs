@@ -45,6 +45,7 @@ macro_rules! with_transport {
             crate::types::gateway::McpTransportType::Sse {
                 server_url,
                 headers,
+                ..
             } => {
                 let mut transport = ClientSseTransport::builder(server_url);
                 for (k, v) in headers {
@@ -62,6 +63,7 @@ macro_rules! with_transport {
             crate::types::gateway::McpTransportType::Ws {
                 server_url,
                 headers,
+                ..
             } => {
                 let mut transport = ClientWsTransport::builder(server_url);
                 for (k, v) in headers {
@@ -183,21 +185,42 @@ pub async fn get_tools(definitions: &[McpDefinition]) -> Result<Vec<ServerTools>
     Ok(all_tools)
 }
 
+pub async fn get_raw_tools(definitions: &McpDefinition) -> Result<Vec<Tool>, GatewayError> {
+    with_transport!(definitions.clone(), |transport| async move {
+        let client = ClientBuilder::new(transport).build();
+
+        let client_clone = client.clone();
+        let _handle = tokio::spawn(async move { client_clone.start().await });
+        // Get available tools
+        let response = client
+            .request(
+                "tools/list",
+                Some(json!({})),
+                RequestOptions::default().timeout(Duration::from_secs(60)),
+            )
+            .await
+            .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+        // Parse response into Vec<Tool>
+        let response: ToolsListResponse = serde_json::from_value(response)?;
+
+        Ok::<Vec<Tool>, GatewayError>(response.tools)
+    })
+}
+
 pub async fn execute_mcp_tool(
     def: &McpDefinition,
     tool: &async_mcp::types::Tool,
     inputs: HashMap<String, serde_json::Value>,
+    meta: Option<serde_json::Value>,
 ) -> Result<String, GatewayError> {
     let name = tool.name.clone();
-    let mcp_server = def.server_name();
-    tracing::info!("Executing tool: {name}, mcp_server: {mcp_server}");
 
     let response: serde_json::Value = with_transport!(def.clone(), |transport| async move {
         let client = ClientBuilder::new(transport).build();
         let request = CallToolRequest {
             name: name.clone(),
             arguments: Some(inputs),
-            meta: None,
+            meta,
         };
 
         let params =
@@ -212,7 +235,7 @@ pub async fn execute_mcp_tool(
             .request(
                 "tools/call",
                 Some(params),
-                RequestOptions::default().timeout(Duration::from_secs(10)),
+                RequestOptions::default().timeout(Duration::from_secs(30)),
             )
             .await
             .map_err(|e| GatewayError::CustomError(e.to_string()))?;
