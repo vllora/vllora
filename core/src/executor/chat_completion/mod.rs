@@ -172,16 +172,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         // }
     }
 
-    let input_vars = request_with_tools
-        .variables
-        .as_ref()
-        .map(|v| {
-            v.iter()
-                .map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone())))
-                .collect()
-        })
-        .unwrap_or_default();
-
+    let input_vars = request_with_tools.variables.clone().unwrap_or_default();
     if is_stream {
         Ok(Left(
             stream_chunks(

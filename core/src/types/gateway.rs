@@ -97,7 +97,7 @@ pub struct ChatCompletionRequestWithTools<T> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub router: Option<DynamicRouter<T>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub variables: Option<HashMap<String, String>>,
+    pub variables: Option<HashMap<String, serde_json::Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extra: Option<Extra>,
     #[serde(flatten)]
