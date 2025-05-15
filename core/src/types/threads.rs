@@ -14,6 +14,14 @@ pub struct MessageThread {
     pub model_name: String, // Corresponding LangDB model
     pub user_id: String,    // UUID
     pub project_id: String, // Project identifier
+    pub is_public: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PublicMessageThread {
+    pub id: String,         // UUID
+    pub is_public: bool,
+    pub tenant_id: String,
 }
 
 #[serde_as]
