@@ -51,6 +51,9 @@ pub enum ModelError {
 
     #[error("System prompt is missing")]
     SystemPromptMissing,
+
+    #[error("Model {0} not found")]
+    ModelNotFound(String),
 }
 
 #[derive(Error, Debug)]

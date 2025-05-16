@@ -4,11 +4,11 @@ pub mod image;
 pub mod middleware;
 pub mod models;
 
-use crate::error::GatewayError;
 use crate::model::types::ModelEvent;
 use crate::models::ModelMetadata;
 use crate::types::engine::Model;
 use crate::GatewayApiError;
+use crate::{error::GatewayError, model::error::ModelError};
 use actix_web::HttpRequest;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
@@ -22,7 +22,6 @@ pub fn find_model_by_full_name(
     provided_models: &AvailableModels,
 ) -> Result<ModelMetadata, GatewayApiError> {
     let model_parts = model_name.split('/').collect::<Vec<&str>>();
-
     let llm_model = if model_parts.len() == 1 {
         provided_models
             .0
@@ -32,6 +31,9 @@ pub fn find_model_by_full_name(
     } else if model_parts.len() == 2 {
         let model_name = model_parts.last().expect("2 elements in model parts");
         let provided_by = model_parts.first().expect("2 elements in model parts");
+
+        let model_parts = model_name.split('@').collect::<Vec<&str>>();
+        let model_name = model_parts.first().expect("1 element in model parts");
 
         provided_models
             .0
@@ -48,8 +50,8 @@ pub fn find_model_by_full_name(
 
     match llm_model {
         Some(model) => Ok(model),
-        None => Err(GatewayApiError::CustomError(format!(
-            "Model not found {model_name}"
+        None => Err(GatewayApiError::ModelError(ModelError::ModelNotFound(
+            model_name.to_string(),
         ))),
     }
 }

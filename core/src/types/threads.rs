@@ -19,7 +19,7 @@ pub struct MessageThread {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PublicMessageThread {
-    pub id: String,         // UUID
+    pub id: String, // UUID
     pub is_public: bool,
     pub tenant_id: String,
 }
