@@ -3,6 +3,7 @@
 use crate::types::gateway::ChatCompletionRequest;
 use crate::{handler::AvailableModels, usage::ProviderMetrics};
 use std::collections::{BTreeMap, HashMap};
+use std::fmt::Display;
 use thiserror::Error;
 
 pub mod strategy;
@@ -70,6 +71,17 @@ pub enum RoutingStrategy {
     Optimized {
         metric: strategy::metric::MetricSelector,
     },
+}
+
+impl Display for RoutingStrategy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RoutingStrategy::Fallback => write!(f, "Fallback"),
+            RoutingStrategy::Percentage { .. } => write!(f, "Percentage"),
+            RoutingStrategy::Random => write!(f, "Random"),
+            RoutingStrategy::Optimized { .. } => write!(f, "Optimized"),
+        }
+    }
 }
 
 impl Default for RoutingStrategy {
