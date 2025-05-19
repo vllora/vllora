@@ -21,21 +21,27 @@ use crate::{
 
 fn validate_server_name(name: &str) -> Result<(), GatewayError> {
     match name {
-        "websearch" => Ok(()),
-        _ => Err(GatewayError::CustomError("Invalid server name".to_string())),
+        "websearch" | "Web Search" => Ok(()),
+        _ => Err(GatewayError::CustomError(format!(
+            "Invalid server name: {}",
+            name
+        ))),
     }
 }
 
 async fn async_server(name: &str, transport: ServerInMemoryTransport) -> Result<(), GatewayError> {
     match name {
-        "websearch" => {
+        "websearch" | "Web Search" => {
             let server = tavily::build(transport)?;
             server
                 .listen()
                 .await
                 .map_err(|e| GatewayError::CustomError(e.to_string()))
         }
-        _ => Err(GatewayError::CustomError("Invalid server name".to_string())),
+        _ => Err(GatewayError::CustomError(format!(
+            "Invalid server name: {}",
+            name
+        ))),
     }
 }
 
