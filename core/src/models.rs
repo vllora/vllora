@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use serde::{Deserialize, Serialize};
 
-use crate::types::provider::{InferenceModelProvider, ModelPrice};
+use crate::types::provider::{CompletionModelPrice, InferenceModelProvider, ModelPrice};
 
 use std::str::FromStr;
 
@@ -273,4 +273,31 @@ pub struct ModelMetadata {
     pub parameters: Option<serde_json::Value>,
     #[serde(default)]
     pub virtual_model_id: Option<String>,
+}
+
+impl Default for ModelMetadata {
+    fn default() -> Self {
+        Self {
+            model: "".to_string(),
+            model_provider: "".to_string(),
+            inference_provider: InferenceProvider {
+                provider: InferenceModelProvider::Proxy("langdb".to_string()),
+                model_name: "".to_string(),
+                endpoint: None,
+            },
+            price: ModelPrice::Completion(CompletionModelPrice {
+                per_input_token: 0.0,
+                per_output_token: 0.0,
+                valid_from: None,
+            }),
+            input_formats: Vec::new(),
+            output_formats: Vec::new(),
+            capabilities: Vec::new(),
+            r#type: ModelType::Completions,
+            limits: Limits::new(0),
+            description: "".to_string(),
+            parameters: None,
+            virtual_model_id: None,
+        }
+    }
 }
