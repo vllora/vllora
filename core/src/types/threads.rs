@@ -15,6 +15,7 @@ pub struct MessageThread {
     pub user_id: String,    // UUID
     pub project_id: String, // Project identifier
     pub is_public: bool,
+    pub title: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
