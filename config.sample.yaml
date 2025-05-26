@@ -25,7 +25,7 @@ http:
 #     api_key: "{{ LANGDB_BEDROCK_API_KEY }}"
 #   gemini: 
 #     api_key: "{{ LANGDB_GEMINI_API_KEY }}"
-#   antrhopic: 
+#   anthropic: 
 #     api_key: "{{ LANGDB_ANTHROPIC_API_KEY }}"
 #   deepseek: 
 #     api_key: "{{ LANGDB_DEEPSEEK_API_KEY }}"
