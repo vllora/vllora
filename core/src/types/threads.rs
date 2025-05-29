@@ -16,6 +16,8 @@ pub struct MessageThread {
     pub project_id: String, // Project identifier
     pub is_public: bool,
     pub title: Option<String>,
+    pub description: Option<String>,
+    pub keywords: Option<Vec<String>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
