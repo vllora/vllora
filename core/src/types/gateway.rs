@@ -174,6 +174,16 @@ pub enum McpTransportType {
     },
 }
 
+impl McpTransportType {
+    pub fn key(&self) -> String {
+        match self {
+            McpTransportType::Sse { server_url, .. } => format!("sse:{}", server_url),
+            McpTransportType::Ws { server_url, .. } => format!("ws:{}", server_url),
+            McpTransportType::InMemory { name, .. } => format!("in-memory:{}", name),
+        }
+    }
+}
+
 fn default_in_memory_name() -> String {
     "langdb".to_string()
 }
