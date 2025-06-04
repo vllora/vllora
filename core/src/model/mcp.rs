@@ -124,7 +124,7 @@ pub async fn get_transport(
             //     .await
             //     .map_err(|e| McpServerError::ClientStartError(e.to_string()))?)
         }
-        _ => Err(McpServerError::InvalidServerName("nx".to_string())),
+        _ => Err(McpServerError::InvalidServerName("Invalid or unsupported server type".to_string())),
     }
 }
 
