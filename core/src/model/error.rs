@@ -26,7 +26,7 @@ pub enum ModelError {
     OpenAIApi(#[from] OpenAIError),
 
     #[error(transparent)]
-    Bedrock(#[from] BedrockError),
+    Bedrock(#[from] Box<BedrockError>),
 
     #[error(transparent)]
     Anthropic(#[from] AnthropicError),
@@ -54,6 +54,12 @@ pub enum ModelError {
 
     #[error("Model {0} not found")]
     ModelNotFound(String),
+}
+
+impl From<BedrockError> for ModelError {
+    fn from(value: BedrockError) -> Self {
+        ModelError::Bedrock(Box::new(value))
+    }
 }
 
 #[derive(Error, Debug)]

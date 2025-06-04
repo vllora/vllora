@@ -28,7 +28,7 @@ use tui::{Counters, Tui};
 #[derive(Error, Debug)]
 pub enum CliError {
     #[error(transparent)]
-    GatewayError(#[from] GatewayError),
+    GatewayError(#[from] Box<GatewayError>),
     #[error(transparent)]
     IoError(#[from] std::io::Error),
     #[error(transparent)]
