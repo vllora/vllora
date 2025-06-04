@@ -205,9 +205,10 @@ impl AnthropicModel {
     }
 
     fn handle_max_tokens_error() -> GatewayError {
-        GatewayError::ModelError(ModelError::FinishError(
+        ModelError::FinishError(
             "the maximum number of tokens specified in the request was reached".to_string(),
-        ))
+        )
+        .into()
     }
     async fn process_stream(
         &self,
@@ -457,11 +458,10 @@ impl AnthropicModel {
                                         ));
                                     }
                                     _ => {
-                                        return Err(GatewayError::ModelError(
-                                            ModelError::CustomError(
-                                                "unexpected content block".to_string(),
-                                            ),
-                                        ));
+                                        return Err(ModelError::CustomError(
+                                            "unexpected content block".to_string(),
+                                        )
+                                        .into());
                                     }
                                 }
                             }
@@ -500,9 +500,10 @@ impl AnthropicModel {
                     let blocks = if let Content::MultipleBlocks(blocks) = response.content {
                         blocks
                     } else {
-                        return Err(GatewayError::ModelError(ModelError::CustomError(
+                        return Err(ModelError::CustomError(
                             "Expected multiple tool blocks".to_string(),
-                        )));
+                        )
+                        .into());
                     };
 
                     let mut messages: Vec<ClustMessage> = vec![ClustMessage::assistant(content)];
@@ -521,9 +522,10 @@ impl AnthropicModel {
                             block => {
                                 tracing::error!("Unexpected content block in response: {}", block);
                                 tracing::error!("All blocks {:?}", blocks);
-                                return Err(GatewayError::ModelError(ModelError::CustomError(
+                                return Err(ModelError::CustomError(
                                     "Unexpected content block in response".to_string(),
-                                )));
+                                )
+                                .into());
                             }
                         }
                     }
@@ -866,7 +868,7 @@ impl ModelInstance for AnthropicModel {
             system_prompt = field::Empty
         );
         let Some(system_prompt) = system_prompt else {
-            return Err(GatewayError::ModelError(ModelError::SystemPromptMissing));
+            return Err(ModelError::SystemPromptMissing.into());
         };
         call_span.record("system_prompt", format!("{}", system_prompt));
         self.execute(
@@ -903,7 +905,7 @@ impl ModelInstance for AnthropicModel {
             system_prompt = field::Empty
         );
         let Some(system_prompt) = system_prompt else {
-            return Err(GatewayError::ModelError(ModelError::SystemPromptMissing));
+            return Err(ModelError::SystemPromptMissing.into());
         };
         call_span.record("system_prompt", format!("{}", system_prompt));
         self.execute_stream(

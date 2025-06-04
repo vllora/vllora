@@ -50,8 +50,8 @@ pub fn find_model_by_full_name(
 
     match llm_model {
         Some(model) => Ok(model),
-        None => Err(GatewayApiError::ModelError(ModelError::ModelNotFound(
-            model_name.to_string(),
+        None => Err(GatewayApiError::ModelError(Box::new(
+            ModelError::ModelNotFound(model_name.to_string()),
         ))),
     }
 }

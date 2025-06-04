@@ -513,10 +513,11 @@ impl GeminiModel {
 
     fn handle_finish_reason(finish_reason: Option<FinishReason>) -> GatewayError {
         match finish_reason {
-            Some(FinishReason::MaxTokens) => GatewayError::ModelError(ModelError::FinishError(
+            Some(FinishReason::MaxTokens) => ModelError::FinishError(
                 "the maximum number of tokens specified in the request was reached".to_string(),
-            )),
-            x => GatewayError::ModelError(ModelError::FinishError(format!("{x:?}"))),
+            )
+            .into(),
+            x => ModelError::FinishError(format!("{x:?}")).into(),
         }
     }
 

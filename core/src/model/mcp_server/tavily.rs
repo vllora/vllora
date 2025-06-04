@@ -1,16 +1,32 @@
-use async_mcp::server::{Server, ServerBuilder};
-use async_mcp::transport::Transport;
-use async_mcp::types::{
-    CallToolRequest, CallToolResponse, ListRequest, PromptsListResponse, ResourcesListResponse,
-    ServerCapabilities, Tool, ToolResponseContent,
-};
+use crate::error::GatewayError;
 use reqwest::Client;
+use rmcp::model::CallToolResult;
+use rmcp::model::ClientCapabilities;
+use rmcp::model::ClientInfo;
+use rmcp::model::Content;
+use rmcp::model::GetPromptRequestParam;
+use rmcp::model::GetPromptResult;
+use rmcp::model::Implementation;
+use rmcp::model::InitializeRequestParam;
+use rmcp::model::InitializeResult;
+use rmcp::model::ListPromptsResult;
+use rmcp::model::ListResourceTemplatesResult;
+use rmcp::model::ListResourcesResult;
+use rmcp::model::PaginatedRequestParam;
+use rmcp::model::ProtocolVersion;
+use rmcp::model::ReadResourceRequestParam;
+use rmcp::model::ReadResourceResult;
+use rmcp::model::ServerCapabilities;
+use rmcp::model::ServerInfo;
+use rmcp::service::RequestContext;
+use rmcp::ClientHandler;
+use rmcp::Error as McpError;
+use rmcp::RoleServer;
+use rmcp::ServerHandler;
+use rmcp_macros::tool;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::env;
-use tracing::info;
-
-use crate::error::GatewayError;
 
 const TAVILY_API_URL: &str = "https://api.tavily.com/search";
 
@@ -30,6 +46,27 @@ pub struct SearchResult {
     pub content: String,
     pub score: f64,
     pub raw_content: Option<String>,
+}
+
+#[derive(Clone)]
+pub struct TavilySearch {}
+
+#[tool(tool_box)]
+impl TavilySearch {
+    #[tool(description = "Search the web and return results")]
+    pub async fn search(
+        &self,
+        #[tool(param)] query: String,
+    ) -> Result<CallToolResult, rmcp::Error> {
+        let r = search_tavily(&query, &env::var("TAVILY_API_KEY").unwrap()).await;
+
+        match r {
+            Ok(r) => Ok(CallToolResult::success(vec![Content::text(
+                serde_json::to_string(&r).unwrap(),
+            )])),
+            Err(e) => Err(McpError::internal_error(e.to_string(), None)),
+        }
+    }
 }
 
 async fn search_tavily(query: &str, api_key: &str) -> Result<Value, GatewayError> {
@@ -55,144 +92,88 @@ async fn search_tavily(query: &str, api_key: &str) -> Result<Value, GatewayError
     Ok(result)
 }
 
-pub fn build<T: Transport>(t: T) -> Result<Server<T>, GatewayError> {
-    let mut server = Server::builder(t)
-        .capabilities(ServerCapabilities {
-            tools: Some(json!({})),
-            ..Default::default()
-        })
-        .request_handler("resources/list", |_req: ListRequest| {
-            Box::pin(async move {
-                Ok(ResourcesListResponse {
-                    resources: Vec::new(),
-                    next_cursor: None,
-                    meta: None,
-                })
-            })
-        })
-        .request_handler("prompts/list", |_req: ListRequest| {
-            Box::pin(async move {
-                Ok(PromptsListResponse {
-                    prompts: Vec::new(),
-                    next_cursor: None,
-                    meta: None,
-                })
-            })
-        });
-
-    register_tools(&mut server)?;
-
-    let server = server.build();
-    Ok(server)
-}
-
-fn register_tools<T: Transport>(server: &mut ServerBuilder<T>) -> Result<(), GatewayError> {
-    // Search Tool
-    let search_tool = Tool {
-        name: "search".to_string(),
-        description: Some("Search the web and return results".to_string()),
-        input_schema: json!({
-            "type": "object",
-            "properties": {
-                "query": {"type": "string"}
-            },
-            "required": ["query"],
-            "additionalProperties": false
-        }),
-        output_schema: None,
-    };
-
-    // Register search tool
-    server.register_tool(search_tool, |req: CallToolRequest| {
-        Box::pin(async move {
-            let args = req.arguments.unwrap_or_default();
-
-            let result: Result<CallToolResponse, GatewayError> = async {
-                let api_key = env::var("TAVILY_API_KEY").map_err(|_| {
-                    GatewayError::CustomError("TAVILY_API_KEY not found in environment".to_string())
-                })?;
-
-                let query = args["query"].as_str().ok_or_else(|| {
-                    GatewayError::CustomError("Missing query parameter".to_string())
-                })?;
-
-                let search_results = search_tavily(query, &api_key).await?;
-
-                Ok(CallToolResponse {
-                    content: vec![ToolResponseContent::Text {
-                        text: serde_json::to_string(&search_results)?,
-                    }],
-                    is_error: None,
-                    meta: None,
-                })
-            }
-            .await;
-
-            match result {
-                Ok(response) => Ok(response),
-                Err(e) => {
-                    info!("Error handling request: {:#?}", e);
-                    Ok(CallToolResponse {
-                        content: vec![ToolResponseContent::Text {
-                            text: format!("{}", e),
-                        }],
-                        is_error: Some(true),
-                        meta: None,
-                    })
-                }
-            }
-        })
-    });
-
-    Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use std::time::Duration;
-
-    use async_mcp::{
-        client::ClientBuilder,
-        protocol::RequestOptions,
-        transport::{ClientInMemoryTransport, ServerInMemoryTransport, Transport},
-    };
-    use serde_json::json;
-
-    use crate::{error::GatewayError, model::mcp_server::tavily::build};
-
-    #[tokio::test]
-    async fn test_tavily_tool() -> Result<(), GatewayError> {
-        tracing_subscriber::fmt()
-            .with_max_level(tracing::Level::DEBUG)
-            // needs to be stderr due to stdio transport
-            .with_writer(std::io::stderr)
-            .init();
-
-        async fn async_server(transport: ServerInMemoryTransport) {
-            let server = build(transport.clone()).unwrap();
-            server.listen().await.unwrap();
+#[tool(tool_box)]
+impl ServerHandler for TavilySearch {
+    fn get_info(&self) -> ServerInfo {
+        ServerInfo {
+            protocol_version: ProtocolVersion::V_2024_11_05,
+            capabilities: ServerCapabilities::builder()
+                .enable_tools()
+                .build(),
+            server_info: Implementation::from_build_env(),
+            instructions: Some("This server provides a counter tool that can increment and decrement values. The counter starts at 0 and can be modified using the 'increment' and 'decrement' tools. Use 'get_value' to check the current count.".to_string()),
         }
+    }
 
-        let transport = ClientInMemoryTransport::new(|t| tokio::spawn(async_server(t)));
-        transport
-            .open()
-            .await
-            .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+    async fn list_resources(
+        &self,
+        _request: Option<PaginatedRequestParam>,
+        _: RequestContext<RoleServer>,
+    ) -> Result<ListResourcesResult, McpError> {
+        Ok(ListResourcesResult {
+            resources: Vec::new(),
+            next_cursor: None,
+        })
+    }
 
-        let client = ClientBuilder::new(transport).build();
-        let client_clone = client.clone();
-        tokio::spawn(async move { client_clone.start().await });
+    async fn read_resource(
+        &self,
+        ReadResourceRequestParam { uri }: ReadResourceRequestParam,
+        _: RequestContext<RoleServer>,
+    ) -> Result<ReadResourceResult, McpError> {
+        Err(McpError::resource_not_found(
+            "resource_not_found",
+            Some(json!({
+                "uri": uri.as_str()
+            })),
+        ))
+    }
 
-        let response = client
-            .request(
-                "tools/call",
-                Some(json!({"name": "search", "arguments": {"query": "How many EOs did Trump sign?"}})),
-                RequestOptions::default().timeout(Duration::from_secs(10)),
-            )
-            .await
-            .map_err(|e| GatewayError::CustomError(e.to_string()))?;
-        println!("{:?}", response);
+    async fn list_prompts(
+        &self,
+        _request: Option<PaginatedRequestParam>,
+        _: RequestContext<RoleServer>,
+    ) -> Result<ListPromptsResult, McpError> {
+        Ok(ListPromptsResult {
+            next_cursor: None,
+            prompts: vec![],
+        })
+    }
 
-        Ok(())
+    async fn get_prompt(
+        &self,
+        GetPromptRequestParam { .. }: GetPromptRequestParam,
+        _: RequestContext<RoleServer>,
+    ) -> Result<GetPromptResult, McpError> {
+        Err(McpError::invalid_params("prompt not found", None))
+    }
+
+    async fn list_resource_templates(
+        &self,
+        _request: Option<PaginatedRequestParam>,
+        _: RequestContext<RoleServer>,
+    ) -> Result<ListResourceTemplatesResult, McpError> {
+        Ok(ListResourceTemplatesResult {
+            next_cursor: None,
+            resource_templates: Vec::new(),
+        })
+    }
+
+    async fn initialize(
+        &self,
+        _request: InitializeRequestParam,
+        _: RequestContext<RoleServer>,
+    ) -> Result<InitializeResult, McpError> {
+        Ok(ServerHandler::get_info(self))
+    }
+}
+
+impl ClientHandler for TavilySearch {
+    fn get_info(&self) -> ClientInfo {
+        ClientInfo {
+            protocol_version: ProtocolVersion::V_2024_11_05,
+            capabilities: ClientCapabilities::builder().build(),
+            client_info: Implementation::from_build_env(),
+        }
     }
 }

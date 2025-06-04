@@ -32,6 +32,8 @@ use types::guardrails::GuardError;
 
 pub type GatewayResult<T> = Result<T, GatewayError>;
 
+pub use rmcp;
+
 #[derive(Error, Debug)]
 pub enum GatewayApiError {
     #[error("Failed to parse JSON")]
@@ -47,7 +49,7 @@ pub enum GatewayApiError {
     CostCalculatorError(#[from] CostCalculatorError),
 
     #[error(transparent)]
-    ModelError(#[from] model::error::ModelError),
+    ModelError(#[from] Box<model::error::ModelError>),
 
     #[error("Token usage limit exceeded")]
     TokenUsageLimit,

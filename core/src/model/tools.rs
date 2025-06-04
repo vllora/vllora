@@ -63,11 +63,13 @@ impl Tool for McpTool {
     }
 
     fn description(&self) -> String {
-        self.0.description.as_ref().cloned().unwrap_or_default()
+        self.0.description.clone().unwrap_or_default().to_string()
     }
 
     fn get_function_parameters(&self) -> std::option::Option<FunctionParameters> {
-        serde_json::from_value(self.0.input_schema.clone()).ok()
+        let schema = self.0.schema_as_json_value();
+
+        serde_json::from_value(schema.clone()).ok()
     }
 
     async fn run(
@@ -80,9 +82,9 @@ impl Tool for McpTool {
             Some(env) => serde_json::json!({"env_vars": env}),
             None => serde_json::to_value(tags)?,
         };
-        execute_mcp_tool(&self.1, &self.0, inputs, Some(meta))
+        Ok(execute_mcp_tool(&self.1, &self.0, inputs, Some(meta))
             .await
-            .map(serde_json::Value::String)
+            .map(serde_json::Value::String)?)
     }
 
     fn stop_at_call(&self) -> bool {
