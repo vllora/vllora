@@ -1,8 +1,10 @@
 use crate::model::tools::Tool;
+use crate::types::cache::PromptCacheOptions;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt::Display;
+use std::hash::Hash;
 use thiserror::Error;
 
 pub use async_openai::types::ResponseFormat as OpenaiResponseFormat;
@@ -58,6 +60,10 @@ impl ChatCompletionRequest {
         self.model = model;
         self
     }
+
+    pub fn hash(&self, hasher: &mut std::hash::DefaultHasher) {
+        self.messages.hash(hasher)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -73,6 +79,9 @@ pub struct Extra {
 
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub guards: Vec<GuardOrName>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache: Option<PromptCacheOptions>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -244,18 +253,18 @@ pub struct ResponseFormat {
     pub response_type: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
 pub struct ImageUrl {
     pub url: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
 pub struct InputAudio {
     pub data: String,
     pub format: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum ContentType {
     Text,
@@ -263,7 +272,7 @@ pub enum ContentType {
     InputAudio,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
 pub struct Content {
     pub r#type: ContentType,
     pub text: Option<String>,
@@ -271,7 +280,7 @@ pub struct Content {
     pub audio: Option<InputAudio>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum ChatCompletionContent {
     Text(String),
@@ -293,7 +302,7 @@ impl Default for ChatCompletionContent {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Hash, PartialEq, Eq)]
 pub struct ChatCompletionMessage {
     pub role: String,
     pub content: Option<ChatCompletionContent>,
@@ -312,7 +321,7 @@ impl ChatCompletionMessage {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Hash, PartialEq, Eq)]
 pub struct ToolCall {
     pub index: Option<usize>,
     pub id: String,
@@ -320,7 +329,7 @@ pub struct ToolCall {
     pub function: FunctionCall,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Hash, PartialEq, Eq)]
 pub struct FunctionCall {
     pub name: String,
     pub arguments: String,
