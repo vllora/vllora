@@ -20,5 +20,10 @@ impl Default for PromptCacheOptions {
 #[serde(rename_all = "snake_case", tag = "type")]
 pub enum PromptCacheAdapter {
     Exact,
-    Distance,
+    Distance(DistanceCacheOptions),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DistanceCacheOptions {
+    pub min_similarity: f32,
 }
