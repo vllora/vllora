@@ -142,7 +142,6 @@ pub async fn stream_chunks(
             )
         })
         .then(move |e: Result<ModelEvent, GatewayApiError>| async move {
-            tracing::warn!("Received Event: {e:?}");
             match e {
                 Ok(e) => match e.event {
                     ModelEventType::LlmContent(content) => Ok((
