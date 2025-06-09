@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::model::types::ModelEvent;
 use crate::model::types::{LLMFinishEvent, ToolStartEvent};
+use crate::types::gateway::ChatCompletionMessage;
 use crate::GatewayError;
 
 use crate::{
@@ -24,6 +25,24 @@ use crate::GatewayApiError;
 pub type FinishEventHandle =
     tokio::task::JoinHandle<(Option<LLMFinishEvent>, Option<Vec<ToolStartEvent>>)>;
 
+pub struct BasicCacheContext {
+    pub events_sender: Option<tokio::sync::mpsc::Sender<Option<ModelEvent>>>,
+    pub response_sender: Option<tokio::sync::oneshot::Sender<ChatCompletionMessage>>,
+    pub cached_events: Option<Vec<ModelEvent>>,
+    pub cached_response: Option<ChatCompletionMessage>,
+}
+
+impl Default for BasicCacheContext {
+    fn default() -> Self {
+        Self {
+            events_sender: None,
+            response_sender: None,
+            cached_events: None,
+            cached_response: None,
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub async fn execute(
     request: ChatCompletionRequest,
@@ -34,12 +53,32 @@ pub async fn execute(
     span: Span,
     handle: Option<FinishEventHandle>,
     input_vars: HashMap<String, serde_json::Value>,
+    cache_context: BasicCacheContext,
 ) -> Result<ChatCompletionResponse, GatewayApiError> {
-    let result = model
-        .invoke(input_vars.clone(), tx, messages.clone(), tags.clone())
+    let result = if let Some(cached_response) = &cache_context.cached_response {
+        match (cache_context.cached_events, cache_context.events_sender) {
+            (Some(events), Some(sender)) => {
+                for event in events {
+                    sender.send(Some(event)).await.unwrap();
+                }
+                sender.send(None).await.unwrap();
+            }
+            _ => {}
+        }
+        
+        cached_response.clone()
+    } else {
+        let response = model
+            .invoke(input_vars.clone(), tx, messages.clone(), tags.clone())
         .instrument(span.clone())
         .await
         .map_err(|e| record_map_err(e, span.clone()))?;
+
+        if let Some(response_sender) = cache_context.response_sender {
+            response_sender.send(response.clone()).unwrap();
+        }
+        response
+    };
 
     let finish_reason = match (&result.tool_calls, &result.content) {
         (Some(_), _) => {

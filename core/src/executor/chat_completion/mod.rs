@@ -1,4 +1,5 @@
-use crate::executor::chat_completion::stream_executor::stream_chunks;
+use crate::executor::chat_completion::basic_executor::BasicCacheContext;
+use crate::executor::chat_completion::stream_executor::{stream_chunks, StreamCacheContext};
 use crate::handler::{find_model_by_full_name, ModelEventWithDetails};
 use crate::llm_gateway::message_mapper::MessageMapper;
 use crate::llm_gateway::provider::Provider;
@@ -39,6 +40,8 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
     request_with_tools: &ChatCompletionRequestWithTools<T>,
     executor_context: &ExecutorContext,
     router_span: tracing::Span,
+    stream_cache_context: StreamCacheContext,
+    basic_cache_context: BasicCacheContext,
 ) -> Result<
     Either<
         Result<ChatCompletionStream, GatewayApiError>,
@@ -182,6 +185,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
                 executor_context.callbackhandler.clone().into(),
                 executor_context.tags.clone(),
                 input_vars,
+                stream_cache_context,
             )
             .instrument(span)
             .await,
@@ -196,6 +200,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
             span.clone(),
             Some(handle),
             input_vars,
+            basic_cache_context,
         )
         .instrument(span)
         .await;

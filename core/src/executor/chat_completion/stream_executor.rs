@@ -29,6 +29,20 @@ use crate::types::engine::CompletionModelDefinition;
 use crate::types::engine::ParentDefinition;
 use crate::GatewayApiError;
 
+pub struct StreamCacheContext {
+    pub events_sender: Option<tokio::sync::mpsc::Sender<Option<ModelEvent>>>,
+    pub cached_events: Option<Vec<ModelEvent>>,
+}
+
+impl Default for StreamCacheContext {
+    fn default() -> Self {
+        Self {
+            events_sender: None,
+            cached_events: None,
+        }
+    }
+}
+
 pub async fn stream_chunks(
     completion_model_definition: CompletionModelDefinition,
     model: Box<dyn ModelInstance>,
@@ -36,6 +50,7 @@ pub async fn stream_chunks(
     callback_handler: Arc<CallbackHandlerFn>,
     tags: HashMap<String, String>,
     input_vars: HashMap<String, serde_json::Value>,
+    cached_context: StreamCacheContext,
 ) -> Result<ChatCompletionStream, GatewayApiError> {
     let parent_definition =
         ParentDefinition::CompletionModel(Box::new(completion_model_definition.clone()));
@@ -50,11 +65,7 @@ pub async fn stream_chunks(
 
     tokio::spawn(
         async move {
-            let (tx, mut rx) = tokio::sync::mpsc::channel(100);
-            let result_fut = model
-                .stream(input_vars, tx, messages, tags)
-                .instrument(Span::current());
-
+            let (tx, mut rx) = tokio::sync::mpsc::channel::<Option<ModelEvent>>(100);
             let forward_fut = async {
                 let mut assistant_msg = String::new();
                 while let Some(Some(mut msg)) = rx.recv().await {
@@ -76,18 +87,49 @@ pub async fn stream_chunks(
                 let span = Span::current();
                 span.record("response", assistant_msg.clone());
             };
-            let (result, _) = join(result_fut, forward_fut).await;
-            if let Err(e) = result {
-                outer_tx
-                    .send(Err(GatewayApiError::GatewayError(e)))
-                    .await
-                    .unwrap();
+
+            tracing::warn!("Cached events: {:#?}", cached_context.cached_events);
+            match cached_context.cached_events {
+                Some(cached_events) => {
+                    for event in cached_events {
+                        tracing::warn!("Cached event: {:#?}", event);
+                        tx.send(Some(event)).await.unwrap();
+                    }  
+
+                    tx.send(None).await.unwrap();
+                    
+                    forward_fut.await;
+                }
+                None => {
+                    let result_fut = model
+                        .stream(input_vars, tx, messages, tags)
+                        .instrument(Span::current());
+
+                    let (result, _) = join(result_fut, forward_fut).await;
+                    if let Err(e) = result {
+                        outer_tx
+                            .send(Err(GatewayApiError::GatewayError(e)))
+                            .await
+                            .unwrap();
+                    }
+                }
             }
         }
         .in_current_span(),
     );
     let event_stream = ReceiverStream::new(rx)
         .into_stream()
+        .then(move |e| {
+            let events_sender = cached_context.events_sender.clone();
+            async move {
+            if let Ok(event) = &e {
+                if let Some(events_sender) = events_sender {
+                    events_sender.send(Some(event.clone())).await.unwrap();
+                }
+            }
+
+            e
+        }})
         .filter_map(|e: Result<ModelEvent, GatewayApiError>| async move {
             e.map_or_else(
                 |e| Some(Err(e)),
@@ -100,6 +142,7 @@ pub async fn stream_chunks(
             )
         })
         .then(move |e: Result<ModelEvent, GatewayApiError>| async move {
+            tracing::warn!("Received Event: {e:?}");
             match e {
                 Ok(e) => match e.event {
                     ModelEventType::LlmContent(content) => Ok((
