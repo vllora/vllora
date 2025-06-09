@@ -56,20 +56,32 @@ pub async fn execute(
     cache_context: BasicCacheContext,
 ) -> Result<ChatCompletionResponse, GatewayApiError> {
     let result = if let Some(cached_response) = &cache_context.cached_response {
-        match (cache_context.cached_events, cache_context.events_sender) {
-            (Some(events), Some(sender)) => {
+        match cache_context.cached_events {
+            Some(events) => {
                 for event in events {
-                    sender.send(Some(event)).await.unwrap();
+                    tx.send(Some(event)).await.unwrap();
                 }
-                sender.send(None).await.unwrap();
+
+                tx.send(None).await.unwrap();
             }
             _ => {}
         }
         
         cached_response.clone()
     } else {
+        let (inner_tx, mut rx) = tokio::sync::mpsc::channel::<Option<ModelEvent>>(100);
+        tokio::spawn(
+            async move {
+                while let Some(event) = rx.recv().await {
+                    if let Some(sender) = &cache_context.events_sender {
+                        sender.send(event.clone()).await.unwrap();
+                    }
+                    tx.send(event).await.unwrap();
+                }
+            }
+        );
         let response = model
-            .invoke(input_vars.clone(), tx, messages.clone(), tags.clone())
+            .invoke(input_vars.clone(), inner_tx, messages.clone(), tags.clone())
         .instrument(span.clone())
         .await
         .map_err(|e| record_map_err(e, span.clone()))?;
