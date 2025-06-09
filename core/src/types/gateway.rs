@@ -60,9 +60,11 @@ impl ChatCompletionRequest {
         self.model = model;
         self
     }
+}
 
-    pub fn hash(&self, hasher: &mut std::hash::DefaultHasher) {
-        self.messages.hash(hasher)
+impl Hash for ChatCompletionRequest {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.messages.hash(state);
     }
 }
 
@@ -176,6 +178,13 @@ pub enum McpTransportType {
         #[serde(default)]
         env: Option<HashMap<String, String>>,
     },
+    Http {
+        server_url: String,
+        #[serde(default)]
+        headers: HashMap<String, String>,
+        #[serde(default)]
+        env: Option<HashMap<String, String>>,
+    },
     #[serde(rename = "in-memory")]
     InMemory {
         #[serde(default = "default_in_memory_name")]
@@ -189,6 +198,7 @@ impl McpTransportType {
             McpTransportType::Sse { server_url, .. } => format!("sse:{}", server_url),
             McpTransportType::Ws { server_url, .. } => format!("ws:{}", server_url),
             McpTransportType::InMemory { name, .. } => format!("in-memory:{}", name),
+            McpTransportType::Http { server_url, .. } => format!("http:{}", server_url),
         }
     }
 }
@@ -211,6 +221,7 @@ impl McpDefinition {
             McpTransportType::InMemory { name, .. } => name.clone(),
             McpTransportType::Sse { server_url, .. } => server_url.clone(),
             McpTransportType::Ws { server_url, .. } => server_url.clone(),
+            McpTransportType::Http { server_url, .. } => server_url.clone(),
         }
     }
 
@@ -219,6 +230,7 @@ impl McpDefinition {
             McpTransportType::InMemory { .. } => None,
             McpTransportType::Sse { env, .. } => env.clone(),
             McpTransportType::Ws { env, .. } => env.clone(),
+            McpTransportType::Http { env, .. } => env.clone(),
         }
     }
 }
@@ -230,7 +242,7 @@ pub struct ServerTools {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct McpTool(pub async_mcp::types::Tool, pub McpDefinition);
+pub struct McpTool(pub rmcp::model::Tool, pub McpDefinition);
 
 // Helper functions for serde defaults
 fn default_tools_filter() -> ToolsFilter {

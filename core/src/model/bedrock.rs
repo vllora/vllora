@@ -451,7 +451,7 @@ impl BedrockModel {
                     .as_ref()
                     .map(JsonValue)
                     .record();
-                let response = result.map_err(|e| ModelError::Bedrock(e.into()))?;
+                let response = result.map_err(|e| ModelError::Bedrock(Box::new(e.into())))?;
                 let span = Span::current();
 
                 span.record("output", format!("{response:?}"));
@@ -685,7 +685,7 @@ impl BedrockModel {
         let mut usage: Option<TokenUsage> = None;
         let mut first_response_received = false;
         while let Some(result) = stream.recv().await.transpose() {
-            let output = result.map_err(|e| ModelError::Bedrock(e.into()))?;
+            let output = result.map_err(|e| ModelError::Bedrock(Box::new(e.into())))?;
             if !first_response_received {
                 first_response_received = true;
                 tx.send(Some(ModelEvent::new(
@@ -1065,9 +1065,11 @@ fn map_converse_stream_error(
 ) -> ModelError {
     match e.as_service_error() {
         Some(ConverseStreamError::ValidationException(e)) => match e.message() {
-            Some(msg) => ModelError::Bedrock(BedrockError::ValidationError(msg.to_string())),
-            None => ModelError::Bedrock(BedrockError::ValidationError(e.to_string())),
+            Some(msg) => {
+                ModelError::Bedrock(Box::new(BedrockError::ValidationError(msg.to_string())))
+            }
+            None => ModelError::Bedrock(Box::new(BedrockError::ValidationError(e.to_string()))),
         },
-        _ => ModelError::Bedrock(e.into()),
+        _ => ModelError::Bedrock(Box::new(e.into())),
     }
 }

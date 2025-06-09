@@ -1,4 +1,6 @@
 use crate::http::status::GuardValidationFailed;
+use crate::model::error::ModelError;
+use crate::model::mcp::McpServerError;
 use crate::types::guardrails::GuardError;
 use actix_web::http::header::ContentType;
 use actix_web::http::StatusCode;
@@ -21,7 +23,7 @@ pub enum GatewayError {
     #[error("Function get is not implemented")]
     FunctionGetNotImplemented,
     #[error(transparent)]
-    ModelError(#[from] crate::model::error::ModelError),
+    ModelError(#[from] Box<ModelError>),
     #[error("Tool call id not found in request")]
     ToolCallIdNotFound,
     #[error(transparent)]
@@ -34,6 +36,20 @@ pub enum GatewayError {
     ValidationU32Error(#[from] clust::ValidationError<u32>),
     #[error(transparent)]
     GuardError(#[from] GuardError),
+    #[error(transparent)]
+    McpServerError(#[from] Box<McpServerError>),
+}
+
+impl From<ModelError> for GatewayError {
+    fn from(value: ModelError) -> Self {
+        GatewayError::ModelError(Box::new(value))
+    }
+}
+
+impl From<McpServerError> for GatewayError {
+    fn from(value: McpServerError) -> Self {
+        GatewayError::McpServerError(Box::new(value))
+    }
 }
 
 impl actix_web::error::ResponseError for GatewayError {
