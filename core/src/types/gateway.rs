@@ -60,9 +60,11 @@ impl ChatCompletionRequest {
         self.model = model;
         self
     }
+}
 
-    pub fn hash(&self, hasher: &mut std::hash::DefaultHasher) {
-        self.messages.hash(hasher)
+impl Hash for ChatCompletionRequest {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.messages.hash(state);
     }
 }
 

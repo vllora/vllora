@@ -25,22 +25,12 @@ use crate::GatewayApiError;
 pub type FinishEventHandle =
     tokio::task::JoinHandle<(Option<LLMFinishEvent>, Option<Vec<ToolStartEvent>>)>;
 
+#[derive(Default)]
 pub struct BasicCacheContext {
     pub events_sender: Option<tokio::sync::mpsc::Sender<Option<ModelEvent>>>,
     pub response_sender: Option<tokio::sync::oneshot::Sender<ChatCompletionMessage>>,
     pub cached_events: Option<Vec<ModelEvent>>,
     pub cached_response: Option<ChatCompletionMessage>,
-}
-
-impl Default for BasicCacheContext {
-    fn default() -> Self {
-        Self {
-            events_sender: None,
-            response_sender: None,
-            cached_events: None,
-            cached_response: None,
-        }
-    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -56,35 +46,30 @@ pub async fn execute(
     cache_context: BasicCacheContext,
 ) -> Result<ChatCompletionResponse, GatewayApiError> {
     let result = if let Some(cached_response) = &cache_context.cached_response {
-        match cache_context.cached_events {
-            Some(events) => {
-                for event in events {
-                    tx.send(Some(event)).await.unwrap();
-                }
-
-                tx.send(None).await.unwrap();
+        if let Some(events) = cache_context.cached_events {
+            for event in events {
+                tx.send(Some(event)).await.unwrap();
             }
-            _ => {}
+
+            tx.send(None).await.unwrap();
         }
-        
+
         cached_response.clone()
     } else {
         let (inner_tx, mut rx) = tokio::sync::mpsc::channel::<Option<ModelEvent>>(100);
-        tokio::spawn(
-            async move {
-                while let Some(event) = rx.recv().await {
-                    if let Some(sender) = &cache_context.events_sender {
-                        sender.send(event.clone()).await.unwrap();
-                    }
-                    tx.send(event).await.unwrap();
+        tokio::spawn(async move {
+            while let Some(event) = rx.recv().await {
+                if let Some(sender) = &cache_context.events_sender {
+                    sender.send(event.clone()).await.unwrap();
                 }
+                tx.send(event).await.unwrap();
             }
-        );
+        });
         let response = model
             .invoke(input_vars.clone(), inner_tx, messages.clone(), tags.clone())
-        .instrument(span.clone())
-        .await
-        .map_err(|e| record_map_err(e, span.clone()))?;
+            .instrument(span.clone())
+            .await
+            .map_err(|e| record_map_err(e, span.clone()))?;
 
         if let Some(response_sender) = cache_context.response_sender {
             response_sender.send(response.clone()).unwrap();

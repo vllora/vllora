@@ -18,8 +18,8 @@ use either::Either::{Left, Right};
 use futures::StreamExt;
 use futures::TryStreamExt;
 
-use thiserror::Error;
 use crate::executor::chat_completion::StreamCacheContext;
+use thiserror::Error;
 
 use opentelemetry::trace::TraceContextExt as _;
 use tokio::sync::broadcast;
@@ -164,9 +164,15 @@ impl RoutedExecutor {
 
         let llm_model =
             find_model_by_full_name(&request.request.model, &executor_context.provided_models)?;
-        let response = execute(request, executor_context, span.clone(), StreamCacheContext::default(), BasicCacheContext::default())
-            .instrument(span.clone())
-            .await?;
+        let response = execute(
+            request,
+            executor_context,
+            span.clone(),
+            StreamCacheContext::default(),
+            BasicCacheContext::default(),
+        )
+        .instrument(span.clone())
+        .await?;
 
         let mut response_builder = HttpResponse::Ok();
         let builder = response_builder

@@ -29,18 +29,10 @@ use crate::types::engine::CompletionModelDefinition;
 use crate::types::engine::ParentDefinition;
 use crate::GatewayApiError;
 
+#[derive(Default)]
 pub struct StreamCacheContext {
     pub events_sender: Option<tokio::sync::mpsc::Sender<Option<ModelEvent>>>,
     pub cached_events: Option<Vec<ModelEvent>>,
-}
-
-impl Default for StreamCacheContext {
-    fn default() -> Self {
-        Self {
-            events_sender: None,
-            cached_events: None,
-        }
-    }
 }
 
 pub async fn stream_chunks(
@@ -94,10 +86,10 @@ pub async fn stream_chunks(
                     for event in cached_events {
                         tracing::warn!("Cached event: {:#?}", event);
                         tx.send(Some(event)).await.unwrap();
-                    }  
+                    }
 
                     tx.send(None).await.unwrap();
-                    
+
                     forward_fut.await;
                 }
                 None => {
@@ -122,14 +114,15 @@ pub async fn stream_chunks(
         .then(move |e| {
             let events_sender = cached_context.events_sender.clone();
             async move {
-            if let Ok(event) = &e {
-                if let Some(events_sender) = events_sender {
-                    events_sender.send(Some(event.clone())).await.unwrap();
+                if let Ok(event) = &e {
+                    if let Some(events_sender) = events_sender {
+                        events_sender.send(Some(event.clone())).await.unwrap();
+                    }
                 }
-            }
 
-            e
-        }})
+                e
+            }
+        })
         .filter_map(|e: Result<ModelEvent, GatewayApiError>| async move {
             e.map_or_else(
                 |e| Some(Err(e)),
