@@ -566,7 +566,6 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
         async {
             let (tx, mut rx) = channel(outer_tx.max_capacity());
             let mut output = String::new();
-            let mut events = Vec::new();
             let mut start_time = None;
             let result = join(
                 self.inner
@@ -611,11 +610,8 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
                                     }
                                     s.record("usage", serde_json::to_string(u).unwrap());
                                 }
-                                events.push(msg.clone());
                             }
-                            _ => {
-                                events.push(msg.clone());
-                            }
+                            _ => {}
                         }
                         outer_tx.send(Some(msg)).await.unwrap();
                     }
