@@ -23,6 +23,8 @@ pub const SPAN_ANTHROPIC: &str = "anthropic";
 
 pub const SPAN_BEDROCK: &str = "bedrock";
 
+pub const SPAN_CACHE: &str = "cache";
+
 pub const SPAN_TOOLS: &str = "tools";
 
 pub const SPAN_TOOL: &str = "tool";

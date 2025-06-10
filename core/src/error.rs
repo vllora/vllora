@@ -1,6 +1,7 @@
 use crate::http::status::GuardValidationFailed;
 use crate::model::error::ModelError;
 use crate::model::mcp::McpServerError;
+use crate::model::types::ModelEvent;
 use crate::types::guardrails::GuardError;
 use actix_web::http::header::ContentType;
 use actix_web::http::StatusCode;
@@ -38,6 +39,8 @@ pub enum GatewayError {
     GuardError(#[from] GuardError),
     #[error(transparent)]
     McpServerError(#[from] Box<McpServerError>),
+    #[error(transparent)]
+    SendError(#[from] Box<tokio::sync::mpsc::error::SendError<Option<ModelEvent>>>),
 }
 
 impl From<ModelError> for GatewayError {
@@ -49,6 +52,12 @@ impl From<ModelError> for GatewayError {
 impl From<McpServerError> for GatewayError {
     fn from(value: McpServerError) -> Self {
         GatewayError::McpServerError(Box::new(value))
+    }
+}
+
+impl From<tokio::sync::mpsc::error::SendError<Option<ModelEvent>>> for GatewayError {
+    fn from(value: tokio::sync::mpsc::error::SendError<Option<ModelEvent>>) -> Self {
+        GatewayError::SendError(Box::new(value))
     }
 }
 

@@ -60,6 +60,7 @@ impl GuardModelInstanceFactory for GuardModelFactory {
             Span::current(),
             None,
             Vec::new(),
+            None,
         )
         .await
         .expect("Failed to resolve model instance");

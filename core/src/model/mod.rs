@@ -1,6 +1,7 @@
 use crate::events::{JsonValue, RecordResult, SPAN_MODEL_CALL};
 use crate::executor::context::ExecutorContext;
 use crate::model::bedrock::BedrockModel;
+use crate::model::cached::CachedModel;
 use crate::model::error::ModelError;
 use crate::types::engine::{CompletionEngineParams, CompletionModelParams};
 use crate::types::engine::{CompletionModelDefinition, ModelTools, ModelType};
@@ -32,6 +33,7 @@ use self::openai::OpenAIModel;
 use crate::model::proxy::OpenAISpecModel;
 pub mod anthropic;
 pub mod bedrock;
+pub mod cached;
 pub mod error;
 pub mod gemini;
 pub mod image_generation;
@@ -83,7 +85,19 @@ pub async fn init_completion_model_instance(
     router_span: tracing::Span,
     extra: Option<&Extra>,
     initial_messages: Vec<ChatCompletionMessage>,
+    cached_model: Option<CachedModel>,
 ) -> Result<Box<dyn ModelInstance>, ModelError> {
+    if let Some(cached_model) = cached_model {
+        return Ok(Box::new(TracedModel {
+            inner: cached_model,
+            definition,
+            executor_context: executor_context.clone(),
+            router_span: router_span.clone(),
+            extra: extra.cloned(),
+            initial_messages: initial_messages.clone(),
+        }));
+    }
+
     match &definition.model_params.engine {
         CompletionEngineParams::Bedrock {
             params,
@@ -233,6 +247,7 @@ pub async fn initialize_completion(
         router_span,
         extra,
         initial_messages,
+        None,
     )
     .await
 }

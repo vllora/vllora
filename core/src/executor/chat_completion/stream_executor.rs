@@ -80,29 +80,16 @@ pub async fn stream_chunks(
                 span.record("response", assistant_msg.clone());
             };
 
-            match cached_context.cached_events {
-                Some(cached_events) => {
-                    for event in cached_events {
-                        tx.send(Some(event)).await.unwrap();
-                    }
+            let result_fut = model
+                .stream(input_vars, tx, messages, tags)
+                .instrument(Span::current());
 
-                    tx.send(None).await.unwrap();
-
-                    forward_fut.await;
-                }
-                None => {
-                    let result_fut = model
-                        .stream(input_vars, tx, messages, tags)
-                        .instrument(Span::current());
-
-                    let (result, _) = join(result_fut, forward_fut).await;
-                    if let Err(e) = result {
-                        outer_tx
-                            .send(Err(GatewayApiError::GatewayError(e)))
-                            .await
-                            .unwrap();
-                    }
-                }
+            let (result, _) = join(result_fut, forward_fut).await;
+            if let Err(e) = result {
+                outer_tx
+                    .send(Err(GatewayApiError::GatewayError(e)))
+                    .await
+                    .unwrap();
             }
         }
         .in_current_span(),

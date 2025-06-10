@@ -4,6 +4,7 @@ use crate::executor::chat_completion::stream_executor::{stream_chunks, StreamCac
 use crate::handler::{find_model_by_full_name, ModelEventWithDetails};
 use crate::llm_gateway::message_mapper::MessageMapper;
 use crate::llm_gateway::provider::Provider;
+use crate::model::cached::CachedModel;
 use crate::model::mcp::get_tools;
 use crate::model::tools::{GatewayTool, Tool};
 use crate::model::types::ModelEvent;
@@ -87,6 +88,18 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
 
     let tools = ModelTools(request_tools);
 
+    let mut cached_instance = None;
+
+    if request_with_tools.request.stream.unwrap_or(false) {
+        if let Some(events) = &stream_cache_context.cached_events {
+            cached_instance = Some(CachedModel::new(events.clone(), None));
+        }
+    } else if let Some(events) = &basic_cache_context.cached_events {
+        if let Some(response) = &basic_cache_context.cached_response {
+            cached_instance = Some(CachedModel::new(events.clone(), Some(response.clone())));
+        }
+    }
+
     let resolved_model_context = resolve_model_instance(
         executor_context,
         request_with_tools,
@@ -95,6 +108,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         router_span,
         request_with_tools.extra.as_ref(),
         request_with_tools.request.messages.clone(),
+        cached_instance,
     )
     .await?;
 
@@ -226,6 +240,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Clone>(
     executor_context: &ExecutorContext,
     request: &ChatCompletionRequestWithTools<T>,
@@ -234,6 +249,7 @@ pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Cl
     router_span: Span,
     extra: Option<&Extra>,
     initial_messages: Vec<ChatCompletionMessage>,
+    cached_model: Option<CachedModel>,
 ) -> Result<ResolvedModelContext, GatewayApiError> {
     let llm_model =
         find_model_by_full_name(&request.request.model, &executor_context.provided_models)?;
@@ -291,6 +307,7 @@ pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Cl
         router_span.clone(),
         extra,
         initial_messages,
+        cached_model,
     )
     .await
     .map_err(|e| GatewayApiError::CustomError(e.to_string()))?;
