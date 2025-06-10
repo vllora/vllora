@@ -80,11 +80,9 @@ pub async fn stream_chunks(
                 span.record("response", assistant_msg.clone());
             };
 
-            tracing::warn!("Cached events: {:#?}", cached_context.cached_events);
             match cached_context.cached_events {
                 Some(cached_events) => {
                     for event in cached_events {
-                        tracing::warn!("Cached event: {:#?}", event);
                         tx.send(Some(event)).await.unwrap();
                     }
 
