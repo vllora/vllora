@@ -1,5 +1,5 @@
 use crate::model::tools::Tool;
-use crate::types::cache::PromptCacheOptions;
+use crate::types::cache::ResponseCacheOptions;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -83,7 +83,7 @@ pub struct Extra {
     pub guards: Vec<GuardOrName>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub cache: Option<PromptCacheOptions>,
+    pub cache: Option<ResponseCacheOptions>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

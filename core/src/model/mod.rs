@@ -66,6 +66,23 @@ pub trait ModelInstance: Sync + Send {
 
 pub const DEFAULT_MAX_RETRIES: i32 = 5;
 
+#[derive(Debug, Serialize, Deserialize)]
+pub enum ResponseCacheState {
+    #[serde(rename = "HIT")]
+    Hit,
+    #[serde(rename = "MISS")]
+    Miss,
+}
+
+impl Display for ResponseCacheState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ResponseCacheState::Hit => write!(f, "HIT"),
+            ResponseCacheState::Miss => write!(f, "MISS"),
+        }
+    }
+}
+
 pub struct TracedModel<Inner: ModelInstance> {
     inner: Inner,
     definition: CompletionModelDefinition,
@@ -73,6 +90,7 @@ pub struct TracedModel<Inner: ModelInstance> {
     router_span: tracing::Span,
     extra: Option<Extra>,
     initial_messages: Vec<ChatCompletionMessage>,
+    response_cache_state: Option<ResponseCacheState>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -86,6 +104,7 @@ pub async fn init_completion_model_instance(
     extra: Option<&Extra>,
     initial_messages: Vec<ChatCompletionMessage>,
     cached_model: Option<CachedModel>,
+    cache_state: Option<ResponseCacheState>,
 ) -> Result<Box<dyn ModelInstance>, ModelError> {
     if let Some(cached_model) = cached_model {
         return Ok(Box::new(TracedModel {
@@ -95,6 +114,7 @@ pub async fn init_completion_model_instance(
             router_span: router_span.clone(),
             extra: extra.cloned(),
             initial_messages: initial_messages.clone(),
+            response_cache_state: cache_state,
         }));
     }
 
@@ -119,6 +139,7 @@ pub async fn init_completion_model_instance(
             router_span: router_span.clone(),
             extra: extra.cloned(),
             initial_messages: initial_messages.clone(),
+            response_cache_state: cache_state,
         })),
         CompletionEngineParams::OpenAi {
             params,
@@ -144,6 +165,7 @@ pub async fn init_completion_model_instance(
                         router_span: router_span.clone(),
                         extra: extra.cloned(),
                         initial_messages: initial_messages.clone(),
+                        response_cache_state: cache_state,
                     }));
                 }
             }
@@ -164,6 +186,7 @@ pub async fn init_completion_model_instance(
                 router_span: router_span.clone(),
                 extra: extra.cloned(),
                 initial_messages: initial_messages.clone(),
+                response_cache_state: cache_state,
             }))
         }
         CompletionEngineParams::Proxy {
@@ -187,6 +210,7 @@ pub async fn init_completion_model_instance(
                 router_span: router_span.clone(),
                 extra: extra.cloned(),
                 initial_messages: initial_messages.clone(),
+                response_cache_state: cache_state,
             }))
         }
         CompletionEngineParams::Anthropic {
@@ -206,6 +230,7 @@ pub async fn init_completion_model_instance(
             router_span: router_span.clone(),
             extra: extra.cloned(),
             initial_messages: initial_messages.clone(),
+            response_cache_state: cache_state,
         })),
         CompletionEngineParams::Gemini {
             credentials,
@@ -224,6 +249,7 @@ pub async fn init_completion_model_instance(
             router_span: router_span.clone(),
             extra: extra.cloned(),
             initial_messages: initial_messages.clone(),
+            response_cache_state: cache_state,
         })),
     }
 }
@@ -247,6 +273,7 @@ pub async fn initialize_completion(
         router_span,
         extra,
         initial_messages,
+        None,
         None,
     )
     .await
@@ -363,7 +390,12 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
             usage = tracing::field::Empty,
             ttft = tracing::field::Empty,
             tags = JsonValue(&serde_json::to_value(tags.clone())?).as_value(),
+            cache = tracing::field::Empty
         );
+
+        if let Some(state) = &self.response_cache_state {
+            span.record("cache", state.to_string());
+        }
 
         apply_guardrails(
             &self.initial_messages,
@@ -514,7 +546,12 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
             usage = tracing::field::Empty,
             tags = JsonValue(&serde_json::to_value(tags.clone())?).as_value(),
             ttft = tracing::field::Empty,
+            cache = tracing::field::Empty
         );
+
+        if let Some(state) = &self.response_cache_state {
+            span.record("cache", state.to_string());
+        }
 
         apply_guardrails(
             &self.initial_messages,

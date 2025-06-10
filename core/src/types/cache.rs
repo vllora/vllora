@@ -1,24 +1,24 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PromptCacheOptions {
+pub struct ResponseCacheOptions {
     pub expiration_time: Option<u32>,
     #[serde(flatten)]
-    pub adapter: PromptCacheAdapter,
+    pub adapter: ResponseCacheAdapter,
 }
 
-impl Default for PromptCacheOptions {
+impl Default for ResponseCacheOptions {
     fn default() -> Self {
         Self {
             expiration_time: Some(24 * 60 * 60),
-            adapter: PromptCacheAdapter::Exact,
+            adapter: ResponseCacheAdapter::Exact,
         }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "type")]
-pub enum PromptCacheAdapter {
+pub enum ResponseCacheAdapter {
     Exact,
     Distance(DistanceCacheOptions),
 }

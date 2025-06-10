@@ -9,7 +9,7 @@ use crate::model::mcp::get_tools;
 use crate::model::tools::{GatewayTool, Tool};
 use crate::model::types::ModelEvent;
 use crate::model::types::ModelEventType;
-use crate::model::ModelInstance;
+use crate::model::{ModelInstance, ResponseCacheState};
 use crate::models::ModelMetadata;
 use crate::types::engine::{
     CompletionModelDefinition, CompletionModelParams, ExecutionOptions, Model, ModelTool,
@@ -89,14 +89,19 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
     let tools = ModelTools(request_tools);
 
     let mut cached_instance = None;
-
+    let mut cache_state = match request_with_tools.extra {
+        Some(Extra { cache: Some(_), .. }) => Some(ResponseCacheState::Miss),
+        _ => None,
+    };
     if request_with_tools.request.stream.unwrap_or(false) {
         if let Some(events) = &stream_cache_context.cached_events {
             cached_instance = Some(CachedModel::new(events.clone(), None));
+            cache_state = Some(ResponseCacheState::Hit);
         }
     } else if let Some(events) = &basic_cache_context.cached_events {
         if let Some(response) = &basic_cache_context.cached_response {
             cached_instance = Some(CachedModel::new(events.clone(), Some(response.clone())));
+            cache_state = Some(ResponseCacheState::Hit);
         }
     }
 
@@ -109,6 +114,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         request_with_tools.extra.as_ref(),
         request_with_tools.request.messages.clone(),
         cached_instance,
+        cache_state,
     )
     .await?;
 
@@ -250,6 +256,7 @@ pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Cl
     extra: Option<&Extra>,
     initial_messages: Vec<ChatCompletionMessage>,
     cached_model: Option<CachedModel>,
+    cache_state: Option<ResponseCacheState>,
 ) -> Result<ResolvedModelContext, GatewayApiError> {
     let llm_model =
         find_model_by_full_name(&request.request.model, &executor_context.provided_models)?;
@@ -308,6 +315,7 @@ pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Cl
         extra,
         initial_messages,
         cached_model,
+        cache_state,
     )
     .await
     .map_err(|e| GatewayApiError::CustomError(e.to_string()))?;

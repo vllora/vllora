@@ -61,6 +61,7 @@ impl GuardModelInstanceFactory for GuardModelFactory {
             None,
             Vec::new(),
             None,
+            None,
         )
         .await
         .expect("Failed to resolve model instance");
