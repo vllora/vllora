@@ -84,6 +84,9 @@ pub struct Extra {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cache: Option<ResponseCacheOptions>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub variables: Option<HashMap<String, serde_json::Value>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -107,8 +110,6 @@ pub struct ChatCompletionRequestWithTools<T> {
     pub mcp_servers: Option<Vec<McpDefinition>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub router: Option<DynamicRouter<T>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub variables: Option<HashMap<String, serde_json::Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extra: Option<Extra>,
     #[serde(flatten)]

@@ -198,7 +198,11 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         // }
     }
 
-    let input_vars = request_with_tools.variables.clone().unwrap_or_default();
+    let input_vars = request_with_tools
+        .extra
+        .as_ref()
+        .and_then(|e| e.variables.clone())
+        .unwrap_or_default();
     if is_stream {
         Ok(Left(
             stream_chunks(
