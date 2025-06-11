@@ -3,6 +3,7 @@ pub mod embedding;
 pub mod image;
 pub mod middleware;
 pub mod models;
+pub mod responses;
 
 use crate::model::types::ModelEvent;
 use crate::models::ModelMetadata;
