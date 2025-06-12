@@ -399,7 +399,7 @@ pub struct ChatModel {
 pub struct FunctionParameters {
     pub r#type: String,
     pub properties: HashMap<String, Property>,
-    pub required: Vec<String>,
+    pub required: Option<Vec<String>>,
 }
 
 impl Default for FunctionParameters {
