@@ -8,7 +8,8 @@ use crate::responses::Responses;
 use crate::types::credentials::ApiKeyCredentials;
 use crate::types::credentials::Credentials;
 use actix_web::HttpRequest;
-pub use async_openai::types::responses::CreateResponse;
+pub use async_openai::types::responses as ResponsesTypes;
+use async_openai::types::responses::CreateResponse;
 use async_openai::types::responses::Response;
 pub use async_openai::Client;
 
