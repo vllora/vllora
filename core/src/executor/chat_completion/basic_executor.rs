@@ -86,6 +86,7 @@ pub async fn execute(
         (None, None)
     };
     let model_usage = u.and_then(|u| u.usage);
+    let is_cache_used = model_usage.as_ref().map(|u| u.is_cache_used);
     let usage: ChatCompletionUsage = match model_usage {
         Some(u) => ChatCompletionUsage {
             prompt_tokens: u.input_tokens as i32,
@@ -109,6 +110,7 @@ pub async fn execute(
             finish_reason: Some(finish_reason.clone()),
         }],
         usage,
+        is_cache_used,
     };
 
     Ok(response)

@@ -370,6 +370,8 @@ pub struct ChatCompletionResponse {
     pub model: String,
     pub choices: Vec<ChatCompletionChoice>,
     pub usage: ChatCompletionUsage,
+    #[serde(skip_serializing)]
+    pub is_cache_used: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -470,6 +472,7 @@ pub struct CompletionModelUsage {
     pub total_tokens: u32,
     pub prompt_tokens_details: Option<PromptTokensDetails>,
     pub completion_tokens_details: Option<CompletionTokensDetails>,
+    pub is_cache_used: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -510,6 +513,7 @@ pub struct CostCalculationResult {
     pub per_output_token: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub per_image_cost: Option<ImageCostCalculationResult>,
+    pub is_cache_used: bool,
 }
 
 #[derive(Serialize, Debug)]

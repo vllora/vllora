@@ -24,6 +24,7 @@ pub fn calculate_image_price(
             cost: (usage.images_count * usage.steps_count) as f64 * type_price,
             per_input_token: 0.0,
             per_output_token: 0.0,
+            is_cache_used: false,
             per_image_cost: Some(ImageCostCalculationResult::TypePrice {
                 size: size.clone(),
                 quality: usage.quality.clone(),
@@ -38,6 +39,7 @@ pub fn calculate_image_price(
             cost: cost * total_mp * (usage.steps_count * usage.images_count) as f64,
             per_input_token: 0.0,
             per_output_token: 0.0,
+            is_cache_used: false,
             per_image_cost: Some(ImageCostCalculationResult::MPPrice(cost)),
         }
     } else {
@@ -47,6 +49,7 @@ pub fn calculate_image_price(
             cost: price * (usage.steps_count * usage.images_count) as f64,
             per_input_token: 0.0,
             per_output_token: 0.0,
+            is_cache_used: false,
             per_image_cost: Some(ImageCostCalculationResult::SingleImagePrice(price)),
         }
     }
@@ -54,9 +57,14 @@ pub fn calculate_image_price(
 
 pub fn calculate_tokens_cost(
     usage: &CompletionModelUsage,
-    cost_per_input_token: f64,
-    cost_per_output_token: f64,
+    mut cost_per_input_token: f64,
+    mut cost_per_output_token: f64,
 ) -> CostCalculationResult {
+    if usage.is_cache_used {
+        cost_per_input_token /= 100.0;
+        cost_per_output_token /= 100.0;
+    }
+
     let input_cost = cost_per_input_token * usage.input_tokens as f64 * 1e-6;
     let output_cost = cost_per_output_token * usage.output_tokens as f64 * 1e-6;
 
@@ -65,5 +73,6 @@ pub fn calculate_tokens_cost(
         per_input_token: cost_per_input_token,
         per_output_token: cost_per_output_token,
         per_image_cost: None,
+        is_cache_used: usage.is_cache_used,
     }
 }

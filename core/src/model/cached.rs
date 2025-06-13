@@ -1,6 +1,6 @@
 use crate::error::GatewayError;
 use crate::events::{JsonValue, SPAN_CACHE};
-use crate::model::types::ModelEvent;
+use crate::model::types::{ModelEvent, ModelEventType};
 use crate::model::ModelInstance;
 use crate::types::gateway::ChatCompletionMessage;
 use crate::types::threads::Message;
@@ -38,6 +38,19 @@ impl CachedModel {
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
     ) -> GatewayResult<()> {
         for event in &self.events {
+            if let ModelEventType::LlmStop(e) = &event.event {
+                let mut u = e.usage.clone();
+                if let Some(u) = u.as_mut() {
+                    u.is_cache_used = true;
+                }
+                let mut event_type = e.clone();
+                event_type.usage = u;
+
+                let mut ev = event.clone();
+                ev.event = ModelEventType::LlmStop(event_type);
+                tx.send(Some(ev)).await?;
+                continue;
+            }
             tx.send(Some(event.clone())).await?;
         }
         tx.send(None).await?;
@@ -51,6 +64,20 @@ impl CachedModel {
         tracing::warn!("Cached model invoke");
 
         for event in &self.events {
+            if let ModelEventType::LlmStop(e) = &event.event {
+                let mut u = e.usage.clone();
+                if let Some(u) = u.as_mut() {
+                    u.is_cache_used = true;
+                }
+                let mut event_type = e.clone();
+                event_type.usage = u;
+
+                let mut ev = event.clone();
+                ev.event = ModelEventType::LlmStop(event_type);
+                tx.send(Some(ev)).await?;
+                continue;
+            }
+
             tx.send(Some(event.clone())).await?;
         }
         tx.send(None).await?;
