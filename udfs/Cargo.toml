@@ -23,7 +23,7 @@ tracing-subscriber = { version = "0.3.0", features = [
   "env-filter",
   "tracing-log",
 ] }
-uuid = "1.13.1"
+uuid = "1.17.0"
 
 
 [[bin]]
