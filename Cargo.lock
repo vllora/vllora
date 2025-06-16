@@ -64,7 +64,7 @@ dependencies = [
  "mime",
  "percent-encoding",
  "pin-project-lite",
- "rand",
+ "rand 0.8.5",
  "sha1",
  "smallvec",
  "tokio",
@@ -256,9 +256,9 @@ dependencies = [
  "langdb_guardrails",
  "minijinja",
  "open",
- "opentelemetry",
+ "opentelemetry 0.24.0",
  "opentelemetry-otlp",
- "opentelemetry_sdk",
+ "opentelemetry_sdk 0.24.1",
  "prettytable-rs",
  "ratatui",
  "reqwest 0.12.12",
@@ -267,7 +267,7 @@ dependencies = [
  "serde_yaml",
  "thiserror 2.0.12",
  "tokio",
- "tonic",
+ "tonic 0.12.3",
  "tracing",
  "tracing-subscriber",
 ]
@@ -376,7 +376,7 @@ dependencies = [
  "derive_builder",
  "eventsource-stream",
  "futures",
- "rand",
+ "rand 0.8.5",
  "reqwest 0.12.12",
  "reqwest-eventsource",
  "secrecy",
@@ -850,7 +850,7 @@ dependencies = [
  "getrandom 0.2.15",
  "instant",
  "pin-project-lite",
- "rand",
+ "rand 0.8.5",
  "tokio",
 ]
 
@@ -2404,11 +2404,11 @@ dependencies = [
  "langdb_clust",
  "minijinja",
  "openssh",
- "opentelemetry",
- "opentelemetry-proto",
- "opentelemetry_sdk",
+ "opentelemetry 0.24.0",
+ "opentelemetry-proto 0.30.0",
+ "opentelemetry_sdk 0.24.1",
  "parking_lot",
- "rand",
+ "rand 0.8.5",
  "regex",
  "reqwest 0.12.12",
  "reqwest-eventsource",
@@ -2423,7 +2423,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tokio-util",
- "tonic",
+ "tonic 0.12.3",
  "tracing",
  "tracing-futures",
  "tracing-opentelemetry",
@@ -2907,6 +2907,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "opentelemetry"
+version = "0.30.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aaf416e4cb72756655126f7dd7bb0af49c674f4c1b9903e80c009e0c37e552e6"
+dependencies = [
+ "futures-core",
+ "futures-sink",
+ "js-sys",
+ "pin-project-lite",
+ "thiserror 2.0.12",
+ "tracing",
+]
+
+[[package]]
 name = "opentelemetry-otlp"
 version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2915,13 +2929,13 @@ dependencies = [
  "async-trait",
  "futures-core",
  "http 1.2.0",
- "opentelemetry",
- "opentelemetry-proto",
- "opentelemetry_sdk",
+ "opentelemetry 0.24.0",
+ "opentelemetry-proto 0.7.0",
+ "opentelemetry_sdk 0.24.1",
  "prost",
  "thiserror 1.0.69",
  "tokio",
- "tonic",
+ "tonic 0.12.3",
 ]
 
 [[package]]
@@ -2930,12 +2944,25 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "30ee9f20bff9c984511a02f082dc8ede839e4a9bf15cc2487c8d6fea5ad850d9"
 dependencies = [
+ "opentelemetry 0.24.0",
+ "opentelemetry_sdk 0.24.1",
+ "prost",
+ "tonic 0.12.3",
+]
+
+[[package]]
+name = "opentelemetry-proto"
+version = "0.30.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e046fd7660710fe5a05e8748e70d9058dc15c94ba914e7c4faa7c728f0e8ddc"
+dependencies = [
+ "base64 0.22.1",
  "hex",
- "opentelemetry",
- "opentelemetry_sdk",
+ "opentelemetry 0.30.0",
+ "opentelemetry_sdk 0.30.0",
  "prost",
  "serde",
- "tonic",
+ "tonic 0.13.1",
 ]
 
 [[package]]
@@ -2950,13 +2977,29 @@ dependencies = [
  "futures-util",
  "glob",
  "once_cell",
- "opentelemetry",
+ "opentelemetry 0.24.0",
  "percent-encoding",
- "rand",
+ "rand 0.8.5",
  "serde_json",
  "thiserror 1.0.69",
  "tokio",
  "tokio-stream",
+]
+
+[[package]]
+name = "opentelemetry_sdk"
+version = "0.30.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "11f644aa9e5e31d11896e024305d7e3c98a88884d9f8919dbf37a9991bc47a4b"
+dependencies = [
+ "futures-channel",
+ "futures-executor",
+ "futures-util",
+ "opentelemetry 0.30.0",
+ "percent-encoding",
+ "rand 0.9.1",
+ "serde_json",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -3191,7 +3234,7 @@ checksum = "a2fe5ef3495d7d2e377ff17b1a8ce2ee2ec2a18cde8b6ad6619d65d0701c135d"
 dependencies = [
  "bytes",
  "getrandom 0.2.15",
- "rand",
+ "rand 0.8.5",
  "ring",
  "rustc-hash",
  "rustls 0.23.21",
@@ -3233,8 +3276,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "34af8d1a0e25924bc5b7c43c079c942339d8f0a8b57c39049bef581b46327404"
 dependencies = [
  "libc",
- "rand_chacha",
- "rand_core",
+ "rand_chacha 0.3.1",
+ "rand_core 0.6.4",
+]
+
+[[package]]
+name = "rand"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9fbfd9d094a40bf3ae768db9361049ace4c0e04a4fd6b359518bd7b73a73dd97"
+dependencies = [
+ "rand_chacha 0.9.0",
+ "rand_core 0.9.3",
 ]
 
 [[package]]
@@ -3244,7 +3297,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6c10a63a0fa32252be49d21e7709d4d4baf8d231c2dbce1eaa8141b9b127d88"
 dependencies = [
  "ppv-lite86",
- "rand_core",
+ "rand_core 0.6.4",
+]
+
+[[package]]
+name = "rand_chacha"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3022b5f1df60f26e1ffddd6c66e8aa15de382ae63b3a0c1bfc0e4d3e3f325cb"
+dependencies = [
+ "ppv-lite86",
+ "rand_core 0.9.3",
 ]
 
 [[package]]
@@ -3254,6 +3317,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
 dependencies = [
  "getrandom 0.2.15",
+]
+
+[[package]]
+name = "rand_core"
+version = "0.9.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "99d9a13982dcf210057a8a78572b2217b667c3beacbf3a0d8b454f6f82837d38"
+dependencies = [
+ "getrandom 0.3.1",
 ]
 
 [[package]]
@@ -4393,6 +4465,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "tonic"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7e581ba15a835f4d9ea06c55ab1bd4dce26fc53752c69a04aac00703bfb49ba9"
+dependencies = [
+ "async-trait",
+ "base64 0.22.1",
+ "bytes",
+ "http 1.2.0",
+ "http-body 1.0.1",
+ "http-body-util",
+ "hyper 1.6.0",
+ "hyper-timeout",
+ "hyper-util",
+ "percent-encoding",
+ "pin-project",
+ "prost",
+ "tokio",
+ "tokio-stream",
+ "tower 0.5.2",
+ "tower-layer",
+ "tower-service",
+ "tracing",
+]
+
+[[package]]
 name = "tower"
 version = "0.4.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4403,7 +4501,7 @@ dependencies = [
  "indexmap 1.9.3",
  "pin-project",
  "pin-project-lite",
- "rand",
+ "rand 0.8.5",
  "slab",
  "tokio",
  "tokio-util",
@@ -4420,11 +4518,15 @@ checksum = "d039ad9159c98b70ecfd540b2573b97f7f52c3e8d9f8ad57a24b916a536975f9"
 dependencies = [
  "futures-core",
  "futures-util",
+ "indexmap 2.7.1",
  "pin-project-lite",
+ "slab",
  "sync_wrapper 1.0.2",
  "tokio",
+ "tokio-util",
  "tower-layer",
  "tower-service",
+ "tracing",
 ]
 
 [[package]]
@@ -4515,8 +4617,8 @@ checksum = "a9784ed4da7d921bc8df6963f8c80a0e4ce34ba6ba76668acadd3edbd985ff3b"
 dependencies = [
  "js-sys",
  "once_cell",
- "opentelemetry",
- "opentelemetry_sdk",
+ "opentelemetry 0.24.0",
+ "opentelemetry_sdk 0.24.1",
  "tracing",
  "tracing-core",
  "tracing-subscriber",

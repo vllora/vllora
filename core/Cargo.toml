@@ -62,7 +62,7 @@ tracing-subscriber = { workspace = true }
 valuable = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry_sdk = { workspace = true }
-opentelemetry-proto = { version = "0.7.0", features = [
+opentelemetry-proto = { version = "0.30.0", features = [
   "gen-tonic",
   "trace",
   "with-serde",
