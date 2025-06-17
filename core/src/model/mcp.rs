@@ -65,25 +65,12 @@ impl From<rmcp::service::ServerInitializeError<std::io::Error>> for McpServerErr
     }
 }
 
-fn _validate_server_name(name: &str) -> Result<(), McpServerError> {
+fn validate_server_name(name: &str) -> Result<(), McpServerError> {
     match name {
         "websearch" | "Web Search" => Ok(()),
         _ => Err(McpServerError::InvalidServerName(name.to_string())),
     }
 }
-
-async fn _cache_durationasync_server(name: &str) -> Result<(), McpServerError> {
-    match name {
-        "websearch" | "Web Search" => {
-            // let async_rw = OneshotTransport::new(tokio::io::stdin(), tokio::io::stdout());
-            // serve_server(tavily::TavilySearch {}, async_rw).await?;
-
-            Ok(())
-        }
-        _ => Err(McpServerError::InvalidServerName(name.to_string())),
-    }
-}
-
 pub fn stdio() -> (tokio::io::Stdin, tokio::io::Stdout) {
     (tokio::io::stdin(), tokio::io::stdout())
 }
@@ -111,18 +98,18 @@ pub async fn get_transport(
                 .map_err(|e| McpServerError::ClientStartError(e.to_string()))?)
         }
         McpTransportType::InMemory { name, .. } => {
-            Err(McpServerError::InvalidServerName(name.clone()))
-            // validate_server_name(&name)?;
-            // let name = name.clone();
-            // tokio::spawn(async move {
-            //     async_server(&name).await.unwrap()
-            // });
+            // Err(McpServerError::InvalidServerName(name.clone()))
+            validate_server_name(name)?;
+            let transport = SseClientTransport::start(
+                std::env::var("TAVILY_MCP_URL").unwrap_or("http://localhost:8083/sse".to_string()),
+            )
+            .await?;
 
-            // Ok(()
-            //     .into_dyn()
-            //     .serve(InMemoryTransport::new())
-            //     .await
-            //     .map_err(|e| McpServerError::ClientStartError(e.to_string()))?)
+            Ok(()
+                .into_dyn()
+                .serve(transport)
+                .await
+                .map_err(|e| McpServerError::ClientStartError(e.to_string()))?)
         }
         _ => Err(McpServerError::InvalidServerName(
             "Invalid or unsupported server type".to_string(),
@@ -203,8 +190,17 @@ pub async fn execute_mcp_tool(
     def: &McpDefinition,
     tool: &rmcp::model::Tool,
     inputs: HashMap<String, serde_json::Value>,
-    meta: Option<serde_json::Value>,
+    mut meta: Option<serde_json::Value>,
 ) -> Result<String, McpServerError> {
+    if let McpTransportType::InMemory { .. } = def.r#type {
+        if def.server_name() == "websearch" {
+            if let Ok(var) = std::env::var("TAVILY_API_KEY") {
+                meta = Some(serde_json::json!({"env_vars": {
+                    "TAVILY_API_KEY": var
+                }}));
+            }
+        }
+    }
     let name = tool.name.clone();
 
     let client = get_transport(def).await?;

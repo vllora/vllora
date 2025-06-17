@@ -218,7 +218,7 @@ impl From<FP> for FunctionParameters {
                     )
                 })
                 .collect(),
-            required: val.required,
+            required: val.required.unwrap_or_default(),
         }
     }
 }

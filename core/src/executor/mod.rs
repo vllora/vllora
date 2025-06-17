@@ -16,6 +16,7 @@ pub mod chat_completion;
 pub mod context;
 pub mod embeddings;
 pub mod image_generation;
+pub mod responses;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct ProvidersConfig(pub HashMap<String, ApiKeyCredentials>);
