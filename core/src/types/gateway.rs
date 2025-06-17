@@ -409,7 +409,7 @@ impl Default for FunctionParameters {
         Self {
             r#type: "object".to_owned(),
             properties: Default::default(),
-            required: Default::default(),
+            required: Some(vec![]),
         }
     }
 }
