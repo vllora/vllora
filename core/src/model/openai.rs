@@ -321,7 +321,13 @@ impl<C: Config> OpenAIModel<C> {
                         description: Some(tool.description()),
                         parameters: tool
                             .get_function_parameters()
-                            .map(serde_json::to_value)
+                            .map(|mut s| {
+                                if s.required.is_none() {
+                                    s.required = Some(vec![]);
+                                }
+
+                                serde_json::to_value(s)
+                            })
                             .transpose()?,
                         strict: Some(false),
                     })
