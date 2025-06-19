@@ -35,6 +35,7 @@ use opentelemetry_sdk::propagation::TraceContextPropagator;
 use serde_json::Value;
 use tokio::select;
 use tokio::sync::{broadcast, mpsc};
+use tonic::metadata::MetadataMap;
 use uuid::Uuid;
 
 pub fn trace_id_uuid(trace_id: TraceId) -> Uuid {
@@ -47,6 +48,21 @@ pub struct AdditionalContext(pub HashMap<String, String>);
 impl AdditionalContext {
     pub fn new(context: HashMap<String, String>) -> Self {
         Self(context)
+    }
+}
+
+#[async_trait::async_trait]
+pub trait TraceTenantResolver: Send + Sync + std::fmt::Debug {
+    async fn get_tenant_id(&self, metadata: &MetadataMap) -> Option<(String, String)>;
+}
+
+#[derive(Debug)]
+pub struct DummyTraceTenantResolver;
+
+#[async_trait::async_trait]
+impl TraceTenantResolver for DummyTraceTenantResolver {
+    async fn get_tenant_id(&self, _metadata: &MetadataMap) -> Option<(String, String)> {
+        None
     }
 }
 
@@ -189,10 +205,15 @@ impl SpanWriter {
 pub struct TraceServiceImpl {
     pub(crate) listener_senders: Arc<TraceMap>,
     pub(crate) writer_sender: mpsc::Sender<Span>,
+    pub(crate) tenant_resolver: Box<dyn TraceTenantResolver>,
 }
 
 impl TraceServiceImpl {
-    pub fn new(listener_senders: Arc<TraceMap>, transport: Box<dyn SpanWriterTransport>) -> Self {
+    pub fn new(
+        listener_senders: Arc<TraceMap>,
+        transport: Box<dyn SpanWriterTransport>,
+        tenant_resolver: Box<dyn TraceTenantResolver>,
+    ) -> Self {
         let (sender, receiver) = mpsc::channel(1000);
         let writer = SpanWriter {
             trace_senders: Arc::clone(&listener_senders),
@@ -205,6 +226,7 @@ impl TraceServiceImpl {
         Self {
             listener_senders,
             writer_sender: sender,
+            tenant_resolver,
         }
     }
 }
@@ -253,6 +275,10 @@ impl TraceService for TraceServiceImpl {
                 }
             };
         }
+
+        let headers = request.metadata();
+        let tenant_from_header = self.tenant_resolver.get_tenant_id(headers).await;
+
         for resource in request.into_inner().resource_spans {
             for scope in resource.scope_spans {
                 for span in scope.spans {
@@ -272,6 +298,13 @@ impl TraceService for TraceServiceImpl {
                     } else {
                         Some(SpanId::from_bytes(try_!(span.parent_span_id.try_into())))
                     };
+
+                    tracing::debug!(target: "otel",
+                        "Span name {}({}) <- {:?}",
+                        span.name,
+                        span_id,
+                        parent_span_id,
+                    );
 
                     let message_ids = span
                         .attributes
@@ -302,7 +335,8 @@ impl TraceService for TraceServiceImpl {
                     );
                     let tenant_id = attributes
                         .remove("langdb.tenant")
-                        .and_then(|v| Some(v.as_str()?.to_owned()));
+                        .and_then(|v| Some(v.as_str()?.to_owned()))
+                        .or(tenant_from_header.as_ref().map(|v| v.0.clone()));
 
                     if tenant_id.is_none() {
                         tracing::debug!(
@@ -316,7 +350,8 @@ impl TraceService for TraceServiceImpl {
 
                     let project_id = attributes
                         .remove("langdb.project_id")
-                        .and_then(|v| Some(v.as_str()?.to_owned()));
+                        .and_then(|v| Some(v.as_str()?.to_owned()))
+                        .or(tenant_from_header.as_ref().map(|v| v.1.clone()));
                     let thread_id = attributes
                         .remove("langdb.thread_id")
                         .and_then(|v| Some(v.as_str()?.to_owned()));
