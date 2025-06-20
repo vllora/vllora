@@ -1,11 +1,12 @@
 use bytemuck::TransparentWrapper;
 use opentelemetry::{baggage::BaggageExt as _, global::ObjectSafeSpan as _};
+use opentelemetry_sdk::error::OTelSdkError;
 use opentelemetry_sdk::trace::SpanProcessor;
 use serde_json::Value;
 use valuable::{Listable, Mappable, Valuable, Visit};
 
 mod layer;
-pub use layer::{config, layer, RecordResult};
+pub use layer::{config, layer, RecordResult, UuidIdGenerator};
 
 pub const SPAN_QUERY: &str = "query";
 
@@ -55,21 +56,25 @@ impl<const N: usize> SpanProcessor for BaggageSpanProcessor<N> {
         for key in self.keys {
             let value = cx.baggage().get(key);
             if let Some(value) = value {
-                span.set_attribute(opentelemetry::KeyValue {
-                    key: key.into(),
-                    value: value.clone(),
-                });
+                span.set_attribute(opentelemetry::KeyValue::new(key, value.clone()));
             }
         }
     }
 
-    fn on_end(&self, _span: opentelemetry_sdk::export::trace::SpanData) {}
+    fn on_end(&self, _span: opentelemetry_sdk::trace::SpanData) {}
 
-    fn force_flush(&self) -> opentelemetry::trace::TraceResult<()> {
+    fn force_flush(&self) -> std::result::Result<(), OTelSdkError> {
         Ok(())
     }
 
-    fn shutdown(&self) -> opentelemetry::trace::TraceResult<()> {
+    fn shutdown(&self) -> std::result::Result<(), OTelSdkError> {
+        Ok(())
+    }
+
+    fn shutdown_with_timeout(
+        &self,
+        _timeout: std::time::Duration,
+    ) -> std::result::Result<(), OTelSdkError> {
         Ok(())
     }
 }

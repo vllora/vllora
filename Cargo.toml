@@ -15,17 +15,19 @@ async-trait = "0.1"
 tokio = { version = "1.45", features = ["rt", "rt-multi-thread", "sync"] }
 chrono = { version = "0.4", features = ["serde"] }
 
-tracing = { version = "0.1.40", features = ["log", "valuable"] }
-tracing-opentelemetry = { version = "0.25", default-features = false }
-tracing-futures = { version = "0.2", features = ["futures-03"] }
-tracing-subscriber = { version = "0.3.0", features = [
+tracing = { version = "0.1.41", features = ["log", "valuable"] }
+tracing-opentelemetry = { version = "0.31", default-features = false }
+tracing-futures = { version = "0.2.5", features = ["futures-03"] }
+tracing-subscriber = { version = "0.3.19", features = [
   "env-filter",
   "tracing-log",
   "valuable",
 ] }
 
-opentelemetry = "0.24"
-opentelemetry-otlp = { version = "0.17", features = ["tls"] }
-opentelemetry_sdk = { version = "0.24.0", features = ["rt-tokio"] }
+opentelemetry = "0.30"
+opentelemetry-otlp = { version = "0.30", features = ["tls", "grpc-tonic"] }
+opentelemetry_sdk = { version = "0.30", features = ["rt-tokio"] }
 
 valuable = { version = "0.1", features = ["derive"] }
+
+tonic = "0.13.0"

@@ -328,8 +328,8 @@ impl TraceService for TraceServiceImpl {
                             )
                         })
                         .collect();
-                    
-                    if !message_ids.is_empty() {           
+
+                    if !message_ids.is_empty() {
                         attributes.insert(
                             "message_id".to_string(),
                             Value::Array(message_ids.iter().map(|s| s.clone().into()).collect()),

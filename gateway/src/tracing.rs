@@ -1,6 +1,6 @@
 use langdb_core::events::{self, BaggageSpanProcessor};
 use opentelemetry::trace::TracerProvider as _;
-use opentelemetry_sdk::trace::TracerProvider;
+use opentelemetry_sdk::trace::SdkTracerProvider;
 use tokio::sync::mpsc::Sender;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::fmt::format::FmtSpan;
@@ -23,18 +23,18 @@ pub fn init_tracing() {
         .with_ansi(color)
         .with_filter(env_filter);
 
-    let otlp_exporter = opentelemetry_otlp::new_exporter().tonic();
-    let provider = TracerProvider::builder()
+    let otlp_exporter = opentelemetry_otlp::SpanExporter::builder()
+        .with_tonic()
+        .build()
+        .unwrap();
+    let provider = SdkTracerProvider::builder()
         .with_span_processor(BaggageSpanProcessor::new([
             "langdb.parent_trace_id",
             "langdb.run_id",
             "langdb.label",
         ]))
-        .with_batch_exporter(
-            otlp_exporter.build_span_exporter().unwrap(),
-            opentelemetry_sdk::runtime::Tokio,
-        )
-        .with_config(events::config())
+        .with_batch_exporter(otlp_exporter)
+        .with_id_generator(events::UuidIdGenerator::default())
         .build();
     let tracer = provider.tracer("langdb-ai-gateway");
     opentelemetry::global::set_tracer_provider(provider);

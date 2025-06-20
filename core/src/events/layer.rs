@@ -45,7 +45,9 @@ impl IdGenerator for UuidIdGenerator {
 }
 
 pub fn config() -> Config {
-    Config::default().with_id_generator(UuidIdGenerator::default())
+    let mut config = Config::default();
+    config.id_generator = Box::new(UuidIdGenerator::default());
+    config
 }
 
 pub fn layer<S, T>(target: impl Into<String>, level: LevelFilter, tracer: T) -> impl Layer<S>
