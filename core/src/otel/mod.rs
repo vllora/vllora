@@ -328,11 +328,13 @@ impl TraceService for TraceServiceImpl {
                             )
                         })
                         .collect();
-
-                    attributes.insert(
-                        "message_id".to_string(),
-                        Value::Array(message_ids.iter().map(|s| s.clone().into()).collect()),
-                    );
+                    
+                    if !message_ids.is_empty() {           
+                        attributes.insert(
+                            "message_id".to_string(),
+                            Value::Array(message_ids.iter().map(|s| s.clone().into()).collect()),
+                        );
+                    }
                     let tenant_id = attributes
                         .remove("langdb.tenant")
                         .and_then(|v| Some(v.as_str()?.to_owned()))
