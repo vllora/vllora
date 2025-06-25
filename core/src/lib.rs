@@ -33,6 +33,7 @@ use types::guardrails::GuardError;
 
 pub type GatewayResult<T> = Result<T, GatewayError>;
 
+pub use either;
 pub use rmcp;
 
 #[derive(Error, Debug)]
