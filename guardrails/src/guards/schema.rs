@@ -1,4 +1,4 @@
-use jsonschema::{Draft, JSONSchema};
+use jsonschema::{Draft, Validator};
 use langdb_core::types::gateway::ChatCompletionMessage;
 use langdb_core::types::guardrails::{evaluator::Evaluator, Guard, GuardResult};
 use serde_json::Value;
@@ -24,9 +24,9 @@ impl Evaluator for SchemaEvaluator {
             match json_result {
                 Ok(json_value) => {
                     // Compile the schema
-                    let compiled_schema = match JSONSchema::options()
+                    let compiled_schema = match Validator::options()
                         .with_draft(Draft::Draft7)
-                        .compile(user_defined_schema)
+                        .build(user_defined_schema)
                     {
                         Ok(schema) => schema,
                         Err(e) => {
@@ -42,12 +42,11 @@ impl Evaluator for SchemaEvaluator {
                             schema: json_value,
                             passed: true,
                         }),
-                        Err(errors) => {
-                            let error_messages: Vec<String> =
-                                errors.map(|err| format!("{}", err)).collect();
+                        Err(error) => {
+                            let error_message = error.to_string();
 
                             Ok(GuardResult::Text {
-                                text: error_messages.join("; "),
+                                text: error_message,
                                 passed: false,
                                 confidence: Some(1.0),
                             })
