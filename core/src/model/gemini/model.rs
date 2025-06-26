@@ -60,6 +60,11 @@ pub fn gemini_client(credentials: Option<&ApiKeyCredentials>) -> Result<Client, 
     Ok(Client::new(api_key))
 }
 
+enum InnerExecutionResult {
+    Finish(ChatCompletionMessage),
+    NextCall(Vec<Content>),
+}
+
 #[derive(Clone)]
 pub struct GeminiModel {
     params: GeminiModelParams,
@@ -258,213 +263,112 @@ impl GeminiModel {
         unreachable!();
     }
 
-    async fn execute(
+    async fn execute_inner(
         &self,
-        input_messages: Vec<Content>,
-        call_span: Span,
+        call: GenerateContentRequest,
+        span: Span,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<ChatCompletionMessage> {
-        let request = self.build_request(input_messages)?;
+    ) -> GatewayResult<InnerExecutionResult> {
         let model_name = self.params.model.as_ref().unwrap();
-        let mut gemini_calls = vec![(request, call_span.clone())];
-        let mut retries = self
-            .execution_options
-            .max_retries
-            .unwrap_or(DEFAULT_MAX_RETRIES);
-        while let Some((call, span)) = gemini_calls.pop() {
-            if retries == 0 {
-                return Err(ModelError::MaxRetriesReached.into());
-            } else {
-                retries -= 1;
-            }
-            let model_name = model_name.clone();
-            let input_messages = call.contents.clone();
+        let input_messages = call.contents.clone();
 
-            tx.send(Some(ModelEvent::new(
-                &span,
-                ModelEventType::LlmStart(LLMStartEvent {
-                    provider_name: SPAN_GEMINI.to_string(),
-                    model_name: self.params.model.clone().unwrap_or_default(),
-                    input: serde_json::to_string(&input_messages)?,
-                }),
-            )))
-            .await
-            .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+        tx.send(Some(ModelEvent::new(
+            &span,
+            ModelEventType::LlmStart(LLMStartEvent {
+                provider_name: SPAN_GEMINI.to_string(),
+                model_name: self.params.model.clone().unwrap_or_default(),
+                input: serde_json::to_string(&input_messages)?,
+            }),
+        )))
+        .await
+        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
-            let response = async move {
-                let result = self.client.invoke(&model_name, call).await;
-                let _ = result
-                    .as_ref()
-                    .map(|response| serde_json::to_value(response).unwrap())
-                    .as_ref()
-                    .map(JsonValue)
-                    .record();
-                let response = result.map_err(custom_err)?;
+        let response = async move {
+            let result = self.client.invoke(model_name, call).await;
+            let _ = result
+                .as_ref()
+                .map(|response| serde_json::to_value(response).unwrap())
+                .as_ref()
+                .map(JsonValue)
+                .record();
+            let response = result.map_err(custom_err)?;
 
-                let span = Span::current();
-                span.record("output", serde_json::to_string(&response)?);
-                if let Some(ref usage) = response.usage_metadata {
-                    span.record(
-                        "usage",
-                        JsonValue(&serde_json::to_value(usage).unwrap()).as_value(),
-                    );
-                }
-                Ok::<_, GatewayError>(response)
-            }
-            .instrument(span.clone().or_current())
-            .await?;
-            let mut finish_reason = None;
-            let mut calls: Vec<(String, HashMap<String, Value>)> = vec![];
-            let mut text = String::new();
-            for candidate in response.candidates {
-                if let Some(reason) = candidate.finish_reason {
-                    finish_reason = Some(reason);
-                }
-                for part in candidate.content.parts {
-                    match part {
-                        Part::Text(t) => {
-                            text.push_str(&t);
-                        }
-                        Part::FunctionCall { name, args } => {
-                            calls.push((name.to_string(), args));
-                        }
-
-                        x => {
-                            return Err(ModelError::StreamError(format!(
-                                "Unexpected stream part: {:?}",
-                                x
-                            ))
-                            .into());
-                        }
-                    };
-                }
-            }
-
-            if !calls.is_empty() {
-                let mut call_messages = vec![];
-                for (name, args) in calls.clone() {
-                    call_messages.push(Content {
-                        role: Role::Model,
-                        parts: vec![Part::FunctionCall { name, args }],
-                    });
-                }
-
-                let tool_calls_str = serde_json::to_string(
-                    &calls
-                        .iter()
-                        .enumerate()
-                        .map(|(index, c)| ToolCall {
-                            index: Some(index),
-                            id: c.0.clone(),
-                            r#type: "function".to_string(),
-                            function: crate::types::gateway::FunctionCall {
-                                name: c.0.clone(),
-                                arguments: serde_json::to_string(&c.1).unwrap(),
-                            },
-                        })
-                        .collect::<Vec<_>>(),
-                )?;
-                let tools_span = tracing::info_span!(target: target!(), events::SPAN_TOOLS, tool_calls=tool_calls_str, label=calls.iter().map(|(name, _)| name.clone()).collect::<Vec<String>>().join(","));
-
-                let tool = self.tools.get(&calls[0].0);
-                if let Some(tool) = tool {
-                    if tool.stop_at_call() {
-                        let usage =
-                            response
-                                .usage_metadata
-                                .as_ref()
-                                .map(|u| CompletionModelUsage {
-                                    input_tokens: u.prompt_token_count as u32,
-                                    output_tokens: (u.total_token_count - u.prompt_token_count)
-                                        as u32,
-                                    total_tokens: u.total_token_count as u32,
-                                    ..Default::default()
-                                });
-                        let finish_reason = ModelFinishReason::ToolCalls;
-                        tx.send(Some(ModelEvent::new(
-                            &span,
-                            ModelEventType::LlmStop(LLMFinishEvent {
-                                provider_name: SPAN_GEMINI.to_string(),
-                                model_name: self.params.model.clone().unwrap_or_default(),
-                                output: Some(text.clone()),
-                                usage,
-                                finish_reason,
-                                tool_calls: calls
-                                    .iter()
-                                    .map(|(tool_name, params)| {
-                                        Ok(ModelToolCall {
-                                            tool_id: tool_name.clone(),
-                                            tool_name: tool_name.clone(),
-                                            input: serde_json::to_string(params)?,
-                                        })
-                                    })
-                                    .collect::<Result<Vec<ModelToolCall>, GatewayError>>()?,
-                                credentials_ident: self.credentials_ident.clone(),
-                            }),
-                        )))
-                        .await
-                        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
-
-                        return Ok(ChatCompletionMessage {
-                            role: "assistant".to_string(),
-                            content: if text.is_empty() {
-                                None
-                            } else {
-                                Some(ChatCompletionContent::Text(text.clone()))
-                            },
-                            tool_calls: Some(
-                                calls
-                                    .iter()
-                                    .enumerate()
-                                    .map(|(index, (tool_name, params))| {
-                                        Ok(ToolCall {
-                                            index: Some(index),
-                                            id: tool_name.clone(),
-                                            r#type: "function".to_string(),
-                                            function: crate::types::gateway::FunctionCall {
-                                                name: tool_name.clone(),
-                                                arguments: serde_json::to_string(params)?,
-                                            },
-                                        })
-                                    })
-                                    .collect::<Result<Vec<ToolCall>, GatewayError>>()?,
-                            ),
-                            ..Default::default()
-                        });
-                    }
-                }
-                tools_span.follows_from(span.id());
-                let tool_call_parts =
-                    Self::handle_tool_calls(calls.iter(), &self.tools, tx, tags.clone())
-                        .instrument(tools_span.clone())
-                        .await;
-                let tools_messages = vec![Content {
-                    role: Role::User,
-                    parts: tool_call_parts,
-                }];
-
-                let conversation_messages =
-                    [input_messages, call_messages, tools_messages].concat();
-                let request = self.build_request(conversation_messages)?;
-                let input = serde_json::to_string(&request)?;
-                let call_span = tracing::info_span!(
-                    target: target!("chat"),
-                    SPAN_GEMINI,
-                    ttft = field::Empty,
-                    input=input,
-                    output = field::Empty,
-                    error = field::Empty,
-                    usage = field::Empty,
-                    request = JsonValue(&serde_json::to_value(&request).unwrap_or_default()).as_value()
+            let span = Span::current();
+            span.record("output", serde_json::to_string(&response)?);
+            if let Some(ref usage) = response.usage_metadata {
+                span.record(
+                    "usage",
+                    JsonValue(&serde_json::to_value(usage).unwrap()).as_value(),
                 );
-                call_span.follows_from(tools_span.id());
-                gemini_calls.push((request, call_span));
-                continue;
+            }
+            Ok::<_, GatewayError>(response)
+        }
+        .instrument(span.clone().or_current())
+        .await?;
+        let mut finish_reason = None;
+        let mut calls: Vec<(String, HashMap<String, Value>)> = vec![];
+        let mut text = String::new();
+        for candidate in response.candidates {
+            if let Some(reason) = candidate.finish_reason {
+                finish_reason = Some(reason);
+            }
+            for part in candidate.content.parts {
+                match part {
+                    Part::Text(t) => {
+                        text.push_str(&t);
+                    }
+                    Part::FunctionCall { name, args } => {
+                        calls.push((name.to_string(), args));
+                    }
+
+                    x => {
+                        return Err(ModelError::StreamError(format!(
+                            "Unexpected stream part: {:?}",
+                            x
+                        ))
+                        .into());
+                    }
+                };
+            }
+        }
+
+        if !calls.is_empty() {
+            let mut call_messages = vec![];
+            for (name, args) in calls.clone() {
+                call_messages.push(Content {
+                    role: Role::Model,
+                    parts: vec![Part::FunctionCall { name, args }],
+                });
             }
 
-            match finish_reason {
-                Some(FinishReason::Stop) => {
+            let tool_calls_str = serde_json::to_string(
+                &calls
+                    .iter()
+                    .enumerate()
+                    .map(|(index, c)| ToolCall {
+                        index: Some(index),
+                        id: c.0.clone(),
+                        r#type: "function".to_string(),
+                        function: crate::types::gateway::FunctionCall {
+                            name: c.0.clone(),
+                            arguments: serde_json::to_string(&c.1).unwrap(),
+                        },
+                    })
+                    .collect::<Vec<_>>(),
+            )?;
+
+            let tools_span = tracing::info_span!(
+                target: target!(),
+                parent: span.clone(),
+                events::SPAN_TOOLS,
+                tool_calls=tool_calls_str,
+                label=calls.iter().map(|(name, _)| name.clone()).collect::<Vec<String>>().join(",")
+            );
+
+            let tool = self.tools.get(&calls[0].0);
+            if let Some(tool) = tool {
+                if tool.stop_at_call() {
                     let usage = response
                         .usage_metadata
                         .as_ref()
@@ -474,39 +378,165 @@ impl GeminiModel {
                             total_tokens: u.total_token_count as u32,
                             ..Default::default()
                         });
-
+                    let finish_reason = ModelFinishReason::ToolCalls;
                     tx.send(Some(ModelEvent::new(
                         &span,
                         ModelEventType::LlmStop(LLMFinishEvent {
                             provider_name: SPAN_GEMINI.to_string(),
-                            model_name: self
-                                .params
-                                .model
-                                .clone()
-                                .map(|m| m.to_string())
-                                .unwrap_or_default(),
+                            model_name: self.params.model.clone().unwrap_or_default(),
                             output: Some(text.clone()),
                             usage,
-                            finish_reason: ModelFinishReason::Stop,
-                            tool_calls: vec![],
+                            finish_reason,
+                            tool_calls: calls
+                                .iter()
+                                .map(|(tool_name, params)| {
+                                    Ok(ModelToolCall {
+                                        tool_id: tool_name.clone(),
+                                        tool_name: tool_name.clone(),
+                                        input: serde_json::to_string(params)?,
+                                    })
+                                })
+                                .collect::<Result<Vec<ModelToolCall>, GatewayError>>()?,
                             credentials_ident: self.credentials_ident.clone(),
                         }),
                     )))
                     .await
                     .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
-                    return Ok(ChatCompletionMessage {
+                    return Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
                         role: "assistant".to_string(),
-                        content: Some(ChatCompletionContent::Text(text)),
+                        content: if text.is_empty() {
+                            None
+                        } else {
+                            Some(ChatCompletionContent::Text(text.clone()))
+                        },
+                        tool_calls: Some(
+                            calls
+                                .iter()
+                                .enumerate()
+                                .map(|(index, (tool_name, params))| {
+                                    Ok(ToolCall {
+                                        index: Some(index),
+                                        id: tool_name.clone(),
+                                        r#type: "function".to_string(),
+                                        function: crate::types::gateway::FunctionCall {
+                                            name: tool_name.clone(),
+                                            arguments: serde_json::to_string(params)?,
+                                        },
+                                    })
+                                })
+                                .collect::<Result<Vec<ToolCall>, GatewayError>>()?,
+                        ),
+                        ..Default::default()
+                    }));
+                }
+            }
+            tools_span.follows_from(span.id());
+            let tool_call_parts =
+                Self::handle_tool_calls(calls.iter(), &self.tools, tx, tags.clone())
+                    .instrument(tools_span.clone())
+                    .await;
+            let tools_messages = vec![Content {
+                role: Role::User,
+                parts: tool_call_parts,
+            }];
+
+            let conversation_messages = [input_messages, call_messages, tools_messages].concat();
+
+            return Ok(InnerExecutionResult::NextCall(conversation_messages));
+        }
+
+        match finish_reason {
+            Some(FinishReason::Stop) => {
+                let usage = response
+                    .usage_metadata
+                    .as_ref()
+                    .map(|u| CompletionModelUsage {
+                        input_tokens: u.prompt_token_count as u32,
+                        output_tokens: (u.total_token_count - u.prompt_token_count) as u32,
+                        total_tokens: u.total_token_count as u32,
                         ..Default::default()
                     });
-                }
-                _ => {
-                    let err = Self::handle_finish_reason(finish_reason);
 
-                    return Err(err);
+                tx.send(Some(ModelEvent::new(
+                    &span,
+                    ModelEventType::LlmStop(LLMFinishEvent {
+                        provider_name: SPAN_GEMINI.to_string(),
+                        model_name: self
+                            .params
+                            .model
+                            .clone()
+                            .map(|m| m.to_string())
+                            .unwrap_or_default(),
+                        output: Some(text.clone()),
+                        usage,
+                        finish_reason: ModelFinishReason::Stop,
+                        tool_calls: vec![],
+                        credentials_ident: self.credentials_ident.clone(),
+                    }),
+                )))
+                .await
+                .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+
+                Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
+                    role: "assistant".to_string(),
+                    content: Some(ChatCompletionContent::Text(text)),
+                    ..Default::default()
+                }))
+            }
+            _ => {
+                let err = Self::handle_finish_reason(finish_reason);
+
+                Err(err)
+            }
+        }
+    }
+
+    async fn execute(
+        &self,
+        input_messages: Vec<Content>,
+        tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
+        tags: HashMap<String, String>,
+    ) -> GatewayResult<ChatCompletionMessage> {
+        let mut gemini_calls = vec![input_messages];
+        let mut retries = self
+            .execution_options
+            .max_retries
+            .unwrap_or(DEFAULT_MAX_RETRIES);
+        while let Some(call) = gemini_calls.pop() {
+            let span = tracing::info_span!(
+                target: target!("chat"),
+                SPAN_GEMINI,
+                input = field::Empty,
+                output = field::Empty,
+                error = field::Empty,
+                usage = field::Empty,
+                ttft = field::Empty,
+                tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value()
+            );
+
+            let result = {
+                let request = self.build_request(call)?;
+
+                span.record("input", serde_json::to_string(&request)?);
+                span.record("request", serde_json::to_string(&request)?);
+                if retries == 0 {
+                    return Err(ModelError::MaxRetriesReached.into());
+                } else {
+                    retries -= 1;
                 }
+
+                self.execute_inner(request, span.clone(), tx, tags.clone())
+                    .await
             };
+
+            match result.map_err(|e| record_map_err(e, span))? {
+                InnerExecutionResult::Finish(message) => return Ok(message),
+                InnerExecutionResult::NextCall(messages) => {
+                    gemini_calls.push(messages);
+                    continue;
+                }
+            }
         }
         unreachable!();
     }
@@ -557,139 +587,174 @@ impl GeminiModel {
         }
     }
 
+    async fn execute_stream_inner(
+        &self,
+        call: GenerateContentRequest,
+        tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
+        call_span: Span,
+        tags: HashMap<String, String>,
+    ) -> GatewayResult<InnerExecutionResult> {
+        let model_name = self.params.model.as_ref().unwrap();
+        let input_messages = call.contents.clone();
+        let stream = self.client.stream(model_name, call).await?;
+        tokio::pin!(stream);
+        tx.send(Some(ModelEvent::new(
+            &call_span,
+            ModelEventType::LlmStart(LLMStartEvent {
+                provider_name: SPAN_GEMINI.to_string(),
+                model_name: self
+                    .params
+                    .model
+                    .clone()
+                    .map(|m| m.to_string())
+                    .unwrap_or_default(),
+                input: serde_json::to_string(&input_messages)?,
+            }),
+        )))
+        .await
+        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+
+        let (finish_reason, tool_calls, usage) = self
+            .process_stream(stream, &tx)
+            .instrument(call_span.clone())
+            .await?;
+
+        let trace_finish_reason = Self::map_finish_reason(&finish_reason, !tool_calls.is_empty());
+        let usage = Self::map_usage(usage.as_ref());
+        if let Some(usage) = &usage {
+            call_span.record("usage", JsonValue(&serde_json::to_value(usage)?).as_value());
+        }
+        tx.send(Some(ModelEvent::new(
+            &call_span,
+            ModelEventType::LlmStop(LLMFinishEvent {
+                provider_name: SPAN_GEMINI.to_string(),
+                model_name: self
+                    .params
+                    .model
+                    .clone()
+                    .map(|m| m.to_string())
+                    .unwrap_or_default(),
+                output: None,
+                usage,
+                finish_reason: trace_finish_reason.clone(),
+                tool_calls: tool_calls.iter().map(Self::map_tool_call).collect(),
+                credentials_ident: self.credentials_ident.clone(),
+            }),
+        )))
+        .await
+        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+
+        let response = serde_json::json!({
+            "finish_reason": finish_reason,
+            "tool_calls": tool_calls
+        });
+        call_span.record("output", response.to_string());
+        if !tool_calls.is_empty() {
+            let mut call_messages = vec![];
+            let mut tools = vec![];
+            for (index, (name, args)) in tool_calls.clone().iter().enumerate() {
+                tools.push(ToolCall {
+                    index: Some(index),
+                    id: name.clone(),
+                    r#type: "function".to_string(),
+                    function: crate::types::gateway::FunctionCall {
+                        name: name.clone(),
+                        arguments: serde_json::to_string(args)?,
+                    },
+                });
+                call_messages.push(Content {
+                    role: Role::Model,
+                    parts: vec![Part::FunctionCall {
+                        name: name.clone(),
+                        args: args.clone(),
+                    }],
+                });
+            }
+            let tool_calls_str = serde_json::to_string(&tools)?;
+
+            let tools_span = tracing::info_span!(
+                target: target!(),
+                parent: call_span.id(),
+                events::SPAN_TOOLS,
+                tool_calls=tool_calls_str,
+                label=tool_calls.iter().map(|(name, _)| name.clone()).collect::<Vec<String>>().join(",")
+            );
+            let tool = self.tools.get(&tool_calls[0].0);
+            if let Some(tool) = tool {
+                if tool.stop_at_call() {
+                    return Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
+                        ..Default::default()
+                    }));
+                }
+            }
+
+            tools_span.follows_from(call_span.id());
+            let tool_call_parts =
+                Self::handle_tool_calls(tool_calls.iter(), &self.tools, &tx, tags.clone())
+                    .instrument(tools_span.clone())
+                    .await;
+            let tools_messages = vec![Content {
+                role: Role::User,
+                parts: tool_call_parts,
+            }];
+
+            let conversation_messages = [input_messages, call_messages, tools_messages].concat();
+
+            return Ok(InnerExecutionResult::NextCall(conversation_messages));
+        }
+
+        match finish_reason {
+            FinishReason::Stop => Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
+                ..Default::default()
+            })),
+            other => Err(Self::handle_finish_reason(Some(other))),
+        }
+    }
+
     async fn execute_stream(
         &self,
         input_messages: Vec<Content>,
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
-        call_span: Span,
         tags: HashMap<String, String>,
     ) -> GatewayResult<()> {
-        let model_name = self.params.model.as_ref().unwrap();
-        let request = self.build_request(input_messages)?;
-        let mut gemini_calls = vec![(request, call_span)];
+        let mut gemini_calls = vec![input_messages];
 
         let mut retries = self
             .execution_options
             .max_retries
             .unwrap_or(DEFAULT_MAX_RETRIES);
-        while let Some((call, span)) = gemini_calls.pop() {
-            if retries == 0 {
-                return Err(ModelError::MaxRetriesReached.into());
-            } else {
-                retries -= 1;
-            }
-            tracing::trace!("Call: {:?}", call);
-            let model_name = model_name.clone();
-            let input_messages = call.contents.clone();
-            let stream = self.client.stream(&model_name, call).await?;
-            tokio::pin!(stream);
-            tx.send(Some(ModelEvent::new(
-                &span,
-                ModelEventType::LlmStart(LLMStartEvent {
-                    provider_name: SPAN_GEMINI.to_string(),
-                    model_name: self
-                        .params
-                        .model
-                        .clone()
-                        .map(|m| m.to_string())
-                        .unwrap_or_default(),
-                    input: serde_json::to_string(&input_messages)?,
-                }),
-            )))
-            .await
-            .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+        while let Some(call) = gemini_calls.pop() {
+            let span = tracing::info_span!(
+                target: target!("chat"),
+                SPAN_GEMINI,
+                input = field::Empty,
+                output = field::Empty,
+                error = field::Empty,
+                usage = field::Empty,
+                ttft = field::Empty,
+                tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value()
+            );
 
-            let (finish_reason, tool_calls, usage) = self
-                .process_stream(stream, &tx)
-                .instrument(span.clone())
-                .await?;
+            let result = {
+                let request = self.build_request(call)?;
 
-            let trace_finish_reason =
-                Self::map_finish_reason(&finish_reason, !tool_calls.is_empty());
-            let usage = Self::map_usage(usage.as_ref());
-            if let Some(usage) = &usage {
-                span.record("usage", JsonValue(&serde_json::to_value(usage)?).as_value());
-            }
-            tx.send(Some(ModelEvent::new(
-                &span,
-                ModelEventType::LlmStop(LLMFinishEvent {
-                    provider_name: SPAN_GEMINI.to_string(),
-                    model_name: self
-                        .params
-                        .model
-                        .clone()
-                        .map(|m| m.to_string())
-                        .unwrap_or_default(),
-                    output: None,
-                    usage,
-                    finish_reason: trace_finish_reason.clone(),
-                    tool_calls: tool_calls.iter().map(Self::map_tool_call).collect(),
-                    credentials_ident: self.credentials_ident.clone(),
-                }),
-            )))
-            .await
-            .map_err(|e| GatewayError::CustomError(e.to_string()))?;
-
-            let response = serde_json::json!({
-                "finish_reason": finish_reason,
-                "tool_calls": tool_calls
-            });
-            span.record("output", response.to_string());
-            if !tool_calls.is_empty() {
-                let mut call_messages = vec![];
-                let mut tools = vec![];
-                for (index, (name, args)) in tool_calls.clone().iter().enumerate() {
-                    tools.push(ToolCall {
-                        index: Some(index),
-                        id: name.clone(),
-                        r#type: "function".to_string(),
-                        function: crate::types::gateway::FunctionCall {
-                            name: name.clone(),
-                            arguments: serde_json::to_string(args)?,
-                        },
-                    });
-                    call_messages.push(Content {
-                        role: Role::Model,
-                        parts: vec![Part::FunctionCall {
-                            name: name.clone(),
-                            args: args.clone(),
-                        }],
-                    });
-                }
-                let tool_calls_str = serde_json::to_string(&tools)?;
-
-                let tools_span = tracing::info_span!(target: target!(), events::SPAN_TOOLS, tool_calls=tool_calls_str, label=tool_calls.iter().map(|(name, _)| name.clone()).collect::<Vec<String>>().join(","));
-                let tool = self.tools.get(&tool_calls[0].0);
-                if let Some(tool) = tool {
-                    if tool.stop_at_call() {
-                        return Ok(());
-                    }
+                span.record("input", serde_json::to_string(&request)?);
+                span.record("request", serde_json::to_string(&request)?);
+                if retries == 0 {
+                    return Err(ModelError::MaxRetriesReached.into());
+                } else {
+                    retries -= 1;
                 }
 
-                tools_span.follows_from(span.id());
-                let tool_call_parts =
-                    Self::handle_tool_calls(tool_calls.iter(), &self.tools, &tx, tags.clone())
-                        .instrument(tools_span.clone())
-                        .await;
-                let tools_messages = vec![Content {
-                    role: Role::User,
-                    parts: tool_call_parts,
-                }];
+                self.execute_stream_inner(request, tx.clone(), span.clone(), tags.clone())
+                    .await
+            };
 
-                let conversation_messages =
-                    [input_messages, call_messages, tools_messages].concat();
-                tracing::trace!("New messages: {conversation_messages:?}");
-                let request = self.build_request(conversation_messages)?;
-                let input = serde_json::to_string(&request)?;
-                let call_span = tracing::info_span!(target: target!("chat"), SPAN_GEMINI, ttft = field::Empty, input = input,output = field::Empty, error = field::Empty, usage = field::Empty);
-                call_span.follows_from(tools_span.id());
-                gemini_calls.push((request, call_span));
-                continue;
-            }
-            match finish_reason {
-                FinishReason::Stop => return Ok(()),
-                other => {
-                    return Err(Self::handle_finish_reason(Some(other)));
+            match result.map_err(|e| record_map_err(e, span))? {
+                InnerExecutionResult::Finish(_) => return Ok(()),
+                InnerExecutionResult::NextCall(messages) => {
+                    gemini_calls.push(messages);
+                    continue;
                 }
             }
         }
@@ -787,12 +852,7 @@ impl ModelInstance for GeminiModel {
     ) -> GatewayResult<ChatCompletionMessage> {
         let conversational_messages =
             self.construct_messages(input_variables, previous_messages)?;
-        let input = serde_json::to_string(&conversational_messages)?;
-        let call_span = tracing::info_span!(target: target!("chat"), SPAN_GEMINI, ttft = field::Empty, input = input, output = field::Empty, error = field::Empty, usage = field::Empty, tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value());
-        self.execute(conversational_messages, call_span.clone(), &tx, tags)
-            .instrument(call_span.clone())
-            .await
-            .map_err(|e| record_map_err(e, call_span))
+        self.execute(conversational_messages, &tx, tags).await
     }
 
     async fn stream(
@@ -804,12 +864,7 @@ impl ModelInstance for GeminiModel {
     ) -> GatewayResult<()> {
         let conversational_messages =
             self.construct_messages(input_variables, previous_messages)?;
-        let input = serde_json::to_string(&conversational_messages)?;
-        let call_span = tracing::info_span!(target: target!("chat"), SPAN_GEMINI, ttft = field::Empty, input = input, output = field::Empty, error = field::Empty, usage = field::Empty, tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value());
-        self.execute_stream(conversational_messages, tx, call_span.clone(), tags)
-            .instrument(call_span.clone())
-            .await
-            .map_err(|e| record_map_err(e, call_span))
+        self.execute_stream(conversational_messages, tx, tags).await
     }
 }
 
