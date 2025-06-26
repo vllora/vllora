@@ -32,7 +32,7 @@ name = "langdb_udf"
 
 [dev-dependencies]
 mockall = "0.13"
-tokio = { version = "1.45", features = ["full"] }
+tokio = { version = "1.45.1", features = ["full"] }
 
 [dependencies.openssl]
 version = "0.10"
