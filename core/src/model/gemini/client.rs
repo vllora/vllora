@@ -69,8 +69,7 @@ impl Client {
             tracing::error!(target: "gemini", "{msg}. Payload: {p}");
 
             return Err(GatewayError::CustomError(format!(
-                "Request failed with status: {}",
-                status
+                "Request failed with status: {status}"
             )));
         }
 

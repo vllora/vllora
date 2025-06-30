@@ -30,7 +30,7 @@ impl Evaluator for SchemaEvaluator {
                     {
                         Ok(schema) => schema,
                         Err(e) => {
-                            return Err(format!("Invalid schema definition: {}", e));
+                            return Err(format!("Invalid schema definition: {e}"));
                         }
                     };
 

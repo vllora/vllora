@@ -76,7 +76,7 @@ fn get_default_password() -> Option<String> {
 
 fn get_user_string(user: &str, password: Option<String>) -> String {
     match password {
-        Some(password) => format!("{user}:{password}", user = user, password = password),
+        Some(password) => format!("{user}:{password}"),
         None => user.to_string(),
     }
 }
@@ -263,10 +263,7 @@ impl DatabaseTransport for ClickhouseHttp {
             .map(|b| serde_json::to_string(&b).unwrap())
             .collect::<Vec<_>>()
             .join(",");
-        let query = format!(
-            "INSERT INTO {}({}) FORMAT JSONCompactEachRow",
-            table_name, columns_str
-        );
+        let query = format!("INSERT INTO {table_name}({columns_str}) FORMAT JSONCompactEachRow");
 
         self.do_execute(&query, Some(body)).await
     }

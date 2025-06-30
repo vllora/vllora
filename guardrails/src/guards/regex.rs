@@ -31,7 +31,7 @@ impl Evaluator for RegexEvaluator {
                     p.as_str()
                         .ok_or_else(|| "Pattern is not a string".to_string())
                         .and_then(|pattern| {
-                            Regex::new(pattern).map_err(|e| format!("Invalid regex pattern: {}", e))
+                            Regex::new(pattern).map_err(|e| format!("Invalid regex pattern: {e}"))
                         })
                 })
                 .collect();
@@ -77,7 +77,7 @@ impl Evaluator for RegexEvaluator {
                     )
                 }
                 _ => {
-                    return Err(format!("Invalid match_type: {}", match_type));
+                    return Err(format!("Invalid match_type: {match_type}"));
                 }
             };
 

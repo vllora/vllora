@@ -148,7 +148,7 @@ pub fn load_langdb_proxy_config(config: Option<ProvidersConfig>) -> Option<Provi
         std::env::var("HOME")
             .ok()
             .and_then(|home_dir| {
-                let credentials_path = format!("{}/.langdb/credentials.yaml", home_dir);
+                let credentials_path = format!("{home_dir}/.langdb/credentials.yaml");
                 std::fs::read_to_string(credentials_path).ok()
             })
             .and_then(|credentials| serde_yaml::from_str::<Credentials>(&credentials).ok())

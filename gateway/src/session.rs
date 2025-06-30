@@ -32,12 +32,12 @@ pub async fn login() -> Result<(), crate::CliError> {
         Ok(response) => match response.json::<SessionResponse>().await {
             Ok(session) => session,
             Err(err) => {
-                println!("Failed to parse session response: {:?}", err);
+                println!("Failed to parse session response: {err:?}");
                 return Ok(());
             }
         },
         Err(err) => {
-            println!("Failed to start session: {:?}. Please try again.", err);
+            println!("Failed to start session: {err:?}. Please try again.");
             return Ok(());
         }
     };
@@ -47,13 +47,12 @@ pub async fn login() -> Result<(), crate::CliError> {
         get_ui_url(),
         session_response.session_id
     );
-    println!("Opening {} in your browser...", url);
+    println!("Opening {url} in your browser...");
     match open::that(url) {
         Ok(_) => (),
-        Err(err) => println!(
-            "Failed to open URL: {:?}. You can manually open it in your browser.",
-            err
-        ),
+        Err(err) => {
+            println!("Failed to open URL: {err:?}. You can manually open it in your browser.")
+        }
     }
 
     let start_time = Instant::now();
@@ -68,10 +67,10 @@ pub async fn login() -> Result<(), crate::CliError> {
         if let Ok(response) = client.get(&url).send().await {
             if let Ok(json) = response.json::<Credentials>().await {
                 let home_dir = std::env::var("HOME").unwrap_or_else(|_| "~".to_string());
-                let credentials_dir = format!("{}/.langdb", home_dir);
+                let credentials_dir = format!("{home_dir}/.langdb");
                 std::fs::create_dir_all(&credentials_dir).unwrap_or_default();
 
-                let credentials_file = format!("{}/credentials.yaml", credentials_dir);
+                let credentials_file = format!("{credentials_dir}/credentials.yaml");
                 let credentials = serde_yaml::to_string(&json).unwrap_or_default();
                 std::fs::write(credentials_file, credentials).unwrap_or_default();
 

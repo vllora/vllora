@@ -90,7 +90,7 @@ pub async fn route(
 
                             metric
                                 .get_value(period_metrics)
-                                .map(|value| (format!("{}/{}", provider, model), value))
+                                .map(|value| (format!("{provider}/{model}"), value))
                         })
                     })
                     .collect();

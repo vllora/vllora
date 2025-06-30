@@ -245,8 +245,7 @@ impl GeminiModel {
 
                                     x => {
                                         return Err(ModelError::StreamError(format!(
-                                            "Unexpected stream part: {:?}",
-                                            x
+                                            "Unexpected stream part: {x:?}"
                                         ))
                                         .into());
                                     }
@@ -334,8 +333,7 @@ impl GeminiModel {
 
                     x => {
                         return Err(ModelError::StreamError(format!(
-                            "Unexpected stream part: {:?}",
-                            x
+                            "Unexpected stream part: {x:?}"
                         ))
                         .into());
                     }

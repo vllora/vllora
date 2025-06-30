@@ -67,7 +67,7 @@ impl Evaluator for LlmJudgeEvaluator {
                 Some(metadata) => match serde_json::from_value(metadata.clone()) {
                     Ok(input_vars) => input_vars,
                     Err(e) => {
-                        return Err(format!("Error parsing guard metadata: {}", e));
+                        return Err(format!("Error parsing guard metadata: {e}"));
                     }
                 },
                 None => HashMap::new(),
@@ -88,7 +88,7 @@ impl Evaluator for LlmJudgeEvaluator {
 
             for var in input_vars.keys() {
                 user_prompt_template = user_prompt_template
-                    .replace(&format!("{{{}}}", var), &input_vars[var].to_string());
+                    .replace(&format!("{{{var}}}"), &input_vars[var].to_string());
             }
 
             user_prompt_template = format!("{}{}", user_prompt_template, default_suffix());
@@ -146,7 +146,7 @@ impl Evaluator for LlmJudgeEvaluator {
                         }
                     }
                 }
-                Err(err) => Err(format!("LLM evaluation failed: {}", err)),
+                Err(err) => Err(format!("LLM evaluation failed: {err}")),
             }
         } else {
             Err("Guard definition is not a LlmJudge".to_string())
@@ -229,7 +229,7 @@ fn interpret_json_response(json: Value, parameters: &Value) -> GuardResult {
                         .join(", ");
 
                     return GuardResult::Text {
-                        text: format!("Found competitor mentions: {}", competitors),
+                        text: format!("Found competitor mentions: {competitors}"),
                         passed: false,
                         confidence,
                     };
@@ -257,7 +257,7 @@ fn interpret_json_response(json: Value, parameters: &Value) -> GuardResult {
                         .join(", ");
 
                     return GuardResult::Text {
-                        text: format!("Found PII: {}", pii_types),
+                        text: format!("Found PII: {pii_types}"),
                         passed: false,
                         confidence,
                     };

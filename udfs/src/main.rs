@@ -37,8 +37,7 @@ async fn process_line(
         let val = tokens.fetch_add(val.usage.total_tokens, std::sync::atomic::Ordering::Relaxed);
         if val > max_tokens {
             return Err(InvokeError::CustomError(format!(
-                "Total tokens: {} exceeds max tokens: {}",
-                val, max_tokens
+                "Total tokens: {val} exceeds max tokens: {max_tokens}"
             )));
         }
     }
@@ -162,7 +161,7 @@ async fn process_ordered_futures(
 async fn main() -> Result<(), InvokeError> {
     // Initialize tracing once at program start
     if let Err(e) = init_tracing(None) {
-        eprintln!("Failed to initialize tracing: {}", e);
+        eprintln!("Failed to initialize tracing: {e}");
     }
 
     let stdin = stdin();

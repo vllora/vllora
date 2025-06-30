@@ -78,7 +78,7 @@ impl Evaluator for DatasetEvaluator {
                                 confidence: Some(1.0 - best_score),
                             })
                         }
-                        Err(e) => Err(format!("Error loading dataset: {}", e)),
+                        Err(e) => Err(format!("Error loading dataset: {e}")),
                     }
                 }
                 langdb_core::types::guardrails::DatasetSource::Managed { .. } => {

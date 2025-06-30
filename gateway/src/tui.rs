@@ -194,7 +194,7 @@ impl Tui {
                 let total_requests = self.state.stats.total_requests;
 
                 // Counters section
-                let avg_response_time = counters.avg_response_time.as_ref().map_or(String::from(""), |t| format!(" (avg {:.2?}ms)", t));
+                let avg_response_time = counters.avg_response_time.as_ref().map_or(String::from(""), |t| format!(" (avg {t:.2?}ms)"));
 
                 let stats = format!(
                     "Tokens: {} (prompt: {}, completion: {}) | Total Requests: {}{} | Total cost: {:.4}$",
@@ -226,13 +226,13 @@ impl Tui {
                                     None
                                 }
                             };
-                            let avg_response_time = avg_time.as_ref().map_or(String::from(""), |t| format!(" (avg {:.2?}ms)", t));
+                            let avg_response_time = avg_time.as_ref().map_or(String::from(""), |t| format!(" (avg {t:.2?}ms)"));
                             let stats = format!(
                                 "Tokens: {} (prompt: {}, completion: {}) | Total Requests: {}{} | Total cost: {:.4}$",
                                 m.metrics.total.total_tokens.unwrap_or(0.0), m.metrics.total.input_tokens.unwrap_or(0.0), m.metrics.total.output_tokens.unwrap_or(0.0), m.metrics.total.requests.unwrap_or(0.0), avg_response_time, m.metrics.total.llm_usage.unwrap_or(0.0)
                             );
                             let stats_widget = Paragraph::new(stats)
-                                .block(Block::default().borders(Borders::ALL).title(format!("{}/{}", provider_name, model_name)));
+                                .block(Block::default().borders(Borders::ALL).title(format!("{provider_name}/{model_name}")));
                             f.render_widget(stats_widget, chunks[index]);
                             index += 1;
                         }

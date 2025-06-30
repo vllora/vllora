@@ -71,7 +71,7 @@ fn custom_err(e: impl ToString) -> ModelError {
 fn parse_azure_url(endpoint: &str, api_key: String) -> Result<AzureConfig, ModelError> {
     use url::Url;
 
-    let url = Url::parse(endpoint).map_err(|e| custom_err(format!("Invalid Azure URL: {}", e)))?;
+    let url = Url::parse(endpoint).map_err(|e| custom_err(format!("Invalid Azure URL: {e}")))?;
 
     // Extract the base URL (e.g., https://karol-m98i9ysd-eastus2.cognitiveservices.azure.com)
     let api_base = format!("{}://{}", url.scheme(), url.host_str().unwrap_or_default());
@@ -129,8 +129,7 @@ pub fn openai_client(
         // Do not handle Azure endpoints here
         if is_azure_endpoint(endpoint) {
             return Err(ModelError::CustomError(format!(
-                "Azure endpoints should be handled by azure_openai_client, not openai_client: {}",
-                endpoint
+                "Azure endpoints should be handled by azure_openai_client, not openai_client: {endpoint}"
             )));
         }
 
@@ -175,8 +174,7 @@ impl OpenAIModel<OpenAIConfig> {
         if let Some(ep) = endpoint {
             if is_azure_endpoint(ep) {
                 return Err(ModelError::CustomError(format!(
-                    "Azure endpoints should be created via OpenAIModel::from_azure_url: {}",
-                    ep
+                    "Azure endpoints should be created via OpenAIModel::from_azure_url: {ep}"
                 )));
             }
         }

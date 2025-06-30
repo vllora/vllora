@@ -102,7 +102,7 @@ impl OpenAIImageGeneration {
                 Ok(async_openai::types::ImageSize::S1024x1792)
             }
             crate::types::gateway::ImageSize::Other((width, height)) => Err(
-                GatewayError::CustomError(format!("Unsupported image size: {}x{}", width, height)),
+                GatewayError::CustomError(format!("Unsupported image size: {width}x{height}")),
             ),
         })
     }
@@ -163,8 +163,8 @@ impl ImageGenerationModelInstance for OpenAIImageGeneration {
 
         let reqwest_client = reqwest::Client::new();
         let reqwest_result = reqwest_client
-            .post(format!("{}/images/generations", api_base))
-            .header("Authorization", format!("Bearer {}", api_key))
+            .post(format!("{api_base}/images/generations"))
+            .header("Authorization", format!("Bearer {api_key}"))
             .json(&r)
             .send()
             .await?;
@@ -191,7 +191,7 @@ impl ImageGenerationModelInstance for OpenAIImageGeneration {
         } else {
             let r: OpenAIReqwestError = reqwest_result.json().await.map_err(|e| {
                 call_span.record("error", e.to_string());
-                GatewayError::CustomError(format!("Failed to generate image: {}", e))
+                GatewayError::CustomError(format!("Failed to generate image: {e}"))
             })?;
             Err(GatewayError::CustomError(format!(
                 "Failed to generate image: {}",

@@ -62,7 +62,7 @@ where
                 .and_then(|h| h.to_str().ok());
 
             let model_log = match (provider, model) {
-                (Some(provider), Some(model)) => format!("{}/{}", provider, model),
+                (Some(provider), Some(model)) => format!("{provider}/{model}"),
                 (Some(name), None) | (None, Some(name)) => name.to_string(),
                 _ => "".to_string(),
             };

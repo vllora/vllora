@@ -50,14 +50,14 @@ fn get_price(price: ModelPrice) -> String {
         }
         ModelPrice::ImageGeneration(image_generation_price) => {
             if let Some(p) = image_generation_price.mp_price {
-                format!("${:.2}/image", p)
+                format!("${p:.2}/image")
             } else if let Some(map) = image_generation_price.type_prices {
                 let prices: Vec<String> = map
                     .iter()
                     .map(|(size, price_map)| {
                         let prices: Vec<String> = price_map
                             .iter()
-                            .map(|(_quality, &price)| format!("${:.4}", price))
+                            .map(|(_quality, &price)| format!("${price:.4}"))
                             .collect();
                         format!("{}: ({})", size, prices.join(", "))
                     })

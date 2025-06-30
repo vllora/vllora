@@ -196,10 +196,10 @@ pub enum McpTransportType {
 impl McpTransportType {
     pub fn key(&self) -> String {
         match self {
-            McpTransportType::Sse { server_url, .. } => format!("sse:{}", server_url),
-            McpTransportType::Ws { server_url, .. } => format!("ws:{}", server_url),
-            McpTransportType::InMemory { name, .. } => format!("in-memory:{}", name),
-            McpTransportType::Http { server_url, .. } => format!("http:{}", server_url),
+            McpTransportType::Sse { server_url, .. } => format!("sse:{server_url}"),
+            McpTransportType::Ws { server_url, .. } => format!("ws:{server_url}"),
+            McpTransportType::InMemory { name, .. } => format!("in-memory:{name}"),
+            McpTransportType::Http { server_url, .. } => format!("http:{server_url}"),
         }
     }
 }
@@ -665,7 +665,7 @@ impl Display for ImageSize {
             ImageSize::Size1024x1024 => write!(f, "1024x1024"),
             ImageSize::Size1792x1024 => write!(f, "1792x1024"),
             ImageSize::Size1024x1792 => write!(f, "1024x1792"),
-            ImageSize::Other((width, height)) => write!(f, "{}x{}", width, height),
+            ImageSize::Other((width, height)) => write!(f, "{width}x{height}"),
         }
     }
 }

@@ -113,11 +113,11 @@ pub async fn create_tunnel(
         .request_port_forward(ForwardType::Local, local.clone(), remote.clone())
         .await
         .map_err(|e| {
-            eprintln!("Error establishing port forwarding: {}", e);
+            eprintln!("Error establishing port forwarding: {e}");
             e
         })?;
 
-    println!("Port forwarding established on port {}", port);
+    println!("Port forwarding established on port {port}");
 
     Ok((session, moved_keyfile.to_owned(), port))
 }

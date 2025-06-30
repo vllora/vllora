@@ -60,8 +60,7 @@ pub(crate) async fn handle_tool_call(
     let tool = tools
         .get(&tool_name)
         .ok_or(GatewayError::CustomError(format!(
-            "Tool Not Found {}",
-            tool_name
+            "Tool Not Found {tool_name}"
         )))?;
 
     async {

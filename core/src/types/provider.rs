@@ -28,7 +28,7 @@ impl Display for BedrockProvider {
             BedrockProvider::Cohere => write!(f, "cohere"),
             BedrockProvider::Meta => write!(f, "meta"),
             BedrockProvider::Mistral => write!(f, "mistral"),
-            BedrockProvider::Other(provider) => write!(f, "{}", provider),
+            BedrockProvider::Other(provider) => write!(f, "{provider}"),
         }
     }
 }
@@ -84,7 +84,7 @@ impl std::fmt::Display for InferenceModelProvider {
             InferenceModelProvider::Anthropic => write!(f, "anthropic"),
             InferenceModelProvider::Gemini => write!(f, "gemini"),
             InferenceModelProvider::Bedrock => write!(f, "bedrock"),
-            InferenceModelProvider::Proxy(name) => write!(f, "{}", name),
+            InferenceModelProvider::Proxy(name) => write!(f, "{name}"),
         }
     }
 }

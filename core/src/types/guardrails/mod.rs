@@ -68,7 +68,7 @@ impl ResponseError for GuardError {
             GuardError::GuardNotPassed(guard_id, result) => {
                 let details = serde_json::to_value(result).ok();
                 let guard_error = GuardValidationError {
-                    message: format!("Guard '{}' not passed", guard_id),
+                    message: format!("Guard '{guard_id}' not passed"),
                     guard_id: guard_id.clone(),
                     details,
                 };

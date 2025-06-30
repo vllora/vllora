@@ -35,7 +35,7 @@ impl CostCalculator for GatewayCostCalculator {
         usage: &Usage,
     ) -> Result<CostCalculationResult, CostCalculatorError> {
         let model_name =
-            if let Some(stripped) = model_name.strip_prefix(&format!("{}/", provider_name)) {
+            if let Some(stripped) = model_name.strip_prefix(&format!("{provider_name}/")) {
                 stripped
             } else {
                 model_name

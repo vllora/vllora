@@ -74,8 +74,7 @@ pub async fn completions(
             Err(e) => {
                 if retries >= MAX_RETRIES {
                     return Err(InvokeError::Other(format!(
-                        "Failed after {} retries: {}",
-                        MAX_RETRIES, e
+                        "Failed after {MAX_RETRIES} retries: {e}"
                     )));
                 }
                 retries += 1;
@@ -119,6 +118,6 @@ mod tests {
         ];
 
         let response = completions(&mut items.iter(), &config).await.unwrap();
-        println!("{:?}", response);
+        println!("{response:?}");
     }
 }

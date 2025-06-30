@@ -263,7 +263,7 @@ impl Display for EngineType {
             EngineType::Routing => write!(f, "routing"),
             EngineType::Secrets => write!(f, "secrets"),
             // For Proxy, display the original string directly
-            EngineType::Proxy(name) => write!(f, "{}", name),
+            EngineType::Proxy(name) => write!(f, "{name}"),
         }
     }
 }

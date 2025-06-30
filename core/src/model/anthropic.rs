@@ -870,7 +870,7 @@ impl ModelInstance for AnthropicModel {
         let Some(system_prompt) = system_prompt else {
             return Err(ModelError::SystemPromptMissing.into());
         };
-        call_span.record("system_prompt", format!("{}", system_prompt));
+        call_span.record("system_prompt", format!("{system_prompt}"));
         self.execute(
             system_prompt,
             conversational_messages,
@@ -907,7 +907,7 @@ impl ModelInstance for AnthropicModel {
         let Some(system_prompt) = system_prompt else {
             return Err(ModelError::SystemPromptMissing.into());
         };
-        call_span.record("system_prompt", format!("{}", system_prompt));
+        call_span.record("system_prompt", format!("{system_prompt}"));
         self.execute_stream(
             system_prompt,
             conversational_messages,

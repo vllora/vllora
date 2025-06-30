@@ -128,17 +128,17 @@ async fn main() -> Result<(), CliError> {
                 tokio::select! {
                     r = counter_handle => {
                         if let Err(e) = r {
-                            eprintln!("Counter loop error: {}", e);
+                            eprintln!("Counter loop error: {e}");
                         }
                     }
                     r = server_handle => {
                         if let Err(e) = r {
-                            eprintln!("Server error: {}", e);
+                            eprintln!("Server error: {e}");
                         }
                     }
                     r = tui_handle => {
                         if let Err(e) = r {
-                            eprintln!("TUI error: {}", e);
+                            eprintln!("TUI error: {e}");
                         }
                         // If TUI exits, abort other tasks
                         counter_abort.abort();

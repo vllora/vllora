@@ -265,9 +265,7 @@ impl BedrockModel {
                     .content(ContentBlock::Text(raw_message))
                     .role(ConversationRole::Assistant)
                     .build()
-                    .map_err(|e| {
-                        ModelError::CustomError(format!("Error building messages: {}", e))
-                    })?
+                    .map_err(|e| ModelError::CustomError(format!("Error building messages: {e}")))?
             }
 
             MessageType::HumanMessage => {
@@ -437,7 +435,7 @@ impl BedrockModel {
                 ModelEventType::LlmStart(LLMStartEvent {
                     provider_name: SPAN_BEDROCK.to_string(),
                     model_name: self.params.model_id.clone().unwrap_or_default(),
-                    input: format!("{:?}", input_messages),
+                    input: format!("{input_messages:?}"),
                 }),
             )))
             .await

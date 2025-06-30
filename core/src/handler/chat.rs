@@ -124,11 +124,11 @@ pub fn map_sso_event(
     let json_str = match chunk {
         Ok(r) => r.map(|c| {
             serde_json::to_string(&c)
-                .unwrap_or_else(|e| format!("{{\"error\": \"Failed to serialize chunk: {}\"}}", e))
+                .unwrap_or_else(|e| format!("{{\"error\": \"Failed to serialize chunk: {e}\"}}"))
         }),
         Err(e) => Some(
             serde_json::to_string(&HashMap::from([("error", e.to_string())]))
-                .unwrap_or_else(|e| format!("{{\"error\": \"Failed to serialize chunk: {}\"}}", e)),
+                .unwrap_or_else(|e| format!("{{\"error\": \"Failed to serialize chunk: {e}\"}}")),
         ),
     };
 
