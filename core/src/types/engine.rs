@@ -4,7 +4,6 @@ use std::{collections::HashMap, fmt::Display, ops::Deref, str::FromStr};
 use crate::types::json::JsonStringCond;
 use async_openai::types::ResponseFormat;
 use clust::messages as claude;
-use indexmap::IndexMap;
 use minijinja::Environment;
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -858,41 +857,6 @@ impl ParamType {
     }
 }
 
-#[serde_as]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct View {
-    pub name: String,
-    pub description: Option<String>,
-    pub query: String,
-    #[serde_as(as = "JsonStringCond")]
-    pub parameters: Vec<ViewParameter>,
-    #[serde_as(as = "JsonStringCond")]
-    pub schema: IndexMap<String, String>,
-    pub project_id: String,
-}
-impl View {
-    pub fn get_parameter_names(&self) -> Vec<Cow<'_, String>> {
-        self.parameters
-            .iter()
-            .map(move |p| Cow::Borrowed(&p.name))
-            .collect()
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct RoutingModelDefinition {
-    pub name: String,
-    pub view: View,
-    pub db_model: Model,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct RoutingModelOptions {
-    pub definition: Box<RoutingModelDefinition>,
-    pub named_args: NamedArgValuesMap,
-    pub verbose: bool,
-}
-
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CompletionModelOptions {
     pub definition: Box<CompletionModelDefinition>,
@@ -912,22 +876,9 @@ impl From<CompletionModelOptions> for ParentCompletionOptions {
     }
 }
 
-impl From<RoutingModelOptions> for ParentCompletionOptions {
-    fn from(value: RoutingModelOptions) -> Self {
-        Self {
-            definition: Box::new(ParentDefinition::RoutingModel(
-                value.definition.deref().clone().into(),
-            )),
-            named_args: value.named_args,
-            verbose: value.verbose,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum ParentDefinition {
     CompletionModel(Box<CompletionModelDefinition>),
-    RoutingModel(Box<RoutingModelDefinition>),
     ImageGenerationModel(Box<ImageGenerationModelDefinition>),
 }
 
@@ -935,7 +886,6 @@ impl ParentDefinition {
     pub fn get_name(&self) -> String {
         match self {
             ParentDefinition::CompletionModel(model) => model.name.clone(),
-            ParentDefinition::RoutingModel(model) => model.name.clone(),
             ParentDefinition::ImageGenerationModel(image_generation_model_definition) => {
                 image_generation_model_definition.name.clone()
             }
@@ -945,14 +895,12 @@ impl ParentDefinition {
     pub fn get_variables(&self) -> Vec<Cow<'_, String>> {
         match self {
             ParentDefinition::CompletionModel(model) => model.prompt.get_variables(),
-            ParentDefinition::RoutingModel(model) => model.view.get_parameter_names(),
             ParentDefinition::ImageGenerationModel(_) => vec![],
         }
     }
     pub fn get_db_model(&self) -> Model {
         match self {
             ParentDefinition::CompletionModel(model) => model.db_model.clone(),
-            ParentDefinition::RoutingModel(model) => model.db_model.clone(),
             ParentDefinition::ImageGenerationModel(image_generation_model_definition) => {
                 image_generation_model_definition.db_model.clone()
             }
