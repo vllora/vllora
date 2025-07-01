@@ -80,7 +80,7 @@ rmcp = { git = "https://github.com/modelcontextprotocol/rust-sdk.git", rev = "4c
   "transport-streamable-http-client",
 ] }
 rmcp-macros = { git = "https://github.com/modelcontextprotocol/rust-sdk.git", rev = "4c34b64b7f8dcabf94d52a9c6518c6b49c1f0451", default-features = true}
-parking_lot = "0.12.3"
+parking_lot = "0.12.4"
 rand = "0.8.5"
 url = "2.5.4"
 # deno_core = "0.334.0"
