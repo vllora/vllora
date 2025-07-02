@@ -14,6 +14,29 @@ pub enum StreamEvent {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CustomEvent {
+    value: serde_json::Value,
+    name: String
+}
+
+impl CustomEvent {
+    pub fn new(name: String, value: serde_json::Value) -> Self {
+        Self {
+            value,
+            name
+        }
+    }
+
+    pub fn name(&self) -> String {
+        self.name.clone()
+    }
+
+    pub fn value(&self) -> serde_json::Value {
+        self.value.clone()
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "type", content = "data")]
 pub enum ModelEventType {
@@ -27,6 +50,7 @@ pub enum ModelEventType {
     ToolStart(ToolStartEvent),
     ToolResult(ToolResultEvent),
     ImageGenerationFinish(ImageGenerationFinishEvent),
+    Custom(CustomEvent),
 }
 impl ModelEventType {
     pub fn as_str(&self) -> &str {
@@ -41,6 +65,7 @@ impl ModelEventType {
             ModelEventType::ToolResult(_) => "tool_result",
             ModelEventType::ImageGenerationFinish(_) => "image_generation_finish",
             ModelEventType::LlmFirstToken(_) => "llm_first_token",
+            ModelEventType::Custom(_) => "custom",
         }
     }
 }
