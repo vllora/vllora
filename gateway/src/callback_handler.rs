@@ -92,47 +92,51 @@ pub fn init_callback_handler(
                                 (duration, ttft)
                             };
 
-                            let result = update_usage(
-                                storage.clone(),
-                                &calculator,
-                                &model_name,
-                                &model_event.model.provider_name,
-                                usage
-                                    .map(langdb_core::types::gateway::Usage::CompletionModelUsage)
-                                    .as_ref(),
-                                duration.map(|d| d as u64),
-                                ttft.map(|t| t as u64),
-                            )
-                            .await;
+                            if let Some(model) = &model_event.model {
+                                let result = update_usage(
+                                    storage.clone(),
+                                    &calculator,
+                                    &model_name,
+                                    &model.provider_name,
+                                    usage
+                                        .map(langdb_core::types::gateway::Usage::CompletionModelUsage)
+                                        .as_ref(),
+                                    duration.map(|d| d as u64),
+                                    ttft.map(|t| t as u64),
+                                )
+                                .await;
 
-                            if let Err(e) = result {
-                                tracing::error!("Error setting model usage: {e}");
-                            };
+                                if let Err(e) = result {
+                                    tracing::error!("Error setting model usage: {e}");
+                                };
+                            }
                         }
                         ModelEventType::ImageGenerationFinish(finish_event) => {
-                            let model_name = finish_event.model_name.clone();
-                            let result = update_usage(
-                                storage.clone(),
-                                &calculator,
-                                &model_name,
-                                &model_event.model.provider_name,
-                                Some(
-                                    &langdb_core::types::gateway::Usage::ImageGenerationModelUsage(
-                                        ImageGenerationModelUsage {
-                                            quality: finish_event.quality.clone(),
-                                            size: finish_event.size.clone().into(),
-                                            images_count: finish_event.count_of_images,
-                                            steps_count: finish_event.steps,
-                                        },
+                            if let Some(model) = &model_event.model {
+                                let model_name = finish_event.model_name.clone();
+                                let result = update_usage(
+                                    storage.clone(),
+                                    &calculator,
+                                    &model_name,
+                                    &model.provider_name,
+                                    Some(
+                                        &langdb_core::types::gateway::Usage::ImageGenerationModelUsage(
+                                            ImageGenerationModelUsage {
+                                                quality: finish_event.quality.clone(),
+                                                size: finish_event.size.clone().into(),
+                                                images_count: finish_event.count_of_images,
+                                                steps_count: finish_event.steps,
+                                            },
+                                        ),
                                     ),
-                                ),
-                                None,
-                                None,
-                            )
-                            .await;
+                                    None,
+                                    None,
+                                )
+                                .await;
 
-                            if let Err(e) = result {
-                                tracing::error!("Error setting model usage: {e}");
+                                if let Err(e) = result {
+                                    tracing::error!("Error setting model usage: {e}");
+                                }
                             }
                         }
                         _ => {}

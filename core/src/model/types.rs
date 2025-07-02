@@ -162,5 +162,4 @@ pub struct RunErrorEvent {
     pub thread_id: Option<String>,
     pub message: String,
     pub code: Option<String>,
-
 }

@@ -65,8 +65,10 @@ pub async fn stream_chunks(
                         assistant_msg.push_str(event.content.as_str());
                     }
 
-                    callback_handler
-                        .on_message(ModelEventWithDetails::new(msg.clone(), Some(db_model.clone())));
+                    callback_handler.on_message(ModelEventWithDetails::new(
+                        msg.clone(),
+                        Some(db_model.clone()),
+                    ));
                     let e = outer_tx.send(Ok(msg)).await;
                     match e {
                         Ok(_) => {}
