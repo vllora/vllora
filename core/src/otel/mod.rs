@@ -32,6 +32,7 @@ use opentelemetry_proto::tonic::{
     trace::v1::span as otel_span,
 };
 use opentelemetry_sdk::propagation::TraceContextPropagator;
+use serde::{Serialize, Serializer};
 use serde_json::Value;
 use tokio::select;
 use tokio::sync::{broadcast, mpsc};
@@ -204,6 +205,7 @@ impl SpanWriter {
 #[derive(Debug)]
 pub struct TraceServiceImpl {
     pub(crate) listener_senders: Arc<TraceMap>,
+    pub(crate) project_trace_senders: Arc<ProjectTraceMap>,
     pub(crate) writer_sender: mpsc::Sender<Span>,
     pub(crate) tenant_resolver: Box<dyn TraceTenantResolver>,
 }
@@ -211,6 +213,7 @@ pub struct TraceServiceImpl {
 impl TraceServiceImpl {
     pub fn new(
         listener_senders: Arc<TraceMap>,
+        project_trace_senders: Arc<ProjectTraceMap>,
         transport: Box<dyn SpanWriterTransport>,
         tenant_resolver: Box<dyn TraceTenantResolver>,
     ) -> Self {
@@ -225,6 +228,7 @@ impl TraceServiceImpl {
         tokio::spawn(writer.run());
         Self {
             listener_senders,
+            project_trace_senders,
             writer_sender: sender,
             tenant_resolver,
         }
@@ -405,13 +409,20 @@ impl TraceService for TraceServiceImpl {
                         kind,
                         attributes,
                         tenant_id,
-                        project_id,
+                        project_id: project_id.clone(),
                         thread_id,
                         tags,
                         run_id,
                     };
                     if let Some((sender, _)) = self.listener_senders.get(&trace_id).as_deref() {
                         let _ = sender.send(span.clone());
+                    }
+                    if let Some(project_id) = project_id.as_ref() {
+                        if let Some((sender, _)) =
+                            self.project_trace_senders.get(project_id).as_deref()
+                        {
+                            let _ = sender.send(span.clone());
+                        }
                     }
                     self.writer_sender.send(span).await.unwrap();
                 }
@@ -426,13 +437,18 @@ impl TraceService for TraceServiceImpl {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 pub struct Span {
+    #[serde(serialize_with = "serialize_trace_id")]
     pub trace_id: TraceId,
+    #[serde(serialize_with = "serialize_option_trace_id")]
     pub parent_trace_id: Option<TraceId>,
+    #[serde(serialize_with = "serialize_span_id")]
     pub span_id: SpanId,
+    #[serde(serialize_with = "serialize_option_span_id")]
     pub parent_span_id: Option<SpanId>,
     pub operation_name: String,
+    #[serde(skip_serializing)]
     pub kind: SpanKind,
     pub start_time_unix_nano: u64,
     pub end_time_unix_nano: u64,
@@ -444,6 +460,42 @@ pub struct Span {
     pub run_id: Option<String>,
 }
 
+fn serialize_span_id<S>(span_id: &SpanId, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_str(&span_id.to_string())
+}
+
+fn serialize_option_span_id<S>(span_id: &Option<SpanId>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match span_id {
+        Some(span_id) => serializer.serialize_str(&span_id.to_string()),
+        None => serializer.serialize_none(),
+    }
+}
+
+fn serialize_trace_id<S>(trace_id: &TraceId, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_str(&trace_id.to_string())
+}
+
+fn serialize_option_trace_id<S>(
+    trace_id: &Option<TraceId>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match trace_id {
+        Some(trace_id) => serializer.serialize_str(&trace_id.to_string()),
+        None => serializer.serialize_none(),
+    }
+}
 pub struct TracingContext;
 impl<S, B> Transform<S, ServiceRequest> for TracingContext
 where
@@ -467,6 +519,7 @@ pub struct TracingContextMiddleware<S> {
 }
 
 pub type TraceMap = DashMap<TraceId, (broadcast::Sender<Span>, broadcast::Receiver<Span>)>;
+pub type ProjectTraceMap = DashMap<String, (broadcast::Sender<Span>, broadcast::Receiver<Span>)>;
 
 impl<S, B> Service<ServiceRequest> for TracingContextMiddleware<S>
 where

@@ -26,6 +26,7 @@ use langdb_core::handler::{AvailableModels, CallbackHandlerFn, LimitCheckWrapper
 use langdb_core::models::ModelMetadata;
 use langdb_core::otel::database::DatabaseSpanWritter;
 use langdb_core::otel::DummyTraceTenantResolver;
+use langdb_core::otel::ProjectTraceMap;
 use langdb_core::otel::SpanWriterTransport;
 use langdb_core::otel::{TraceMap, TraceServiceImpl, TraceServiceServer};
 use langdb_core::types::gateway::CostCalculator;
@@ -165,6 +166,7 @@ impl ApiServer {
 
         let trace_service = TraceServiceServer::new(TraceServiceImpl::new(
             Arc::new(TraceMap::new()),
+            Arc::new(ProjectTraceMap::new()),
             writer,
             Box::new(DummyTraceTenantResolver),
         ));
