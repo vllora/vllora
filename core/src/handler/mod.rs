@@ -103,11 +103,11 @@ impl CallbackHandlerFn {
 #[derive(Clone, Debug)]
 pub struct ModelEventWithDetails {
     pub event: ModelEvent,
-    pub model: Model,
+    pub model: Option<Model>,
 }
 
 impl ModelEventWithDetails {
-    pub fn new(event: ModelEvent, model: Model) -> Self {
+    pub fn new(event: ModelEvent, model: Option<Model>) -> Self {
         Self { event, model }
     }
 }

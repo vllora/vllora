@@ -86,7 +86,7 @@ pub async fn handle_image_generation(
                 stop_event = Some(e.clone());
             }
 
-            callback_handler.on_message(ModelEventWithDetails::new(msg, db_model.clone()));
+            callback_handler.on_message(ModelEventWithDetails::new(msg, Some(db_model.clone())));
         }
 
         stop_event

@@ -17,6 +17,9 @@ pub enum StreamEvent {
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "type", content = "data")]
 pub enum ModelEventType {
+    RunStart(RunStartEvent),
+    RunEnd(RunEndEvent),
+    RunError(RunErrorEvent),
     LlmStart(LLMStartEvent),
     LlmFirstToken(LLMFirstToken),
     LlmContent(LLMContentEvent),
@@ -28,6 +31,9 @@ pub enum ModelEventType {
 impl ModelEventType {
     pub fn as_str(&self) -> &str {
         match self {
+            ModelEventType::RunStart(_) => "run_start",
+            ModelEventType::RunEnd(_) => "run_end",
+            ModelEventType::RunError(_) => "run_error",
             ModelEventType::LlmStart(_) => "llm_start",
             ModelEventType::LlmContent(_) => "llm_content",
             ModelEventType::LlmStop(_) => "llm_stop",
@@ -136,4 +142,25 @@ pub struct ImageGenerationFinishEvent {
     pub count_of_images: u8,
     pub steps: u8,
     pub credentials_ident: CredentialsIdent,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RunStartEvent {
+    pub run_id: String,
+    pub thread_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RunEndEvent {
+    pub run_id: String,
+    pub thread_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RunErrorEvent {
+    pub run_id: String,
+    pub thread_id: Option<String>,
+    pub message: String,
+    pub code: Option<String>,
+
 }
