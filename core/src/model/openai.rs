@@ -664,7 +664,7 @@ impl<C: Config> OpenAIModel<C> {
             );
 
             match self
-                .execute_inner(span.clone(), messages, tx, tags.clone())
+                .execute_inner(span.clone(), messages.clone(), tx, tags.clone())
                 .await
             {
                 Ok(InnerExecutionResult::Finish(message)) => return Ok(message),
@@ -676,6 +676,8 @@ impl<C: Config> OpenAIModel<C> {
                     span.record("error", e.to_string());
                     if retries == 0 {
                         return Err(e);
+                    } else {
+                        openai_calls.push(messages);
                     }
                 }
             }
@@ -854,7 +856,7 @@ impl<C: Config> OpenAIModel<C> {
             match self
                 .execute_stream_inner(
                     span.clone(),
-                    input_messages,
+                    input_messages.clone(),
                     tx,
                     tags.clone(),
                     first_response_received,
@@ -872,6 +874,8 @@ impl<C: Config> OpenAIModel<C> {
                     retries -= 1;
                     if retries == 0 {
                         return Err(e);
+                    } else {
+                        openai_calls.push(input_messages);
                     }
                 }
             }

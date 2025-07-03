@@ -102,6 +102,13 @@ pub struct GuardWithParameters {
     pub parameters: Value,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ModelNameOrTarget {
+    ModelName(String),
+    Target(HashMap<String, serde_json::Value>),
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ChatCompletionRequestWithTools<T> {
     #[serde(flatten)]
@@ -114,6 +121,8 @@ pub struct ChatCompletionRequestWithTools<T> {
     pub max_retries: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extra: Option<Extra>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fallbacks: Option<Vec<ModelNameOrTarget>>,
     #[serde(flatten)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider_specific: Option<ProviderSpecificRequest>,

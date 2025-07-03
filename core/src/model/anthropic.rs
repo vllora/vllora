@@ -625,7 +625,7 @@ impl AnthropicModel {
                 return Err(ModelError::SystemPromptMissing.into());
             };
             let request = self
-                .build_request(system_prompt.clone(), input_messages, false)
+                .build_request(system_prompt.clone(), input_messages.clone(), false)
                 .map_err(custom_err)?;
 
             call_span.record("system_prompt", format!("{system_prompt}"));
@@ -643,6 +643,8 @@ impl AnthropicModel {
                     call_span.record("error", e.to_string());
                     if retries == 0 {
                         return Err(e);
+                    } else {
+                        calls.push((Some(system_prompt), input_messages));
                     }
                 }
             }
@@ -682,7 +684,7 @@ impl AnthropicModel {
                 return Err(ModelError::SystemPromptMissing.into());
             };
             let request = self
-                .build_request(system_prompt.clone(), input_messages, true)
+                .build_request(system_prompt.clone(), input_messages.clone(), true)
                 .map_err(custom_err)?;
 
             call_span.record("system_prompt", format!("{system_prompt}"));
@@ -700,6 +702,8 @@ impl AnthropicModel {
                     call_span.record("error", e.to_string());
                     if retries == 0 {
                         return Err(e);
+                    } else {
+                        calls.push((Some(system_prompt), input_messages));
                     }
                 }
             }
