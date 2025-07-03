@@ -651,19 +651,32 @@ impl<C: Config> OpenAIModel<C> {
             .unwrap_or(DEFAULT_MAX_RETRIES);
         while let Some(messages) = openai_calls.pop() {
             let input = serde_json::to_string(&messages)?;
-            let span = tracing::info_span!(target: target!("chat"), SPAN_OPENAI, input = input, output = field::Empty, error = field::Empty, usage = field::Empty, ttft = field::Empty, tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value());
+            let span = tracing::info_span!(
+                target: target!("chat"),
+                SPAN_OPENAI,
+                input = input,
+                output = field::Empty,
+                error = field::Empty,
+                usage = field::Empty,
+                ttft = field::Empty,
+                tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
+                retries_left = retries
+            );
 
-            if retries == 0 {
-                return Err(ModelError::MaxRetriesReached.into());
-            } else {
-                retries -= 1;
-            }
-
-            match self.execute_inner(span, messages, tx, tags.clone()).await? {
-                InnerExecutionResult::Finish(message) => return Ok(message),
-                InnerExecutionResult::NextCall(messages) => {
+            match self
+                .execute_inner(span.clone(), messages, tx, tags.clone())
+                .await
+            {
+                Ok(InnerExecutionResult::Finish(message)) => return Ok(message),
+                Ok(InnerExecutionResult::NextCall(messages)) => {
                     openai_calls.push(messages);
-                    continue;
+                }
+                Err(e) => {
+                    retries -= 1;
+                    span.record("error", e.to_string());
+                    if retries == 0 {
+                        return Err(e);
+                    }
                 }
             }
         }
@@ -823,33 +836,43 @@ impl<C: Config> OpenAIModel<C> {
             .max_retries
             .unwrap_or(DEFAULT_MAX_RETRIES);
         while let Some(input_messages) = openai_calls.pop() {
-            if retries == 0 {
-                return Err(ModelError::MaxRetriesReached.into());
-            } else {
-                retries -= 1;
-            }
-
             let input = serde_json::to_string(&input_messages)?;
-            let span = tracing::info_span!(target: target!("chat"), SPAN_OPENAI, input = input, output = field::Empty, error = field::Empty, usage = field::Empty, ttft = field::Empty, tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value());
+            let span = tracing::info_span!(
+                target: target!("chat"),
+                SPAN_OPENAI,
+                input = input,
+                output = field::Empty,
+                error = field::Empty,
+                usage = field::Empty,
+                ttft = field::Empty,
+                tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
+                retries_left = retries
+            );
 
             let first_response_received = &mut false;
 
             match self
                 .execute_stream_inner(
-                    span,
+                    span.clone(),
                     input_messages,
                     tx,
                     tags.clone(),
                     first_response_received,
                 )
-                .await?
+                .await
             {
-                InnerExecutionResult::Finish(_) => {
+                Ok(InnerExecutionResult::Finish(_)) => {
                     break;
                 }
-                InnerExecutionResult::NextCall(messages) => {
+                Ok(InnerExecutionResult::NextCall(messages)) => {
                     openai_calls.push(messages);
-                    continue;
+                }
+                Err(e) => {
+                    span.record("error", e.to_string());
+                    retries -= 1;
+                    if retries == 0 {
+                        return Err(e);
+                    }
                 }
             }
         }

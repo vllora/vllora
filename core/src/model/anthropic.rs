@@ -47,6 +47,11 @@ macro_rules! target {
     };
 }
 
+enum InnerExecutionResult {
+    Finish(ChatCompletionMessage),
+    NextCall((Option<SystemPrompt>, Vec<ClustMessage>)),
+}
+
 fn custom_err(e: impl ToString) -> ModelError {
     ModelError::CustomError(e.to_string())
 }
@@ -336,213 +341,71 @@ impl AnthropicModel {
         unreachable!();
     }
 
-    async fn execute(
+    async fn execute_inner(
         &self,
-        system_message: SystemPrompt,
-        input_messages: Vec<ClustMessage>,
-        call_span: Span,
+        span: Span,
+        request: MessagesRequestBody,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<ChatCompletionMessage> {
-        let request = self
-            .build_request(system_message.clone(), input_messages, false)
-            .map_err(custom_err)?;
-        let mut calls = vec![(request, call_span.clone())];
-        let mut retries = self
-            .execution_options
-            .max_retries
-            .unwrap_or(DEFAULT_MAX_RETRIES);
-        let credential_ident = self.credentials_ident.clone();
-        while let Some((call, span)) = calls.pop() {
-            if retries == 0 {
-                return Err(ModelError::MaxRetriesReached.into());
-            } else {
-                retries -= 1;
-            }
-            let system_message = system_message.clone();
-            let input_messages = call.messages.clone();
+    ) -> GatewayResult<InnerExecutionResult> {
+        let system_message = request.system.clone();
+        let input_messages = request.messages.clone();
 
-            tx.send(Some(ModelEvent::new(
-                &span,
-                ModelEventType::LlmStart(LLMStartEvent {
-                    provider_name: SPAN_ANTHROPIC.to_string(),
-                    model_name: self
-                        .params
-                        .model
-                        .clone()
-                        .map(|m| m.to_string())
-                        .unwrap_or_default(),
-                    input: serde_json::to_string(&input_messages)?,
-                }),
-            )))
-            .await
-            .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+        tx.send(Some(ModelEvent::new(
+            &span,
+            ModelEventType::LlmStart(LLMStartEvent {
+                provider_name: SPAN_ANTHROPIC.to_string(),
+                model_name: self
+                    .params
+                    .model
+                    .clone()
+                    .map(|m| m.to_string())
+                    .unwrap_or_default(),
+                input: serde_json::to_string(&input_messages)?,
+            }),
+        )))
+        .await
+        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
-            let response = async move {
-                let result = self.client.create_a_message(call).await;
-                let _ = result
-                    .as_ref()
-                    .map(|response| serde_json::to_value(response).unwrap())
-                    .as_ref()
-                    .map(JsonValue)
-                    .record();
-                let response = result.map_err(custom_err)?;
+        let response = async move {
+            let result = self.client.create_a_message(request).await;
+            let _ = result
+                .as_ref()
+                .map(|response| serde_json::to_value(response).unwrap())
+                .as_ref()
+                .map(JsonValue)
+                .record();
+            let response = result.map_err(custom_err)?;
 
-                let span = Span::current();
-                span.record("output", serde_json::to_string(&response)?);
+            let span = Span::current();
+            span.record("output", serde_json::to_string(&response)?);
 
-                span.record(
-                    "usage",
-                    JsonValue(&serde_json::to_value(response.usage).unwrap()).as_value(),
-                );
+            span.record(
+                "usage",
+                JsonValue(&serde_json::to_value(response.usage).unwrap()).as_value(),
+            );
 
-                Ok::<_, GatewayError>(response)
-            }
-            .instrument(span.clone().or_current())
-            .await?;
+            Ok::<_, GatewayError>(response)
+        }
+        .instrument(span.clone().or_current())
+        .await?;
 
-            // Alwayss present in non streamin mode
-            let stop_reason = response.stop_reason.unwrap();
+        // Alwayss present in non streamin mode
+        let stop_reason = response.stop_reason.unwrap();
 
-            match stop_reason {
-                clust::messages::StopReason::EndTurn
-                | clust::messages::StopReason::StopSequence => {
-                    let message_content = response.content;
+        match stop_reason {
+            clust::messages::StopReason::EndTurn | clust::messages::StopReason::StopSequence => {
+                let message_content = response.content;
 
-                    let usage = CompletionModelUsage {
-                        input_tokens: response.usage.input_tokens,
-                        output_tokens: response.usage.output_tokens,
-                        total_tokens: response.usage.input_tokens + response.usage.output_tokens,
-                        ..Default::default()
-                    };
+                let usage = CompletionModelUsage {
+                    input_tokens: response.usage.input_tokens,
+                    output_tokens: response.usage.output_tokens,
+                    total_tokens: response.usage.input_tokens + response.usage.output_tokens,
+                    ..Default::default()
+                };
 
-                    match message_content {
-                        Content::SingleText(content) => {
-                            tx.send(Some(ModelEvent::new(
-                                &span,
-                                ModelEventType::LlmStop(LLMFinishEvent {
-                                    provider_name: SPAN_ANTHROPIC.to_string(),
-                                    model_name: self
-                                        .params
-                                        .model
-                                        .clone()
-                                        .map(|m| m.to_string())
-                                        .unwrap_or_default(),
-                                    output: Some(content.clone()),
-                                    usage: Some(usage),
-                                    finish_reason: ModelFinishReason::Stop,
-                                    tool_calls: vec![],
-                                    credentials_ident: credential_ident,
-                                }),
-                            )))
-                            .await
-                            .map_err(|e| GatewayError::CustomError(e.to_string()))?;
-
-                            return Ok(ChatCompletionMessage {
-                                content: Some(ChatCompletionContent::Text(content.to_owned())),
-                                role: "assistant".to_string(),
-                                ..Default::default()
-                            });
-                        }
-                        Content::MultipleBlocks(blocks) => {
-                            let mut final_text = String::new();
-                            for b in blocks.iter() {
-                                match b {
-                                    ContentBlock::Text(text) => {
-                                        final_text.push_str(&text.text);
-                                    }
-                                    ContentBlock::Thinking(thinking) => {
-                                        final_text.push_str(&format!(
-                                            "thinking: {}\n\n",
-                                            thinking.thinking
-                                        ));
-                                    }
-                                    _ => {
-                                        return Err(ModelError::CustomError(
-                                            "unexpected content block".to_string(),
-                                        )
-                                        .into());
-                                    }
-                                }
-                            }
-
-                            tx.send(Some(ModelEvent::new(
-                                &span,
-                                ModelEventType::LlmStop(LLMFinishEvent {
-                                    provider_name: SPAN_ANTHROPIC.to_string(),
-                                    model_name: self
-                                        .params
-                                        .model
-                                        .clone()
-                                        .map(|m| m.to_string())
-                                        .unwrap_or_default(),
-                                    output: Some(final_text.clone()),
-                                    usage: Some(usage),
-                                    finish_reason: ModelFinishReason::Stop,
-                                    tool_calls: vec![],
-                                    credentials_ident: credential_ident,
-                                }),
-                            )))
-                            .await
-                            .map_err(|e| GatewayError::CustomError(e.to_string()))?;
-
-                            return Ok(ChatCompletionMessage {
-                                content: Some(ChatCompletionContent::Text(final_text)),
-                                role: "assistant".to_string(),
-                                ..Default::default()
-                            });
-                        }
-                    }
-                }
-                clust::messages::StopReason::MaxTokens => Self::handle_max_tokens_error(),
-                clust::messages::StopReason::ToolUse => {
-                    let content = response.content.clone();
-                    let blocks = if let Content::MultipleBlocks(blocks) = response.content {
-                        blocks
-                    } else {
-                        return Err(ModelError::CustomError(
-                            "Expected multiple tool blocks".to_string(),
-                        )
-                        .into());
-                    };
-
-                    let mut messages: Vec<ClustMessage> = vec![ClustMessage::assistant(content)];
-                    let mut tool_runs = Vec::new();
-                    let mut text_content = None;
-                    for b in blocks.iter() {
-                        match b {
-                            ContentBlock::ToolUse(tool) => {
-                                tool_runs.push(tool.tool_use.clone());
-                            }
-                            ContentBlock::Text(t) => {
-                                // Ignore text for now
-                                // messages.push(ClustMessage::assistant(t.text.clone()))
-                                text_content = Some(t.text.clone());
-                            }
-                            block => {
-                                tracing::error!("Unexpected content block in response: {}", block);
-                                tracing::error!("All blocks {:?}", blocks);
-                                return Err(ModelError::CustomError(
-                                    "Unexpected content block in response".to_string(),
-                                )
-                                .into());
-                            }
-                        }
-                    }
-
-                    let tool_calls_str = serde_json::to_string(&tool_runs)?;
-                    let tools_span = tracing::info_span!(target: target!(), events::SPAN_TOOLS, tool_calls=tool_calls_str, label=tool_runs.iter().map(|t| t.name.clone()).collect::<Vec<String>>().join(","));
-                    tools_span.follows_from(span.id());
-
-                    let tool = self.tools.get(&tool_runs[0].name).unwrap();
-                    if tool.stop_at_call() {
-                        let usage = Some(CompletionModelUsage {
-                            input_tokens: response.usage.input_tokens,
-                            output_tokens: response.usage.output_tokens,
-                            total_tokens: response.usage.input_tokens
-                                + response.usage.output_tokens,
-                            ..Default::default()
-                        });
+                match message_content {
+                    Content::SingleText(content) => {
                         tx.send(Some(ModelEvent::new(
                             &span,
                             ModelEventType::LlmStop(LLMFinishEvent {
@@ -553,70 +416,296 @@ impl AnthropicModel {
                                     .clone()
                                     .map(|m| m.to_string())
                                     .unwrap_or_default(),
-                                output: text_content.clone(),
-                                usage,
-                                finish_reason: ModelFinishReason::ToolCalls,
-                                tool_calls: tool_runs
-                                    .iter()
-                                    .map(|tool_call| ModelToolCall {
-                                        tool_id: tool_call.id.clone(),
-                                        tool_name: tool_call.name.clone(),
-                                        input: serde_json::to_string(&tool_call.input).unwrap(),
-                                    })
-                                    .collect(),
-                                credentials_ident: credential_ident,
+                                output: Some(content.clone()),
+                                usage: Some(usage),
+                                finish_reason: ModelFinishReason::Stop,
+                                tool_calls: vec![],
+                                credentials_ident: self.credentials_ident.clone(),
                             }),
                         )))
                         .await
                         .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
-                        return Ok(ChatCompletionMessage {
+                        Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
+                            content: Some(ChatCompletionContent::Text(content.to_owned())),
                             role: "assistant".to_string(),
-                            content: text_content.map(ChatCompletionContent::Text),
-                            tool_calls: Some(
-                                tool_runs
-                                    .iter()
-                                    .enumerate()
-                                    .map(|(index, tool_call)| {
-                                        Ok(ToolCall {
-                                            index: Some(index),
-                                            id: tool_call.id.clone(),
-                                            r#type: "function".to_string(),
-                                            function: crate::types::gateway::FunctionCall {
-                                                name: tool_call.name.clone(),
-                                                arguments: serde_json::to_string(&tool_call.input)?,
-                                            },
-                                        })
-                                    })
-                                    .collect::<Result<Vec<ToolCall>, GatewayError>>()?,
-                            ),
                             ..Default::default()
-                        });
-                    } else {
-                        let result_tool_calls = Self::handle_tool_calls(
-                            tool_runs.iter(),
-                            &self.tools,
-                            tx,
-                            tags.clone(),
-                        )
-                        .instrument(tools_span.clone())
-                        .await;
-                        messages.extend(result_tool_calls);
+                        }))
+                    }
+                    Content::MultipleBlocks(blocks) => {
+                        let mut final_text = String::new();
+                        for b in blocks.iter() {
+                            match b {
+                                ContentBlock::Text(text) => {
+                                    final_text.push_str(&text.text);
+                                }
+                                ContentBlock::Thinking(thinking) => {
+                                    final_text
+                                        .push_str(&format!("thinking: {}\n\n", thinking.thinking));
+                                }
+                                _ => {
+                                    return Err(ModelError::CustomError(
+                                        "unexpected content block".to_string(),
+                                    )
+                                    .into());
+                                }
+                            }
+                        }
 
-                        let conversation_messages = [input_messages, messages].concat();
-                        let request = self
-                            .build_request(system_message, conversation_messages, false)
-                            .map_err(custom_err)?;
-                        let input = serde_json::to_string(&request)?;
-                        let call_span = tracing::info_span!(target: target!("chat"), SPAN_ANTHROPIC, input=input, output = field::Empty, ttft = field::Empty, error = field::Empty, usage = field::Empty);
-                        call_span.follows_from(tools_span.id());
-                        calls.push((request, call_span));
-                        continue;
+                        tx.send(Some(ModelEvent::new(
+                            &span,
+                            ModelEventType::LlmStop(LLMFinishEvent {
+                                provider_name: SPAN_ANTHROPIC.to_string(),
+                                model_name: self
+                                    .params
+                                    .model
+                                    .clone()
+                                    .map(|m| m.to_string())
+                                    .unwrap_or_default(),
+                                output: Some(final_text.clone()),
+                                usage: Some(usage),
+                                finish_reason: ModelFinishReason::Stop,
+                                tool_calls: vec![],
+                                credentials_ident: self.credentials_ident.clone(),
+                            }),
+                        )))
+                        .await
+                        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+
+                        Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
+                            content: Some(ChatCompletionContent::Text(final_text)),
+                            role: "assistant".to_string(),
+                            ..Default::default()
+                        }))
                     }
                 }
-            };
+            }
+            clust::messages::StopReason::MaxTokens => Err(Self::handle_max_tokens_error()),
+            clust::messages::StopReason::ToolUse => {
+                let content = response.content.clone();
+                let blocks = if let Content::MultipleBlocks(blocks) = response.content {
+                    blocks
+                } else {
+                    return Err(ModelError::CustomError(
+                        "Expected multiple tool blocks".to_string(),
+                    )
+                    .into());
+                };
+
+                let mut messages: Vec<ClustMessage> = vec![ClustMessage::assistant(content)];
+                let mut tool_runs = Vec::new();
+                let mut text_content = None;
+                for b in blocks.iter() {
+                    match b {
+                        ContentBlock::ToolUse(tool) => {
+                            tool_runs.push(tool.tool_use.clone());
+                        }
+                        ContentBlock::Text(t) => {
+                            // Ignore text for now
+                            // messages.push(ClustMessage::assistant(t.text.clone()))
+                            text_content = Some(t.text.clone());
+                        }
+                        block => {
+                            tracing::error!("Unexpected content block in response: {}", block);
+                            tracing::error!("All blocks {:?}", blocks);
+                            return Err(ModelError::CustomError(
+                                "Unexpected content block in response".to_string(),
+                            )
+                            .into());
+                        }
+                    }
+                }
+
+                let tool_calls_str = serde_json::to_string(&tool_runs)?;
+                let tools_span = tracing::info_span!(target: target!(), events::SPAN_TOOLS, tool_calls=tool_calls_str, label=tool_runs.iter().map(|t| t.name.clone()).collect::<Vec<String>>().join(","));
+                tools_span.follows_from(span.id());
+
+                let tool = self.tools.get(&tool_runs[0].name).unwrap();
+                if tool.stop_at_call() {
+                    let usage = Some(CompletionModelUsage {
+                        input_tokens: response.usage.input_tokens,
+                        output_tokens: response.usage.output_tokens,
+                        total_tokens: response.usage.input_tokens + response.usage.output_tokens,
+                        ..Default::default()
+                    });
+                    tx.send(Some(ModelEvent::new(
+                        &span,
+                        ModelEventType::LlmStop(LLMFinishEvent {
+                            provider_name: SPAN_ANTHROPIC.to_string(),
+                            model_name: self
+                                .params
+                                .model
+                                .clone()
+                                .map(|m| m.to_string())
+                                .unwrap_or_default(),
+                            output: text_content.clone(),
+                            usage,
+                            finish_reason: ModelFinishReason::ToolCalls,
+                            tool_calls: tool_runs
+                                .iter()
+                                .map(|tool_call| ModelToolCall {
+                                    tool_id: tool_call.id.clone(),
+                                    tool_name: tool_call.name.clone(),
+                                    input: serde_json::to_string(&tool_call.input).unwrap(),
+                                })
+                                .collect(),
+                            credentials_ident: self.credentials_ident.clone(),
+                        }),
+                    )))
+                    .await
+                    .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+
+                    Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
+                        role: "assistant".to_string(),
+                        content: text_content.map(ChatCompletionContent::Text),
+                        tool_calls: Some(
+                            tool_runs
+                                .iter()
+                                .enumerate()
+                                .map(|(index, tool_call)| {
+                                    Ok(ToolCall {
+                                        index: Some(index),
+                                        id: tool_call.id.clone(),
+                                        r#type: "function".to_string(),
+                                        function: crate::types::gateway::FunctionCall {
+                                            name: tool_call.name.clone(),
+                                            arguments: serde_json::to_string(&tool_call.input)?,
+                                        },
+                                    })
+                                })
+                                .collect::<Result<Vec<ToolCall>, GatewayError>>()?,
+                        ),
+                        ..Default::default()
+                    }))
+                } else {
+                    let result_tool_calls =
+                        Self::handle_tool_calls(tool_runs.iter(), &self.tools, tx, tags.clone())
+                            .instrument(tools_span.clone())
+                            .await;
+                    messages.extend(result_tool_calls);
+
+                    let conversation_messages = [input_messages, messages].concat();
+                    Ok(InnerExecutionResult::NextCall((
+                        system_message,
+                        conversation_messages,
+                    )))
+                }
+            }
         }
+    }
+
+    async fn execute(
+        &self,
+        system_message: Option<SystemPrompt>,
+        input_messages: Vec<ClustMessage>,
+        tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
+        tags: HashMap<String, String>,
+    ) -> GatewayResult<ChatCompletionMessage> {
+        let mut calls = vec![(system_message, input_messages)];
+        let mut retries = self
+            .execution_options
+            .max_retries
+            .unwrap_or(DEFAULT_MAX_RETRIES);
+        while let Some((system_message, input_messages)) = calls.pop() {
+            let input = serde_json::to_string(&input_messages)?;
+            let call_span = tracing::info_span!(
+                target: target!("chat"),
+                SPAN_ANTHROPIC,
+                input = input,
+                output = field::Empty,
+                error = field::Empty,
+                ttft = field::Empty,
+                usage = field::Empty,
+                tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
+                system_prompt = field::Empty,
+                retries_left = retries
+            );
+
+            let Some(system_prompt) = system_message else {
+                return Err(ModelError::SystemPromptMissing.into());
+            };
+            let request = self
+                .build_request(system_prompt.clone(), input_messages, false)
+                .map_err(custom_err)?;
+
+            call_span.record("system_prompt", format!("{system_prompt}"));
+
+            match self
+                .execute_inner(call_span.clone(), request, tx, tags.clone())
+                .await
+            {
+                Ok(InnerExecutionResult::Finish(message)) => return Ok(message),
+                Ok(InnerExecutionResult::NextCall((system_prompt, messages))) => {
+                    calls.push((system_prompt, messages));
+                }
+                Err(e) => {
+                    retries -= 1;
+                    call_span.record("error", e.to_string());
+                    if retries == 0 {
+                        return Err(e);
+                    }
+                }
+            }
+        }
+
         unreachable!();
+    }
+
+    async fn execute_stream(
+        &self,
+        system_message: Option<SystemPrompt>,
+        input_messages: Vec<ClustMessage>,
+        tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
+        tags: HashMap<String, String>,
+    ) -> GatewayResult<()> {
+        let mut calls = vec![(system_message, input_messages)];
+        let mut retries = self
+            .execution_options
+            .max_retries
+            .unwrap_or(DEFAULT_MAX_RETRIES);
+        while let Some((system_message, input_messages)) = calls.pop() {
+            let input = serde_json::to_string(&input_messages)?;
+            let call_span = tracing::info_span!(
+                target: target!("chat"),
+                SPAN_ANTHROPIC,
+                input = input,
+                output = field::Empty,
+                error = field::Empty,
+                ttft = field::Empty,
+                usage = field::Empty,
+                tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
+                system_prompt = field::Empty,
+                retries_left = retries
+            );
+
+            let Some(system_prompt) = system_message else {
+                return Err(ModelError::SystemPromptMissing.into());
+            };
+            let request = self
+                .build_request(system_prompt.clone(), input_messages, true)
+                .map_err(custom_err)?;
+
+            call_span.record("system_prompt", format!("{system_prompt}"));
+
+            match self
+                .execute_stream_inner(request, call_span.clone(), tx, tags.clone())
+                .await
+            {
+                Ok(InnerExecutionResult::Finish(_)) => return Ok(()),
+                Ok(InnerExecutionResult::NextCall((system_prompt, messages))) => {
+                    calls.push((system_prompt, messages));
+                }
+                Err(e) => {
+                    retries -= 1;
+                    call_span.record("error", e.to_string());
+                    if retries == 0 {
+                        return Err(e);
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 
     fn map_usage(usage: Option<&Usage>) -> Option<CompletionModelUsage> {
@@ -645,144 +734,126 @@ impl AnthropicModel {
         })
     }
 
-    async fn execute_stream(
+    async fn execute_stream_inner(
         &self,
-        system_message: SystemPrompt,
-        input_messages: Vec<ClustMessage>,
-        tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
-        call_span: Span,
+        request: MessagesRequestBody,
+        span: Span,
+        tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<()> {
-        let request = self
-            .build_request(system_message.clone(), input_messages, true)
-            .map_err(custom_err)?;
-        let mut anthropic_calls = vec![(request, call_span)];
-        let mut retries = self
-            .execution_options
-            .max_retries
-            .unwrap_or(DEFAULT_MAX_RETRIES);
+    ) -> GatewayResult<InnerExecutionResult> {
+        let system_message = request.system.clone();
+        let input_messages = request.messages.clone();
         let credentials_ident = self.credentials_ident.clone();
-        while let Some((call, span)) = anthropic_calls.pop() {
-            if retries == 0 {
-                return Err(ModelError::MaxRetriesReached.into());
-            } else {
-                retries -= 1;
-            }
-            let system_message = system_message.clone();
-            let input_messages = call.messages.clone();
 
-            tx.send(Some(ModelEvent::new(
-                &span,
-                ModelEventType::LlmStart(LLMStartEvent {
-                    provider_name: SPAN_ANTHROPIC.to_string(),
-                    model_name: self
-                        .params
-                        .model
-                        .clone()
-                        .map(|m| m.to_string())
-                        .unwrap_or_default(),
-                    input: serde_json::to_string(&input_messages)?,
-                }),
-            )))
+        tx.send(Some(ModelEvent::new(
+            &span,
+            ModelEventType::LlmStart(LLMStartEvent {
+                provider_name: SPAN_ANTHROPIC.to_string(),
+                model_name: self
+                    .params
+                    .model
+                    .clone()
+                    .map(|m| m.to_string())
+                    .unwrap_or_default(),
+                input: serde_json::to_string(&input_messages)?,
+            }),
+        )))
+        .await
+        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+
+        let stream = self
+            .client
+            .create_a_message_stream(request)
             .await
-            .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+            .map_err(custom_err)?;
+        let (stop_reason, tool_calls, usage) = self
+            .process_stream(stream, tx)
+            .instrument(span.clone())
+            .await?;
 
-            let stream = self
-                .client
-                .create_a_message_stream(call)
-                .await
-                .map_err(custom_err)?;
-            let (stop_reason, tool_calls, usage) = self
-                .process_stream(stream, &tx)
-                .instrument(span.clone())
-                .await?;
+        let trace_finish_reason = Self::map_finish_reason(&stop_reason);
+        let usage = Self::map_usage(usage.as_ref());
+        if let Some(usage) = &usage {
+            span.record("usage", JsonValue(&serde_json::to_value(usage)?).as_value());
+        }
+        tx.send(Some(ModelEvent::new(
+            &span,
+            ModelEventType::LlmStop(LLMFinishEvent {
+                provider_name: SPAN_ANTHROPIC.to_string(),
+                model_name: self
+                    .params
+                    .model
+                    .clone()
+                    .map(|m| m.to_string())
+                    .unwrap_or_default(),
+                output: None,
+                usage,
+                finish_reason: trace_finish_reason.clone(),
+                credentials_ident: credentials_ident.clone(),
+                tool_calls: tool_calls
+                    .iter()
+                    .map(Self::map_tool_call)
+                    .collect::<Result<Vec<ModelToolCall>, GatewayError>>()?,
+            }),
+        )))
+        .await
+        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
-            let trace_finish_reason = Self::map_finish_reason(&stop_reason);
-            let usage = Self::map_usage(usage.as_ref());
-            if let Some(usage) = &usage {
-                span.record("usage", JsonValue(&serde_json::to_value(usage)?).as_value());
+        let response = serde_json::json!({
+            "stop_reason": trace_finish_reason,
+            "tool_calls": tool_calls
+        });
+        span.record("output", response.to_string());
+
+        match stop_reason {
+            StopReason::EndTurn | StopReason::StopSequence => {
+                Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
+                    ..Default::default()
+                }))
             }
-            tx.send(Some(ModelEvent::new(
-                &span,
-                ModelEventType::LlmStop(LLMFinishEvent {
-                    provider_name: SPAN_ANTHROPIC.to_string(),
-                    model_name: self
-                        .params
-                        .model
-                        .clone()
-                        .map(|m| m.to_string())
-                        .unwrap_or_default(),
-                    output: None,
-                    usage,
-                    finish_reason: trace_finish_reason.clone(),
-                    credentials_ident: credentials_ident.clone(),
-                    tool_calls: tool_calls
-                        .iter()
-                        .map(Self::map_tool_call)
-                        .collect::<Result<Vec<ModelToolCall>, GatewayError>>()?,
-                }),
-            )))
-            .await
-            .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+            StopReason::MaxTokens => Err(Self::handle_max_tokens_error()),
+            StopReason::ToolUse => {
+                let tool_calls_str = serde_json::to_string(&tool_calls)?;
+                let tools_span = tracing::info_span!(target: target!(), events::SPAN_TOOLS, tool_calls=tool_calls_str, label=tool_calls.iter().map(|t| t.name.clone()).collect::<Vec<String>>().join(","));
+                tools_span.follows_from(span.id());
+                let tool = self.tools.get(&tool_calls[0].name).unwrap();
+                if tool.stop_at_call() {
+                    tx.send(Some(ModelEvent::new(
+                        &span,
+                        ModelEventType::ToolStart(ToolStartEvent {
+                            tool_id: tool_calls[0].id.clone(),
+                            tool_name: tool_calls[0].name.clone(),
+                            input: serde_json::to_string(&tool_calls[0].input)?,
+                        }),
+                    )))
+                    .await
+                    .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
-            let response = serde_json::json!({
-                "stop_reason": trace_finish_reason,
-                "tool_calls": tool_calls
-            });
-            span.record("output", response.to_string());
-            match stop_reason {
-                StopReason::EndTurn | StopReason::StopSequence => return Ok(()),
-                StopReason::MaxTokens => return Err(Self::handle_max_tokens_error()),
-                StopReason::ToolUse => {
-                    let tool_calls_str = serde_json::to_string(&tool_calls)?;
-                    let tools_span = tracing::info_span!(target: target!(), events::SPAN_TOOLS, tool_calls=tool_calls_str, label=tool_calls.iter().map(|t| t.name.clone()).collect::<Vec<String>>().join(","));
-                    tools_span.follows_from(span.id());
-                    let tool = self.tools.get(&tool_calls[0].name).unwrap();
-                    if tool.stop_at_call() {
-                        tx.send(Some(ModelEvent::new(
-                            &span,
-                            ModelEventType::ToolStart(ToolStartEvent {
-                                tool_id: tool_calls[0].id.clone(),
-                                tool_name: tool_calls[0].name.clone(),
-                                input: serde_json::to_string(&tool_calls[0].input)?,
-                            }),
-                        )))
-                        .await
-                        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+                    Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
+                        ..Default::default()
+                    }))
+                } else {
+                    let mut messages = vec![ClustMessage::assistant(Content::MultipleBlocks(
+                        tool_calls
+                            .iter()
+                            .map(|t| ContentBlock::ToolUse(ToolUseContentBlock::new(t.clone())))
+                            .collect(),
+                    ))];
+                    let result_tool_calls =
+                        Self::handle_tool_calls(tool_calls.iter(), &self.tools, tx, tags.clone())
+                            .instrument(tools_span.clone())
+                            .await;
+                    messages.extend(result_tool_calls);
 
-                        return Ok(());
-                    } else {
-                        let mut messages = vec![ClustMessage::assistant(Content::MultipleBlocks(
-                            tool_calls
-                                .iter()
-                                .map(|t| ContentBlock::ToolUse(ToolUseContentBlock::new(t.clone())))
-                                .collect(),
-                        ))];
-                        let result_tool_calls = Self::handle_tool_calls(
-                            tool_calls.iter(),
-                            &self.tools,
-                            &tx,
-                            tags.clone(),
-                        )
-                        .instrument(tools_span.clone())
-                        .await;
-                        messages.extend(result_tool_calls);
+                    let conversation_messages = [input_messages, messages].concat();
 
-                        let conversation_messages = [input_messages, messages].concat();
-                        let request = self
-                            .build_request(system_message, conversation_messages, true)
-                            .map_err(custom_err)?;
-                        let input = serde_json::to_string(&request)?;
-                        let call_span = tracing::info_span!(target: target!("chat"), SPAN_ANTHROPIC, input = input,output = field::Empty, ttft = field::Empty, error = field::Empty, usage = field::Empty);
-                        call_span.follows_from(tools_span.id());
-                        anthropic_calls.push((request, call_span));
-                        continue;
-                    }
+                    Ok(InnerExecutionResult::NextCall((
+                        system_message,
+                        conversation_messages,
+                    )))
                 }
             }
         }
-
-        Ok(())
     }
 
     fn map_previous_messages(messages_dto: Vec<Message>) -> GatewayResult<Vec<ClustMessage>> {
@@ -855,32 +926,8 @@ impl ModelInstance for AnthropicModel {
     ) -> GatewayResult<ChatCompletionMessage> {
         let (system_prompt, conversational_messages) =
             self.construct_messages(input_variables, previous_messages)?;
-        let input = serde_json::to_string(&conversational_messages)?;
-        let call_span = tracing::info_span!(
-            target: target!("chat"),
-            SPAN_ANTHROPIC,
-            input = input,
-            output = field::Empty,
-            error = field::Empty,
-            ttft = field::Empty,
-            usage = field::Empty,
-            tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
-            system_prompt = field::Empty
-        );
-        let Some(system_prompt) = system_prompt else {
-            return Err(ModelError::SystemPromptMissing.into());
-        };
-        call_span.record("system_prompt", format!("{system_prompt}"));
-        self.execute(
-            system_prompt,
-            conversational_messages,
-            call_span.clone(),
-            &tx,
-            tags,
-        )
-        .instrument(call_span.clone())
-        .await
-        .map_err(|e| record_map_err(e, call_span))
+        self.execute(system_prompt, conversational_messages, &tx, tags)
+            .await
     }
 
     async fn stream(
@@ -892,32 +939,8 @@ impl ModelInstance for AnthropicModel {
     ) -> GatewayResult<()> {
         let (system_prompt, conversational_messages) =
             self.construct_messages(input_variables, previous_messages)?;
-        let input = serde_json::to_string(&conversational_messages)?;
-        let call_span = tracing::info_span!(
-            target: target!("chat"),
-            SPAN_ANTHROPIC,
-            input = input,
-            output = field::Empty,
-            ttft = field::Empty,
-            error = field::Empty,
-            usage = field::Empty,
-            tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
-            system_prompt = field::Empty
-        );
-        let Some(system_prompt) = system_prompt else {
-            return Err(ModelError::SystemPromptMissing.into());
-        };
-        call_span.record("system_prompt", format!("{system_prompt}"));
-        self.execute_stream(
-            system_prompt,
-            conversational_messages,
-            tx,
-            call_span.clone(),
-            tags,
-        )
-        .instrument(call_span.clone())
-        .await
-        .map_err(|e| record_map_err(e, call_span))
+        self.execute_stream(system_prompt, conversational_messages, &tx, tags)
+            .await
     }
 }
 

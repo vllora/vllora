@@ -64,7 +64,7 @@ pub trait ModelInstance: Sync + Send {
     ) -> GatewayResult<()>;
 }
 
-pub const DEFAULT_MAX_RETRIES: i32 = 5;
+pub const DEFAULT_MAX_RETRIES: i32 = 0;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ResponseCacheState {
