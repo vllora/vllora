@@ -523,29 +523,34 @@ impl GeminiModel {
                 error = field::Empty,
                 usage = field::Empty,
                 ttft = field::Empty,
-                tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value()
+                tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
+                retries_left = retries
             );
 
             let result = {
-                let request = self.build_request(call)?;
+                let request = self.build_request(call.clone())?;
 
                 span.record("input", serde_json::to_string(&request)?);
                 span.record("request", serde_json::to_string(&request)?);
-                if retries == 0 {
-                    return Err(ModelError::MaxRetriesReached.into());
-                } else {
-                    retries -= 1;
-                }
 
                 self.execute_inner(request, span.clone(), tx, tags.clone())
                     .await
             };
 
-            match result.map_err(|e| record_map_err(e, span))? {
-                InnerExecutionResult::Finish(message) => return Ok(message),
-                InnerExecutionResult::NextCall(messages) => {
+            match result.map_err(|e| record_map_err(e, span.clone())) {
+                Ok(InnerExecutionResult::Finish(message)) => return Ok(message),
+                Ok(InnerExecutionResult::NextCall(messages)) => {
                     gemini_calls.push(messages);
                     continue;
+                }
+                Err(e) => {
+                    retries -= 1;
+                    span.record("error", e.to_string());
+                    if retries == 0 {
+                        return Err(e);
+                    } else {
+                        gemini_calls.push(call);
+                    }
                 }
             }
         }
@@ -744,29 +749,34 @@ impl GeminiModel {
                 error = field::Empty,
                 usage = field::Empty,
                 ttft = field::Empty,
-                tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value()
+                tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
+                retries_left = retries
             );
 
             let result = {
-                let request = self.build_request(call)?;
+                let request = self.build_request(call.clone())?;
 
                 span.record("input", serde_json::to_string(&request)?);
                 span.record("request", serde_json::to_string(&request)?);
-                if retries == 0 {
-                    return Err(ModelError::MaxRetriesReached.into());
-                } else {
-                    retries -= 1;
-                }
 
                 self.execute_stream_inner(request, tx.clone(), span.clone(), tags.clone())
                     .await
             };
 
-            match result.map_err(|e| record_map_err(e, span))? {
-                InnerExecutionResult::Finish(_) => return Ok(()),
-                InnerExecutionResult::NextCall(messages) => {
+            match result.map_err(|e| record_map_err(e, span.clone())) {
+                Ok(InnerExecutionResult::Finish(_)) => return Ok(()),
+                Ok(InnerExecutionResult::NextCall(messages)) => {
                     gemini_calls.push(messages);
                     continue;
+                }
+                Err(e) => {
+                    retries -= 1;
+                    span.record("error", e.to_string());
+                    if retries == 0 {
+                        return Err(e);
+                    } else {
+                        gemini_calls.push(call);
+                    }
                 }
             }
         }
