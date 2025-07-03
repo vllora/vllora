@@ -40,8 +40,6 @@ pub struct Model {
     #[serde_as(as = "JsonStringCond")]
     pub model_params: HashMap<String, Value>,
     #[serde_as(as = "JsonStringCond")]
-    pub execution_options: ExecutionOptions,
-    #[serde_as(as = "JsonStringCond")]
     pub tools: ModelTools,
     pub model_type: ModelType,
     pub response_schema: Option<String>,
