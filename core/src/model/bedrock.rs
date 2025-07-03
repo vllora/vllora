@@ -24,6 +24,7 @@ use crate::types::threads::Message as LMessage;
 use crate::GatewayResult;
 use async_trait::async_trait;
 use aws_sdk_bedrockruntime::operation::converse::builders::ConverseFluentBuilder;
+use aws_sdk_bedrockruntime::operation::converse_stream::builders::ConverseStreamFluentBuilder;
 use aws_sdk_bedrockruntime::operation::converse_stream::{self, ConverseStreamError};
 use aws_sdk_bedrockruntime::types::builders::ImageBlockBuilder;
 use aws_sdk_bedrockruntime::types::ConverseOutput::Message as MessageVariant;
@@ -55,6 +56,11 @@ macro_rules! target {
     ($subtgt:literal) => {
         concat!("langdb::user_tracing::models::bedrock::", $subtgt)
     };
+}
+
+enum InnerExecutionResult {
+    Finish(ChatCompletionMessage),
+    NextCall(Vec<Message>),
 }
 
 fn build_err(e: impl ToString) -> ModelError {
@@ -412,260 +418,277 @@ impl BedrockModel {
         &self,
         input_messages: Vec<Message>,
         system_messages: Vec<SystemContentBlock>,
-        call_span: Span,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
     ) -> GatewayResult<ChatCompletionMessage> {
-        let mut bedrock_calls = vec![(input_messages, call_span)];
+        let mut calls = vec![input_messages];
 
         let mut retries = self
             .execution_options
             .max_retries
             .unwrap_or(DEFAULT_MAX_RETRIES);
-        while let Some((input_messages, span)) = bedrock_calls.pop() {
-            if retries == 0 {
-                return Err(ModelError::MaxRetriesReached.into());
-            } else {
-                retries -= 1;
-            }
+        while let Some(input_messages) = calls.pop() {
+            let input = serde_json::json!({
+                "initial_messages": format!("{input_messages:?}"),
+                "system_messages": format!("{system_messages:?}")
+            });
+            let span = tracing::info_span!(
+                target: target!("chat"),
+                 SPAN_BEDROCK,
+                  ttft = field::Empty,
+                   output = field::Empty,
+                    error = field::Empty,
+                     usage = field::Empty,
+                      cost = field::Empty,
+                      input = JsonValue(&input).as_value(),
+                      tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
+                retries_left = retries
+            );
+
             let builder = self.build_request(&input_messages, &system_messages)?;
+            let response = self
+                .execute_inner(builder, span.clone(), tx, tags.clone())
+                .await;
 
-            tx.send(Some(ModelEvent::new(
-                &span,
-                ModelEventType::LlmStart(LLMStartEvent {
-                    provider_name: SPAN_BEDROCK.to_string(),
-                    model_name: self.params.model_id.clone().unwrap_or_default(),
-                    input: format!("{input_messages:?}"),
-                }),
-            )))
-            .await
-            .map_err(|e| GatewayError::CustomError(e.to_string()))?;
-
-            let response = async move {
-                let result = builder.send().await;
-                let _ = result
-                    .as_ref()
-                    .map(|response| Value::String(format!("{response:?}")))
-                    .as_ref()
-                    .map(JsonValue)
-                    .record();
-                let response = result.map_err(|e| ModelError::Bedrock(Box::new(e.into())))?;
-                let span = Span::current();
-
-                span.record("output", format!("{response:?}"));
-                if let Some(ref usage) = response.usage {
-                    span.record(
-                        "usage",
-                        JsonValue(&serde_json::json!({
-                            "input_tokens": usage.input_tokens,
-                            "output_tokens": usage.output_tokens,
-                            "total_tokens": usage.total_tokens,
-                        }))
-                        .as_value(),
-                    );
+            match response {
+                Ok(InnerExecutionResult::Finish(message)) => return Ok(message),
+                Ok(InnerExecutionResult::NextCall(messages)) => {
+                    calls.push(messages);
                 }
-                Ok::<_, GatewayError>(response)
-            }
-            .instrument(span.clone().or_current())
-            .await?;
-
-            match response.stop_reason {
-                StopReason::EndTurn | StopReason::StopSequence => match response.output {
-                    Some(MessageVariant(message)) => {
-                        let usage = response.usage.as_ref().map(|usage| CompletionModelUsage {
-                            input_tokens: usage.input_tokens as u32,
-                            output_tokens: usage.output_tokens as u32,
-                            total_tokens: usage.total_tokens as u32,
-                            ..Default::default()
-                        });
-
-                        let output = match message.content.first() {
-                            Some(ContentBlock::Text(message)) => Some(message.clone()),
-                            _ => None,
-                        };
-
-                        tx.send(Some(ModelEvent::new(
-                            &span,
-                            ModelEventType::LlmStop(LLMFinishEvent {
-                                provider_name: SPAN_BEDROCK.to_string(),
-                                model_name: self
-                                    .params
-                                    .model_id
-                                    .clone()
-                                    .map(|m| m.to_string())
-                                    .unwrap_or_default(),
-                                output,
-                                usage,
-                                finish_reason: ModelFinishReason::Stop,
-                                tool_calls: vec![],
-                                credentials_ident: self.credentials_ident.clone(),
-                            }),
-                        )))
-                        .await
-                        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
-
-                        let message = message.content.first().ok_or(ModelError::CustomError(
-                            "Content Block Not Found".to_string(),
-                        ))?;
-                        match message {
-                            ContentBlock::Text(content) => {
-                                return Ok(ChatCompletionMessage {
-                                    role: "assistant".to_string(),
-                                    content: Some(ChatCompletionContent::Text(content.clone())),
-                                    ..Default::default()
-                                });
-                            }
-                            _ => {
-                                return Err(ModelError::FinishError(
-                            "Content block is not in a text format. Currently only TEXT format supported".into(),
-                        ).into());
-                            }
-                        }
-                    }
-                    _ => {
-                        return Err(ModelError::FinishError("No output provided".into()).into());
-                    }
-                },
-
-                StopReason::ToolUse => {
-                    let tools_span = tracing::info_span!(target: target!(), events::SPAN_TOOLS, label=field::Empty);
-                    tools_span.follows_from(span.id());
-                    if let Some(message_output) = response.output {
-                        match message_output {
-                            ConverseOutput::Message(message) => {
-                                let mut messages = vec![message.clone()];
-                                let mut text = String::new();
-                                let mut tool_uses = vec![];
-
-                                for m in message.content {
-                                    match m {
-                                        ContentBlock::Text(t) => text.push_str(&t),
-                                        ContentBlock::ToolUse(tool_use) => {
-                                            tool_uses.push(tool_use);
-                                        }
-                                        _ => {}
-                                    }
-                                }
-
-                                let content = if text.is_empty() { None } else { Some(text) };
-
-                                let tool = self.tools.get(&tool_uses[0].name).ok_or(
-                                    ModelError::FinishError(format!(
-                                        "Tool {} not found",
-                                        tool_uses[0].name
-                                    )),
-                                )?;
-                                let tool_calls: Vec<ToolCall> = tool_uses
-                                    .iter()
-                                    .enumerate()
-                                    .map(|(index, tool_call)| ToolCall {
-                                        index: Some(index),
-                                        id: tool_call.tool_use_id().to_string(),
-                                        r#type: "function".to_string(),
-                                        function: crate::types::gateway::FunctionCall {
-                                            name: tool_call.name().to_string(),
-                                            arguments: serde_json::to_string(tool_call.input())
-                                                .unwrap_or_default(),
-                                        },
-                                    })
-                                    .collect();
-                                let tool_calls_str = serde_json::to_string(&tool_calls)?;
-                                let tools_span = tracing::info_span!(target: target!(), events::SPAN_TOOLS, tool_calls=tool_calls_str, label=tool_uses.iter().map(|t| t.name.clone()).collect::<Vec<String>>().join(","));
-
-                                tools_span.record(
-                                    "label",
-                                    tool_uses
-                                        .iter()
-                                        .map(|t| t.name.clone())
-                                        .collect::<Vec<String>>()
-                                        .join(","),
-                                );
-                                if tool.stop_at_call() {
-                                    let usage =
-                                        response.usage.as_ref().map(|usage| CompletionModelUsage {
-                                            input_tokens: usage.input_tokens as u32,
-                                            output_tokens: usage.output_tokens as u32,
-                                            total_tokens: usage.total_tokens as u32,
-                                            ..Default::default()
-                                        });
-
-                                    tx.send(
-                                        Some(
-                                            ModelEvent::new(
-                                                &span,
-                                                ModelEventType::LlmStop(
-                                                    LLMFinishEvent {
-                                                        provider_name: SPAN_BEDROCK.to_string(),
-                                                        model_name: self
-                                                            .params
-                                                            .model_id
-                                                            .clone()
-                                                            .map(|m| m.to_string())
-                                                            .unwrap_or_default(),
-                                                        output: content.clone(),
-                                                        usage,
-                                                        finish_reason: ModelFinishReason::ToolCalls,
-                                                        tool_calls: tool_uses
-                                                            .iter()
-                                                            .map(Self::map_tool_call)
-                                                            .collect::<Result<
-                                                                Vec<ModelToolCall>,
-                                                                GatewayError,
-                                                            >>(
-                                                            )?,
-                                                        credentials_ident: self
-                                                            .credentials_ident
-                                                            .clone(),
-                                                    },
-                                                ),
-                                            ),
-                                        ),
-                                    )
-                                    .await
-                                    .map_err(|e| GatewayError::CustomError(e.to_string()))?;
-
-                                    return Ok(ChatCompletionMessage {
-                                        role: "assistant".to_string(),
-                                        tool_calls: Some(tool_calls),
-                                        content: content.map(ChatCompletionContent::Text),
-                                        ..Default::default()
-                                    });
-                                } else {
-                                    let tools_message = Self::handle_tool_calls(
-                                        tool_uses,
-                                        &self.tools,
-                                        tx,
-                                        tags.clone(),
-                                    )
-                                    .instrument(tools_span.clone())
-                                    .await?;
-                                    messages.push(tools_message);
-
-                                    let conversation_messages = [input_messages, messages].concat();
-                                    println!("{conversation_messages:#?}");
-                                    let call_span = tracing::info_span!(target: target!("chat"), SPAN_BEDROCK, output = field::Empty, error = field::Empty, usage = field::Empty);
-                                    call_span.follows_from(tools_span.id());
-                                    bedrock_calls.push((conversation_messages, call_span));
-                                    continue;
-                                }
-                            }
-                            _ => {
-                                return Err(ModelError::FinishError(
-                                    "Tool use doesnt have message".into(),
-                                )
-                                .into());
-                            }
-                        }
-                    } else {
-                        return Err(
-                            ModelError::FinishError("Tool missing content".to_string()).into()
-                        );
+                Err(e) => {
+                    retries -= 1;
+                    span.record("error", e.to_string());
+                    if retries == 0 {
+                        return Err(e);
                     }
                 }
-                x => return Err(Self::handle_stop_reason(x).into()),
             }
         }
         unreachable!();
+    }
+
+    async fn execute_inner(
+        &self,
+        builder: ConverseFluentBuilder,
+        span: Span,
+        tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
+        tags: HashMap<String, String>,
+    ) -> GatewayResult<InnerExecutionResult> {
+        let input_messages = builder.get_messages().clone().unwrap_or_default();
+        tx.send(Some(ModelEvent::new(
+            &span,
+            ModelEventType::LlmStart(LLMStartEvent {
+                provider_name: SPAN_BEDROCK.to_string(),
+                model_name: self.params.model_id.clone().unwrap_or_default(),
+                input: format!("{input_messages:?}"),
+            }),
+        )))
+        .await
+        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+
+        let response = async move {
+            let result = builder.send().await;
+            let _ = result
+                .as_ref()
+                .map(|response| Value::String(format!("{response:?}")))
+                .as_ref()
+                .map(JsonValue)
+                .record();
+            let response = result.map_err(|e| ModelError::Bedrock(Box::new(e.into())))?;
+            let span = Span::current();
+
+            span.record("output", format!("{response:?}"));
+            if let Some(ref usage) = response.usage {
+                span.record(
+                    "usage",
+                    JsonValue(&serde_json::json!({
+                        "input_tokens": usage.input_tokens,
+                        "output_tokens": usage.output_tokens,
+                        "total_tokens": usage.total_tokens,
+                    }))
+                    .as_value(),
+                );
+            }
+            Ok::<_, GatewayError>(response)
+        }
+        .instrument(span.clone().or_current())
+        .await?;
+
+        match response.stop_reason {
+            StopReason::EndTurn | StopReason::StopSequence => match response.output {
+                Some(MessageVariant(message)) => {
+                    let usage = response.usage.as_ref().map(|usage| CompletionModelUsage {
+                        input_tokens: usage.input_tokens as u32,
+                        output_tokens: usage.output_tokens as u32,
+                        total_tokens: usage.total_tokens as u32,
+                        ..Default::default()
+                    });
+
+                    let output = match message.content.first() {
+                        Some(ContentBlock::Text(message)) => Some(message.clone()),
+                        _ => None,
+                    };
+
+                    tx.send(Some(ModelEvent::new(
+                        &span,
+                        ModelEventType::LlmStop(LLMFinishEvent {
+                            provider_name: SPAN_BEDROCK.to_string(),
+                            model_name: self
+                                .params
+                                .model_id
+                                .clone()
+                                .map(|m| m.to_string())
+                                .unwrap_or_default(),
+                            output,
+                            usage,
+                            finish_reason: ModelFinishReason::Stop,
+                            tool_calls: vec![],
+                            credentials_ident: self.credentials_ident.clone(),
+                        }),
+                    )))
+                    .await
+                    .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+
+                    let message = message.content.first().ok_or(ModelError::CustomError(
+                        "Content Block Not Found".to_string(),
+                    ))?;
+                    match message {
+                        ContentBlock::Text(content) => {
+                            Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
+                                role: "assistant".to_string(),
+                                content: Some(ChatCompletionContent::Text(content.clone())),
+                                ..Default::default()
+                            }))
+                        }
+                        _ => {
+                            Err(ModelError::FinishError(
+                        "Content block is not in a text format. Currently only TEXT format supported".into(),
+                    ).into())
+                        }
+                    }
+                }
+                _ => Err(ModelError::FinishError("No output provided".into()).into()),
+            },
+
+            StopReason::ToolUse => {
+                let tools_span =
+                    tracing::info_span!(target: target!(), events::SPAN_TOOLS, label=field::Empty);
+                tools_span.follows_from(span.id());
+                if let Some(message_output) = response.output {
+                    match message_output {
+                        ConverseOutput::Message(message) => {
+                            let mut messages = vec![message.clone()];
+                            let mut text = String::new();
+                            let mut tool_uses = vec![];
+
+                            for m in message.content {
+                                match m {
+                                    ContentBlock::Text(t) => text.push_str(&t),
+                                    ContentBlock::ToolUse(tool_use) => {
+                                        tool_uses.push(tool_use);
+                                    }
+                                    _ => {}
+                                }
+                            }
+
+                            let content = if text.is_empty() { None } else { Some(text) };
+
+                            let tool = self.tools.get(&tool_uses[0].name).ok_or(
+                                ModelError::FinishError(format!(
+                                    "Tool {} not found",
+                                    tool_uses[0].name
+                                )),
+                            )?;
+                            let tool_calls: Vec<ToolCall> = tool_uses
+                                .iter()
+                                .enumerate()
+                                .map(|(index, tool_call)| ToolCall {
+                                    index: Some(index),
+                                    id: tool_call.tool_use_id().to_string(),
+                                    r#type: "function".to_string(),
+                                    function: crate::types::gateway::FunctionCall {
+                                        name: tool_call.name().to_string(),
+                                        arguments: serde_json::to_string(tool_call.input())
+                                            .unwrap_or_default(),
+                                    },
+                                })
+                                .collect();
+                            let tool_calls_str = serde_json::to_string(&tool_calls)?;
+                            let tools_span = tracing::info_span!(target: target!(), events::SPAN_TOOLS, tool_calls=tool_calls_str, label=tool_uses.iter().map(|t| t.name.clone()).collect::<Vec<String>>().join(","));
+
+                            tools_span.record(
+                                "label",
+                                tool_uses
+                                    .iter()
+                                    .map(|t| t.name.clone())
+                                    .collect::<Vec<String>>()
+                                    .join(","),
+                            );
+                            if tool.stop_at_call() {
+                                let usage =
+                                    response.usage.as_ref().map(|usage| CompletionModelUsage {
+                                        input_tokens: usage.input_tokens as u32,
+                                        output_tokens: usage.output_tokens as u32,
+                                        total_tokens: usage.total_tokens as u32,
+                                        ..Default::default()
+                                    });
+
+                                tx.send(Some(ModelEvent::new(
+                                    &span,
+                                    ModelEventType::LlmStop(LLMFinishEvent {
+                                        provider_name: SPAN_BEDROCK.to_string(),
+                                        model_name: self
+                                            .params
+                                            .model_id
+                                            .clone()
+                                            .map(|m| m.to_string())
+                                            .unwrap_or_default(),
+                                        output: content.clone(),
+                                        usage,
+                                        finish_reason: ModelFinishReason::ToolCalls,
+                                        tool_calls: tool_uses
+                                            .iter()
+                                            .map(Self::map_tool_call)
+                                            .collect::<Result<Vec<ModelToolCall>, GatewayError>>(
+                                        )?,
+                                        credentials_ident: self.credentials_ident.clone(),
+                                    }),
+                                )))
+                                .await
+                                .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+
+                                Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
+                                    role: "assistant".to_string(),
+                                    tool_calls: Some(tool_calls),
+                                    content: content.map(ChatCompletionContent::Text),
+                                    ..Default::default()
+                                }))
+                            } else {
+                                let tools_message = Self::handle_tool_calls(
+                                    tool_uses,
+                                    &self.tools,
+                                    tx,
+                                    tags.clone(),
+                                )
+                                .instrument(tools_span.clone())
+                                .await?;
+                                messages.push(tools_message);
+
+                                let conversation_messages = [input_messages, messages].concat();
+
+                                Ok(InnerExecutionResult::NextCall(conversation_messages))
+                            }
+                        }
+                        _ => Err(
+                            ModelError::FinishError("Tool use doesnt have message".into()).into(),
+                        ),
+                    }
+                } else {
+                    Err(ModelError::FinishError("Tool missing content".to_string()).into())
+                }
+            }
+            x => Err(Self::handle_stop_reason(x).into()),
+        }
     }
 
     async fn process_stream(
@@ -793,27 +816,36 @@ impl BedrockModel {
         })
     }
 
-    pub(crate) async fn execute_stream(
+    async fn execute_stream(
         &self,
         input_messages: Vec<Message>,
         system_messages: Vec<SystemContentBlock>,
-        tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
-        call_span: Span,
+        tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
     ) -> GatewayResult<()> {
-        let mut bedrock_calls = vec![(input_messages, call_span)];
+        let mut calls = vec![input_messages];
 
         let mut retries = self
             .execution_options
             .max_retries
             .unwrap_or(DEFAULT_MAX_RETRIES);
-        while let Some((input_messages, span)) = bedrock_calls.pop() {
-            if retries == 0 {
-                return Err(ModelError::MaxRetriesReached.into());
-            } else {
-                retries -= 1;
-            }
-            let mut conversational_messages = input_messages.clone();
+        while let Some(input_messages) = calls.pop() {
+            let input = serde_json::json!({
+                "initial_messages": format!("{input_messages:?}"),
+                "system_messages": format!("{system_messages:?}")
+            });
+            let span = tracing::info_span!(
+                target: target!("chat"),
+                 SPAN_BEDROCK,
+                  ttft = field::Empty,
+                   output = field::Empty,
+                    error = field::Empty,
+                     usage = field::Empty,
+                      cost = field::Empty,
+                      input = JsonValue(&input).as_value(),
+                      tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
+                retries_left = retries
+            );
 
             let builder = self
                 .client
@@ -823,107 +855,139 @@ impl BedrockModel {
                 .set_tool_config(self.get_tools_config()?)
                 .set_messages(Some(input_messages.clone()));
 
-            tx.send(Some(ModelEvent::new(
-                &span,
-                ModelEventType::LlmStart(LLMStartEvent {
-                    provider_name: SPAN_BEDROCK.to_string(),
-                    model_name: self.params.model_id.clone().unwrap_or_default(),
-                    input: format!("{conversational_messages:?}"),
-                }),
-            )))
-            .await
-            .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+            let response = self
+                .execute_stream_inner(builder, span.clone(), tx, tags.clone())
+                .await;
 
-            let response = builder.send().await.map_err(map_converse_stream_error)?;
-            let (stop_reason, msg, usage) = self
-                .process_stream(response, &tx)
-                .instrument(span.clone())
-                .await?;
-            let trace_finish_reason = Self::map_finish_reason(&stop_reason);
-            let usage = Self::map_usage(usage.as_ref());
-            if let Some(usage) = &usage {
-                span.record(
-                    "usage",
-                    JsonValue(&serde_json::json!({
-                        "input_tokens": usage.input_tokens,
-                        "output_tokens": usage.output_tokens,
-                    }))
-                    .as_value(),
-                );
-            }
-            let tool_calls = msg
-                .as_ref()
-                .map(|(_, tool_uses)| {
-                    tool_uses
-                        .iter()
-                        .map(Self::map_tool_call)
-                        .collect::<GatewayResult<Vec<_>>>()
-                })
-                .unwrap_or(Ok(vec![]))?;
-            tx.send(Some(ModelEvent::new(
-                &span,
-                ModelEventType::LlmStop(LLMFinishEvent {
-                    provider_name: SPAN_BEDROCK.to_string(),
-                    model_name: self.params.model_id.clone().unwrap_or_default(),
-                    output: None,
-                    usage,
-                    finish_reason: trace_finish_reason.clone(),
-                    tool_calls: tool_calls.clone(),
-                    credentials_ident: self.credentials_ident.clone(),
-                }),
-            )))
-            .await
-            .map_err(|e| GatewayError::CustomError(e.to_string()))?;
-
-            let response = serde_json::json!({
-                "stop_reason": format!("{stop_reason:?}"),
-                "msg": format!("{msg:?}")
-            });
-            span.record("output", response.to_string());
-            match stop_reason {
-                StopReason::ToolUse => {
-                    let Some((role, tool_uses)) = msg else {
-                        return Err(
-                            ModelError::CustomError("Empty tooluse block".to_string()).into()
-                        );
-                    };
-
-                    let tool_calls_str = serde_json::to_string(&tool_calls)?;
-                    let tools_span = tracing::info_span!(target: target!(), events::SPAN_TOOLS, tool_calls=tool_calls_str, label=tool_uses.iter().map(|t| t.name.clone()).collect::<Vec<String>>().join(","));
-
-                    let tool = self.tools.get(&tool_calls[0].tool_name).unwrap();
-                    if tool.stop_at_call() {
-                        return Ok(());
-                    }
-
-                    let message = Message::builder()
-                        .role(role.clone())
-                        .set_content(Some(
-                            tool_uses
-                                .iter()
-                                .cloned()
-                                .map(ContentBlock::ToolUse)
-                                .collect::<Vec<_>>(),
-                        ))
-                        .build()
-                        .map_err(build_err)?;
-                    conversational_messages.push(message);
-                    let result_tool_calls =
-                        Self::handle_tool_calls(tool_uses, &self.tools, &tx, tags.clone())
-                            .instrument(tools_span.clone())
-                            .await?;
-                    conversational_messages.push(result_tool_calls);
-                    let call_span = tracing::info_span!(target: target!("chat"), SPAN_BEDROCK, ttft = field::Empty, output = field::Empty, error = field::Empty, usage = field::Empty, cost = field::Empty);
-                    call_span.follows_from(tools_span.id());
-                    bedrock_calls.push((conversational_messages, call_span));
-                    continue;
+            match response {
+                Ok(InnerExecutionResult::Finish(_)) => return Ok(()),
+                Ok(InnerExecutionResult::NextCall(messages)) => {
+                    calls.push(messages);
                 }
-                StopReason::EndTurn | StopReason::StopSequence => return Ok(()),
-                other => return Err(Self::handle_stop_reason(other).into()),
+                Err(e) => {
+                    retries -= 1;
+                    span.record("error", e.to_string());
+                    if retries == 0 {
+                        return Err(e);
+                    }
+                }
             }
         }
 
         Ok(())
+    }
+
+    async fn execute_stream_inner(
+        &self,
+        builder: ConverseStreamFluentBuilder,
+        span: Span,
+        tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
+        tags: HashMap<String, String>,
+    ) -> GatewayResult<InnerExecutionResult> {
+        let input_messages = builder.get_messages().clone().unwrap_or_default();
+
+        tx.send(Some(ModelEvent::new(
+            &span,
+            ModelEventType::LlmStart(LLMStartEvent {
+                provider_name: SPAN_BEDROCK.to_string(),
+                model_name: self.params.model_id.clone().unwrap_or_default(),
+                input: format!("{input_messages:?}"),
+            }),
+        )))
+        .await
+        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+
+        let response = builder.send().await.map_err(map_converse_stream_error)?;
+        let (stop_reason, msg, usage) = self
+            .process_stream(response, tx)
+            .instrument(span.clone())
+            .await?;
+        let trace_finish_reason = Self::map_finish_reason(&stop_reason);
+        let usage = Self::map_usage(usage.as_ref());
+        if let Some(usage) = &usage {
+            span.record(
+                "usage",
+                JsonValue(&serde_json::json!({
+                    "input_tokens": usage.input_tokens,
+                    "output_tokens": usage.output_tokens,
+                }))
+                .as_value(),
+            );
+        }
+        let tool_calls = msg
+            .as_ref()
+            .map(|(_, tool_uses)| {
+                tool_uses
+                    .iter()
+                    .map(Self::map_tool_call)
+                    .collect::<GatewayResult<Vec<_>>>()
+            })
+            .unwrap_or(Ok(vec![]))?;
+        tx.send(Some(ModelEvent::new(
+            &span,
+            ModelEventType::LlmStop(LLMFinishEvent {
+                provider_name: SPAN_BEDROCK.to_string(),
+                model_name: self.params.model_id.clone().unwrap_or_default(),
+                output: None,
+                usage,
+                finish_reason: trace_finish_reason.clone(),
+                tool_calls: tool_calls.clone(),
+                credentials_ident: self.credentials_ident.clone(),
+            }),
+        )))
+        .await
+        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+
+        let response = serde_json::json!({
+            "stop_reason": format!("{stop_reason:?}"),
+            "msg": format!("{msg:?}")
+        });
+        span.record("output", response.to_string());
+        match stop_reason {
+            StopReason::ToolUse => {
+                let Some((role, tool_uses)) = msg else {
+                    return Err(ModelError::CustomError("Empty tooluse block".to_string()).into());
+                };
+
+                let tool_calls_str = serde_json::to_string(&tool_calls)?;
+                let tools_span = tracing::info_span!(target: target!(), events::SPAN_TOOLS, tool_calls=tool_calls_str, label=tool_uses.iter().map(|t| t.name.clone()).collect::<Vec<String>>().join(","));
+
+                let tool = self.tools.get(&tool_calls[0].tool_name).unwrap();
+                if tool.stop_at_call() {
+                    return Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
+                        ..Default::default()
+                    }));
+                }
+
+                let mut conversational_messages = input_messages.clone();
+
+                let message = Message::builder()
+                    .role(role.clone())
+                    .set_content(Some(
+                        tool_uses
+                            .iter()
+                            .cloned()
+                            .map(ContentBlock::ToolUse)
+                            .collect::<Vec<_>>(),
+                    ))
+                    .build()
+                    .map_err(build_err)?;
+                conversational_messages.push(message);
+                let result_tool_calls =
+                    Self::handle_tool_calls(tool_uses, &self.tools, tx, tags.clone())
+                        .instrument(tools_span.clone())
+                        .await?;
+                conversational_messages.push(result_tool_calls);
+
+                Ok(InnerExecutionResult::NextCall(conversational_messages))
+            }
+            StopReason::EndTurn | StopReason::StopSequence => {
+                Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
+                    ..Default::default()
+                }))
+            }
+            other => Err(Self::handle_stop_reason(other).into()),
+        }
     }
 
     pub fn handle_stop_reason(reason: StopReason) -> ModelError {
@@ -950,21 +1014,8 @@ impl ModelInstance for BedrockModel {
     ) -> GatewayResult<ChatCompletionMessage> {
         let (initial_messages, system_messages) =
             self.construct_messages(input_vars.clone(), previous_messages)?;
-        let input = serde_json::json!({
-            "initial_messages": format!("{initial_messages:?}"),
-            "system_messages": format!("{system_messages:?}")
-        })
-        .to_string();
-        let call_span = tracing::info_span!(target: target!("chat"), SPAN_BEDROCK,  input = input, ttft = field::Empty, output = field::Empty, error = field::Empty, usage = field::Empty, tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value());
-        self.execute(
-            initial_messages.clone(),
-            system_messages.clone(),
-            call_span.clone(),
-            &tx,
-            tags,
-        )
-        .instrument(call_span.clone())
-        .await
+        self.execute(initial_messages.clone(), system_messages.clone(), &tx, tags)
+            .await
     }
 
     async fn stream(
@@ -976,22 +1027,9 @@ impl ModelInstance for BedrockModel {
     ) -> GatewayResult<()> {
         let (initial_messages, system_messages) =
             self.construct_messages(input_vars.clone(), previous_messages)?;
-        let input = serde_json::json!({
-            "initial_messages": format!("{initial_messages:?}"),
-            "system_messages": format!("{system_messages:?}")
-        })
-        .to_string();
 
-        let call_span = tracing::info_span!(target: target!("chat"), SPAN_BEDROCK,  input = input, ttft = field::Empty, output = field::Empty, error = field::Empty, usage = field::Empty, cost=field::Empty, tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value());
-        self.execute_stream(
-            initial_messages,
-            system_messages,
-            tx,
-            call_span.clone(),
-            tags,
-        )
-        .instrument(call_span.clone())
-        .await
+        self.execute_stream(initial_messages, system_messages, &tx, tags)
+            .await
     }
 }
 

@@ -87,6 +87,9 @@ pub struct Extra {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub variables: Option<HashMap<String, serde_json::Value>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_retries: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

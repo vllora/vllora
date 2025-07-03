@@ -8,7 +8,7 @@ use crate::{
         credentials::{ApiKeyCredentials, Credentials},
         engine::{
             AnthropicModelParams, BedrockModelParams, ClaudeModel, CompletionEngineParams,
-            GeminiModelParams, ImageGenerationEngineParams, OpenAiModelParams,
+            ExecutionOptions, GeminiModelParams, ImageGenerationEngineParams, OpenAiModelParams,
         },
         gateway::{ChatCompletionRequest, CreateImageRequest, ProviderSpecificRequest},
         provider::{BedrockProvider, InferenceModelProvider},
@@ -25,6 +25,7 @@ impl Provider {
         request: &ChatCompletionRequest,
         credentials: Option<Credentials>,
         provider_specific: Option<&ProviderSpecificRequest>,
+        execution_options: Option<ExecutionOptions>,
     ) -> Result<CompletionEngineParams, GatewayError> {
         match model.inference_provider.provider {
             InferenceModelProvider::OpenAI | InferenceModelProvider::Proxy(_) => {
@@ -58,14 +59,14 @@ impl Provider {
                 if model.inference_provider.provider == InferenceModelProvider::OpenAI {
                     Ok(CompletionEngineParams::OpenAi {
                         params,
-                        execution_options: Default::default(),
+                        execution_options: execution_options.unwrap_or_default(),
                         credentials: api_key_credentials,
                         endpoint: custom_endpoint,
                     })
                 } else {
                     Ok(CompletionEngineParams::Proxy {
                         params,
-                        execution_options: Default::default(),
+                        execution_options: execution_options.unwrap_or_default(),
                         credentials: api_key_credentials,
                     })
                 }
@@ -83,7 +84,7 @@ impl Provider {
                 };
                 Ok(CompletionEngineParams::Bedrock {
                     credentials: aws_creds,
-                    execution_options: Default::default(),
+                    execution_options: execution_options.unwrap_or_default(),
                     params: BedrockModelParams {
                         model_id: Some(model.inference_provider.model_name.clone()),
                         max_tokens: request.max_tokens.map(|x| x as i32),
@@ -104,7 +105,7 @@ impl Provider {
                 let model = serde_json::from_str::<ClaudeModel>(&format!("\"{model_name}\""))?;
                 Ok(CompletionEngineParams::Anthropic {
                     credentials: api_key_credentials,
-                    execution_options: Default::default(),
+                    execution_options: execution_options.unwrap_or_default(),
                     params: AnthropicModelParams {
                         model: Some(model.clone()),
                         max_tokens: match request.max_tokens {
@@ -144,7 +145,7 @@ impl Provider {
                 });
                 Ok(CompletionEngineParams::Gemini {
                     credentials: api_key_credentials,
-                    execution_options: Default::default(),
+                    execution_options: execution_options.unwrap_or_default(),
                     params: GeminiModelParams {
                         model: Some(model.inference_provider.model_name.clone()),
                         max_output_tokens: request.max_tokens.map(|x| x as i32),
