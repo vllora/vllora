@@ -29,7 +29,7 @@ pub struct Tools {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Content {
     pub role: Role,
-    pub parts: Vec<Part>,
+    pub parts: Vec<PartWithThought>,
 }
 
 impl From<String> for Part {
@@ -37,17 +37,24 @@ impl From<String> for Part {
         Part::Text(val)
     }
 }
+
 impl Content {
     pub fn user(part: impl Into<Part>) -> Content {
         Content {
             role: Role::User,
-            parts: vec![part.into()],
+            parts: vec![PartWithThought {
+                part: part.into(),
+                thought_signature: None,
+            }],
         }
     }
     pub fn model(part: impl Into<Part>) -> Content {
         Content {
             role: Role::Model,
-            parts: vec![part.into()],
+            parts: vec![PartWithThought {
+                part: part.into(),
+                thought_signature: None,
+            }],
         }
     }
 }
@@ -78,6 +85,23 @@ pub struct GenerationConfig {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct PartWithThought {
+    #[serde(flatten)]
+    pub part: Part,
+    pub thought_signature: Option<String>,
+}
+
+impl From<Part> for PartWithThought {
+    fn from(part: Part) -> Self {
+        Self {
+            part,
+            thought_signature: None,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub enum Part {
     Text(String),
     InlineData {
@@ -98,7 +122,7 @@ pub enum Part {
     },
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PartFunctionResponse {
     pub fields: HashMap<String, Value>,
@@ -126,7 +150,7 @@ pub struct SafetyRating {
     pub probability: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum FinishReason {
     FinishReasonUnspecified, // The finish reason is unspecified.

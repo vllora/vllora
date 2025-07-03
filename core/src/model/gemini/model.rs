@@ -15,7 +15,9 @@ use crate::events::JsonValue;
 use crate::events::SPAN_GEMINI;
 use crate::events::{self, RecordResult};
 use crate::model::error::AuthorizationError;
-use crate::model::gemini::types::{FunctionDeclaration, GenerationConfig, Role, Tools};
+use crate::model::gemini::types::{
+    FunctionDeclaration, GenerationConfig, PartWithThought, Role, Tools,
+};
 use crate::model::handler::handle_tool_call;
 use crate::model::types::LLMFirstToken;
 use crate::model::{async_trait, CredentialsIdent, DEFAULT_MAX_RETRIES};
@@ -110,7 +112,7 @@ impl GeminiModel {
         tools: &HashMap<String, Box<dyn Tool>>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
-    ) -> Vec<Part> {
+    ) -> Vec<PartWithThought> {
         futures::future::join_all(function_calls.map(|(name, args)| {
             let tags = tags.clone();
             async move {
@@ -121,7 +123,7 @@ impl GeminiModel {
                 let content = result
                     .map(|r| r.to_string())
                     .unwrap_or_else(|err| err.to_string());
-                Part::Text(content)
+                Part::Text(content).into()
             }
         }))
         .await
@@ -228,7 +230,7 @@ impl GeminiModel {
                         }
                         for candidate in res.candidates {
                             for part in candidate.content.parts {
-                                match part {
+                                match part.part {
                                     Part::Text(text) => {
                                         let _ = tx
                                             .send(Some(ModelEvent::new(
@@ -323,7 +325,7 @@ impl GeminiModel {
                 finish_reason = Some(reason);
             }
             for part in candidate.content.parts {
-                match part {
+                match part.part {
                     Part::Text(t) => {
                         text.push_str(&t);
                     }
@@ -346,7 +348,7 @@ impl GeminiModel {
             for (name, args) in calls.clone() {
                 call_messages.push(Content {
                     role: Role::Model,
-                    parts: vec![Part::FunctionCall { name, args }],
+                    parts: vec![Part::FunctionCall { name, args }.into()],
                 });
             }
 
@@ -676,7 +678,8 @@ impl GeminiModel {
                     parts: vec![Part::FunctionCall {
                         name: name.clone(),
                         args: args.clone(),
-                    }],
+                    }
+                    .into()],
                 });
             }
             let tool_calls_str = serde_json::to_string(&tools)?;
@@ -800,9 +803,10 @@ impl GeminiModel {
                                         Ok(Part::FunctionCall {
                                             name: c.id.clone(),
                                             args: serde_json::from_str(args)?,
-                                        })
+                                        }
+                                        .into())
                                     })
-                                    .collect::<Result<Vec<Part>, GatewayError>>()?,
+                                    .collect::<Result<Vec<PartWithThought>, GatewayError>>()?,
                             })
                         } else {
                             match &m.content {
@@ -818,17 +822,20 @@ impl GeminiModel {
                         tool_results_remaining -= 1;
                         let content =
                             serde_json::to_value(m.content.clone().unwrap_or_default()).unwrap();
-                        tool_calls_collected.push(Part::FunctionResponse {
-                            name: m.tool_call_id.clone().unwrap_or_default(),
-                            response: Some(PartFunctionResponse {
-                                fields: HashMap::from([(
-                                    "content
-                                "
-                                    .to_string(),
-                                    content,
-                                )]),
-                            }),
-                        });
+                        tool_calls_collected.push(
+                            Part::FunctionResponse {
+                                name: m.tool_call_id.clone().unwrap_or_default(),
+                                response: Some(PartFunctionResponse {
+                                    fields: HashMap::from([(
+                                        "content
+                                        "
+                                        .to_string(),
+                                        content,
+                                    )]),
+                                }),
+                            }
+                            .into(),
+                        );
                         if tool_results_remaining == 0 {
                             Some(Content {
                                 role: Role::User,
@@ -975,7 +982,7 @@ fn construct_user_message(m: &InnerMessage) -> Content {
                         }
                     }
                 };
-                parts.push(msg)
+                parts.push(msg.into())
             }
             Content {
                 role: Role::User,

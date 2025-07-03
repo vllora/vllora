@@ -178,3 +178,72 @@ impl Client {
         ))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::model::gemini::types::FinishReason;
+    use crate::model::gemini::types::GenerateContentResponse;
+    use crate::model::gemini::types::Part;
+    use crate::model::HashMap;
+    use serde_json;
+
+    #[test]
+    fn validate_deseraliazation() {
+        let response = r#"
+        {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "functionCall": {
+                                    "name": "poi_agent",
+                                    "args": {
+                                        "request": "London"
+                                    }
+                                },
+                                "thoughtSignature": "Cs4IAVSoXO4XI+CXTYl8EHlHyH3RRCHvvT3J2AzGUT9AjW70Y4bxah8GfUasz/CPwYK2FsJic4b6MOtQO6ny5cFSwyyDG+8g3aG6w/H8fQyRa8dWIoQnwdXwHGPxkVowZgA5zzQHfNYst4+bxuAztERyiENFAOkZaryvu3l18IRiuANt8DbBtaw/o0Pj5uPiuOvHjaKmCWuis1dT0aZD+mSdblbevOoXlACIQl0TxjkMLl7V9Ub6T3vwf/drrw6NbCZyoOTJqWRPqdpcHyl+jSzTdUzDKZvBNBMZ7Z57u9Bk81zRqBzeJKMm/LveD0QoX4kwFUi/xdeKbIiArJQ+V4CxDeB3fEWoO7fU5+iQLwM45+l7KXW1lcO95myHXxHJlI26/xWUc6+sxRpaIZ26VXNX5bpCtRP6QQFcQv63w00h0VwSWMfsFc/RS0HCq6l+YiJPRkeCajk6WI5WKquIRxX7/atYk/ZD3DnhJql+iCoCQA5h22PgOqrx7q7jEt14oqx98azegFKryTfhXVWVjh9diCVp0XBNTteBXAhAOd5kfByUvJhb/keArZ1a6Ht/wlb7dzWvyD3Xj3iSj3RhBZ3waUC+pLRMq2pyU/9iHflYScShK2rjSUOj55JBS4ep0rDG+OaN+AXQYqwBHyodMynbOGQbZvrICCy24fJT72QUAkRPWB7YatNhtk3X+6lQGeZTODVvlH/j/b8fS64Q2hVh7jk6r96AnGePo6dFAbF4npyFgCplVum6XFC0DxzFRt1DhyJlIiun1URYxPtccoXYJeciGMPdzz0yc73KeYtRUPG0cIS8Hf0jXndg2X66T8tm3QnRPgK2MGYbMQiT2Em+Ndf3J/VaKhI9ERcfC03y6wExFtcHH50TO5iz/CthEsk2GAl3Kh3RxjdX4UBXWuzGdSAN8EPROW4sxtFPLeW8pQ0UFDAKSsvGz3Wxj9Bs/15GefEHzIZafCK+0eT9wVcOGy+BtReHZwzHh2ynmaagKAkt4coEFGfnqqf7np+7N4R/mWcDFeLbGNXbevJCoB0irgCjz5P6hegy55sb5djt6Uxl6IEIlYDESNclXOicoUy5RedGqg29wd76+tVrfMlUHDNdfbpVUX8z/Goeizx9sQwpi1woLErpxwOx29t97s8dP2fwRQf/Ec0UkTYMHqx4Cp/PIxD8UvKveem3hnoM7jKNASPXrzNr6DeIwojWBHOLXnwb9thgxICdtZzkuBCvXGskr70cSnp1fn8650FdOi0IoPOPliPC0gx8CGBuk0sN0CqO/Y/I6tWw5RKS+32vPkXlF9ENba1aOHe5bM8RQPzikvAKCt/94LQ4sr5crYXMX7JwrjFzMAt0oDOxGFvkUoQstmBttAJ68ot5x3Cc34ze08AAeWkseppfJUD5iPkNiThUbOwPduiHUY0ayhi/8aJvpC4fDdEym81O+SyjhrG8v5X7TIQ0XaI/Sfs4Pg=="
+                            }
+                        ],
+                        "role": "model"
+                    },
+                    "finishReason": "STOP",
+                    "index": 0
+                }
+            ],
+            "usageMetadata": {
+                "promptTokenCount": 1876,
+                "candidatesTokenCount": 15,
+                "totalTokenCount": 2146,
+                "promptTokensDetails": [
+                    {
+                        "modality": "TEXT",
+                        "tokenCount": 1876
+                    }
+                ],
+                "thoughtsTokenCount": 255
+            },
+            "modelVersion": "models/gemini-2.5-pro",
+            "responseId": "gB5maLaOCtqajrEPuYf66A4"
+        }"#;
+
+        let r = serde_json::from_str::<GenerateContentResponse>(response).unwrap();
+
+        assert_eq!(r.candidates.len(), 1);
+        assert_eq!(r.candidates[0].content.parts.len(), 1);
+        assert_eq!(
+            r.candidates[0].content.parts[0].part,
+            Part::FunctionCall {
+                name: "poi_agent".to_string(),
+                args: HashMap::from([(
+                    "request".to_string(),
+                    serde_json::Value::String("London".to_string())
+                )]),
+            }
+        );
+        assert_eq!(
+            r.candidates[0].finish_reason.as_ref().unwrap().clone(),
+            FinishReason::Stop
+        );
+    }
+}

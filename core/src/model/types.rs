@@ -16,15 +16,12 @@ pub enum StreamEvent {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CustomEvent {
     value: serde_json::Value,
-    name: String
+    name: String,
 }
 
 impl CustomEvent {
     pub fn new(name: String, value: serde_json::Value) -> Self {
-        Self {
-            value,
-            name
-        }
+        Self { value, name }
     }
 
     pub fn name(&self) -> String {
