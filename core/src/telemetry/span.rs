@@ -2,10 +2,10 @@
 macro_rules! create_model_span {
     // Variant with span name, tags, level and custom fields
     ($name:expr, $target:expr, $tags:expr, $retries_left:expr, $($field_name:ident = $field_value:expr),* $(,)?) => {{
-        let name = $name; // Capture the name expression
+        static NAME: &str = $name; // Capture the name expression
         tracing::info_span!(
             target: $target,
-            "{}", name, // Use string interpolation for the span name
+            NAME, // Use string interpolation for the span name
             tags = JsonValue(&serde_json::to_value($tags.clone()).unwrap_or_default()).as_value(),
             retries_left = $retries_left,
             request = field::Empty,
