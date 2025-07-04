@@ -1,5 +1,6 @@
 #[cfg(feature = "database")]
 pub mod database;
+pub mod span;
 
 use crate::types::GatewayTenant;
 use std::collections::HashMap;

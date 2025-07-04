@@ -28,7 +28,7 @@ use crate::types::gateway::{
 };
 use crate::types::message::{MessageType, PromptMessage};
 use crate::types::threads::{AudioFormat, InnerMessage, Message, MessageContentPartOptions};
-use crate::GatewayResult;
+use crate::{create_model_span, GatewayResult};
 use async_openai::types::ResponseFormat;
 use futures::Stream;
 use futures::StreamExt;
@@ -515,18 +515,7 @@ impl GeminiModel {
             .max_retries
             .unwrap_or(DEFAULT_MAX_RETRIES);
         while let Some(call) = gemini_calls.pop() {
-            let span = tracing::info_span!(
-                target: target!("chat"),
-                SPAN_GEMINI,
-                input = field::Empty,
-                output = field::Empty,
-                error = field::Empty,
-                usage = field::Empty,
-                ttft = field::Empty,
-                tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
-                retries_left = retries_left,
-                request = field::Empty,
-            );
+            let span = create_model_span!(SPAN_GEMINI, target!("chat"), tags, retries_left);
 
             let request = self.build_request(call.clone())?;
 
@@ -741,18 +730,7 @@ impl GeminiModel {
             .max_retries
             .unwrap_or(DEFAULT_MAX_RETRIES);
         while let Some(call) = gemini_calls.pop() {
-            let span = tracing::info_span!(
-                target: target!("chat"),
-                SPAN_GEMINI,
-                input = field::Empty,
-                output = field::Empty,
-                error = field::Empty,
-                usage = field::Empty,
-                ttft = field::Empty,
-                tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
-                retries_left = retries_left,
-                request = field::Empty,
-            );
+            let span = create_model_span!(SPAN_GEMINI, target!("chat"), tags, retries_left);
 
             let request = self.build_request(call.clone())?;
 

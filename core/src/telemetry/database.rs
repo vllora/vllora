@@ -1,5 +1,5 @@
 use crate::database::DatabaseTransport;
-use crate::otel::SpanWriterTransport;
+use crate::telemetry::SpanWriterTransport;
 use crate::GatewayError;
 use crate::GatewayResult;
 use serde_json::Value;

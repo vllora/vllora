@@ -4,7 +4,7 @@ use crate::model::types::{ModelEvent, ModelEventType};
 use crate::model::ModelInstance;
 use crate::types::gateway::ChatCompletionMessage;
 use crate::types::threads::Message;
-use crate::GatewayResult;
+use crate::{create_model_span, GatewayResult};
 use async_trait::async_trait;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -101,17 +101,7 @@ impl ModelInstance for CachedModel {
         _previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
     ) -> GatewayResult<()> {
-        let span = tracing::info_span!(
-            target: target!("chat"),
-            SPAN_CACHE,
-            cache_state = "HIT",
-            output = field::Empty,
-            error = field::Empty,
-            usage = field::Empty,
-            ttft = field::Empty,
-            tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
-            request = field::Empty
-        );
+        let span = create_model_span!(SPAN_CACHE, target!("chat"), tags, 0, cache_state = "HIT");
 
         self.inner_stream(tx).instrument(span).await
     }
@@ -123,17 +113,7 @@ impl ModelInstance for CachedModel {
         _previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
     ) -> GatewayResult<ChatCompletionMessage> {
-        let span = tracing::info_span!(
-            target: target!("chat"),
-            SPAN_CACHE,
-            cache_state = "HIT",
-            output = field::Empty,
-            error = field::Empty,
-            usage = field::Empty,
-            ttft = field::Empty,
-            tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
-            request = field::Empty
-        );
+        let span = create_model_span!(SPAN_CACHE, target!("chat"), tags, 0, cache_state = "HIT");
 
         self.invoke_inner(tx).instrument(span).await
     }

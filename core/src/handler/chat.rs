@@ -23,7 +23,7 @@ use tracing_futures::Instrument;
 
 use crate::handler::AvailableModels;
 use crate::handler::CallbackHandlerFn;
-use crate::otel::TraceMap;
+use crate::telemetry::TraceMap;
 use crate::GatewayApiError;
 
 use super::can_execute_llm_for_request;
