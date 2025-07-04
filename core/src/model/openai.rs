@@ -18,7 +18,7 @@ use crate::types::gateway::CompletionModelUsage;
 use crate::types::gateway::{ChatCompletionContent, ChatCompletionMessage, ToolCall};
 use crate::types::message::{MessageType, PromptMessage};
 use crate::types::threads::{InnerMessage, Message};
-use crate::GatewayResult;
+use crate::{create_model_span, GatewayResult};
 use async_openai::config::Config;
 use async_openai::config::{AzureConfig, OpenAIConfig};
 use async_openai::error::OpenAIError;
@@ -653,17 +653,12 @@ impl<C: Config> OpenAIModel<C> {
             .unwrap_or(DEFAULT_MAX_RETRIES);
         while let Some(messages) = openai_calls.pop() {
             let input = serde_json::to_string(&messages)?;
-            let span = tracing::info_span!(
-                target: target!("chat"),
+            let span = create_model_span!(
                 SPAN_OPENAI,
-                input = input,
-                output = field::Empty,
-                error = field::Empty,
-                usage = field::Empty,
-                ttft = field::Empty,
-                tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
-                retries_left = retries_left,
-                request = field::Empty
+                target!("chat"),
+                tags,
+                retries_left,
+                input = input
             );
 
             match self
@@ -843,17 +838,12 @@ impl<C: Config> OpenAIModel<C> {
             .unwrap_or(DEFAULT_MAX_RETRIES);
         while let Some(input_messages) = openai_calls.pop() {
             let input = serde_json::to_string(&input_messages)?;
-            let span = tracing::info_span!(
-                target: target!("chat"),
+            let span = create_model_span!(
                 SPAN_OPENAI,
-                input = input,
-                output = field::Empty,
-                error = field::Empty,
-                usage = field::Empty,
-                ttft = field::Empty,
-                tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
-                retries_left = retries_left,
-                request = field::Empty
+                target!("chat"),
+                tags,
+                retries_left,
+                input = input
             );
 
             let first_response_received = &mut false;

@@ -1,4 +1,4 @@
-use langdb_core::{otel::SpanWriterTransport, GatewayResult};
+use langdb_core::{telemetry::SpanWriterTransport, GatewayResult};
 use serde_json::Value;
 
 pub struct DummyTraceWritterTransport {}

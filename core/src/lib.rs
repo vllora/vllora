@@ -9,10 +9,10 @@ pub mod http;
 pub mod llm_gateway;
 pub mod model;
 pub mod models;
-pub mod otel;
 pub mod pricing;
 pub mod responses;
 pub mod routing;
+pub mod telemetry;
 pub mod types;
 
 use crate::error::GatewayError;

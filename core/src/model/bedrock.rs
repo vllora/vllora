@@ -21,7 +21,7 @@ use crate::types::message::{MessageType, PromptMessage};
 use crate::types::provider::BedrockProvider;
 use crate::types::threads::InnerMessage;
 use crate::types::threads::Message as LMessage;
-use crate::GatewayResult;
+use crate::{create_model_span, GatewayResult};
 use async_trait::async_trait;
 use aws_sdk_bedrockruntime::operation::converse::builders::ConverseFluentBuilder;
 use aws_sdk_bedrockruntime::operation::converse_stream::builders::ConverseStreamFluentBuilder;
@@ -432,18 +432,13 @@ impl BedrockModel {
                 "initial_messages": format!("{input_messages:?}"),
                 "system_messages": format!("{system_messages:?}")
             });
-            let span = tracing::info_span!(
-                target: target!("chat"),
+            let span = create_model_span!(
                 SPAN_BEDROCK,
-                ttft = field::Empty,
-                output = field::Empty,
-                error = field::Empty,
-                usage = field::Empty,
-                cost = field::Empty,
+                target!("chat"),
+                tags,
+                retries_left,
                 input = JsonValue(&input).as_value(),
-                tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
-                retries_left = retries_left,
-                request = field::Empty
+                system_prompt = field::Empty
             );
 
             let builder = self.build_request(&input_messages, &system_messages)?;
@@ -837,18 +832,13 @@ impl BedrockModel {
                 "initial_messages": format!("{input_messages:?}"),
                 "system_messages": format!("{system_messages:?}")
             });
-            let span = tracing::info_span!(
-                target: target!("chat"),
+            let span = create_model_span!(
                 SPAN_BEDROCK,
-                ttft = field::Empty,
-                output = field::Empty,
-                error = field::Empty,
-                usage = field::Empty,
-                cost = field::Empty,
+                target!("chat"),
+                tags,
+                retries_left,
                 input = JsonValue(&input).as_value(),
-                tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
-                retries_left = retries_left,
-                request = field::Empty
+                system_prompt = field::Empty
             );
 
             let builder = self

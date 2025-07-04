@@ -24,11 +24,11 @@ use langdb_core::handler::middleware::rate_limit::{RateLimitMiddleware, RateLimi
 use langdb_core::handler::models::list_gateway_models;
 use langdb_core::handler::{AvailableModels, CallbackHandlerFn, LimitCheckWrapper};
 use langdb_core::models::ModelMetadata;
-use langdb_core::otel::database::DatabaseSpanWritter;
-use langdb_core::otel::DummyTraceTenantResolver;
-use langdb_core::otel::ProjectTraceMap;
-use langdb_core::otel::SpanWriterTransport;
-use langdb_core::otel::{TraceMap, TraceServiceImpl, TraceServiceServer};
+use langdb_core::telemetry::database::DatabaseSpanWritter;
+use langdb_core::telemetry::DummyTraceTenantResolver;
+use langdb_core::telemetry::ProjectTraceMap;
+use langdb_core::telemetry::SpanWriterTransport;
+use langdb_core::telemetry::{TraceMap, TraceServiceImpl, TraceServiceServer};
 use langdb_core::types::gateway::CostCalculator;
 use langdb_core::types::guardrails::service::GuardrailsEvaluator;
 use langdb_core::types::guardrails::Guard;

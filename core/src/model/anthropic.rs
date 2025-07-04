@@ -19,7 +19,7 @@ use crate::types::gateway::CompletionModelUsage;
 use crate::types::gateway::{ChatCompletionContent, ChatCompletionMessage, ToolCall};
 use crate::types::message::{MessageType, PromptMessage};
 use crate::types::threads::{InnerMessage, Message};
-use crate::GatewayResult;
+use crate::{create_model_span, GatewayResult};
 use clust::messages::{
     Content, ContentBlock, ImageContentBlock, ImageContentSource, Message as ClustMessage,
     MessageChunk, MessagesRequestBody, MessagesRequestBuilder, StopReason, StreamError,
@@ -608,18 +608,13 @@ impl AnthropicModel {
             .unwrap_or(DEFAULT_MAX_RETRIES);
         while let Some((system_message, input_messages)) = calls.pop() {
             let input = serde_json::to_string(&input_messages)?;
-            let call_span = tracing::info_span!(
-                target: target!("chat"),
+            let call_span = create_model_span!(
                 SPAN_ANTHROPIC,
+                target!("chat"),
+                tags,
+                retries_left,
                 input = input,
-                output = field::Empty,
-                error = field::Empty,
-                ttft = field::Empty,
-                usage = field::Empty,
-                tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
-                system_prompt = field::Empty,
-                retries_left = retries_left,
-                request = field::Empty
+                system_prompt = field::Empty
             );
 
             let Some(system_prompt) = system_message else {
@@ -671,18 +666,13 @@ impl AnthropicModel {
             .unwrap_or(DEFAULT_MAX_RETRIES);
         while let Some((system_message, input_messages)) = calls.pop() {
             let input = serde_json::to_string(&input_messages)?;
-            let call_span = tracing::info_span!(
-                target: target!("chat"),
+            let call_span = create_model_span!(
                 SPAN_ANTHROPIC,
+                target!("chat"),
+                tags,
+                retries_left,
                 input = input,
-                output = field::Empty,
-                error = field::Empty,
-                ttft = field::Empty,
-                usage = field::Empty,
-                tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
-                system_prompt = field::Empty,
-                retries_left = retries_left,
-                request = field::Empty
+                system_prompt = field::Empty
             );
 
             let Some(system_prompt) = system_message else {
