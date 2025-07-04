@@ -423,7 +423,7 @@ impl BedrockModel {
     ) -> GatewayResult<ChatCompletionMessage> {
         let mut calls = vec![input_messages];
 
-        let mut retries = self
+        let mut retries_left = self
             .execution_options
             .max_retries
             .unwrap_or(DEFAULT_MAX_RETRIES);
@@ -442,7 +442,7 @@ impl BedrockModel {
                 cost = field::Empty,
                 input = JsonValue(&input).as_value(),
                 tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
-                retries_left = retries,
+                retries_left = retries_left,
                 request = field::Empty
             );
 
@@ -457,13 +457,13 @@ impl BedrockModel {
                     calls.push(messages);
                 }
                 Err(e) => {
-                    retries -= 1;
                     span.record("error", e.to_string());
-                    if retries == 0 {
+                    if retries_left == 0 {
                         return Err(e);
                     } else {
                         calls.push(input_messages);
                     }
+                    retries_left -= 1;
                 }
             }
         }
@@ -828,7 +828,7 @@ impl BedrockModel {
     ) -> GatewayResult<()> {
         let mut calls = vec![input_messages];
 
-        let mut retries = self
+        let mut retries_left = self
             .execution_options
             .max_retries
             .unwrap_or(DEFAULT_MAX_RETRIES);
@@ -847,7 +847,7 @@ impl BedrockModel {
                 cost = field::Empty,
                 input = JsonValue(&input).as_value(),
                 tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
-                retries_left = retries,
+                retries_left = retries_left,
                 request = field::Empty
             );
 
@@ -869,13 +869,13 @@ impl BedrockModel {
                     calls.push(messages);
                 }
                 Err(e) => {
-                    retries -= 1;
                     span.record("error", e.to_string());
-                    if retries == 0 {
+                    if retries_left == 0 {
                         return Err(e);
                     } else {
                         calls.push(input_messages);
                     }
+                    retries_left -= 1;
                 }
             }
         }
