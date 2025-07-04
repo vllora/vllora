@@ -510,7 +510,7 @@ impl GeminiModel {
         tags: HashMap<String, String>,
     ) -> GatewayResult<ChatCompletionMessage> {
         let mut gemini_calls = vec![input_messages];
-        let mut retries = self
+        let mut retries_left = self
             .execution_options
             .max_retries
             .unwrap_or(DEFAULT_MAX_RETRIES);
@@ -524,7 +524,7 @@ impl GeminiModel {
                 usage = field::Empty,
                 ttft = field::Empty,
                 tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
-                retries_left = retries,
+                retries_left = retries_left,
                 request = field::Empty,
             );
 
@@ -544,13 +544,13 @@ impl GeminiModel {
                     continue;
                 }
                 Err(e) => {
-                    retries -= 1;
                     span.record("error", e.to_string());
-                    if retries == 0 {
+                    if retries_left == 0 {
                         return Err(e);
                     } else {
                         gemini_calls.push(call);
                     }
+                    retries_left -= 1;
                 }
             }
         }
@@ -736,7 +736,7 @@ impl GeminiModel {
     ) -> GatewayResult<()> {
         let mut gemini_calls = vec![input_messages];
 
-        let mut retries = self
+        let mut retries_left = self
             .execution_options
             .max_retries
             .unwrap_or(DEFAULT_MAX_RETRIES);
@@ -750,7 +750,7 @@ impl GeminiModel {
                 usage = field::Empty,
                 ttft = field::Empty,
                 tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
-                retries_left = retries,
+                retries_left = retries_left,
                 request = field::Empty,
             );
 
@@ -770,13 +770,13 @@ impl GeminiModel {
                     continue;
                 }
                 Err(e) => {
-                    retries -= 1;
                     span.record("error", e.to_string());
-                    if retries == 0 {
+                    if retries_left == 0 {
                         return Err(e);
                     } else {
                         gemini_calls.push(call);
                     }
+                    retries_left -= 1;
                 }
             }
         }

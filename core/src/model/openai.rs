@@ -647,7 +647,7 @@ impl<C: Config> OpenAIModel<C> {
         tags: HashMap<String, String>,
     ) -> GatewayResult<ChatCompletionMessage> {
         let mut openai_calls = vec![input_messages];
-        let mut retries = self
+        let mut retries_left = self
             .execution_options
             .max_retries
             .unwrap_or(DEFAULT_MAX_RETRIES);
@@ -662,7 +662,7 @@ impl<C: Config> OpenAIModel<C> {
                 usage = field::Empty,
                 ttft = field::Empty,
                 tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
-                retries_left = retries,
+                retries_left = retries_left,
                 request = field::Empty
             );
 
@@ -675,13 +675,13 @@ impl<C: Config> OpenAIModel<C> {
                     openai_calls.push(messages);
                 }
                 Err(e) => {
-                    retries -= 1;
                     span.record("error", e.to_string());
-                    if retries == 0 {
+                    if retries_left == 0 {
                         return Err(e);
                     } else {
                         openai_calls.push(messages);
                     }
+                    retries_left -= 1;
                 }
             }
         }
@@ -837,7 +837,7 @@ impl<C: Config> OpenAIModel<C> {
         tags: HashMap<String, String>,
     ) -> GatewayResult<()> {
         let mut openai_calls = vec![input_messages];
-        let mut retries = self
+        let mut retries_left = self
             .execution_options
             .max_retries
             .unwrap_or(DEFAULT_MAX_RETRIES);
@@ -852,7 +852,7 @@ impl<C: Config> OpenAIModel<C> {
                 usage = field::Empty,
                 ttft = field::Empty,
                 tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
-                retries_left = retries,
+                retries_left = retries_left,
                 request = field::Empty
             );
 
@@ -876,12 +876,12 @@ impl<C: Config> OpenAIModel<C> {
                 }
                 Err(e) => {
                     span.record("error", e.to_string());
-                    retries -= 1;
-                    if retries == 0 {
+                    if retries_left == 0 {
                         return Err(e);
                     } else {
                         openai_calls.push(input_messages);
                     }
+                    retries_left -= 1;
                 }
             }
         }

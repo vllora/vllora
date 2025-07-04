@@ -602,7 +602,7 @@ impl AnthropicModel {
         tags: HashMap<String, String>,
     ) -> GatewayResult<ChatCompletionMessage> {
         let mut calls = vec![(system_message, input_messages)];
-        let mut retries = self
+        let mut retries_left = self
             .execution_options
             .max_retries
             .unwrap_or(DEFAULT_MAX_RETRIES);
@@ -618,7 +618,7 @@ impl AnthropicModel {
                 usage = field::Empty,
                 tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
                 system_prompt = field::Empty,
-                retries_left = retries,
+                retries_left = retries_left,
                 request = field::Empty
             );
 
@@ -643,13 +643,13 @@ impl AnthropicModel {
                     calls.push((system_prompt, messages));
                 }
                 Err(e) => {
-                    retries -= 1;
                     call_span.record("error", e.to_string());
-                    if retries == 0 {
+                    if retries_left == 0 {
                         return Err(e);
                     } else {
                         calls.push((Some(system_prompt), input_messages));
                     }
+                    retries_left -= 1;
                 }
             }
         }
@@ -665,7 +665,7 @@ impl AnthropicModel {
         tags: HashMap<String, String>,
     ) -> GatewayResult<()> {
         let mut calls = vec![(system_message, input_messages)];
-        let mut retries = self
+        let mut retries_left = self
             .execution_options
             .max_retries
             .unwrap_or(DEFAULT_MAX_RETRIES);
@@ -681,7 +681,7 @@ impl AnthropicModel {
                 usage = field::Empty,
                 tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
                 system_prompt = field::Empty,
-                retries_left = retries,
+                retries_left = retries_left,
                 request = field::Empty
             );
 
@@ -706,13 +706,13 @@ impl AnthropicModel {
                     calls.push((system_prompt, messages));
                 }
                 Err(e) => {
-                    retries -= 1;
                     call_span.record("error", e.to_string());
-                    if retries == 0 {
+                    if retries_left == 0 {
                         return Err(e);
                     } else {
                         calls.push((Some(system_prompt), input_messages));
                     }
+                    retries_left -= 1;
                 }
             }
         }
