@@ -118,7 +118,7 @@ pub struct ChatCompletionRequestWithTools<T> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub router: Option<DynamicRouter<T>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_retries: Option<i32>,
+    pub max_retries: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extra: Option<Extra>,
     #[serde(skip_serializing_if = "Option::is_none")]

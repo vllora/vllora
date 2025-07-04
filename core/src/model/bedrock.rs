@@ -442,7 +442,8 @@ impl BedrockModel {
                 cost = field::Empty,
                 input = JsonValue(&input).as_value(),
                 tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
-                retries_left = retries
+                retries_left = retries,
+                request = field::Empty
             );
 
             let builder = self.build_request(&input_messages, &system_messages)?;
@@ -846,7 +847,8 @@ impl BedrockModel {
                 cost = field::Empty,
                 input = JsonValue(&input).as_value(),
                 tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
-                retries_left = retries
+                retries_left = retries,
+                request = field::Empty
             );
 
             let builder = self

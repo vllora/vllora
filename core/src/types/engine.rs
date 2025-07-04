@@ -172,7 +172,7 @@ impl CompletionModelDefinition {
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Default)]
 pub struct ExecutionOptions {
-    pub max_retries: Option<i32>,
+    pub max_retries: Option<u32>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
