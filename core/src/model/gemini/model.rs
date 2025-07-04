@@ -524,18 +524,18 @@ impl GeminiModel {
                 usage = field::Empty,
                 ttft = field::Empty,
                 tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
-                retries_left = retries
+                retries_left = retries,
+                request = field::Empty,
             );
 
-            let result = {
-                let request = self.build_request(call.clone())?;
+            let request = self.build_request(call.clone())?;
 
-                span.record("input", serde_json::to_string(&request)?);
-                span.record("request", serde_json::to_string(&request)?);
+            span.record("input", serde_json::to_string(&request)?);
+            span.record("request", serde_json::to_string(&request)?);
 
-                self.execute_inner(request, span.clone(), tx, tags.clone())
-                    .await
-            };
+            let result = self
+                .execute_inner(request, span.clone(), tx, tags.clone())
+                .await;
 
             match result.map_err(|e| record_map_err(e, span.clone())) {
                 Ok(InnerExecutionResult::Finish(message)) => return Ok(message),
@@ -750,18 +750,18 @@ impl GeminiModel {
                 usage = field::Empty,
                 ttft = field::Empty,
                 tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
-                retries_left = retries
+                retries_left = retries,
+                request = field::Empty,
             );
 
-            let result = {
-                let request = self.build_request(call.clone())?;
+            let request = self.build_request(call.clone())?;
 
-                span.record("input", serde_json::to_string(&request)?);
-                span.record("request", serde_json::to_string(&request)?);
+            span.record("input", serde_json::to_string(&request)?);
+            span.record("request", serde_json::to_string(&request)?);
 
-                self.execute_stream_inner(request, tx.clone(), span.clone(), tags.clone())
-                    .await
-            };
+            let result = self
+                .execute_stream_inner(request, tx.clone(), span.clone(), tags.clone())
+                .await;
 
             match result.map_err(|e| record_map_err(e, span.clone())) {
                 Ok(InnerExecutionResult::Finish(_)) => return Ok(()),

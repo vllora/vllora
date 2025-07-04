@@ -109,7 +109,8 @@ impl ModelInstance for CachedModel {
             error = field::Empty,
             usage = field::Empty,
             ttft = field::Empty,
-            tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value()
+            tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
+            request = field::Empty
         );
 
         self.inner_stream(tx).instrument(span).await
@@ -130,7 +131,8 @@ impl ModelInstance for CachedModel {
             error = field::Empty,
             usage = field::Empty,
             ttft = field::Empty,
-            tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value()
+            tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
+            request = field::Empty
         );
 
         self.invoke_inner(tx).instrument(span).await

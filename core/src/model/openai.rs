@@ -471,6 +471,8 @@ impl<C: Config> OpenAIModel<C> {
         tags: HashMap<String, String>,
     ) -> GatewayResult<InnerExecutionResult> {
         let call = self.build_request(&messages, false)?;
+        span.record("request", serde_json::to_string(&call)?);
+
         let input_messages = call.messages.clone();
         tx.send(Some(ModelEvent::new(
             &span,
@@ -660,7 +662,8 @@ impl<C: Config> OpenAIModel<C> {
                 usage = field::Empty,
                 ttft = field::Empty,
                 tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
-                retries_left = retries
+                retries_left = retries,
+                request = field::Empty
             );
 
             match self
@@ -735,6 +738,7 @@ impl<C: Config> OpenAIModel<C> {
         .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
         let request = self.build_request(&input_messages, true)?;
+        span.record("request", serde_json::to_string(&request)?);
 
         let stream = self
             .client
@@ -848,7 +852,8 @@ impl<C: Config> OpenAIModel<C> {
                 usage = field::Empty,
                 ttft = field::Empty,
                 tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value(),
-                retries_left = retries
+                retries_left = retries,
+                request = field::Empty
             );
 
             let first_response_received = &mut false;
