@@ -515,7 +515,7 @@ impl GeminiModel {
             .max_retries
             .unwrap_or(DEFAULT_MAX_RETRIES);
         while let Some(call) = gemini_calls.pop() {
-            let span = create_model_span!(SPAN_GEMINI, target!("chat"), tags, retries_left);
+            let span = create_model_span!(SPAN_GEMINI, target!("chat"), &tags, retries_left);
 
             let request = self.build_request(call.clone())?;
 
@@ -730,7 +730,7 @@ impl GeminiModel {
             .max_retries
             .unwrap_or(DEFAULT_MAX_RETRIES);
         while let Some(call) = gemini_calls.pop() {
-            let span = create_model_span!(SPAN_GEMINI, target!("chat"), tags, retries_left);
+            let span = create_model_span!(SPAN_GEMINI, target!("chat"), &tags, retries_left);
 
             let request = self.build_request(call.clone())?;
 

@@ -101,7 +101,7 @@ impl ModelInstance for CachedModel {
         _previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
     ) -> GatewayResult<()> {
-        let span = create_model_span!(SPAN_CACHE, target!("chat"), tags, 0, cache_state = "HIT");
+        let span = create_model_span!(SPAN_CACHE, target!("chat"), &tags, 0, cache_state = "HIT");
 
         self.inner_stream(tx).instrument(span).await
     }
@@ -113,7 +113,7 @@ impl ModelInstance for CachedModel {
         _previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
     ) -> GatewayResult<ChatCompletionMessage> {
-        let span = create_model_span!(SPAN_CACHE, target!("chat"), tags, 0, cache_state = "HIT");
+        let span = create_model_span!(SPAN_CACHE, target!("chat"), &tags, 0, cache_state = "HIT");
 
         self.invoke_inner(tx).instrument(span).await
     }
