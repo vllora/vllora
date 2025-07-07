@@ -179,7 +179,7 @@ pub async fn stream_chunks(
                             _ => None,
                         };
 
-                        Ok((ev, usage, None))
+                        Ok((ev, usage, Some(finish_reason.to_string())))
                     }
                     _ => Err(GatewayApiError::CustomError(
                         "Unsupported event".to_string(),

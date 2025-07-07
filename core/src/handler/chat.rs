@@ -92,9 +92,46 @@ pub fn map_sso_event(
     model_name: String,
 ) -> Result<Bytes, GatewayApiError> {
     let model_name = model_name.clone();
-    let chunk = match delta {
-        Ok((None, None, _)) => Ok(None),
-        Ok((delta, usage, finish_reason)) => {
+    let chunks = match delta {
+        Ok((None, usage, Some(finish_reason))) => {
+            let mut chunks = vec![];
+            chunks.push(ChatCompletionChunk {
+                id: uuid::Uuid::new_v4().to_string(),
+                object: "chat.completion.chunk".to_string(),
+                created: chrono::Utc::now().timestamp(),
+                model: model_name.clone(),
+                choices: vec![ChatCompletionChunkChoice {
+                    index: 0,
+                    delta: ChatCompletionDelta {
+                        content: None,
+                        role: None,
+                        tool_calls: None,
+                    },
+                    finish_reason: Some(finish_reason.clone()),
+                    logprobs: None,
+                }],
+                usage: None,
+            });
+
+            if let Some(u) = &usage {
+                chunks.push(ChatCompletionChunk {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    object: "chat.completion.chunk".to_string(),
+                    created: chrono::Utc::now().timestamp(),
+                    model: model_name.clone(),
+                    choices: vec![],
+                    usage: Some(ChatCompletionUsage {
+                        prompt_tokens: u.input_tokens as i32,
+                        completion_tokens: u.output_tokens as i32,
+                        total_tokens: u.total_tokens as i32,
+                        cost: 0.0,
+                    }),
+                });
+            }
+
+            Ok(chunks)
+        }
+        Ok((delta, _, finish_reason)) => {
             let chunk = ChatCompletionChunk {
                 id: uuid::Uuid::new_v4().to_string(),
                 object: "chat.completion.chunk".to_string(),
@@ -108,33 +145,32 @@ pub fn map_sso_event(
                         logprobs: None,
                     }]
                 }),
-                usage: usage.as_ref().map(|u| ChatCompletionUsage {
-                    prompt_tokens: u.input_tokens as i32,
-                    completion_tokens: u.output_tokens as i32,
-                    total_tokens: u.total_tokens as i32,
-                    cost: 0.0,
-                }),
+                usage: None,
             };
 
-            Ok(Some(chunk))
+            Ok(vec![chunk])
         }
         Err(e) => Err(e),
     };
 
-    let json_str = match chunk {
-        Ok(r) => r.map(|c| {
-            serde_json::to_string(&c)
-                .unwrap_or_else(|e| format!("{{\"error\": \"Failed to serialize chunk: {e}\"}}"))
-        }),
-        Err(e) => Some(
-            serde_json::to_string(&HashMap::from([("error", e.to_string())]))
-                .unwrap_or_else(|e| format!("{{\"error\": \"Failed to serialize chunk: {e}\"}}")),
-        ),
-    };
+    let mut result_combined = String::new();
+    match chunks {
+        Ok(chunks) => {
+            for c in chunks {
+                let json_str = serde_json::to_string(&c).unwrap_or_else(|e| {
+                    format!("{{\"error\": \"Failed to serialize chunk: {e}\"}}")
+                });
 
-    let result = json_str
-        .as_ref()
-        .map_or(String::new(), |json_str| format!("data: {json_str}\n\n"));
+                result_combined.push_str(&format!("data: {json_str}\n\n"));
+            }
+        }
+        Err(e) => {
+            let result = serde_json::to_string(&HashMap::from([("error", e.to_string())]))
+                .unwrap_or_else(|e| format!("{{\"error\": \"Failed to serialize chunk: {e}\"}}"));
 
-    Ok(Bytes::from(result))
+            result_combined.push_str(&format!("data: {result}\n\n"));
+        }
+    }
+
+    Ok(Bytes::from(result_combined))
 }
