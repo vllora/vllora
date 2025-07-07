@@ -422,8 +422,18 @@ impl TraceService for TraceServiceImpl {
                         if let Some((sender, _)) =
                             self.project_trace_senders.get(project_id).as_deref()
                         {
-                            let _ = sender.send(span.clone());
+                            match sender.send(span.clone()) {
+                                Ok(_) => println!("Trace sent"),
+                                Err(e) => tracing::error!("E: {}", e.to_string())
+                            }
+                        } else {
+                            tracing::warn!("No project_trace senders");
+                            for sender in self.project_trace_senders.iter() {
+                                tracing::warn!("Key: {:#?}", sender.key());
+                            }
                         }
+                    } else {
+                        tracing::warn!("No project_id");
                     }
                     self.writer_sender.send(span).await.unwrap();
                 }
