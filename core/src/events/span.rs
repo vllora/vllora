@@ -27,3 +27,23 @@ macro_rules! create_model_span {
         $crate::create_model_span!($name, $target, $tags, 0,)
     }};
 }
+
+#[macro_export]
+macro_rules! create_thread_span {
+    ($tags:expr) => {{
+        tracing::info_span!(
+            target: "langdb::user_tracing::api_invoke",
+            SPAN_API_INVOKE,
+            request = tracing::field::Empty,
+            response = tracing::field::Empty,
+            error = tracing::field::Empty,
+            thread_id = tracing::field::Empty,
+            message_id = tracing::field::Empty,
+            cost = tracing::field::Empty,
+            credentials_identifier = tracing::field::Empty,
+            router_name = tracing::field::Empty,
+            tags = JsonValue(&serde_json::to_value($tags.clone()).unwrap_or_default()).as_value(),
+            user = tracing::field::Empty,
+        )
+    }};
+}
