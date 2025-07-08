@@ -185,7 +185,7 @@ impl Tui {
                     .constraints(
                         blocks,
                     )
-                    .split(f.size());
+                    .split(f.area());
 
                 let logo = Paragraph::new(LOGO.to_string());
                 f.render_widget(logo, chunks[0]);
@@ -207,9 +207,8 @@ impl Tui {
 
                 let mut index = 2;
                 if !counters.metrics.is_empty() {
-                    let table = Table::new(vec![Row::new(model_cost)])
+                    let table = Table::new(vec![Row::new(model_cost)], widths)
                         .header(Row::new(model_names))
-                        .widths(&widths)
                         .block(Block::default().borders(Borders::ALL).title("Cost"));
                     f.render_widget(table, chunks[index]);
                     index += 1;
