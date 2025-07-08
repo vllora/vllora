@@ -455,6 +455,7 @@ pub struct Span {
     pub kind: SpanKind,
     pub start_time_unix_nano: u64,
     pub end_time_unix_nano: u64,
+    #[serde(rename="attribute")]
     pub attributes: serde_json::Map<String, serde_json::Value>,
     pub tenant_id: Option<String>,
     pub project_id: Option<String>,
