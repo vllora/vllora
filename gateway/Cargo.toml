@@ -27,7 +27,7 @@ thiserror = { workspace = true }
 futures = "0.3.30"
 actix-cors = "0.7.0"
 
-minijinja = "2.0.1"
+minijinja = "2.11.0"
 reqwest = { version = "0.12.2", default-features = false, features = [
   "json",
   "stream",
