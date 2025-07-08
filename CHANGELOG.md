@@ -2,6 +2,40 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.2.3](https://github.com/langdb/langdb-cloud/compare/0.2.2...0.2.3) (2025-07-08)
+
+
+### Features
+
+* add custom event for model events ([3d34406](https://github.com/langdb/langdb-cloud/commit/3d3440675e8d5bdcc0b42f9dc4bdac9a60e48070))
+* add description and keywords fields to thread ([566512c](https://github.com/langdb/langdb-cloud/commit/566512c4cea1e103185c18b7df6e6036ec18cc8f))
+* Add key generation for transport type ([7d15fc9](https://github.com/langdb/langdb-cloud/commit/7d15fc95f3ce7ce952426e1d3420233d74046c6d))
+* Add options struct for prompt caching ([7cdf8d3](https://github.com/langdb/langdb-cloud/commit/7cdf8d3877051b429adeb6efa76b2cea689d444d))
+* add run lifecycle events and fix model usage tracking ([5b86f23](https://github.com/langdb/langdb-cloud/commit/5b86f238a5daeb189e8d58556f73a5a98ed09a1c))
+* Add variables field to chat completions ([#73](https://github.com/langdb/langdb-cloud/issues/73)) ([ae94f87](https://github.com/langdb/langdb-cloud/commit/ae94f8767e20e183ae0d9b10f9a267585255139e))
+* add version support for virtual model retrieval via model@version syntax ([8c26bb3](https://github.com/langdb/langdb-cloud/commit/8c26bb3c8a3359c2f1620002e66fa5564900853f))
+* Basic responses support ([#92](https://github.com/langdb/langdb-cloud/issues/92)) ([67efe60](https://github.com/langdb/langdb-cloud/commit/67efe6059854c373a1405f39be807bab504ac6d9))
+* Enhanced support for MCP servers ([#72](https://github.com/langdb/langdb-cloud/issues/72)) ([46137d1](https://github.com/langdb/langdb-cloud/commit/46137d12ac6f120508da4ca65c46fc2c3215c2f2))
+* Handle max retries in request ([ccb5f0a](https://github.com/langdb/langdb-cloud/commit/ccb5f0a2e076354d414e65fd0f262ddfc2432703))
+* implement tenant-aware OpenTelemetry trace ([034d15d](https://github.com/langdb/langdb-cloud/commit/034d15d7db9a83552dae2e8cc358d40634d32e3c))
+* Support azure url parsing and usage in client ([363dd75](https://github.com/langdb/langdb-cloud/commit/363dd7516ec266e7b18917eaa57bee10bab10344))
+* Support http streamable transport ([#86](https://github.com/langdb/langdb-cloud/issues/86)) ([ed7ca6e](https://github.com/langdb/langdb-cloud/commit/ed7ca6ee27f72ca12f365c05fc0bb687eace6198))
+* Support project traces channels ([e9e6928](https://github.com/langdb/langdb-cloud/commit/e9e6928e8027aeb3831140a69780c009eea7039a))
+
+
+### Bug Fixes
+
+* Empty required parameters list ([5e8c0cd](https://github.com/langdb/langdb-cloud/commit/5e8c0cd2cdac36164b51670d875ce96f020222d9))
+* Fix duplicated tools labels in gemini tools spans ([7c01c7a](https://github.com/langdb/langdb-cloud/commit/7c01c7ae30c3babd341ff0a6cb15f6eef6841b47))
+* Fix operation name for model spans ([1f53ef2](https://github.com/langdb/langdb-cloud/commit/1f53ef226763578f396597927226dedd189c68c6))
+* Fix required default value ([3d5bd55](https://github.com/langdb/langdb-cloud/commit/3d5bd550c1f7f6257de954b64f65b6ec2319c156))
+* Fix retries handle in llm calls ([64fd662](https://github.com/langdb/langdb-cloud/commit/64fd662ff78f5a081cf4eb5b95116a55cbc36cbb))
+* Fix retries logic ([94bccf1](https://github.com/langdb/langdb-cloud/commit/94bccf1a39bdb482483542a420d3abfaa344dc38))
+* Fix tracing for cached responses ([e6f0171](https://github.com/langdb/langdb-cloud/commit/e6f017102d4fd561bad72888e6380f05b92687a4))
+* handle cache response errors gracefully in gateway service ([8900fab](https://github.com/langdb/langdb-cloud/commit/8900fab1e23e61ac33750d3c31ac10674039f901))
+* Handle thought signature in gemini response ([3f0116d](https://github.com/langdb/langdb-cloud/commit/3f0116d5d0ba1b27901ae6c2b0ea05b66bd41628))
+* Properly handle model calls traces in gemini ([707d599](https://github.com/langdb/langdb-cloud/commit/707d59920ed1713153478dbe7d69f312510209a2))
+
 ### [0.2.2](https://github.com/langdb/langdb-cloud/compare/0.2.1...0.2.2) (2025-04-04)
 
 
