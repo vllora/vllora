@@ -240,7 +240,7 @@ dependencies = [
 
 [[package]]
 name = "ai-gateway"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -2561,7 +2561,7 @@ dependencies = [
 
 [[package]]
 name = "langdb_core"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "actix-web",
  "async-openai-compat",
@@ -2615,7 +2615,7 @@ dependencies = [
 
 [[package]]
 name = "langdb_guardrails"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "async-openai-compat",
  "async-trait",
@@ -3693,8 +3693,9 @@ dependencies = [
 
 [[package]]
 name = "rmcp"
-version = "0.1.5"
-source = "git+https://github.com/modelcontextprotocol/rust-sdk.git?rev=4c34b64b7f8dcabf94d52a9c6518c6b49c1f0451#4c34b64b7f8dcabf94d52a9c6518c6b49c1f0451"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "37f2048a81a7ff7e8ef6bc5abced70c3d9114c8f03d85d7aaaafd9fd04f12e9e"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -3717,9 +3718,11 @@ dependencies = [
 
 [[package]]
 name = "rmcp-macros"
-version = "0.1.5"
-source = "git+https://github.com/modelcontextprotocol/rust-sdk.git?rev=4c34b64b7f8dcabf94d52a9c6518c6b49c1f0451#4c34b64b7f8dcabf94d52a9c6518c6b49c1f0451"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72398e694b9f6dbb5de960cf158c8699e6a1854cb5bbaac7de0646b2005763c4"
 dependencies = [
+ "darling",
  "proc-macro2",
  "quote",
  "serde_json",
@@ -4791,7 +4794,7 @@ checksum = "42ff0bf0c66b8238c6f3b578df37d0b7848e55df8577b3f74f92a69acceeb825"
 
 [[package]]
 name = "udfs"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "async-openai-compat",
  "clap",

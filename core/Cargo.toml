@@ -72,14 +72,14 @@ clickhouse = { version = "0.11.6", package = "langdb_clickhouse", features = [
   "uuid",
 ], optional = true }
 tokio-util = { version = "0.7.11", optional = true }
-rmcp = { git = "https://github.com/modelcontextprotocol/rust-sdk.git", rev = "4c34b64b7f8dcabf94d52a9c6518c6b49c1f0451", default-features = true, features = [
+rmcp = { version = "0.2.1", default-features = true, features = [
   "transport-sse-client",
   "reqwest",
   "client",
   "server",
   "transport-streamable-http-client",
 ] }
-rmcp-macros = { git = "https://github.com/modelcontextprotocol/rust-sdk.git", rev = "4c34b64b7f8dcabf94d52a9c6518c6b49c1f0451", default-features = true}
+rmcp-macros = { version = "0.2.1", default-features = true}
 parking_lot = "0.12.4"
 rand = "0.8.5"
 url = "2.5.4"
