@@ -1,4 +1,5 @@
 use crate::error::GatewayError;
+use futures::Future;
 use reqwest::Client;
 use rmcp::model::CallToolResult;
 use rmcp::model::ClientCapabilities;
@@ -16,17 +17,19 @@ use rmcp::model::PaginatedRequestParam;
 use rmcp::model::ProtocolVersion;
 use rmcp::model::ReadResourceRequestParam;
 use rmcp::model::ReadResourceResult;
-use rmcp::model::ServerCapabilities;
-use rmcp::model::ServerInfo;
 use rmcp::service::RequestContext;
 use rmcp::ClientHandler;
 use rmcp::Error as McpError;
 use rmcp::RoleServer;
-use rmcp::ServerHandler;
-use rmcp_macros::tool;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::env;
+
+use rmcp::{
+    handler::server::{router::tool::ToolRouter, tool::Parameters},
+    model::{ServerCapabilities, ServerInfo},
+    schemars, tool, tool_handler, tool_router, ServerHandler,
+};
 
 const TAVILY_API_URL: &str = "https://api.tavily.com/search";
 
@@ -48,15 +51,29 @@ pub struct SearchResult {
     pub raw_content: Option<String>,
 }
 
-#[derive(Clone)]
-pub struct TavilySearch {}
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct SearchRequest {
+    #[schemars(description = "Search query")]
+    pub query: String,
+}
 
-#[tool(tool_box)]
+#[derive(Clone)]
+pub struct TavilySearch {
+    tool_router: ToolRouter<Self>,
+}
+
+#[tool_router]
 impl TavilySearch {
+    pub fn new() -> Self {
+        Self {
+            tool_router: Self::tool_router(),
+        }
+    }
+
     #[tool(description = "Search the web and return results")]
     pub async fn search(
         &self,
-        #[tool(param)] query: String,
+        Parameters(SearchRequest { query }): Parameters<SearchRequest>,
     ) -> Result<CallToolResult, rmcp::Error> {
         let r = search_tavily(&query, &env::var("TAVILY_API_KEY").unwrap()).await;
 
@@ -66,6 +83,12 @@ impl TavilySearch {
             )])),
             Err(e) => Err(McpError::internal_error(e.to_string(), None)),
         }
+    }
+}
+
+impl Default for TavilySearch {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -92,7 +115,7 @@ async fn search_tavily(query: &str, api_key: &str) -> Result<Value, GatewayError
     Ok(result)
 }
 
-#[tool(tool_box)]
+#[tool_handler]
 impl ServerHandler for TavilySearch {
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
