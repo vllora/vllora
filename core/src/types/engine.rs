@@ -123,7 +123,15 @@ impl Prompt {
     pub fn render(template: String, variables: &HashMap<String, Value>) -> String {
         let env = Environment::new();
         let tmpl = env.template_from_str(&template).unwrap();
-        tmpl.render(variables).unwrap()
+
+        // If template rendering fail, return raw template
+        match tmpl.render(variables) {
+            Ok(rendered) => rendered,
+            Err(e) => {
+                tracing::error!("Template rendering failed: {}", e);
+                template
+            }
+        }
     }
 
     pub fn empty() -> Self {
