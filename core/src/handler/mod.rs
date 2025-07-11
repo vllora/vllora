@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AvailableModels(pub Vec<ModelMetadata>);
 
 pub fn find_model_by_full_name(
