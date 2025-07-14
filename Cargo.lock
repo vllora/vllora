@@ -367,8 +367,7 @@ checksum = "34ac096ce696dc2fcabef30516bb13c0a68a11d30131d3df6f04711467681b04"
 [[package]]
 name = "async-openai-compat"
 version = "0.28.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d8f204f8e0e22d9292c4b2e5403295ee947132b1b81567e3def5d3e7ae61819d"
+source = "git+https://github.com/langdb/async-openai-compat.git?rev=ae133c6e70da55c1b72babcba58ed2b213d79c17#ae133c6e70da55c1b72babcba58ed2b213d79c17"
 dependencies = [
  "async-openai-macros",
  "backoff",
@@ -393,8 +392,7 @@ dependencies = [
 [[package]]
 name = "async-openai-macros"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0289cba6d5143bfe8251d57b4a8cac036adf158525a76533a7082ba65ec76398"
+source = "git+https://github.com/langdb/async-openai-compat.git?rev=ae133c6e70da55c1b72babcba58ed2b213d79c17#ae133c6e70da55c1b72babcba58ed2b213d79c17"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1040,9 +1038,9 @@ checksum = "5ce89b21cab1437276d2650d57e971f9d548a2d9037cc231abdc0562b97498ce"
 
 [[package]]
 name = "bytemuck"
-version = "1.21.0"
+version = "1.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef657dfab802224e671f5818e9a4935f9b1957ed18e58292690cc39e7a4092a3"
+checksum = "5c76a5792e44e4abe34d3abf15636779261d45a7450612059293d1d2cfc63422"
 dependencies = [
  "bytemuck_derive",
 ]
