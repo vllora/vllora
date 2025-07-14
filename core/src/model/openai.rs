@@ -530,7 +530,6 @@ impl<C: Config> OpenAIModel<C> {
         }
         // always take 1 since we put n = 1 in request
         let first_choice = choices[0].to_owned();
-        tracing::warn!("First choice {first_choice:#?}");
 
         let mut finish_reason = first_choice.finish_reason;
         // XAI bug workaround
