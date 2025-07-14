@@ -24,7 +24,7 @@ pub async fn list_gateway_models(
             .0
             .iter()
             .map(|v| ChatModel {
-                id: format!("{}/{}", v.inference_provider.provider, v.model),
+                id: v.qualified_model_name(),
                 object: "model".to_string(),
                 created: 1686935002,
                 owned_by: v.model_provider.to_string(),

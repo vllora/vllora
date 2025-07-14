@@ -301,3 +301,9 @@ impl Default for ModelMetadata {
         }
     }
 }
+
+impl ModelMetadata {
+    pub fn qualified_model_name(&self) -> String {
+        format!("{}/{}", self.inference_provider.provider, self.model)
+    }
+}
