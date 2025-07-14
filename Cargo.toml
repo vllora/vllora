@@ -4,7 +4,7 @@ members = ["gateway", "core", "udfs", "guardrails"]
 default-members = ["gateway", "udfs"]
 
 [workspace.dependencies]
-async-openai = { version = "0.28.4", package = "async-openai-compat" }
+async-openai = { package = "async-openai-compat", git = "https://github.com/langdb/async-openai-compat.git", rev = "ae133c6e70da55c1b72babcba58ed2b213d79c17" }
 thiserror = "2.0.12"
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
