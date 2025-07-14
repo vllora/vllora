@@ -2587,7 +2587,7 @@ dependencies = [
  "opentelemetry-proto",
  "opentelemetry_sdk",
  "parking_lot",
- "rand 0.8.5",
+ "rand 0.9.1",
  "regex",
  "reqwest",
  "reqwest-eventsource",

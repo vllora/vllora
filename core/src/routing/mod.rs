@@ -129,8 +129,8 @@ impl RouteStrategy for LlmRouter {
                 // Randomly select between available models
                 use rand::Rng;
 
-                let mut rng = rand::thread_rng();
-                let idx = rng.gen_range(0..self.targets.len());
+                let mut rng = rand::rng();
+                let idx = rng.random_range(0..self.targets.len());
                 Ok(vec![self.targets[idx].clone()])
             }
             RoutingStrategy::Percentage {
