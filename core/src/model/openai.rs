@@ -534,7 +534,7 @@ impl<C: Config> OpenAIModel<C> {
         let mut finish_reason = first_choice.finish_reason;
         // XAI bug workaround
         if let Some(content) = &first_choice.message.content {
-            if content == "" && first_choice.message.tool_calls.is_some() {
+            if content.is_empty() && first_choice.message.tool_calls.is_some() {
                 finish_reason = Some(FinishReason::ToolCalls);
             }
         }
