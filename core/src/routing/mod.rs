@@ -1,11 +1,13 @@
+use crate::routing::metrics::MetricsRepository;
 // use crate::routing::strategy::script::ScriptError;
 // use crate::routing::strategy::script::ScriptStrategy;
+use crate::handler::AvailableModels;
 use crate::types::gateway::ChatCompletionRequest;
-use crate::{handler::AvailableModels, usage::ProviderMetrics};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::fmt::Display;
 use thiserror::Error;
 
+pub mod metrics;
 pub mod strategy;
 
 #[derive(Error, Debug)]
@@ -32,6 +34,9 @@ pub enum RouterError {
 
     #[error("Target by index not found: {0}")]
     TargetByIndexNotFound(usize),
+
+    #[error("Metrics repository error: {0}")]
+    MetricsRepositoryError(String),
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
@@ -105,23 +110,23 @@ pub enum TargetOrRouterName {
 
 #[async_trait::async_trait]
 pub trait RouteStrategy {
-    async fn route(
+    async fn route<M: MetricsRepository + Send + Sync>(
         &self,
         request: ChatCompletionRequest,
         available_models: &AvailableModels,
         headers: HashMap<String, String>,
-        metrics: BTreeMap<String, ProviderMetrics>,
+        metrics_repository: &M,
     ) -> Result<Targets, RouterError>;
 }
 
 #[async_trait::async_trait]
 impl RouteStrategy for LlmRouter {
-    async fn route(
+    async fn route<M: MetricsRepository + Send + Sync>(
         &self,
         _request: ChatCompletionRequest,
         _available_models: &AvailableModels,
         _headers: HashMap<String, String>,
-        metrics: BTreeMap<String, ProviderMetrics>,
+        metrics_repository: &M,
     ) -> Result<Targets, RouterError> {
         match &self.strategy {
             RoutingStrategy::Fallback => Ok(self.targets.clone()),
@@ -176,6 +181,10 @@ impl RouteStrategy for LlmRouter {
                             .and_then(|v| v.as_str().map(|s| s.to_string()))
                     })
                     .collect::<Vec<_>>();
+
+                // Fetch metrics from the repository
+                let metrics = metrics_repository.get_metrics().await?;
+
                 let model = strategy::metric::route(
                     &models,
                     &metrics,
@@ -242,6 +251,76 @@ mod tests {
         };
 
         eprintln!("{}", serde_json::to_string_pretty(&router).unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_metrics_repository_integration() {
+        use crate::routing::metrics::InMemoryMetricsRepository;
+        use crate::usage::ProviderMetrics;
+        use crate::usage::{Metrics, ModelMetrics, TimeMetrics};
+        use std::collections::BTreeMap;
+
+        // Create sample metrics
+        let mut provider_metrics = ProviderMetrics {
+            models: BTreeMap::new(),
+        };
+
+        // Add model metrics
+        provider_metrics.models.insert(
+            "gpt-4".to_string(),
+            ModelMetrics {
+                metrics: TimeMetrics {
+                    total: Metrics {
+                        requests: Some(100.0),
+                        latency: Some(150.0),
+                        ttft: Some(50.0),
+                        tps: Some(20.0),
+                        error_rate: Some(0.01),
+                        input_tokens: Some(1000.0),
+                        output_tokens: Some(500.0),
+                        total_tokens: Some(1500.0),
+                        llm_usage: Some(0.5),
+                    },
+                    last_15_minutes: Metrics::default(),
+                    last_hour: Metrics::default(),
+                },
+            },
+        );
+
+        // Create metrics repository
+        let mut metrics_map = BTreeMap::new();
+        metrics_map.insert("openai".to_string(), provider_metrics);
+        let metrics_repo = InMemoryMetricsRepository::new(metrics_map);
+
+        // Create router with optimized strategy
+        let router = LlmRouter {
+            name: "test_router".to_string(),
+            strategy: RoutingStrategy::Optimized {
+                metric: strategy::metric::MetricSelector::Latency,
+            },
+            targets: vec![HashMap::from([(
+                "model".to_string(),
+                serde_json::Value::String("openai/gpt-4".to_string()),
+            )])],
+            metrics_duration: Some(MetricsDuration::Total),
+        };
+
+        // Test routing
+        let request = ChatCompletionRequest::default();
+        let available_models = AvailableModels(vec![]);
+        let headers = HashMap::new();
+
+        let result = router
+            .route(request, &available_models, headers, &metrics_repo)
+            .await;
+
+        assert!(result.is_ok());
+        let targets = result.unwrap();
+        assert_eq!(targets.len(), 1);
+        assert_eq!(
+            targets[0].get("model").unwrap().as_str().unwrap(),
+            "openai/gpt-4"
+        );
     }
 
     // #[tokio::test]
