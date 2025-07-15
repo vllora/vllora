@@ -129,8 +129,14 @@ impl RoutedExecutor {
                     .await;
 
                 match executor_result {
-                    Ok(executor_result) => {
-                        for t in executor_result.iter().rev() {
+                    Ok(routing_result) => {
+                        // Store interceptor state for potential use in subsequent processing
+                        if let Some(interceptor_state) = routing_result.interceptor_state {
+                            span.record("interceptor_state_available", true);
+                            tracing::debug!("Interceptor state available for request");
+                        }
+                        
+                        for t in routing_result.targets.iter().rev() {
                             targets.push((request.clone(), Some(t.clone())));
                         }
                     }
