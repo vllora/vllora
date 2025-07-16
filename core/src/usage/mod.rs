@@ -28,7 +28,7 @@ pub fn get_total_key(company_id: &str, key: &str) -> String {
     format!("{company_id}:{key}:total")
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq, Hash, Clone)]
 pub enum LimitPeriod {
     Hour,
     Day,
