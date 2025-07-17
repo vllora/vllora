@@ -1,4 +1,5 @@
 use crate::types::gateway::ChatCompletionRequest;
+use crate::routing::InterceptorSpec;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -133,6 +134,12 @@ pub trait Interceptor: Send + Sync {
     fn should_execute(&self, _context: &InterceptorContext) -> bool {
         true
     }
+}
+
+/// Factory trait for creating interceptors from InterceptorSpec
+pub trait InterceptorFactory: Send + Sync {
+    /// Create an interceptor instance from the given InterceptorSpec
+    fn create_interceptor(&self, spec: &InterceptorSpec) -> Result<Arc<dyn Interceptor>, InterceptorError>;
 }
 
 /// Manager for handling multiple interceptors
@@ -328,6 +335,46 @@ mod tests {
             state_read.pre_request_results[0].interceptor_name,
             "test_interceptor"
         );
+        assert!(state_read.pre_request_results[0].success);
+    }
+
+    #[tokio::test]
+    async fn test_interceptor_factory_and_manager() {
+        use crate::routing::InterceptorSpec;
+        use std::sync::Arc;
+
+        // Dummy factory that creates TestInterceptor from InterceptorSpec
+        struct DummyFactory;
+        impl super::InterceptorFactory for DummyFactory {
+            fn create_interceptor(&self, spec: &InterceptorSpec) -> Result<Arc<dyn super::Interceptor>, super::InterceptorError> {
+                Ok(Arc::new(TestInterceptor::new(spec.name.clone())))
+            }
+        }
+
+        // Example InterceptorSpec
+        let spec = InterceptorSpec {
+            name: "factory_test_interceptor".to_string(),
+            interceptor_type: Some("dummy".to_string()),
+            extra: Default::default(),
+        };
+
+        // Use the factory to create an interceptor
+        let factory = DummyFactory;
+        let interceptor = factory.create_interceptor(&spec).unwrap();
+
+        // Add to manager and execute
+        let mut manager = super::InterceptorManager::new();
+        manager.add_interceptor(interceptor).unwrap();
+
+        let state = Arc::new(tokio::sync::RwLock::new(super::InterceptorState::new()));
+        let request = ChatCompletionRequest::default();
+        let headers = HashMap::new();
+        let mut context = super::InterceptorContext::new(request, headers, state.clone());
+
+        manager.execute_pre_request(&mut context).await.unwrap();
+        let state_read = state.read().await;
+        assert_eq!(state_read.pre_request_results.len(), 1);
+        assert_eq!(state_read.pre_request_results[0].interceptor_name, "factory_test_interceptor");
         assert!(state_read.pre_request_results[0].success);
     }
 }

@@ -60,7 +60,6 @@ pub struct LlmRouter {
     pub targets: Vec<HashMap<String, serde_json::Value>>,
     #[serde(default)]
     pub metrics_duration: Option<MetricsDuration>,
-    // interceptor_manager removed
 }
 
 impl LlmRouter {
@@ -82,7 +81,6 @@ impl LlmRouter {
         self.metrics_duration = Some(duration);
         self
     }
-    // with_interceptor_manager removed
 }
 
 /// Extended routing result that includes interceptor state
@@ -115,6 +113,10 @@ pub enum RoutingStrategy {
     Optimized {
         metric: strategy::metric::MetricSelector,
     },
+    /// Conditional routing based on request or context conditions
+    Conditional {
+        routing: ConditionalRouting,
+    },
 }
 
 impl Display for RoutingStrategy {
@@ -124,6 +126,7 @@ impl Display for RoutingStrategy {
             RoutingStrategy::Percentage { .. } => write!(f, "Percentage"),
             RoutingStrategy::Random => write!(f, "Random"),
             RoutingStrategy::Optimized { .. } => write!(f, "Optimized"),
+            RoutingStrategy::Conditional { .. } => write!(f, "Conditional"),
         }
     }
 }
@@ -145,6 +148,104 @@ pub type Targets = Vec<Target>;
 pub enum TargetOrRouterName {
     String(String),
     Target(Target),
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+pub struct ConditionalRouting {
+    #[serde(default)]
+    pub pre_request: Vec<InterceptorSpec>,
+    pub routes: Vec<Route>,
+    #[serde(default)]
+    pub post_request: Vec<InterceptorSpec>,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+pub struct InterceptorSpec {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub interceptor_type: Option<String>,
+    #[serde(flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+pub struct Route {
+    pub name: String,
+    pub conditions: RouteCondition,
+    #[serde(default)]
+    pub targets: Option<TargetSpec>,
+    #[serde(default)]
+    pub message_mapper: Option<MessageMapper>,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+#[serde(untagged)]
+pub enum RouteCondition {
+    All { all: Vec<ConditionExpr> },
+    Any { any: Vec<ConditionExpr> },
+    Expr(HashMap<String, ConditionOp>),
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+#[serde(untagged)]
+pub enum ConditionExpr {
+    Expr(HashMap<String, ConditionOp>),
+}
+
+impl ConditionExpr {
+    /// Validates that all keys in the condition expression match allowed patterns.
+    /// Allowed keys:
+    /// - "metadata.user.tier"
+    /// - "metadata.user.id"
+    /// - "metadata.region"
+    /// - "pre_request.*.result"
+    /// - "metrics.provider.*"
+    /// - "metrics.model:*"
+    pub fn validate_keys(&self) -> Result<(), String> {
+        match self {
+            ConditionExpr::Expr(map) => {
+                for key in map.keys() {
+                    if !Self::is_valid_key(key) {
+                        return Err(format!("Invalid condition key: {}", key));
+                    }
+                }
+                Ok(())
+            }
+        }
+    }
+
+    fn is_valid_key(key: &str) -> bool {
+        key == "metadata.user.tier"
+            || key == "metadata.user.id"
+            || key == "metadata.region"
+            || (key.starts_with("pre_request.") && key.ends_with(".result"))
+            || key.starts_with("metrics.provider.")
+            || key.starts_with("metrics.model.")
+    }
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+pub struct ConditionOp {
+    #[serde(flatten)]
+    pub op: HashMap<String, serde_json::Value>,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+#[serde(untagged)]
+pub enum TargetSpec {
+    Any {
+        #[serde(rename = "$any")]
+        any: Vec<String>,
+        #[serde(default)]
+        sort: Option<HashMap<String, String>>,
+    },
+    List(Vec<HashMap<String, serde_json::Value>>),
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+pub struct MessageMapper {
+    pub modifier: String,
+    pub content: String,
 }
 
 #[async_trait::async_trait]
@@ -217,6 +318,15 @@ impl RouteStrategy for LlmRouter {
                     "model".to_string(),
                     serde_json::Value::String(model),
                 )])]
+            }
+            RoutingStrategy::Conditional { routing } => {
+                tracing::info!("Conditional routing: {:#?}", routing);
+                // Placeholder for conditional routing logic
+                // This will require a more complex state management
+                // For now, it will return an error or a default target
+                return Err(RouterError::MetricRouterError(
+                    "Conditional routing not yet implemented".to_string(),
+                ));
             }
         };
         Ok(RoutingResult::new(targets))

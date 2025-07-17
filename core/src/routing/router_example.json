@@ -1,0 +1,43 @@
+{
+    "pre_request": [
+      { "name": "daily_user_request_limit", "type": "rate_limiter", "limit": 1000, "period": "day", "target": "user_id" },
+      { "name": "semantic_guardrail", "type": "guardrail" }
+    ],
+    "routes": [
+      {
+        "name": "premium_eu_high_performance",
+        "conditions": {
+          "all": [
+            { "metadata.user.tier": { "eq": "premium" } },
+            { "metadata.region": { "eq": "EU" } },
+            { "pre_request.daily_user_request_limit.result": { "eq": true } },
+            { "metrics.provider.error_rate": { "lt": 0.02 } }
+          ]
+        },
+        "targets": {
+          "$any": ["anthropic/claude-4-opus", "openai/gpt-o3"],
+          "sort": { "ttft": "MIN" }
+        }
+      },
+      {
+        "name": "gdpr_compliance_fallback",
+        "conditions": {
+          "metadata.compliance_tags": { "$in": ["GDPR"] }
+        },
+        "targets": [ { "model": "eu-specialist/gdpr-compliant-model" } ]
+      },
+      {
+        "name": "rate_limit_exceeded_block",
+        "conditions": {
+          "pre_request.daily_user_request_limit.result": { "eq": false }
+        },
+        "message_mapper": {
+          "modifier": "block",
+          "content": "You have exceeded your daily quota. Please try again tomorrow."
+        }
+      }
+    ],
+    "post_request": [
+      { "name": "toxicity_guardrail", "type": "guardrail" }
+    ]
+  }
