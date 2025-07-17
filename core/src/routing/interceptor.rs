@@ -1,19 +1,17 @@
 use crate::types::gateway::ChatCompletionRequest;
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
-
-pub mod examples;
 
 #[derive(Error, Debug)]
 pub enum InterceptorError {
     #[error("Interceptor execution failed: {0}")]
     ExecutionError(String),
-    
+
     #[error("Interceptor state serialization failed: {0}")]
     SerializationError(#[from] serde_json::Error),
-    
+
     #[error("Interceptor validation failed: {0}")]
     ValidationError(String),
 }
@@ -41,38 +39,38 @@ impl InterceptorState {
     pub fn new() -> Self {
         Self::default()
     }
-    
+
     pub fn with_request_id(mut self, request_id: String) -> Self {
         self.request_id = Some(request_id);
         self
     }
-    
+
     pub fn add_pre_request_result(&mut self, result: InterceptorResult) {
         self.pre_request_results.push(result);
     }
-    
+
     pub fn add_post_request_result(&mut self, result: InterceptorResult) {
         self.post_request_results.push(result);
     }
-    
+
     pub fn get_pre_request_data(&self, interceptor_name: &str) -> Option<&serde_json::Value> {
         self.pre_request_results
             .iter()
             .find(|r| r.interceptor_name == interceptor_name)
             .map(|r| &r.data)
     }
-    
+
     pub fn get_post_request_data(&self, interceptor_name: &str) -> Option<&serde_json::Value> {
         self.post_request_results
             .iter()
             .find(|r| r.interceptor_name == interceptor_name)
             .map(|r| &r.data)
     }
-    
+
     pub fn set_metadata(&mut self, key: String, value: serde_json::Value) {
         self.metadata.insert(key, value);
     }
-    
+
     pub fn get_metadata(&self, key: &str) -> Option<&serde_json::Value> {
         self.metadata.get(key)
     }
@@ -100,7 +98,7 @@ impl InterceptorContext {
             metadata: HashMap::new(),
         }
     }
-    
+
     pub fn with_metadata(mut self, metadata: HashMap<String, serde_json::Value>) -> Self {
         self.metadata = metadata;
         self
@@ -112,20 +110,27 @@ impl InterceptorContext {
 pub trait Interceptor: Send + Sync {
     /// Name of the interceptor
     fn name(&self) -> &str;
-    
+
     /// Execute pre-request interceptor
-    async fn pre_request(&self, context: &mut InterceptorContext) -> Result<serde_json::Value, InterceptorError>;
-    
+    async fn pre_request(
+        &self,
+        context: &mut InterceptorContext,
+    ) -> Result<serde_json::Value, InterceptorError>;
+
     /// Execute post-request interceptor
-    async fn post_request(&self, context: &mut InterceptorContext, response: &serde_json::Value) -> Result<serde_json::Value, InterceptorError>;
-    
+    async fn post_request(
+        &self,
+        context: &mut InterceptorContext,
+        response: &serde_json::Value,
+    ) -> Result<serde_json::Value, InterceptorError>;
+
     /// Optional: Validate interceptor configuration
     fn validate_config(&self) -> Result<(), InterceptorError> {
         Ok(())
     }
-    
+
     /// Optional: Check if interceptor should be enabled for this request
-    fn should_execute(&self, context: &InterceptorContext) -> bool {
+    fn should_execute(&self, _context: &InterceptorContext) -> bool {
         true
     }
 }
@@ -141,21 +146,27 @@ impl InterceptorManager {
             interceptors: Vec::new(),
         }
     }
-    
-    pub fn add_interceptor(&mut self, interceptor: Arc<dyn Interceptor>) -> Result<(), InterceptorError> {
+
+    pub fn add_interceptor(
+        &mut self,
+        interceptor: Arc<dyn Interceptor>,
+    ) -> Result<(), InterceptorError> {
         interceptor.validate_config()?;
         self.interceptors.push(interceptor);
         Ok(())
     }
-    
-    pub async fn execute_pre_request(&self, context: &mut InterceptorContext) -> Result<(), InterceptorError> {
+
+    pub async fn execute_pre_request(
+        &self,
+        context: &mut InterceptorContext,
+    ) -> Result<(), InterceptorError> {
         let start_time = std::time::Instant::now();
-        
+
         for interceptor in &self.interceptors {
             if !interceptor.should_execute(context) {
                 continue;
             }
-            
+
             let interceptor_start = std::time::Instant::now();
             let result = match interceptor.pre_request(context).await {
                 Ok(data) => InterceptorResult {
@@ -173,23 +184,30 @@ impl InterceptorManager {
                     error: Some(e.to_string()),
                 },
             };
-            
+
             let mut state = context.state.write().await;
             state.add_pre_request_result(result);
         }
-        
-        tracing::debug!("Pre-request interceptors executed in {}ms", start_time.elapsed().as_millis());
+
+        tracing::debug!(
+            "Pre-request interceptors executed in {}ms",
+            start_time.elapsed().as_millis()
+        );
         Ok(())
     }
-    
-    pub async fn execute_post_request(&self, context: &mut InterceptorContext, response: &serde_json::Value) -> Result<(), InterceptorError> {
+
+    pub async fn execute_post_request(
+        &self,
+        context: &mut InterceptorContext,
+        response: &serde_json::Value,
+    ) -> Result<(), InterceptorError> {
         let start_time = std::time::Instant::now();
-        
+
         for interceptor in &self.interceptors {
             if !interceptor.should_execute(context) {
                 continue;
             }
-            
+
             let interceptor_start = std::time::Instant::now();
             let result = match interceptor.post_request(context, response).await {
                 Ok(data) => InterceptorResult {
@@ -207,12 +225,15 @@ impl InterceptorManager {
                     error: Some(e.to_string()),
                 },
             };
-            
+
             let mut state = context.state.write().await;
             state.add_post_request_result(result);
         }
-        
-        tracing::debug!("Post-request interceptors executed in {}ms", start_time.elapsed().as_millis());
+
+        tracing::debug!(
+            "Post-request interceptors executed in {}ms",
+            start_time.elapsed().as_millis()
+        );
         Ok(())
     }
 }
@@ -227,32 +248,39 @@ impl Default for InterceptorManager {
 mod tests {
     use super::*;
     use crate::types::gateway::ChatCompletionRequest;
-    
+
     struct TestInterceptor {
         name: String,
     }
-    
+
     impl TestInterceptor {
         fn new(name: String) -> Self {
             Self { name }
         }
     }
-    
+
     #[async_trait::async_trait]
     impl Interceptor for TestInterceptor {
         fn name(&self) -> &str {
             &self.name
         }
-        
-        async fn pre_request(&self, context: &mut InterceptorContext) -> Result<serde_json::Value, InterceptorError> {
+
+        async fn pre_request(
+            &self,
+            context: &mut InterceptorContext,
+        ) -> Result<serde_json::Value, InterceptorError> {
             Ok(serde_json::json!({
                 "interceptor": self.name,
                 "type": "pre_request",
                 "request_model": context.request.model
             }))
         }
-        
-        async fn post_request(&self, context: &mut InterceptorContext, response: &serde_json::Value) -> Result<serde_json::Value, InterceptorError> {
+
+        async fn post_request(
+            &self,
+            _context: &mut InterceptorContext,
+            _response: &serde_json::Value,
+        ) -> Result<serde_json::Value, InterceptorError> {
             Ok(serde_json::json!({
                 "interceptor": self.name,
                 "type": "post_request",
@@ -260,11 +288,11 @@ mod tests {
             }))
         }
     }
-    
+
     #[tokio::test]
     async fn test_interceptor_state() {
         let mut state = InterceptorState::new();
-        
+
         let result = InterceptorResult {
             interceptor_name: "test".to_string(),
             execution_time_ms: 100,
@@ -272,31 +300,34 @@ mod tests {
             success: true,
             error: None,
         };
-        
+
         state.add_pre_request_result(result);
-        
+
         let retrieved = state.get_pre_request_data("test").unwrap();
         assert_eq!(retrieved["test"], "value");
     }
-    
+
     #[tokio::test]
     async fn test_interceptor_manager() {
         let mut manager = InterceptorManager::new();
         let interceptor = Arc::new(TestInterceptor::new("test_interceptor".to_string()));
-        
+
         manager.add_interceptor(interceptor).unwrap();
-        
+
         let state = Arc::new(tokio::sync::RwLock::new(InterceptorState::new()));
         let request = ChatCompletionRequest::default();
         let headers = HashMap::new();
-        
+
         let mut context = InterceptorContext::new(request, headers, state.clone());
-        
+
         manager.execute_pre_request(&mut context).await.unwrap();
-        
+
         let state_read = state.read().await;
         assert_eq!(state_read.pre_request_results.len(), 1);
-        assert_eq!(state_read.pre_request_results[0].interceptor_name, "test_interceptor");
+        assert_eq!(
+            state_read.pre_request_results[0].interceptor_name,
+            "test_interceptor"
+        );
         assert!(state_read.pre_request_results[0].success);
     }
 }

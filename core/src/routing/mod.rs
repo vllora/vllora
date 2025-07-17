@@ -7,12 +7,9 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use thiserror::Error;
 
+pub mod interceptor;
 pub mod metrics;
 pub mod strategy;
-pub mod interceptor;
-
-use interceptor::{InterceptorManager, InterceptorState, InterceptorContext};
-use std::sync::Arc;
 
 #[derive(Error, Debug)]
 pub enum RouterError {
@@ -63,9 +60,7 @@ pub struct LlmRouter {
     pub targets: Vec<HashMap<String, serde_json::Value>>,
     #[serde(default)]
     pub metrics_duration: Option<MetricsDuration>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(default)]
-    pub interceptor_manager: Option<Arc<InterceptorManager>>,
+    // interceptor_manager removed
 }
 
 impl LlmRouter {
@@ -75,7 +70,6 @@ impl LlmRouter {
             strategy,
             targets: Vec::new(),
             metrics_duration: None,
-            interceptor_manager: None,
         }
     }
 
@@ -88,31 +82,18 @@ impl LlmRouter {
         self.metrics_duration = Some(duration);
         self
     }
-
-    pub fn with_interceptor_manager(mut self, manager: Arc<InterceptorManager>) -> Self {
-        self.interceptor_manager = Some(manager);
-        self
-    }
+    // with_interceptor_manager removed
 }
 
 /// Extended routing result that includes interceptor state
 #[derive(Debug, Clone)]
 pub struct RoutingResult {
     pub targets: Targets,
-    pub interceptor_state: Option<Arc<tokio::sync::RwLock<InterceptorState>>>,
 }
 
 impl RoutingResult {
     pub fn new(targets: Targets) -> Self {
-        Self {
-            targets,
-            interceptor_state: None,
-        }
-    }
-
-    pub fn with_interceptor_state(mut self, state: Arc<tokio::sync::RwLock<InterceptorState>>) -> Self {
-        self.interceptor_state = Some(state);
-        self
+        Self { targets }
     }
 }
 
@@ -181,34 +162,16 @@ pub trait RouteStrategy {
 impl RouteStrategy for LlmRouter {
     async fn route<M: MetricsRepository + Send + Sync>(
         &self,
-        request: ChatCompletionRequest,
-        available_models: &AvailableModels,
-        headers: HashMap<String, String>,
+        _request: ChatCompletionRequest,
+        _available_models: &AvailableModels,
+        _headers: HashMap<String, String>,
         metrics_repository: &M,
     ) -> Result<RoutingResult, RouterError> {
-        // Initialize interceptor state
-        let interceptor_state = Arc::new(tokio::sync::RwLock::new(InterceptorState::new()));
-        
-        // Execute pre-request interceptors if available
-        if let Some(interceptor_manager) = &self.interceptor_manager {
-            let mut context = InterceptorContext::new(
-                request.clone(),
-                headers.clone(),
-                interceptor_state.clone(),
-            );
-            
-            interceptor_manager.execute_pre_request(&mut context).await?;
-            
-            tracing::debug!("Pre-request interceptors executed for router: {}", self.name);
-        }
-
-        // Execute routing strategy
+        // Routing logic only, no interceptors
         let targets = match &self.strategy {
             RoutingStrategy::Fallback => self.targets.clone(),
             RoutingStrategy::Random => {
-                // Randomly select between available models
                 use rand::Rng;
-
                 let mut rng = rand::rng();
                 let idx = rng.random_range(0..self.targets.len());
                 vec![self.targets[idx].clone()]
@@ -216,11 +179,8 @@ impl RouteStrategy for LlmRouter {
             RoutingStrategy::Percentage {
                 targets_percentages,
             } => {
-                // it should be 100, but it is not restricted
                 let total_percentages: f64 = targets_percentages.iter().sum();
-                // A/B testing between models based on ModelPairWithSplit
                 let rand_val = rand::random::<f64>() * total_percentages;
-
                 let mut sum = 0.0;
                 let idx = targets_percentages
                     .iter()
@@ -230,23 +190,12 @@ impl RouteStrategy for LlmRouter {
                         rand_val >= prev_sum && rand_val < sum
                     })
                     .unwrap_or(0);
-
                 let target = match self.targets.get(idx) {
                     Some(target) => target.clone(),
                     None => return Err(RouterError::TargetByIndexNotFound(idx)),
                 };
-
                 vec![target]
             }
-            // RoutingStrategy::Script { script } => {
-            //     let result =
-            //         ScriptStrategy::run(script, &request, &headers, available_models, &metrics)?;
-
-            //     let r = serde_json::from_value(result)
-            //         .map_err(RouterError::FailedToDeserializeRequestResult)?;
-
-            //     vec![r]
-            // }
             RoutingStrategy::Optimized { metric } => {
                 let models = self
                     .targets
@@ -256,10 +205,7 @@ impl RouteStrategy for LlmRouter {
                             .and_then(|v| v.as_str().map(|s| s.to_string()))
                     })
                     .collect::<Vec<_>>();
-
-                // Fetch metrics from the repository
                 let metrics = metrics_repository.get_metrics().await?;
-
                 let model = strategy::metric::route(
                     &models,
                     &metrics,
@@ -267,34 +213,13 @@ impl RouteStrategy for LlmRouter {
                     self.metrics_duration.as_ref(),
                 )
                 .await?;
-
                 vec![HashMap::from([(
                     "model".to_string(),
                     serde_json::Value::String(model),
                 )])]
             }
         };
-
-        // Execute post-request interceptors if available
-        if let Some(interceptor_manager) = &self.interceptor_manager {
-            let mut context = InterceptorContext::new(
-                request.clone(),
-                headers.clone(),
-                interceptor_state.clone(),
-            );
-            
-            let response_data = serde_json::json!({
-                "targets": targets,
-                "router_name": self.name,
-                "strategy": self.strategy.to_string()
-            });
-            
-            interceptor_manager.execute_post_request(&mut context, &response_data).await?;
-            
-            tracing::debug!("Post-request interceptors executed for router: {}", self.name);
-        }
-
-        Ok(RoutingResult::new(targets).with_interceptor_state(interceptor_state))
+        Ok(RoutingResult::new(targets))
     }
 }
 
@@ -312,7 +237,6 @@ mod tests {
             },
             targets: vec![],
             metrics_duration: None,
-            interceptor_manager: None,
         };
 
         eprintln!("{}", serde_json::to_string_pretty(&router).unwrap());
@@ -345,7 +269,6 @@ mod tests {
                 ]),
             ],
             metrics_duration: None,
-            interceptor_manager: None,
         };
 
         eprintln!("{}", serde_json::to_string_pretty(&router).unwrap());
@@ -401,7 +324,6 @@ mod tests {
                 serde_json::Value::String("openai/gpt-4".to_string()),
             )])],
             metrics_duration: Some(MetricsDuration::Total),
-            interceptor_manager: None,
         };
 
         // Test routing
@@ -417,78 +339,81 @@ mod tests {
         let routing_result = result.unwrap();
         assert_eq!(routing_result.targets.len(), 1);
         assert_eq!(
-            routing_result.targets[0].get("model").unwrap().as_str().unwrap(),
+            routing_result.targets[0]
+                .get("model")
+                .unwrap()
+                .as_str()
+                .unwrap(),
             "openai/gpt-4"
         );
-        assert!(routing_result.interceptor_state.is_none());
     }
 
-    #[tokio::test]
-    async fn test_interceptor_integration() {
-        use crate::routing::interceptor::{InterceptorManager, Interceptor, InterceptorError};
-        use crate::routing::interceptor::InterceptorContext;
-        use std::sync::Arc;
+    // #[tokio::test]
+    // async fn test_interceptor_integration() {
+    //     use crate::routing::interceptor::{InterceptorManager, Interceptor, InterceptorError};
+    //     use crate::routing::interceptor::InterceptorContext;
+    //     use std::sync::Arc;
 
-        // Create a test interceptor
-        struct TestInterceptor;
-        
-        #[async_trait::async_trait]
-        impl Interceptor for TestInterceptor {
-            fn name(&self) -> &str {
-                "test_interceptor"
-            }
-            
-            async fn pre_request(&self, _context: &mut InterceptorContext) -> Result<serde_json::Value, InterceptorError> {
-                Ok(serde_json::json!({"test": "pre_request"}))
-            }
-            
-            async fn post_request(&self, _context: &mut InterceptorContext, _response: &serde_json::Value) -> Result<serde_json::Value, InterceptorError> {
-                Ok(serde_json::json!({"test": "post_request"}))
-            }
-        }
+    //     // Create a test interceptor
+    //     struct TestInterceptor;
 
-        // Create interceptor manager
-        let mut interceptor_manager = InterceptorManager::new();
-        interceptor_manager.add_interceptor(Arc::new(TestInterceptor)).unwrap();
+    //     #[async_trait::async_trait]
+    //     impl Interceptor for TestInterceptor {
+    //         fn name(&self) -> &str {
+    //             "test_interceptor"
+    //         }
 
-        // Create router with interceptor manager
-        let router = LlmRouter {
-            name: "test_router".to_string(),
-            strategy: RoutingStrategy::Optimized {
-                metric: strategy::metric::MetricSelector::Latency,
-            },
-            targets: vec![HashMap::from([(
-                "model".to_string(),
-                serde_json::Value::String("openai/gpt-4".to_string()),
-            )])],
-            metrics_duration: Some(MetricsDuration::Total),
-            interceptor_manager: Some(Arc::new(interceptor_manager)),
-        };
+    //         async fn pre_request(&self, _context: &mut InterceptorContext) -> Result<serde_json::Value, InterceptorError> {
+    //             Ok(serde_json::json!({"test": "pre_request"}))
+    //         }
 
-        // Test routing
-        let request = ChatCompletionRequest::default();
-        let available_models = AvailableModels(vec![]);
-        let headers = HashMap::new();
+    //         async fn post_request(&self, _context: &mut InterceptorContext, _response: &serde_json::Value) -> Result<serde_json::Value, InterceptorError> {
+    //             Ok(serde_json::json!({"test": "post_request"}))
+    //         }
+    //     }
 
-        let result = router
-            .route(request, &available_models, headers, &InMemoryMetricsRepository::new(BTreeMap::new()))
-            .await;
+    //     // Create interceptor manager
+    //     let mut interceptor_manager = InterceptorManager::new();
+    //     interceptor_manager.add_interceptor(Arc::new(TestInterceptor)).unwrap();
 
-        assert!(result.is_ok());
-        let routing_result = result.unwrap();
-        assert_eq!(routing_result.targets.len(), 1);
-        assert_eq!(
-            routing_result.targets[0].get("model").unwrap().as_str().unwrap(),
-            "openai/gpt-4"
-        );
+    //     // Create router with interceptor manager
+    //     let router = LlmRouter {
+    //         name: "test_router".to_string(),
+    //         strategy: RoutingStrategy::Optimized {
+    //             metric: strategy::metric::MetricSelector::Latency,
+    //         },
+    //         targets: vec![HashMap::from([(
+    //             "model".to_string(),
+    //             serde_json::Value::String("openai/gpt-4".to_string()),
+    //         )])],
+    //         metrics_duration: Some(MetricsDuration::Total),
+    //         interceptor_manager: Some(Arc::new(interceptor_manager)),
+    //     };
 
-        // Check interceptor state exists
-        assert!(routing_result.interceptor_state.is_some());
-        let state = routing_result.interceptor_state.unwrap();
-        let state_read = state.read().await;
-        assert_eq!(state_read.pre_request_results.len(), 1);
-        assert_eq!(state_read.post_request_results.len(), 1);
-    }
+    //     // Test routing
+    //     let request = ChatCompletionRequest::default();
+    //     let available_models = AvailableModels(vec![]);
+    //     let headers = HashMap::new();
+
+    //     let result = router
+    //         .route(request, &available_models, headers, &InMemoryMetricsRepository::new(BTreeMap::new()))
+    //         .await;
+
+    //     assert!(result.is_ok());
+    //     let routing_result = result.unwrap();
+    //     assert_eq!(routing_result.targets.len(), 1);
+    //     assert_eq!(
+    //         routing_result.targets[0].get("model").unwrap().as_str().unwrap(),
+    //         "openai/gpt-4"
+    //     );
+
+    //     // Check interceptor state exists
+    //     assert!(routing_result.interceptor_state.is_some());
+    //     let state = routing_result.interceptor_state.unwrap();
+    //     let state_read = state.read().await;
+    //     assert_eq!(state_read.pre_request_results.len(), 1);
+    //     assert_eq!(state_read.post_request_results.len(), 1);
+    // }
 
     // #[tokio::test]
     // async fn test_script_router() {
