@@ -405,7 +405,7 @@ impl TraceService for TraceServiceImpl {
                         tags,
                         run_id,
                     };
-                    
+
                     if let Some(project_id) = project_id.as_ref() {
                         if let Some((sender, _)) =
                             self.project_trace_senders.get(project_id).as_deref()

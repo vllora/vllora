@@ -218,7 +218,6 @@ impl ApiServer {
                 service
                     .app_data(limit_checker)
                     .app_data(Data::new(callback))
-                    .app_data(web::Data::from(trace_senders.clone()))
                     .app_data(Data::new(AvailableModels(models)))
                     .app_data(Data::new(
                         Box::new(cost_calculator) as Box<dyn CostCalculator>
