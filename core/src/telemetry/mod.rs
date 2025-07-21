@@ -81,7 +81,6 @@ pub(crate) struct SpanWriter {
     pub(crate) transport: Box<dyn SpanWriterTransport>,
     pub(crate) receiver: tokio::sync::mpsc::Receiver<Span>,
     pub(crate) buf: Vec<Vec<Value>>,
-    pub(crate) trace_senders: Arc<TraceMap>,
     pub(crate) finished_traces: Vec<TraceId>,
 }
 
@@ -171,10 +170,6 @@ impl SpanWriter {
         if let Err(e) = result {
             tracing::error!("{e}");
         }
-        // Once we've written the full trace, we can safely drop the sender
-        for trace_id in self.finished_traces.drain(..) {
-            self.trace_senders.remove(&trace_id);
-        }
         self.buf.clear();
     }
 
@@ -204,7 +199,6 @@ impl SpanWriter {
 
 #[derive(Debug)]
 pub struct TraceServiceImpl {
-    pub(crate) listener_senders: Arc<TraceMap>,
     pub(crate) project_trace_senders: Arc<ProjectTraceMap>,
     pub(crate) writer_sender: mpsc::Sender<Span>,
     pub(crate) tenant_resolver: Box<dyn TraceTenantResolver>,
@@ -212,14 +206,12 @@ pub struct TraceServiceImpl {
 
 impl TraceServiceImpl {
     pub fn new(
-        listener_senders: Arc<TraceMap>,
         project_trace_senders: Arc<ProjectTraceMap>,
         transport: Box<dyn SpanWriterTransport>,
         tenant_resolver: Box<dyn TraceTenantResolver>,
     ) -> Self {
         let (sender, receiver) = mpsc::channel(1000);
         let writer = SpanWriter {
-            trace_senders: Arc::clone(&listener_senders),
             transport,
             receiver,
             finished_traces: Default::default(),
@@ -227,7 +219,6 @@ impl TraceServiceImpl {
         };
         tokio::spawn(writer.run());
         Self {
-            listener_senders,
             project_trace_senders,
             writer_sender: sender,
             tenant_resolver,
@@ -414,9 +405,7 @@ impl TraceService for TraceServiceImpl {
                         tags,
                         run_id,
                     };
-                    if let Some((sender, _)) = self.listener_senders.get(&trace_id).as_deref() {
-                        let _ = sender.send(span.clone());
-                    }
+                    
                     if let Some(project_id) = project_id.as_ref() {
                         if let Some((sender, _)) =
                             self.project_trace_senders.get(project_id).as_deref()
@@ -522,7 +511,6 @@ pub struct TracingContextMiddleware<S> {
     service: S,
 }
 
-pub type TraceMap = DashMap<TraceId, (broadcast::Sender<Span>, broadcast::Receiver<Span>)>;
 pub type ProjectTraceMap = DashMap<String, (broadcast::Sender<Span>, broadcast::Receiver<Span>)>;
 
 impl<S, B> Service<ServiceRequest> for TracingContextMiddleware<S>

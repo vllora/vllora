@@ -28,7 +28,7 @@ use langdb_core::telemetry::database::DatabaseSpanWritter;
 use langdb_core::telemetry::DummyTraceTenantResolver;
 use langdb_core::telemetry::ProjectTraceMap;
 use langdb_core::telemetry::SpanWriterTransport;
-use langdb_core::telemetry::{TraceMap, TraceServiceImpl, TraceServiceServer};
+use langdb_core::telemetry::{TraceServiceImpl, TraceServiceServer};
 use langdb_core::types::gateway::CostCalculator;
 use langdb_core::types::guardrails::service::GuardrailsEvaluator;
 use langdb_core::types::guardrails::Guard;
@@ -110,8 +110,6 @@ impl ApiServer {
         models: Vec<ModelMetadata>,
         storage: Option<Arc<Mutex<InMemoryStorage>>>,
     ) -> Result<impl Future<Output = Result<(), ServerError>>, ServerError> {
-        let trace_senders = Arc::new(TraceMap::new());
-        let trace_senders_inner = Arc::clone(&trace_senders);
         let server_config = self.clone();
 
         let cost_calculator = GatewayCostCalculator::new(models.clone());
@@ -142,7 +140,6 @@ impl ApiServer {
             Self::create_app_entry(
                 cors,
                 storage.clone(),
-                trace_senders_inner.clone(),
                 models.clone(),
                 server_config.config.guards.clone(),
                 callback.clone(),
@@ -165,7 +162,6 @@ impl ApiServer {
         };
 
         let trace_service = TraceServiceServer::new(TraceServiceImpl::new(
-            Arc::new(TraceMap::new()),
             Arc::new(ProjectTraceMap::new()),
             writer,
             Box::new(DummyTraceTenantResolver),
@@ -188,7 +184,6 @@ impl ApiServer {
     fn create_app_entry(
         cors: Cors,
         in_memory_storage: Option<Arc<Mutex<InMemoryStorage>>>,
-        trace_senders: Arc<TraceMap>,
         models: Vec<ModelMetadata>,
         guards: Option<HashMap<String, Guard>>,
         callback: CallbackHandlerFn,

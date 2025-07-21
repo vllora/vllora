@@ -23,7 +23,6 @@ use tracing_futures::Instrument;
 
 use crate::handler::AvailableModels;
 use crate::handler::CallbackHandlerFn;
-use crate::telemetry::TraceMap;
 use crate::GatewayApiError;
 
 use super::can_execute_llm_for_request;
@@ -40,7 +39,6 @@ pub type SSOChatEvent = (
 pub async fn create_chat_completion(
     request: web::Json<ChatCompletionRequestWithTools<RoutingStrategy>>,
     callback_handler: web::Data<CallbackHandlerFn>,
-    traces: web::Data<TraceMap>,
     req: HttpRequest,
     provided_models: web::Data<AvailableModels>,
     cost_calculator: web::Data<Box<dyn CostCalculator>>,
@@ -82,7 +80,7 @@ pub async fn create_chat_completion(
 
     let executor = RoutedExecutor::new(request.clone());
     executor
-        .execute(&executor_context, traces.get_ref(), memory_storage)
+        .execute(&executor_context, memory_storage)
         .instrument(span.clone())
         .await
 }
