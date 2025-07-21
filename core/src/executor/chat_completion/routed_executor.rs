@@ -40,6 +40,8 @@ use crate::events::SPAN_REQUEST_ROUTING;
 use tracing::field;
 use valuable::Valuable;
 
+const MAX_DEPTH: usize = 10;
+
 #[derive(Error, Debug)]
 pub enum RoutedExecutorError {
     #[error("Failed deserializing request to json: {0}")]
@@ -68,7 +70,15 @@ impl RoutedExecutor {
 
         let mut targets = vec![(self.request.clone(), None)];
 
+        let mut depth = 0;
         while let Some((mut request, target)) = targets.pop() {
+            depth += 1;
+            if depth > MAX_DEPTH {
+                return Err(GatewayApiError::GatewayError(GatewayError::CustomError(
+                    "Max depth reached".to_string(),
+                )));
+            }
+
             if let Some(t) = target {
                 request.router = None;
                 request = Self::merge_request_with_target(&request, &t)?;
