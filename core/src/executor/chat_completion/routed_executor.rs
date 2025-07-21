@@ -31,7 +31,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt as _;
 use crate::handler::find_model_by_full_name;
 
 use crate::routing::LlmRouter;
-use crate::telemetry::{trace_id_uuid};
+use crate::telemetry::trace_id_uuid;
 use crate::GatewayApiError;
 
 use crate::events::JsonValue;
