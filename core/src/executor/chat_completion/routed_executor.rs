@@ -23,7 +23,6 @@ use crate::executor::chat_completion::StreamCacheContext;
 use thiserror::Error;
 
 use opentelemetry::trace::TraceContextExt as _;
-use tokio::sync::broadcast;
 use tokio::sync::Mutex;
 use tracing::Span;
 use tracing_futures::Instrument;
@@ -32,7 +31,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt as _;
 use crate::handler::find_model_by_full_name;
 
 use crate::routing::LlmRouter;
-use crate::telemetry::{trace_id_uuid, TraceMap};
+use crate::telemetry::{trace_id_uuid};
 use crate::GatewayApiError;
 
 use crate::events::JsonValue;
@@ -63,7 +62,6 @@ impl RoutedExecutor {
     pub async fn execute(
         &self,
         executor_context: &ExecutorContext,
-        traces: &TraceMap,
         memory_storage: Option<Arc<Mutex<InMemoryStorage>>>,
     ) -> Result<HttpResponse, GatewayApiError> {
         let span = Span::current();
@@ -141,7 +139,7 @@ impl RoutedExecutor {
                     }
                 }
             } else {
-                let result = Self::execute_request(&request, executor_context, traces).await;
+                let result = Self::execute_request(&request, executor_context).await;
 
                 match result {
                     Ok(response) => return Ok(response),
@@ -165,14 +163,10 @@ impl RoutedExecutor {
     async fn execute_request(
         request: &ChatCompletionRequestWithTools<RoutingStrategy>,
         executor_context: &ExecutorContext,
-        traces: &TraceMap,
     ) -> Result<HttpResponse, GatewayApiError> {
         let span = tracing::Span::current();
         span.record("request", &serde_json::to_string(&request)?);
         let trace_id = span.context().span().span_context().trace_id();
-        traces
-            .entry(trace_id)
-            .or_insert_with(|| broadcast::channel(8));
 
         let model_name = request.request.model.clone();
 
