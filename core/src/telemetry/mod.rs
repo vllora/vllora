@@ -407,7 +407,7 @@ impl TraceService for TraceServiceImpl {
                     };
 
                     if let Some(project_id) = project_id.as_ref() {
-                        if let Some((sender, _)) =
+                        if let Some(sender) =
                             self.project_trace_senders.get(project_id).as_deref()
                         {
                             match sender.send(span.clone()) {
@@ -511,7 +511,7 @@ pub struct TracingContextMiddleware<S> {
     service: S,
 }
 
-pub type ProjectTraceMap = DashMap<String, (broadcast::Sender<Span>, broadcast::Receiver<Span>)>;
+pub type ProjectTraceMap = DashMap<String, broadcast::Sender<Span>>;
 
 impl<S, B> Service<ServiceRequest> for TracingContextMiddleware<S>
 where
