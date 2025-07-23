@@ -54,7 +54,7 @@ regex = "1.11.1"
 secrecy = { version = "0.10.3", features = ["serde"] }
 actix-web = "4"
 tonic = { workspace = true }
-dashmap = "6.0.1"
+dashmap = "6.1.0"
 bytes = { version = "1", features = ["serde"] }
 either = "1.15.0"
 tracing = { workspace = true }

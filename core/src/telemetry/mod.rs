@@ -407,8 +407,7 @@ impl TraceService for TraceServiceImpl {
                     };
 
                     if let Some(project_id) = project_id.as_ref() {
-                        if let Some(sender) =
-                            self.project_trace_senders.get(project_id).as_deref()
+                        if let Some(sender) = self.project_trace_senders.get(project_id).as_deref()
                         {
                             match sender.send(span.clone()) {
                                 Ok(_) => {}
