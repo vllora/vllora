@@ -145,6 +145,9 @@ pub struct RequestUser {
     #[serde(alias = "user_name")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    #[serde(alias = "user_email")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
     #[serde(alias = "user_tags", alias = "tags")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tiers: Option<Vec<String>>,
