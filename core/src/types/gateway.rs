@@ -197,7 +197,7 @@ pub enum McpTransportType {
         #[serde(default)]
         env: Option<HashMap<String, String>>,
     },
-    #[serde(rename = "in-memory")]
+    #[serde(rename = "in-memory", alias = "memory")]
     InMemory {
         #[serde(default = "default_in_memory_name")]
         name: String,
