@@ -12,6 +12,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 pub const API_CALLS: &str = "api_calls";
+pub const API_CALLS_BY_IP: &str = "api_calls_by_ip";
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct RateLimiting {
