@@ -109,6 +109,8 @@ impl Client {
     ) -> GatewayResult<GenerateContentResponse> {
         let invoke_url = format!("/{model_name}:generateContent");
         tracing::debug!(target: "gemini", "Invoking model: {model_name} on {invoke_url} with payload: {:?}", payload);
+        let span = tracing::Span::current();
+        span.record("request", serde_json::to_string(&payload)?);
         self.make_request(&invoke_url, Some(&payload), Method::Post)
             .await
     }
@@ -124,6 +126,8 @@ impl Client {
             self.api_key
         );
         tracing::debug!(target: "gemini", "Invoking model: {model_name} on {stream_url} with payload: {}", serde_json::to_string(&payload).unwrap());
+        let span = tracing::Span::current();
+        span.record("request", serde_json::to_string(&payload)?);
         let request = self.client.post(&stream_url).json(&payload);
         // Delegate the request to the EventSource.
         let event_source =
