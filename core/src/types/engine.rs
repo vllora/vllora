@@ -121,6 +121,10 @@ impl Prompt {
     }
 
     pub fn render(template: String, variables: &HashMap<String, Value>) -> String {
+        if variables.is_empty() {
+            return template;
+        }
+
         let env = Environment::new();
         let tmpl = env.template_from_str(&template).unwrap();
 
