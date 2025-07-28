@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::events::JsonValue;
 use crate::executor::context::ExecutorContext;
+use crate::model::DefaultModelMetadataFactory;
 use crate::routing::RoutingStrategy;
 use crate::types::gateway::ChatCompletionRequestWithTools;
 use crate::types::gateway::CompletionModelUsage;
@@ -14,16 +15,16 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use valuable::Valuable;
 
+use crate::handler::AvailableModels;
+use crate::handler::CallbackHandlerFn;
+use crate::model::ModelMetadataFactory;
 use crate::types::gateway::{
     ChatCompletionChunk, ChatCompletionChunkChoice, ChatCompletionDelta, ChatCompletionUsage,
     CostCalculator,
 };
+use crate::GatewayApiError;
 use tracing::Span;
 use tracing_futures::Instrument;
-
-use crate::handler::AvailableModels;
-use crate::handler::CallbackHandlerFn;
-use crate::GatewayApiError;
 
 use super::can_execute_llm_for_request;
 
@@ -73,7 +74,10 @@ pub async fn create_chat_completion(
     let executor_context = ExecutorContext::new(
         callback_handler.get_ref().clone(),
         cost_calculator.into_inner(),
-        provided_models.get_ref().clone(),
+        Arc::new(
+            Box::new(DefaultModelMetadataFactory::new(&provided_models.0))
+                as Box<dyn ModelMetadataFactory>,
+        ),
         &req,
         guardrails_evaluator_service,
     )?;

@@ -1,7 +1,7 @@
 use crate::error::GatewayError;
 use crate::executor::chat_completion::basic_executor::BasicCacheContext;
 use crate::executor::chat_completion::stream_executor::{stream_chunks, StreamCacheContext};
-use crate::handler::{find_model_by_full_name, ModelEventWithDetails};
+use crate::handler::ModelEventWithDetails;
 use crate::llm_gateway::message_mapper::MessageMapper;
 use crate::llm_gateway::provider::Provider;
 use crate::model::cached::CachedModel;
@@ -119,7 +119,10 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
     .await?;
 
     let mut request = request_with_tools.request.clone();
-    let llm_model = find_model_by_full_name(&request.model, &executor_context.provided_models)?;
+    let llm_model = executor_context
+        .model_metadata_factory
+        .get_model_metadata(&request.model)
+        .await?;
     request.model = llm_model.inference_provider.model_name.clone();
 
     let user: String = request
@@ -262,8 +265,10 @@ pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Cl
     cached_model: Option<CachedModel>,
     cache_state: Option<ResponseCacheState>,
 ) -> Result<ResolvedModelContext, GatewayApiError> {
-    let llm_model =
-        find_model_by_full_name(&request.request.model, &executor_context.provided_models)?;
+    let llm_model = executor_context
+        .model_metadata_factory
+        .get_model_metadata(&request.request.model)
+        .await?;
     let (key_credentials, llm_model) = use_langdb_proxy(executor_context, llm_model.clone());
 
     let key = get_key_credentials(

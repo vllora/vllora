@@ -30,7 +30,11 @@ use types::{ModelEvent, ModelEventType};
 use valuable::Valuable;
 pub mod handler;
 use self::openai::OpenAIModel;
+use crate::handler::find_model_by_full_name;
 use crate::model::proxy::OpenAISpecModel;
+use crate::models::ModelMetadata;
+use crate::GatewayApiError;
+
 pub mod anthropic;
 pub mod bedrock;
 pub mod cached;
@@ -709,4 +713,28 @@ pub async fn apply_guardrails(
     }
 
     Ok(())
+}
+
+#[async_trait]
+pub trait ModelMetadataFactory: Send + Sync {
+    async fn get_model_metadata(&self, model_name: &str) -> Result<ModelMetadata, GatewayApiError>;
+}
+
+pub struct DefaultModelMetadataFactory {
+    models: Vec<ModelMetadata>,
+}
+
+impl DefaultModelMetadataFactory {
+    pub fn new(models: &[ModelMetadata]) -> Self {
+        Self {
+            models: models.to_vec(),
+        }
+    }
+}
+
+#[async_trait]
+impl ModelMetadataFactory for DefaultModelMetadataFactory {
+    async fn get_model_metadata(&self, model_name: &str) -> Result<ModelMetadata, GatewayApiError> {
+        find_model_by_full_name(model_name, &self.models)
+    }
 }

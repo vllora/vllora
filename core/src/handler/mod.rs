@@ -20,12 +20,11 @@ pub struct AvailableModels(pub Vec<ModelMetadata>);
 
 pub fn find_model_by_full_name(
     model_name: &str,
-    provided_models: &AvailableModels,
+    provided_models: &[ModelMetadata],
 ) -> Result<ModelMetadata, GatewayApiError> {
     let model_parts = model_name.split('/').collect::<Vec<&str>>();
     let llm_model = if model_parts.len() == 1 {
         provided_models
-            .0
             .iter()
             .find(|m| m.model.to_lowercase() == model_name.to_lowercase())
             .cloned()
@@ -37,7 +36,6 @@ pub fn find_model_by_full_name(
         let model_name = model_parts.first().expect("1 element in model parts");
 
         provided_models
-            .0
             .iter()
             .find(|m| {
                 (m.model.to_lowercase() == model_name.to_lowercase()

@@ -1,9 +1,14 @@
-use crate::types::gateway::ChatCompletionRequest;
 use crate::routing::InterceptorSpec;
+use crate::types::gateway::ChatCompletionRequest;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
+
+mod factory;
+pub mod guard;
+
+pub use factory::RouterInterceptorFactory;
 
 #[derive(Error, Debug)]
 pub enum InterceptorError {
@@ -139,7 +144,10 @@ pub trait Interceptor: Send + Sync {
 /// Factory trait for creating interceptors from InterceptorSpec
 pub trait InterceptorFactory: Send + Sync {
     /// Create an interceptor instance from the given InterceptorSpec
-    fn create_interceptor(&self, spec: &InterceptorSpec) -> Result<Arc<dyn Interceptor>, InterceptorError>;
+    fn create_interceptor(
+        &self,
+        spec: &InterceptorSpec,
+    ) -> Result<Arc<dyn Interceptor>, InterceptorError>;
 }
 
 /// Manager for handling multiple interceptors
@@ -196,7 +204,7 @@ impl InterceptorManager {
             state.add_pre_request_result(result);
         }
 
-        tracing::debug!(
+        tracing::warn!(
             "Pre-request interceptors executed in {}ms",
             start_time.elapsed().as_millis()
         );
@@ -254,7 +262,7 @@ impl Default for InterceptorManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::gateway::ChatCompletionRequest;
+    use crate::{routing::InterceptorType, types::gateway::ChatCompletionRequest};
 
     struct TestInterceptor {
         name: String,
@@ -346,7 +354,10 @@ mod tests {
         // Dummy factory that creates TestInterceptor from InterceptorSpec
         struct DummyFactory;
         impl super::InterceptorFactory for DummyFactory {
-            fn create_interceptor(&self, spec: &InterceptorSpec) -> Result<Arc<dyn super::Interceptor>, super::InterceptorError> {
+            fn create_interceptor(
+                &self,
+                spec: &InterceptorSpec,
+            ) -> Result<Arc<dyn super::Interceptor>, super::InterceptorError> {
                 Ok(Arc::new(TestInterceptor::new(spec.name.clone())))
             }
         }
@@ -354,7 +365,9 @@ mod tests {
         // Example InterceptorSpec
         let spec = InterceptorSpec {
             name: "factory_test_interceptor".to_string(),
-            interceptor_type: Some("dummy".to_string()),
+            interceptor_type: InterceptorType::Guardrail {
+                guard_id: "guard_id".to_string(),
+            },
             extra: Default::default(),
         };
 
@@ -374,7 +387,10 @@ mod tests {
         manager.execute_pre_request(&mut context).await.unwrap();
         let state_read = state.read().await;
         assert_eq!(state_read.pre_request_results.len(), 1);
-        assert_eq!(state_read.pre_request_results[0].interceptor_name, "factory_test_interceptor");
+        assert_eq!(
+            state_read.pre_request_results[0].interceptor_name,
+            "factory_test_interceptor"
+        );
         assert!(state_read.pre_request_results[0].success);
     }
 }

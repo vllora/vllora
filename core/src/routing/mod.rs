@@ -1,10 +1,12 @@
+use crate::model::ModelMetadataFactory;
 use crate::routing::metrics::MetricsRepository;
 // use crate::routing::strategy::script::ScriptError;
 // use crate::routing::strategy::script::ScriptStrategy;
-use crate::handler::AvailableModels;
+use crate::routing::strategy::conditional::ConditionalRouter;
 use crate::types::gateway::ChatCompletionRequest;
 use std::collections::HashMap;
 use std::fmt::Display;
+use std::sync::Arc;
 use thiserror::Error;
 
 pub mod interceptor;
@@ -162,10 +164,16 @@ pub struct ConditionalRouting {
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
 pub struct InterceptorSpec {
     pub name: String,
-    #[serde(rename = "type")]
-    pub interceptor_type: Option<String>,
+    #[serde(flatten)]
+    pub interceptor_type: InterceptorType,
     #[serde(flatten)]
     pub extra: HashMap<String, serde_json::Value>,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum InterceptorType {
+    Guardrail { guard_id: String },
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
@@ -206,7 +214,7 @@ impl ConditionExpr {
             ConditionExpr::Expr(map) => {
                 for key in map.keys() {
                     if !Self::is_valid_key(key) {
-                        return Err(format!("Invalid condition key: {}", key));
+                        return Err(format!("Invalid condition key: {key}"));
                     }
                 }
                 Ok(())
@@ -253,9 +261,10 @@ pub trait RouteStrategy {
     async fn route<M: MetricsRepository + Send + Sync>(
         &self,
         request: ChatCompletionRequest,
-        available_models: &AvailableModels,
+        model_metadata_factory: Arc<Box<dyn ModelMetadataFactory>>,
         headers: HashMap<String, String>,
         metrics_repository: &M,
+        interceptor_factory: Box<dyn interceptor::InterceptorFactory>,
     ) -> Result<RoutingResult, RouterError>;
 }
 
@@ -264,9 +273,10 @@ impl RouteStrategy for LlmRouter {
     async fn route<M: MetricsRepository + Send + Sync>(
         &self,
         _request: ChatCompletionRequest,
-        _available_models: &AvailableModels,
+        _model_metadata_factory: Arc<Box<dyn ModelMetadataFactory>>,
         _headers: HashMap<String, String>,
         metrics_repository: &M,
+        interceptor_factory: Box<dyn interceptor::InterceptorFactory>,
     ) -> Result<RoutingResult, RouterError> {
         // Routing logic only, no interceptors
         let targets = match &self.strategy {
@@ -321,12 +331,33 @@ impl RouteStrategy for LlmRouter {
             }
             RoutingStrategy::Conditional { routing } => {
                 tracing::info!("Conditional routing: {:#?}", routing);
-                // Placeholder for conditional routing logic
-                // This will require a more complex state management
-                // For now, it will return an error or a default target
-                return Err(RouterError::MetricRouterError(
-                    "Conditional routing not yet implemented".to_string(),
-                ));
+                let router = ConditionalRouter {
+                    routing: routing.clone(),
+                };
+                let headers = HashMap::new(); // TODO: pass real headers
+                let target_opt = router
+                    .get_target(interceptor_factory, &_request, &headers, &HashMap::new())
+                    .await;
+                tracing::info!("Target: {:#?}", target_opt);
+                match target_opt {
+                    Some(TargetSpec::List(targets)) => targets.clone(),
+                    Some(TargetSpec::Any { any, .. }) => any
+                        .iter()
+                        .map(|model| {
+                            let mut map = HashMap::new();
+                            map.insert(
+                                "model".to_string(),
+                                serde_json::Value::String(model.clone()),
+                            );
+                            map
+                        })
+                        .collect(),
+                    None => {
+                        return Err(RouterError::MetricRouterError(
+                            "No conditional route matched".to_string(),
+                        ))
+                    }
+                }
             }
         };
         Ok(RoutingResult::new(targets))
@@ -335,6 +366,10 @@ impl RouteStrategy for LlmRouter {
 
 #[cfg(test)]
 mod tests {
+    use crate::model::DefaultModelMetadataFactory;
+    use std::sync::Arc;
+
+    use crate::routing::interceptor::InterceptorFactory;
 
     use super::*;
 
@@ -360,7 +395,7 @@ mod tests {
                 HashMap::from([
                     (
                         "model".to_string(),
-                        serde_json::Value::String("openai/gpt-4o-mini".to_string()),
+                        serde_json::Value::String("openai/gpt-4.1-nano".to_string()),
                     ),
                     (
                         "frequence_penality".to_string(),
@@ -370,7 +405,7 @@ mod tests {
                 HashMap::from([
                     (
                         "model".to_string(),
-                        serde_json::Value::String("openai/gpt-4o-mini".to_string()),
+                        serde_json::Value::String("openai/gpt-4.1-nano".to_string()),
                     ),
                     (
                         "frequence_penality".to_string(),
@@ -438,11 +473,32 @@ mod tests {
 
         // Test routing
         let request = ChatCompletionRequest::default();
-        let available_models = AvailableModels(vec![]);
+        let model_metadata_factory = Arc::new(
+            Box::new(DefaultModelMetadataFactory::new(&[])) as Box<dyn ModelMetadataFactory>
+        );
         let headers = HashMap::new();
 
+        struct DummyFactory;
+        impl interceptor::InterceptorFactory for DummyFactory {
+            fn create_interceptor(
+                &self,
+                _spec: &InterceptorSpec,
+            ) -> Result<Arc<dyn interceptor::Interceptor>, interceptor::InterceptorError>
+            {
+                Err(interceptor::InterceptorError::ExecutionError(
+                    "DummyFactory: no interceptors".to_string(),
+                ))
+            }
+        }
+        let dummy_factory = Box::new(DummyFactory) as Box<dyn InterceptorFactory>;
         let result = router
-            .route(request, &available_models, headers, &metrics_repo)
+            .route(
+                request,
+                model_metadata_factory,
+                headers,
+                &metrics_repo,
+                dummy_factory,
+            )
             .await;
 
         assert!(result.is_ok());
@@ -458,172 +514,170 @@ mod tests {
         );
     }
 
-    // #[tokio::test]
-    // async fn test_interceptor_integration() {
-    //     use crate::routing::interceptor::{InterceptorManager, Interceptor, InterceptorError};
-    //     use crate::routing::interceptor::InterceptorContext;
-    //     use std::sync::Arc;
+    #[tokio::test]
+    async fn test_llm_router_conditional() {
+        use crate::model::DefaultModelMetadataFactory;
+        use crate::routing::interceptor::{
+            Interceptor, InterceptorContext, InterceptorError, InterceptorFactory,
+        };
+        use crate::routing::metrics::MetricsRepository;
+        use crate::routing::{
+            ConditionOp, ConditionalRouting, InterceptorSpec, Route, RouteCondition, TargetSpec,
+        };
+        use crate::types::gateway::ChatCompletionRequest;
+        use std::collections::BTreeMap;
+        use std::collections::HashMap;
+        use std::sync::Arc;
 
-    //     // Create a test interceptor
-    //     struct TestInterceptor;
+        struct MockGuardrail {
+            result: bool,
+        }
+        #[async_trait::async_trait]
+        impl Interceptor for MockGuardrail {
+            fn name(&self) -> &str {
+                "guardrail"
+            }
+            async fn pre_request(
+                &self,
+                _context: &mut InterceptorContext,
+            ) -> Result<serde_json::Value, InterceptorError> {
+                Ok(serde_json::json!(self.result))
+            }
+            async fn post_request(
+                &self,
+                _context: &mut InterceptorContext,
+                _response: &serde_json::Value,
+            ) -> Result<serde_json::Value, InterceptorError> {
+                Ok(serde_json::json!(self.result))
+            }
+        }
+        struct MockFactory {
+            result: bool,
+        }
+        impl InterceptorFactory for MockFactory {
+            fn create_interceptor(
+                &self,
+                spec: &InterceptorSpec,
+            ) -> Result<Arc<dyn Interceptor>, InterceptorError> {
+                if spec.name == "guardrail" {
+                    Ok(Arc::new(MockGuardrail {
+                        result: self.result,
+                    }))
+                } else {
+                    Err(InterceptorError::ExecutionError(
+                        "Unknown interceptor".to_string(),
+                    ))
+                }
+            }
+        }
+        struct DummyMetricsRepo;
+        #[async_trait::async_trait]
+        impl MetricsRepository for DummyMetricsRepo {
+            async fn get_metrics(
+                &self,
+            ) -> Result<BTreeMap<String, crate::usage::ProviderMetrics>, RouterError> {
+                Ok(BTreeMap::new())
+            }
+            async fn get_provider_metrics(
+                &self,
+                _provider: &str,
+            ) -> Result<Option<crate::usage::ProviderMetrics>, RouterError> {
+                Ok(Some(crate::usage::ProviderMetrics::default()))
+            }
+            async fn get_model_metrics(
+                &self,
+                _provider: &str,
+                _model: &str,
+            ) -> Result<Option<crate::usage::ModelMetrics>, RouterError> {
+                Ok(None)
+            }
+        }
+        // Passing guardrail
+        let routing = ConditionalRouting {
+            pre_request: vec![InterceptorSpec {
+                name: "guardrail".to_string(),
+                interceptor_type: InterceptorType::Guardrail {
+                    guard_id: "guard_id".to_string(),
+                },
+                extra: HashMap::new(),
+            }],
+            routes: vec![Route {
+                name: "guarded_route".to_string(),
+                conditions: RouteCondition::Expr(HashMap::from([(
+                    "pre_request.guardrail.result".to_string(),
+                    ConditionOp {
+                        op: HashMap::from([("eq".to_string(), serde_json::json!(true))]),
+                    },
+                )])),
+                targets: Some(TargetSpec::List(vec![HashMap::from([(
+                    "model".to_string(),
+                    serde_json::json!("mock/model"),
+                )])])),
+                message_mapper: None,
+            }],
+            post_request: vec![],
+        };
+        let router = LlmRouter {
+            name: "conditional_test".to_string(),
+            strategy: RoutingStrategy::Conditional {
+                routing: routing.clone(),
+            },
+            targets: vec![],
+            metrics_duration: None,
+        };
+        let factory = Box::new(MockFactory { result: true }) as Box<dyn InterceptorFactory>;
+        let model_metadata_factory = Arc::new(
+            Box::new(DefaultModelMetadataFactory::new(&[])) as Box<dyn ModelMetadataFactory>
+        );
+        let result = router
+            .route(
+                ChatCompletionRequest::default(),
+                model_metadata_factory,
+                HashMap::new(),
+                &DummyMetricsRepo,
+                factory,
+            )
+            .await;
+        assert!(result.is_ok());
+        let routing_result = result.unwrap();
+        assert_eq!(routing_result.targets.len(), 1);
+        assert_eq!(routing_result.targets[0]["model"], "mock/model");
+        // Failing guardrail
+        let factory = Box::new(MockFactory { result: false }) as Box<dyn InterceptorFactory>;
+        let model_metadata_factory = Arc::new(
+            Box::new(DefaultModelMetadataFactory::new(&[])) as Box<dyn ModelMetadataFactory>
+        );
+        let result = router
+            .route(
+                ChatCompletionRequest::default(),
+                model_metadata_factory,
+                HashMap::new(),
+                &DummyMetricsRepo,
+                factory,
+            )
+            .await;
+        assert!(result.is_err());
+    }
 
-    //     #[async_trait::async_trait]
-    //     impl Interceptor for TestInterceptor {
-    //         fn name(&self) -> &str {
-    //             "test_interceptor"
-    //         }
+    #[test]
+    fn test_deserialize_route() {
+        let route = r#"
+        {
+                    "name": "toxic",
+                    "conditions": {
+                        "all": [
+                            { "pre_request.toxic.passed": { "eq": false } }
+                        ]
+                    },
+                    "targets": {
+                        "$any": ["anthropic/claude-4-opus"],
+                        "sort": { "ttft": "MIN" }
+                    },
+                    "message_mapper": null  
+                }
+        "#;
+        let route: Route = serde_json::from_str(route).unwrap();
 
-    //         async fn pre_request(&self, _context: &mut InterceptorContext) -> Result<serde_json::Value, InterceptorError> {
-    //             Ok(serde_json::json!({"test": "pre_request"}))
-    //         }
-
-    //         async fn post_request(&self, _context: &mut InterceptorContext, _response: &serde_json::Value) -> Result<serde_json::Value, InterceptorError> {
-    //             Ok(serde_json::json!({"test": "post_request"}))
-    //         }
-    //     }
-
-    //     // Create interceptor manager
-    //     let mut interceptor_manager = InterceptorManager::new();
-    //     interceptor_manager.add_interceptor(Arc::new(TestInterceptor)).unwrap();
-
-    //     // Create router with interceptor manager
-    //     let router = LlmRouter {
-    //         name: "test_router".to_string(),
-    //         strategy: RoutingStrategy::Optimized {
-    //             metric: strategy::metric::MetricSelector::Latency,
-    //         },
-    //         targets: vec![HashMap::from([(
-    //             "model".to_string(),
-    //             serde_json::Value::String("openai/gpt-4".to_string()),
-    //         )])],
-    //         metrics_duration: Some(MetricsDuration::Total),
-    //         interceptor_manager: Some(Arc::new(interceptor_manager)),
-    //     };
-
-    //     // Test routing
-    //     let request = ChatCompletionRequest::default();
-    //     let available_models = AvailableModels(vec![]);
-    //     let headers = HashMap::new();
-
-    //     let result = router
-    //         .route(request, &available_models, headers, &InMemoryMetricsRepository::new(BTreeMap::new()))
-    //         .await;
-
-    //     assert!(result.is_ok());
-    //     let routing_result = result.unwrap();
-    //     assert_eq!(routing_result.targets.len(), 1);
-    //     assert_eq!(
-    //         routing_result.targets[0].get("model").unwrap().as_str().unwrap(),
-    //         "openai/gpt-4"
-    //     );
-
-    //     // Check interceptor state exists
-    //     assert!(routing_result.interceptor_state.is_some());
-    //     let state = routing_result.interceptor_state.unwrap();
-    //     let state_read = state.read().await;
-    //     assert_eq!(state_read.pre_request_results.len(), 1);
-    //     assert_eq!(state_read.post_request_results.len(), 1);
-    // }
-
-    // #[tokio::test]
-    // async fn test_script_router() {
-    //     let router = LlmRouter {
-    //         name: "test".to_string(),
-    //         strategy: RoutingStrategy::Script {
-    //             script: r#"
-    //                 function route(params) {
-    //                     const { request, models, metrics } = params;
-    //                     if (request.messages.length > 5) {
-    //                         return { ...request, model: "openai/gpt-4" };
-    //                     }
-    //                     return { ...request, model: "openai/gpt-3.5-turbo" };
-    //                 }
-    //             "#
-    //             .to_string(),
-    //         },
-    //         targets: vec![],
-    //         metrics_duration: None,
-    //     };
-
-    //     // Test case 1: Short conversation (≤ 5 messages)
-    //     let request = ChatCompletionRequest {
-    //         model: "router/test".to_string(),
-    //         messages: vec![
-    //             ChatCompletionMessage::new_text("user".to_string(), "Hello".to_string()),
-    //             ChatCompletionMessage::new_text("assistant".to_string(), "Hi there!".to_string()),
-    //         ],
-    //         ..Default::default()
-    //     };
-
-    //     let headers = HashMap::new();
-    //     let available_models = AvailableModels(vec![]);
-    //     let metrics = BTreeMap::new();
-
-    //     let result = router
-    //         .route(
-    //             request.clone(),
-    //             &available_models,
-    //             headers.clone(),
-    //             metrics.clone(),
-    //         )
-    //         .await;
-
-    //     assert!(result.is_ok());
-    //     assert_eq!(
-    //         result
-    //             .unwrap()
-    //             .first()
-    //             .expect("No targets")
-    //             .get("model")
-    //             .expect("No model")
-    //             .as_str()
-    //             .expect("No model string")
-    //             .to_string(),
-    //         "openai/gpt-3.5-turbo"
-    //     );
-
-    //     // Test case 2: Long conversation (> 5 messages)
-    //     let long_request = ChatCompletionRequest {
-    //         model: "router/test".to_string(),
-    //         messages: vec![
-    //             ChatCompletionMessage::new_text("user".to_string(), "Message 1".to_string()),
-    //             ChatCompletionMessage::new_text("assistant".to_string(), "Response 1".to_string()),
-    //             ChatCompletionMessage::new_text("user".to_string(), "Message 2".to_string()),
-    //             ChatCompletionMessage::new_text("assistant".to_string(), "Response 2".to_string()),
-    //             ChatCompletionMessage::new_text("user".to_string(), "Message 3".to_string()),
-    //             ChatCompletionMessage::new_text("assistant".to_string(), "Response 3".to_string()),
-    //         ],
-    //         ..Default::default()
-    //     };
-
-    //     let result = router
-    //         .route(long_request, &available_models, headers, metrics)
-    //         .await;
-
-    //     assert!(result.is_ok());
-    //     assert_eq!(
-    //         result
-    //             .unwrap()
-    //             .first()
-    //             .expect("No targets")
-    //             .get("model")
-    //             .expect("No model")
-    //             .as_str()
-    //             .expect("No model string")
-    //             .to_string(),
-    //         "openai/gpt-4"
-    //     );
-
-    //     // Test serialization
-    //     let serialized = serde_json::to_string_pretty(&router).unwrap();
-    //     let deserialized: LlmRouter = serde_json::from_str(&serialized).unwrap();
-    //     assert_eq!(router.name, deserialized.name);
-    //     assert_eq!(router.targets, deserialized.targets);
-    //     match (&router.strategy, &deserialized.strategy) {
-    //         (RoutingStrategy::Script { script: s1 }, RoutingStrategy::Script { script: s2 }) => {
-    //             assert_eq!(s1, s2);
-    //         }
-    //         _ => panic!("Deserialized strategy does not match"),
-    //     }
-    // }
+        eprintln!("{}", serde_json::to_string_pretty(&route).unwrap());
+    }
 }

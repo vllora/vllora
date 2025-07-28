@@ -28,8 +28,6 @@ use tracing::Span;
 use tracing_futures::Instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt as _;
 
-use crate::handler::find_model_by_full_name;
-
 use crate::routing::LlmRouter;
 use crate::telemetry::trace_id_uuid;
 use crate::GatewayApiError;
@@ -118,12 +116,14 @@ impl RoutedExecutor {
                 // Create metrics repository from the fetched metrics
                 let metrics_repository = InMemoryMetricsRepository::new(metrics);
 
+                let interceptor_factory = executor_context.get_interceptor_factory();
                 let executor_result = llm_router
                     .route(
                         request.request.clone(),
-                        &executor_context.provided_models,
+                        Arc::clone(&executor_context.model_metadata_factory),
                         executor_context.headers.clone(),
                         &metrics_repository,
+                        interceptor_factory,
                     )
                     .instrument(span.clone())
                     .await;
@@ -170,8 +170,10 @@ impl RoutedExecutor {
 
         let model_name = request.request.model.clone();
 
-        let llm_model =
-            find_model_by_full_name(&request.request.model, &executor_context.provided_models)?;
+        let llm_model = executor_context
+            .model_metadata_factory
+            .get_model_metadata(&request.request.model)
+            .await?;
         let response = execute(
             request,
             executor_context,
