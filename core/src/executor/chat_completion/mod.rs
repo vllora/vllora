@@ -121,7 +121,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
     let mut request = request_with_tools.request.clone();
     let llm_model = executor_context
         .model_metadata_factory
-        .get_model_metadata(&request.model)
+        .get_model_metadata(&request.model, false)
         .await?;
     request.model = llm_model.inference_provider.model_name.clone();
 
@@ -267,7 +267,7 @@ pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Cl
 ) -> Result<ResolvedModelContext, GatewayApiError> {
     let llm_model = executor_context
         .model_metadata_factory
-        .get_model_metadata(&request.request.model)
+        .get_model_metadata(&request.request.model, false)
         .await?;
     let (key_credentials, llm_model) = use_langdb_proxy(executor_context, llm_model.clone());
 

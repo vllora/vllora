@@ -717,7 +717,11 @@ pub async fn apply_guardrails(
 
 #[async_trait]
 pub trait ModelMetadataFactory: Send + Sync {
-    async fn get_model_metadata(&self, model_name: &str) -> Result<ModelMetadata, GatewayApiError>;
+    async fn get_model_metadata(
+        &self,
+        model_name: &str,
+        include_parameters: bool,
+    ) -> Result<ModelMetadata, GatewayApiError>;
 }
 
 pub struct DefaultModelMetadataFactory {
@@ -734,7 +738,11 @@ impl DefaultModelMetadataFactory {
 
 #[async_trait]
 impl ModelMetadataFactory for DefaultModelMetadataFactory {
-    async fn get_model_metadata(&self, model_name: &str) -> Result<ModelMetadata, GatewayApiError> {
+    async fn get_model_metadata(
+        &self,
+        model_name: &str,
+        _include_parameters: bool,
+    ) -> Result<ModelMetadata, GatewayApiError> {
         find_model_by_full_name(model_name, &self.models)
     }
 }
