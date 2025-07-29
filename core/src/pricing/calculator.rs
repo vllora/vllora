@@ -74,17 +74,11 @@ pub fn calculate_tokens_cost(
         .prompt_tokens_details
         .as_ref()
         .map_or(0, |p| p.cached_tokens());
-    let input_tokens = if cost_per_cached_input_token.is_some() {
-        // If cached input token price is set, we need to subtract the cached tokens from the input tokens
-        // Use saturating_sub to prevent overflow when cached_tokens > input_tokens
-        usage.input_tokens.saturating_sub(cached_tokens)
-    } else {
-        usage.input_tokens
-    };
+    let not_cached_input_tokens = usage.input_tokens.saturating_sub(cached_tokens);
 
     let cached_input_token_cost = cost_per_cached_input_token.unwrap_or(cost_per_input_token);
 
-    let input_cost = cost_per_input_token * input_tokens as f64 * 1e-6;
+    let input_cost = cost_per_input_token * not_cached_input_tokens as f64 * 1e-6;
     let cached_input_cost = cached_input_token_cost * cached_tokens as f64 * 1e-6;
     let output_cost = cost_per_output_token * usage.output_tokens as f64 * 1e-6;
 
@@ -235,13 +229,13 @@ mod tests {
         );
 
         // When cache is used, prices are divided by 100
-        // Since no cached input token price is set, input_tokens = 1000 (not subtracted)
-        // input_cost = 1000 * (1/100) * 1e-6 = 0.00001
+        // Since no cached input token price is set, input_tokens = 700
+        // input_cost = 700 * (1/100) * 1e-6 = 0.000007
         // cached_input_cost = 300 * (1/100) * 1e-6 = 0.000003 (uses input token price)
         // output_cost = 500 * (2/100) * 1e-6 = 0.00001
-        // total_cost = 0.00001 + 0.000003 + 0.00001 = 0.000023
+        // total_cost = 0.000007 + 0.000003 + 0.00001 = 0.00002
 
-        assert!((result.cost - 0.000023).abs() < 1e-10);
+        assert!((result.cost - 0.00002).abs() < 1e-10);
         assert_eq!(result.per_input_token, 0.01); // 1 / 100
         assert_eq!(result.per_cached_input_token, None);
         assert_eq!(result.per_output_token, 0.02); // 2 / 100
