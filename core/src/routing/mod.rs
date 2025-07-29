@@ -206,7 +206,7 @@ impl ConditionExpr {
     /// - "metadata.user.tier"
     /// - "metadata.user.id"
     /// - "metadata.region"
-    /// - "pre_request.*.result"
+    /// - "pre_request.*.*"
     /// - "metrics.provider.*"
     /// - "metrics.model:*"
     pub fn validate_keys(&self) -> Result<(), String> {
@@ -226,16 +226,28 @@ impl ConditionExpr {
         key == "metadata.user.tier"
             || key == "metadata.user.id"
             || key == "metadata.region"
-            || (key.starts_with("pre_request.") && key.ends_with(".result"))
+            || key.starts_with("pre_request.")
             || key.starts_with("metrics.provider.")
             || key.starts_with("metrics.model.")
     }
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct ConditionOp {
     #[serde(flatten)]
-    pub op: HashMap<String, serde_json::Value>,
+    pub op: HashMap<ConditionOpType, serde_json::Value>,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone, PartialEq, Eq, Hash)]
+#[serde(rename_all = "lowercase")]
+pub enum ConditionOpType {
+    Eq,
+    Ne,
+    In,
+    Gt,
+    Lt,
+    Gte,
+    Lte,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
@@ -541,14 +553,14 @@ mod tests {
                 &self,
                 _context: &mut InterceptorContext,
             ) -> Result<serde_json::Value, InterceptorError> {
-                Ok(serde_json::json!(self.result))
+                Ok(serde_json::json!({"result": self.result}))
             }
             async fn post_request(
                 &self,
                 _context: &mut InterceptorContext,
                 _response: &serde_json::Value,
             ) -> Result<serde_json::Value, InterceptorError> {
-                Ok(serde_json::json!(self.result))
+                Ok(serde_json::json!({"result": self.result}))
             }
         }
         struct MockFactory {
@@ -606,7 +618,7 @@ mod tests {
                 conditions: RouteCondition::Expr(HashMap::from([(
                     "pre_request.guardrail.result".to_string(),
                     ConditionOp {
-                        op: HashMap::from([("eq".to_string(), serde_json::json!(true))]),
+                        op: HashMap::from([(ConditionOpType::Eq, serde_json::json!(true))]),
                     },
                 )])),
                 targets: Some(TargetSpec::List(vec![HashMap::from([(

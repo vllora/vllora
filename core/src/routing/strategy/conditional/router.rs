@@ -67,6 +67,7 @@ impl ConditionalRouter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::routing::ConditionOpType;
     use crate::routing::interceptor;
     use crate::routing::interceptor::{Interceptor, InterceptorContext, InterceptorError};
     use crate::routing::{
@@ -89,14 +90,14 @@ mod tests {
             &self,
             _context: &mut InterceptorContext,
         ) -> Result<serde_json::Value, InterceptorError> {
-            Ok(serde_json::json!(self.result))
+            Ok(serde_json::json!({"result": self.result}))
         }
         async fn post_request(
             &self,
             _context: &mut InterceptorContext,
             _response: &serde_json::Value,
         ) -> Result<serde_json::Value, InterceptorError> {
-            Ok(serde_json::json!(self.result))
+            Ok(serde_json::json!({"result": self.result}))
         }
     }
 
@@ -136,7 +137,7 @@ mod tests {
                 conditions: RouteCondition::Expr(HashMap::from([(
                     "pre_request.guardrail.result".to_string(),
                     ConditionOp {
-                        op: HashMap::from([("eq".to_string(), serde_json::json!(true))]),
+                        op: HashMap::from([(ConditionOpType::Eq, serde_json::json!(true))]),
                     },
                 )])),
                 targets: Some(TargetSpec::List(vec![HashMap::from([(
@@ -180,7 +181,7 @@ mod tests {
                 conditions: RouteCondition::Expr(HashMap::from([(
                     "pre_request.guardrail.result".to_string(),
                     ConditionOp {
-                        op: HashMap::from([("eq".to_string(), serde_json::json!(true))]),
+                        op: HashMap::from([(ConditionOpType::Eq, serde_json::json!(true))]),
                     },
                 )])),
                 targets: Some(TargetSpec::List(vec![HashMap::from([(
@@ -213,7 +214,7 @@ mod tests {
                 conditions: RouteCondition::Expr(HashMap::from([(
                     "metadata.region".to_string(),
                     ConditionOp {
-                        op: HashMap::from([("eq".to_string(), serde_json::json!("EU"))]),
+                        op: HashMap::from([(ConditionOpType::Eq, serde_json::json!("EU"))]),
                     },
                 )])),
                 targets: Some(TargetSpec::List(vec![HashMap::from([(
@@ -260,7 +261,7 @@ mod tests {
                     conditions: RouteCondition::Expr(HashMap::from([(
                         "pre_request.guardrail.result".to_string(),
                         ConditionOp {
-                            op: HashMap::from([("eq".to_string(), serde_json::json!(true))]),
+                            op: HashMap::from([(ConditionOpType::Eq, serde_json::json!(true))]),
                         },
                     )])),
                     targets: Some(TargetSpec::List(vec![HashMap::from([(
@@ -274,7 +275,7 @@ mod tests {
                     conditions: RouteCondition::Expr(HashMap::from([(
                         "metadata.region".to_string(),
                         ConditionOp {
-                            op: HashMap::from([("eq".to_string(), serde_json::json!("EU"))]),
+                            op: HashMap::from([(ConditionOpType::Eq, serde_json::json!("EU"))]),
                         },
                     )])),
                     targets: Some(TargetSpec::List(vec![HashMap::from([(
@@ -321,7 +322,7 @@ mod tests {
                 conditions: RouteCondition::Expr(HashMap::from([(
                     "pre_request.guardrail.result".to_string(),
                     ConditionOp {
-                        op: HashMap::from([("eq".to_string(), serde_json::json!(true))]),
+                        op: HashMap::from([(ConditionOpType::Eq, serde_json::json!(true))]),
                     },
                 )])),
                 targets: Some(TargetSpec::List(vec![HashMap::from([(
