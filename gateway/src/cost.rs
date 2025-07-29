@@ -61,10 +61,14 @@ impl CostCalculator for GatewayCostCalculator {
                     }
                 }
                 langdb_core::types::gateway::Usage::CompletionModelUsage(usage) => {
-                    let (input_price, output_price) = match price {
+                    let (input_price, cached_input_price, output_price) = match price {
                         Some(p) => match p {
-                            ModelPrice::Completion(c) => (c.per_input_token, c.per_output_token),
-                            ModelPrice::Embedding(c) => (c.per_input_token, 0.0),
+                            ModelPrice::Completion(c) => (
+                                c.per_input_token,
+                                c.per_cached_input_token,
+                                c.per_output_token,
+                            ),
+                            ModelPrice::Embedding(c) => (c.per_input_token, None, 0.0),
                             ModelPrice::ImageGeneration(_) => {
                                 return Err(CostCalculatorError::CalculationError(
                                     "Model pricing not supported".to_string(),
@@ -73,10 +77,15 @@ impl CostCalculator for GatewayCostCalculator {
                         },
                         None => {
                             tracing::error!("Model not found: {model_name} - {provider_name}");
-                            (self.default_input_cost, self.default_output_cost)
+                            (self.default_input_cost, None, self.default_output_cost)
                         }
                     };
-                    Ok(calculate_tokens_cost(usage, input_price, output_price))
+                    Ok(calculate_tokens_cost(
+                        usage,
+                        input_price,
+                        cached_input_price,
+                        output_price,
+                    ))
                 }
             }
         } else {

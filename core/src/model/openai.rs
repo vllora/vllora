@@ -733,6 +733,17 @@ impl<C: Config> OpenAIModel<C> {
             input_tokens: u.prompt_tokens,
             output_tokens: u.completion_tokens,
             total_tokens: u.total_tokens,
+            prompt_tokens_details: u.prompt_tokens_details.as_ref().map(|p| {
+                crate::types::gateway::PromptTokensDetails::new(p.cached_tokens, p.audio_tokens)
+            }),
+            completion_tokens_details: u.completion_tokens_details.as_ref().map(|c| {
+                crate::types::gateway::CompletionTokensDetails::new(
+                    c.accepted_prediction_tokens,
+                    c.audio_tokens,
+                    c.reasoning_tokens,
+                    c.rejected_prediction_tokens,
+                )
+            }),
             ..Default::default()
         })
     }
@@ -786,6 +797,7 @@ impl<C: Config> OpenAIModel<C> {
         .await
         .map_err(|e| GatewayError::CustomError(e.to_string()))?;
         if let Some(usage) = usage {
+            tracing::warn!("Usage: {:#?}", usage);
             span.record(
                 "usage",
                 JsonValue(&serde_json::to_value(usage).unwrap()).as_value(),

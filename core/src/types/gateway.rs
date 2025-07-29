@@ -400,6 +400,10 @@ pub struct ChatCompletionUsage {
     pub prompt_tokens: i32,
     pub completion_tokens: i32,
     pub total_tokens: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_tokens_details: Option<PromptTokensDetails>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completion_tokens_details: Option<CompletionTokensDetails>,
     pub cost: f64,
 }
 
@@ -484,7 +488,9 @@ pub struct CompletionModelUsage {
     pub input_tokens: u32,
     pub output_tokens: u32,
     pub total_tokens: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_tokens_details: Option<PromptTokensDetails>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub completion_tokens_details: Option<CompletionTokensDetails>,
     pub is_cache_used: bool,
 }
@@ -503,12 +509,45 @@ pub struct PromptTokensDetails {
     audio_tokens: u32,
 }
 
+impl PromptTokensDetails {
+    pub fn new(cached_tokens: Option<u32>, audio_tokens: Option<u32>) -> Self {
+        Self {
+            cached_tokens: cached_tokens.unwrap_or(0),
+            audio_tokens: audio_tokens.unwrap_or(0),
+        }
+    }
+
+    pub fn cached_tokens(&self) -> u32 {
+        self.cached_tokens
+    }
+
+    pub fn audio_tokens(&self) -> u32 {
+        self.audio_tokens
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CompletionTokensDetails {
     accepted_prediction_tokens: u32,
     audio_tokens: u32,
     reasoning_tokens: u32,
     rejected_prediction_tokens: u32,
+}
+
+impl CompletionTokensDetails {
+    pub fn new(
+        accepted_prediction_tokens: Option<u32>,
+        audio_tokens: Option<u32>,
+        reasoning_tokens: Option<u32>,
+        rejected_prediction_tokens: Option<u32>,
+    ) -> Self {
+        Self {
+            accepted_prediction_tokens: accepted_prediction_tokens.unwrap_or(0),
+            audio_tokens: audio_tokens.unwrap_or(0),
+            reasoning_tokens: reasoning_tokens.unwrap_or(0),
+            rejected_prediction_tokens: rejected_prediction_tokens.unwrap_or(0),
+        }
+    }
 }
 
 #[derive(Error, Debug)]
@@ -524,13 +563,15 @@ pub enum CostCalculatorError {
 pub struct CostCalculationResult {
     pub cost: f64,
     pub per_input_token: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub per_cached_input_token: Option<f64>,
     pub per_output_token: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub per_image_cost: Option<ImageCostCalculationResult>,
     pub is_cache_used: bool,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, PartialEq)]
 pub enum ImageCostCalculationResult {
     TypePrice {
         size: String,

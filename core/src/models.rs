@@ -289,6 +289,7 @@ impl Default for ModelMetadata {
             price: ModelPrice::Completion(CompletionModelPrice {
                 per_input_token: 0.0,
                 per_output_token: 0.0,
+                per_cached_input_token: None,
                 valid_from: None,
             }),
             input_formats: Vec::new(),

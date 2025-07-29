@@ -92,6 +92,8 @@ pub async fn execute(
             prompt_tokens: u.input_tokens as i32,
             completion_tokens: u.output_tokens as i32,
             total_tokens: u.total_tokens as i32,
+            prompt_tokens_details: u.prompt_tokens_details.clone(),
+            completion_tokens_details: u.completion_tokens_details.clone(),
             cost: 0.0,
         },
         None => ChatCompletionUsage {
