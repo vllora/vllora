@@ -1,0 +1,234 @@
+{
+  "name": "enhanced_conditional_router",
+  "description": "Enhanced conditional router with metadata extraction, rate limiting, and message transformation",
+  
+  "pre_request": [
+    {
+      "name": "user_token_limit",
+      "type": "rate_limiter",
+      "limit": 100000,
+      "limit_target": "input_tokens",
+      "limit_entity": "user_name",
+      "period": "day",
+      "action": "block"
+    },
+    {
+      "name": "content_filter",
+      "type": "guardrail",
+      "guard_id": "toxicity_filter",
+      "config": {
+        "enabled": true,
+        "threshold": 0.8,
+        "rules": ["no_harmful_content", "no_hate_speech"]
+      }
+    },
+    {
+      "name": "message_sanitizer",
+      "type": "message_transformer",
+      "rules": [
+        {
+          "pattern": "\\b(password|secret|key)\\b",
+          "replacement": "[REDACTED]",
+          "flags": "gi"
+        },
+        {
+          "pattern": "\\b\\d{4}-\\d{4}-\\d{4}-\\d{4}\\b",
+          "replacement": "[CREDIT_CARD_REDACTED]",
+          "flags": "g"
+        }
+      ],
+      "direction": "pre_request"
+    },
+    {
+      "name": "metadata_enricher",
+      "type": "metadata_enricher",
+      "fields": ["user.id", "user.tiers", "variables.priority"],
+      "sources": ["user", "variables"]
+    }
+  ],
+  
+  "post_request": [
+    {
+      "name": "response_filter",
+      "type": "guardrail",
+      "guard_id": "content_safety",
+      "config": {
+        "enabled": true,
+        "threshold": 0.7,
+        "rules": ["no_pii", "no_sensitive_data"]
+      }
+    },
+    {
+      "name": "response_sanitizer",
+      "type": "message_transformer",
+      "rules": [
+        {
+          "pattern": "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}\\b",
+          "replacement": "[EMAIL_REDACTED]",
+          "flags": "g"
+        },
+        {
+          "pattern": "\\b\\d{3}-\\d{2}-\\d{4}\\b",
+          "replacement": "[SSN_REDACTED]",
+          "flags": "g"
+        }
+      ],
+      "direction": "post_response"
+    }
+  ],
+  
+  "routes": [
+    {
+      "name": "premium_user_routing",
+      "conditions": {
+        "all": [
+          {
+            "extra.user.tiers": {
+              "in": ["premium", "enterprise"]
+            }
+          },
+          {
+            "extra.variables.priority": {
+              "eq": "high"
+            }
+          },
+          {
+            "pre_request.content_filter.passed": {
+              "eq": true
+            }
+          }
+        ]
+      },
+      "targets": {
+        "$any": ["openai/gpt-4", "anthropic/claude-3-opus"],
+        "sort": {
+          "latency": "MIN"
+        }
+      }
+    },
+    {
+      "name": "standard_user_routing",
+      "conditions": {
+        "all": [
+          {
+            "extra.user.tiers": {
+              "in": ["standard", "free"]
+            }
+          },
+          {
+            "pre_request.content_filter.passed": {
+              "eq": true
+            }
+          }
+        ]
+      },
+      "targets": {
+        "$any": ["openai/gpt-3.5-turbo", "anthropic/claude-3-haiku"]
+      }
+    },
+    {
+      "name": "rate_limited_routing",
+      "conditions": {
+        "all": [
+          {
+            "pre_request.user_token_limit.within_limit": {
+              "eq": false
+            }
+          }
+        ]
+      },
+      "targets": {
+        "$any": ["openai/gpt-3.5-turbo", "anthropic/claude-3-haiku"],
+        "sort": {
+          "cost": "MIN"
+        }
+      }
+    },
+    {
+      "name": "high_priority_routing",
+      "conditions": {
+        "all": [
+          {
+            "extra.variables.priority": {
+              "eq": "critical"
+            }
+          },
+          {
+            "extra.user.tiers": {
+              "in": ["enterprise", "premium"]
+            }
+          }
+        ]
+      },
+      "targets": {
+        "$any": ["openai/gpt-4-turbo", "anthropic/claude-3-opus"],
+        "sort": {
+          "latency": "MIN",
+          "cost": "MAX"
+        }
+      }
+    },
+    {
+      "name": "compliance_routing",
+      "conditions": {
+        "all": [
+          {
+            "extra.variables.compliance_required": {
+              "eq": true
+            }
+          },
+          {
+            "extra.user.tiers": {
+              "in": ["enterprise"]
+            }
+          }
+        ]
+      },
+      "targets": {
+        "$any": ["openai/gpt-4", "anthropic/claude-3-sonnet"],
+        "sort": {
+          "compliance": "MAX"
+        }
+      }
+    }
+  ],
+  
+  "metadata": {
+    "cache_ttl": 300,
+    "extraction_rules": [
+      "user.id",
+      "user.name", 
+      "user.email",
+      "user.tiers",
+      "variables.priority",
+      "variables.department",
+      "variables.budget",
+      "guards.content_filter",
+      "guards.toxicity_filter"
+    ]
+  },
+  
+  "rate_limiting": {
+    "default_action": "block",
+    "burst_protection": true,
+    "distributed": false,
+    "redis_config": {
+      "enabled": false,
+      "url": "redis://localhost:6379"
+    }
+  },
+  
+  "monitoring": {
+    "metrics": {
+      "enabled": true,
+      "collect_interceptor_stats": true,
+      "collect_rate_limit_stats": true,
+      "collect_metadata_stats": true
+    },
+    "alerts": {
+      "rate_limit_violations": true,
+      "guardrail_failures": true,
+      "transformation_errors": true
+    }
+  }
+}

@@ -48,7 +48,7 @@ impl ConditionalRouter {
 
         // Evaluate routes in order with lazy interceptor execution
         for route in &self.routing.routes {
-            match evaluate_conditions_lazy(&route.conditions, &mut lazy_manager, metadata).await {
+            match evaluate_conditions_lazy(&route.conditions, &mut lazy_manager, metadata, &request.extra).await {
                 Ok(true) => {
                     if let Some(targets) = &route.targets {
                         return Some(targets);

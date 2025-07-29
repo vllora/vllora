@@ -7,6 +7,9 @@ use thiserror::Error;
 
 mod factory;
 pub mod guard;
+pub mod rate_limiter;
+pub mod transformer;
+pub mod types;
 
 pub use factory::RouterInterceptorFactory;
 
@@ -82,13 +85,16 @@ impl InterceptorState {
     }
 }
 
-/// Context passed to interceptors
+/// Enhanced context passed to interceptors with rich metadata support
 #[derive(Debug, Clone)]
 pub struct InterceptorContext {
     pub request: ChatCompletionRequest,
     pub headers: HashMap<String, String>,
     pub state: Arc<tokio::sync::RwLock<InterceptorState>>,
     pub metadata: HashMap<String, serde_json::Value>,
+    pub extra: Option<crate::types::gateway::Extra>,
+    pub chain_position: usize,
+    pub results: HashMap<String, InterceptorResult>,
 }
 
 impl InterceptorContext {
@@ -102,12 +108,37 @@ impl InterceptorContext {
             headers,
             state,
             metadata: HashMap::new(),
+            extra: None,
+            chain_position: 0,
+            results: HashMap::new(),
         }
     }
 
     pub fn with_metadata(mut self, metadata: HashMap<String, serde_json::Value>) -> Self {
         self.metadata = metadata;
         self
+    }
+
+    pub fn with_extra(mut self, extra: Option<crate::types::gateway::Extra>) -> Self {
+        self.extra = extra;
+        self
+    }
+
+    pub fn with_chain_position(mut self, position: usize) -> Self {
+        self.chain_position = position;
+        self
+    }
+
+    pub fn add_result(&mut self, name: String, result: InterceptorResult) {
+        self.results.insert(name, result);
+    }
+
+    pub fn get_result(&self, name: &str) -> Option<&InterceptorResult> {
+        self.results.get(name)
+    }
+
+    pub fn get_extra_metadata(&self) -> Option<&crate::types::gateway::Extra> {
+        self.extra.as_ref()
     }
 }
 
