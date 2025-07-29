@@ -19,7 +19,9 @@
       "config": {
         "enabled": true,
         "threshold": 0.8,
-        "rules": ["no_harmful_content", "no_hate_speech"]
+        "rules": ["no_harmful_content", "no_hate_speech"],
+        "guardrail_type": "toxicity",
+        "categories": ["hate_speech", "violence", "harassment"]
       }
     },
     {
@@ -44,6 +46,17 @@
       "type": "metadata_enricher",
       "fields": ["user.id", "user.tiers", "variables.priority"],
       "sources": ["user", "variables"]
+    },
+    {
+      "name": "semantic_filter",
+      "type": "guardrail",
+      "guard_id": "semantic_safety",
+      "config": {
+        "enabled": true,
+        "threshold": 0.6,
+        "guardrail_type": "semantic",
+        "topics": ["medical_advice", "financial_advice", "legal_advice"]
+      }
     }
   ],
   
@@ -55,7 +68,10 @@
       "config": {
         "enabled": true,
         "threshold": 0.7,
-        "rules": ["no_pii", "no_sensitive_data"]
+        "rules": ["no_pii", "no_sensitive_data"],
+        "guardrail_type": "compliance",
+        "regulations": ["GDPR", "HIPAA"],
+        "data_classification": "sensitive"
       }
     },
     {

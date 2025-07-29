@@ -44,17 +44,19 @@
 **Status: FULLY IMPLEMENTED**
 
 #### Implemented Components:
-- ✅ **InterceptorType enum** - Comprehensive type system for all interceptor types
+- ✅ **InterceptorType enum** - Simplified type system with unified guardrail approach
 - ✅ **Post-request validation** - Type restrictions for post-request interceptors
 - ✅ **Rate Limiter** - Full rate limiting implementation with multiple targets and entities
 - ✅ **Message Transformer** - Request/response content transformation
 - ✅ **Enhanced Context** - Rich context with extra metadata and chain management
+- ✅ **Unified Guardrail System** - Single guardrail type supporting semantic, toxicity, and compliance guardrails
 
 #### Key Features:
 - **Rate Limiting**: Support for tokens, requests, cost, and custom targets
 - **Message Transformation**: Regex-based content transformation with flags
 - **Type Safety**: Validation of interceptor types for pre/post request
 - **Flexible Configuration**: JSON-based configuration for all interceptor types
+- **Unified Guardrails**: Single guardrail type supporting semantic, toxicity, compliance, and content filtering
 
 #### Example Configuration:
 ```json
@@ -66,6 +68,35 @@
   "limit_entity": "user_name",
   "period": "day",
   "action": "block"
+}
+```
+
+**Guardrail Examples:**
+```json
+{
+  "name": "toxicity_filter",
+  "type": "guardrail",
+  "guard_id": "content_safety",
+  "config": {
+    "enabled": true,
+    "threshold": 0.8,
+    "guardrail_type": "toxicity",
+    "categories": ["hate_speech", "violence"]
+  }
+}
+```
+
+```json
+{
+  "name": "semantic_filter",
+  "type": "guardrail",
+  "guard_id": "semantic_safety",
+  "config": {
+    "enabled": true,
+    "threshold": 0.6,
+    "guardrail_type": "semantic",
+    "topics": ["medical_advice", "financial_advice"]
+  }
 }
 ```
 
@@ -136,11 +167,10 @@
 ## 🚧 REMAINING TODO ITEMS
 
 ### 1. Advanced Guardrails (Partially Implemented)
-- ✅ Basic guardrail framework
+- ✅ Unified guardrail framework with type support
+- ✅ Support for semantic, toxicity, and compliance guardrails
 - ⏳ Custom guardrail framework with plugin system
-- ⏳ Semantic guardrail implementation
-- ⏳ Toxicity guardrail implementation
-- ⏳ Compliance guardrail implementation
+- ⏳ Advanced guardrail implementations (semantic analysis, toxicity detection, compliance checking)
 
 ### 2. Distributed Rate Limiting
 - ✅ Local rate limiting implementation

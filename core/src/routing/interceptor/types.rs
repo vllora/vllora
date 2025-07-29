@@ -9,21 +9,6 @@ pub enum InterceptorType {
         guard_id: String,
         config: GuardrailConfig,
     },
-    SemanticGuardrail {
-        topics: Vec<String>,
-        threshold: f64,
-        action: GuardrailAction,
-    },
-    ToxicityGuardrail {
-        threshold: f64,
-        action: ToxicityAction,
-        categories: Vec<String>,
-    },
-    ComplianceGuardrail {
-        regulations: Vec<String>, // GDPR, HIPAA, etc.
-        data_classification: String,
-        action: ComplianceAction,
-    },
     MessageTransformer {
         rules: Vec<TransformRule>,
         direction: TransformDirection, // pre_request, post_response
@@ -50,9 +35,6 @@ impl InterceptorType {
         matches!(
             self,
             InterceptorType::Guardrail { .. }
-                | InterceptorType::SemanticGuardrail { .. }
-                | InterceptorType::ToxicityGuardrail { .. }
-                | InterceptorType::ComplianceGuardrail { .. }
         )
     }
 
@@ -60,9 +42,6 @@ impl InterceptorType {
     pub fn get_name(&self) -> &str {
         match self {
             InterceptorType::Guardrail { guard_id, .. } => guard_id,
-            InterceptorType::SemanticGuardrail { .. } => "semantic_guardrail",
-            InterceptorType::ToxicityGuardrail { .. } => "toxicity_guardrail",
-            InterceptorType::ComplianceGuardrail { .. } => "compliance_guardrail",
             InterceptorType::MessageTransformer { .. } => "message_transformer",
             InterceptorType::MetadataEnricher { .. } => "metadata_enricher",
             InterceptorType::RateLimiter { .. } => "rate_limiter",
@@ -70,7 +49,7 @@ impl InterceptorType {
     }
 }
 
-/// Configuration for basic guardrails
+/// Configuration for guardrails
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GuardrailConfig {
     pub enabled: bool,
@@ -78,6 +57,16 @@ pub struct GuardrailConfig {
     pub threshold: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rules: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub topics: Option<Vec<String>>, // For semantic guardrails
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub categories: Option<Vec<String>>, // For toxicity guardrails
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub regulations: Option<Vec<String>>, // For compliance guardrails (GDPR, HIPAA, etc.)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data_classification: Option<String>, // For compliance guardrails
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub guardrail_type: Option<String>, // "semantic", "toxicity", "compliance", "content_filter", etc.
 }
 
 /// Actions that can be taken by guardrails
@@ -91,26 +80,7 @@ pub enum GuardrailAction {
     Redirect(String), // Redirect to different model
 }
 
-/// Actions for toxicity guardrails
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ToxicityAction {
-    Block,
-    Flag,
-    Filter,
-    Sanitize,
-}
 
-/// Actions for compliance guardrails
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ComplianceAction {
-    Block,
-    Flag,
-    Encrypt,
-    Anonymize,
-    Log,
-}
 
 /// Rules for message transformation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -240,6 +210,11 @@ mod tests {
                 enabled: true,
                 threshold: None,
                 rules: None,
+                topics: None,
+                categories: None,
+                regulations: None,
+                data_classification: None,
+                guardrail_type: None,
             },
         };
         assert!(guardrail.is_allowed_in_post_request());
@@ -287,6 +262,11 @@ mod tests {
                 enabled: true,
                 threshold: Some(0.8),
                 rules: Some(vec!["no_harmful_content".to_string()]),
+                topics: None,
+                categories: None,
+                regulations: None,
+                data_classification: None,
+                guardrail_type: Some("content_filter".to_string()),
             },
         };
 
