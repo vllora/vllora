@@ -1,7 +1,9 @@
-use crate::routing::interceptor::{InterceptorFactory, InterceptorManager};
+use crate::routing::interceptor::{InterceptorFactory, LazyInterceptorManager};
 use crate::routing::{
-    strategy::conditional::evaluator::referenced_pre_request_interceptors, ConditionalRouting,
-    TargetSpec,
+    strategy::conditional::evaluator::{
+        evaluate_conditions_lazy, referenced_pre_request_interceptors,
+    },
+    ConditionalRouting, TargetSpec,
 };
 
 pub struct ConditionalRouter {
@@ -9,7 +11,7 @@ pub struct ConditionalRouter {
 }
 
 impl ConditionalRouter {
-    /// Evaluates routes in order, running only referenced pre_request interceptors, and returns the first matching target.
+    /// Evaluates routes in order, running only referenced pre_request interceptors lazily, and returns the first matching target.
     /// Stops at the first unmet condition for each route and moves to the next route.
     /// Accepts an InterceptorFactory to instantiate interceptors as needed.
     pub async fn get_target(
@@ -22,41 +24,47 @@ impl ConditionalRouter {
         let referenced = referenced_pre_request_interceptors(&self.routing.routes);
         tracing::warn!("Referenced interceptors: {:#?}", referenced);
 
-        let mut manager = InterceptorManager::new();
-        // Only instantiate and add referenced interceptors
+        // Create interceptors map for lazy execution
+        let mut interceptors = std::collections::HashMap::new();
         for spec in &self.routing.pre_request {
             if referenced.contains(&spec.name) {
                 if let Ok(interceptor) = factory.create_interceptor(spec) {
-                    let _ = manager.add_interceptor(interceptor);
+                    interceptors.insert(spec.name.clone(), interceptor);
                 }
             }
         }
+
         let state = std::sync::Arc::new(tokio::sync::RwLock::new(
             crate::routing::interceptor::InterceptorState::new(),
         ));
-        let mut context = crate::routing::interceptor::InterceptorContext::new(
+        let context = crate::routing::interceptor::InterceptorContext::new(
             request.clone(),
             headers.clone(),
             state.clone(),
         );
 
-        // Run pre_request interceptors
-        let _ = manager.execute_pre_request(&mut context).await;
-        // Collect results
-        let state_read = state.read().await;
-        let mut pre_request_results = std::collections::HashMap::new();
-        for result in &state_read.pre_request_results {
-            pre_request_results.insert(result.interceptor_name.clone(), result.data.clone());
-        }
-        // Evaluate routes in order
+        // Create lazy interceptor manager
+        let mut lazy_manager = LazyInterceptorManager::new(interceptors, context);
+
+        // Evaluate routes in order with lazy interceptor execution
         for route in &self.routing.routes {
-            if super::evaluator::evaluate_conditions(
-                &route.conditions,
-                &pre_request_results,
-                metadata,
-            ) {
-                if let Some(targets) = &route.targets {
-                    return Some(targets);
+            match evaluate_conditions_lazy(&route.conditions, &mut lazy_manager, metadata).await {
+                Ok(true) => {
+                    if let Some(targets) = &route.targets {
+                        return Some(targets);
+                    }
+                }
+                Ok(false) => {
+                    // Condition not met, continue to next route
+                    continue;
+                }
+                Err(e) => {
+                    tracing::error!(
+                        "Error evaluating conditions for route {}: {}",
+                        route.name,
+                        e
+                    );
+                    continue;
                 }
             }
         }
@@ -67,9 +75,9 @@ impl ConditionalRouter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::routing::ConditionOpType;
     use crate::routing::interceptor;
     use crate::routing::interceptor::{Interceptor, InterceptorContext, InterceptorError};
+    use crate::routing::ConditionOpType;
     use crate::routing::{
         ConditionOp, ConditionalRouting, InterceptorSpec, InterceptorType, Route, RouteCondition,
         TargetSpec,
@@ -110,7 +118,8 @@ mod tests {
             &self,
             spec: &InterceptorSpec,
         ) -> Result<Arc<dyn Interceptor>, InterceptorError> {
-            if spec.name == "guardrail" {
+            // Handle both "guardrail" and "guardrail1", "guardrail2" patterns
+            if spec.name.starts_with("guardrail") {
                 Ok(Arc::new(MockGuardrail {
                     result: self.result,
                 }))
@@ -344,5 +353,78 @@ mod tests {
             )
             .await;
         assert!(target.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_lazy_interceptor_execution() {
+        // Test that interceptors are only executed when needed
+        let routing = ConditionalRouting {
+            pre_request: vec![
+                InterceptorSpec {
+                    name: "guardrail1".to_string(),
+                    interceptor_type: InterceptorType::Guardrail {
+                        guard_id: "guard_id1".to_string(),
+                    },
+                    extra: HashMap::new(),
+                },
+                InterceptorSpec {
+                    name: "guardrail2".to_string(),
+                    interceptor_type: InterceptorType::Guardrail {
+                        guard_id: "guard_id2".to_string(),
+                    },
+                    extra: HashMap::new(),
+                },
+            ],
+            routes: vec![
+                Route {
+                    name: "first_route".to_string(),
+                    conditions: RouteCondition::Expr(HashMap::from([(
+                        "pre_request.guardrail1.result".to_string(),
+                        ConditionOp {
+                            op: HashMap::from([(ConditionOpType::Eq, serde_json::json!(true))]),
+                        },
+                    )])),
+                    targets: Some(TargetSpec::List(vec![HashMap::from([(
+                        "model".to_string(),
+                        serde_json::json!("first/model"),
+                    )])])),
+                    message_mapper: None,
+                },
+                // This route should never be reached because first_route matches
+                Route {
+                    name: "second_route".to_string(),
+                    conditions: RouteCondition::Expr(HashMap::from([(
+                        "pre_request.guardrail2.result".to_string(),
+                        ConditionOp {
+                            op: HashMap::from([(ConditionOpType::Eq, serde_json::json!(true))]),
+                        },
+                    )])),
+                    targets: Some(TargetSpec::List(vec![HashMap::from([(
+                        "model".to_string(),
+                        serde_json::json!("second/model"),
+                    )])])),
+                    message_mapper: None,
+                },
+            ],
+            post_request: vec![],
+        };
+        let router = ConditionalRouter { routing };
+        let factory = Box::new(MockFactory { result: true }) as Box<dyn InterceptorFactory>;
+        
+        let target = router
+            .get_target(
+                factory,
+                &ChatCompletionRequest::default(),
+                &HashMap::new(),
+                &HashMap::new(),
+            )
+            .await;
+        
+        assert!(target.is_some());
+        if let Some(TargetSpec::List(targets)) = target {
+            assert_eq!(targets[0]["model"], "first/model");
+        } else {
+            panic!("Expected List target");
+        }
     }
 }

@@ -150,6 +150,87 @@ pub trait InterceptorFactory: Send + Sync {
     ) -> Result<Arc<dyn Interceptor>, InterceptorError>;
 }
 
+/// Lazy interceptor manager that only executes interceptors when needed
+pub struct LazyInterceptorManager {
+    interceptors: HashMap<String, Arc<dyn Interceptor>>,
+    state: Arc<tokio::sync::RwLock<InterceptorState>>,
+    context: InterceptorContext,
+}
+
+impl LazyInterceptorManager {
+    pub fn new(
+        interceptors: HashMap<String, Arc<dyn Interceptor>>,
+        context: InterceptorContext,
+    ) -> Self {
+        Self {
+            interceptors,
+            state: context.state.clone(),
+            context,
+        }
+    }
+
+    /// Get the result of a specific interceptor, executing it if not already executed
+    pub async fn get_interceptor_result(
+        &mut self,
+        interceptor_name: &str,
+    ) -> Result<Option<serde_json::Value>, InterceptorError> {
+        // First check if the result is already available
+        {
+            let state = self.state.read().await;
+            if let Some(data) = state.get_pre_request_data(interceptor_name) {
+                return Ok(Some(data.clone()));
+            }
+        }
+
+        // If not available, execute the interceptor
+        if let Some(interceptor) = self.interceptors.get(interceptor_name) {
+            let interceptor_start = std::time::Instant::now();
+
+            let (result, data_result) = match interceptor.pre_request(&mut self.context).await {
+                Ok(data) => {
+                    let data_clone = data.clone();
+                    let result = InterceptorResult {
+                        interceptor_name: interceptor_name.to_string(),
+                        execution_time_ms: interceptor_start.elapsed().as_millis() as u64,
+                        data,
+                        success: true,
+                        error: None,
+                    };
+                    (result, Ok(Some(data_clone)))
+                }
+                Err(e) => {
+                    let error_msg = e.to_string();
+                    let result = InterceptorResult {
+                        interceptor_name: interceptor_name.to_string(),
+                        execution_time_ms: interceptor_start.elapsed().as_millis() as u64,
+                        data: serde_json::Value::Null,
+                        success: false,
+                        error: Some(error_msg.clone()),
+                    };
+                    (result, Err(InterceptorError::ExecutionError(error_msg)))
+                }
+            };
+
+            let mut state = self.state.write().await;
+            state.add_pre_request_result(result);
+
+            data_result
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Get all pre-request results that have been executed so far
+    pub async fn get_all_results(&self) -> HashMap<String, serde_json::Value> {
+        let state = self.state.read().await;
+        let mut results = HashMap::new();
+        for result in &state.pre_request_results {
+            results.insert(result.interceptor_name.clone(), result.data.clone());
+        }
+        results
+    }
+}
+
 /// Manager for handling multiple interceptors
 pub struct InterceptorManager {
     interceptors: Vec<Arc<dyn Interceptor>>,
@@ -344,6 +425,48 @@ mod tests {
             "test_interceptor"
         );
         assert!(state_read.pre_request_results[0].success);
+    }
+
+    #[tokio::test]
+    async fn test_lazy_interceptor_manager() {
+        let interceptor = Arc::new(TestInterceptor::new("lazy_test".to_string()));
+        let mut interceptors = HashMap::new();
+        interceptors.insert("lazy_test".to_string(), interceptor as Arc<dyn Interceptor>);
+
+        let state = Arc::new(tokio::sync::RwLock::new(InterceptorState::new()));
+        let request = ChatCompletionRequest::default();
+        let headers = HashMap::new();
+        let context = InterceptorContext::new(request, headers, state.clone());
+
+        let mut lazy_manager = LazyInterceptorManager::new(interceptors, context);
+
+        // Initially no results
+        let initial_results = lazy_manager.get_all_results().await;
+        assert!(initial_results.is_empty());
+
+        // Get result for the first time - should execute
+        let result = lazy_manager
+            .get_interceptor_result("lazy_test")
+            .await
+            .unwrap();
+        assert!(result.is_some());
+        assert_eq!(result.unwrap()["interceptor"], "lazy_test");
+
+        // Get result again - should return cached result
+        let cached_result = lazy_manager
+            .get_interceptor_result("lazy_test")
+            .await
+            .unwrap();
+        assert!(cached_result.is_some());
+        assert_eq!(cached_result.unwrap()["interceptor"], "lazy_test");
+
+        // Verify only one execution in state
+        let state_read = state.read().await;
+        assert_eq!(state_read.pre_request_results.len(), 1);
+        assert_eq!(
+            state_read.pre_request_results[0].interceptor_name,
+            "lazy_test"
+        );
     }
 
     #[tokio::test]

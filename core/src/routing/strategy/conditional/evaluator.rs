@@ -1,3 +1,4 @@
+use crate::routing::interceptor::LazyInterceptorManager;
 use crate::routing::{ConditionOpType, Route, RouteCondition};
 use std::collections::{HashMap, HashSet};
 
@@ -23,6 +24,42 @@ pub fn evaluate_conditions(
     }
 }
 
+/// Evaluates if a route's conditions are met using lazy interceptor execution.
+pub async fn evaluate_conditions_lazy(
+    condition: &RouteCondition,
+    lazy_manager: &mut LazyInterceptorManager,
+    metadata: &HashMap<String, serde_json::Value>,
+) -> Result<bool, crate::routing::interceptor::InterceptorError> {
+    tracing::warn!("Evaluating conditions lazily: {:#?}", condition);
+
+    match condition {
+        RouteCondition::All { all } => {
+            for expr in all {
+                if !evaluate_expr_lazy(expr, lazy_manager, metadata).await? {
+                    return Ok(false);
+                }
+            }
+            Ok(true)
+        }
+        RouteCondition::Any { any } => {
+            for expr in any {
+                if evaluate_expr_lazy(expr, lazy_manager, metadata).await? {
+                    return Ok(true);
+                }
+            }
+            Ok(false)
+        }
+        RouteCondition::Expr(map) => {
+            for (k, v) in map {
+                if !evaluate_op_lazy(k, v, lazy_manager, metadata).await? {
+                    return Ok(false);
+                }
+            }
+            Ok(true)
+        }
+    }
+}
+
 fn evaluate_expr(
     expr: &crate::routing::ConditionExpr,
     pre_request_results: &HashMap<String, serde_json::Value>,
@@ -32,6 +69,23 @@ fn evaluate_expr(
         crate::routing::ConditionExpr::Expr(map) => map
             .iter()
             .all(|(k, v)| evaluate_op(k, v, pre_request_results, metadata)),
+    }
+}
+
+async fn evaluate_expr_lazy(
+    expr: &crate::routing::ConditionExpr,
+    lazy_manager: &mut LazyInterceptorManager,
+    metadata: &HashMap<String, serde_json::Value>,
+) -> Result<bool, crate::routing::interceptor::InterceptorError> {
+    match expr {
+        crate::routing::ConditionExpr::Expr(map) => {
+            for (k, v) in map {
+                if !evaluate_op_lazy(k, v, lazy_manager, metadata).await? {
+                    return Ok(false);
+                }
+            }
+            Ok(true)
+        }
     }
 }
 
@@ -140,8 +194,144 @@ fn evaluate_op(
             }
         }
     }
-    
+
     true
+}
+
+async fn evaluate_op_lazy(
+    key: &str,
+    op: &crate::routing::ConditionOp,
+    lazy_manager: &mut LazyInterceptorManager,
+    metadata: &HashMap<String, serde_json::Value>,
+) -> Result<bool, crate::routing::interceptor::InterceptorError> {
+    // Helper function to get the value to compare against
+    let get_value = |key: &str| -> Option<&serde_json::Value> {
+        if key.starts_with("pre_request.") {
+            let parts: Vec<&str> = key.split('.').collect();
+            if parts.len() == 3 {
+                let _name = parts[1];
+                // For lazy evaluation, we need to execute the interceptor if not already done
+                // This will be handled by the caller
+                return None; // We'll handle this differently
+            }
+        } else if let Some(meta_key) = key.strip_prefix("metadata.") {
+            return metadata.get(meta_key);
+        }
+        None
+    };
+
+    // Get the value to compare
+    let value = if key.starts_with("pre_request.") {
+        let parts: Vec<&str> = key.split('.').collect();
+        if parts.len() == 3 {
+            let interceptor_name = parts[1];
+            let field_name = parts[2];
+            
+            // Execute the interceptor if needed
+            let interceptor_result = lazy_manager
+                .get_interceptor_result(interceptor_name)
+                .await?;
+            
+            if let Some(result_data) = interceptor_result {
+                if let Some(obj) = result_data.as_object() {
+                    let field_value = obj.get(field_name).cloned();
+                    field_value
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    } else {
+        let value = get_value(key).cloned();
+        value
+    };
+
+    let Some(value) = value else {
+        return Ok(false);
+    };
+
+    // Check each operator in the op map
+    for (op_name, op_value) in &op.op {
+        match op_name {
+            ConditionOpType::Eq => {
+                if value != *op_value {
+                    return Ok(false);
+                }
+            }
+            ConditionOpType::Ne => {
+                if value == *op_value {
+                    return Ok(false);
+                }
+            }
+            ConditionOpType::In => {
+                if let Some(array) = op_value.as_array() {
+                    if !array.contains(&value) {
+                        return Ok(false);
+                    }
+                } else {
+                    return Ok(false);
+                }
+            }
+            ConditionOpType::Gt => {
+                if let (Some(val_num), Some(op_num)) = (value.as_f64(), op_value.as_f64()) {
+                    if val_num <= op_num {
+                        return Ok(false);
+                    }
+                } else if let (Some(val_str), Some(op_str)) = (value.as_str(), op_value.as_str()) {
+                    if val_str <= op_str {
+                        return Ok(false);
+                    }
+                } else {
+                    return Ok(false);
+                }
+            }
+            ConditionOpType::Lt => {
+                if let (Some(val_num), Some(op_num)) = (value.as_f64(), op_value.as_f64()) {
+                    if val_num >= op_num {
+                        return Ok(false);
+                    }
+                } else if let (Some(val_str), Some(op_str)) = (value.as_str(), op_value.as_str()) {
+                    if val_str >= op_str {
+                        return Ok(false);
+                    }
+                } else {
+                    return Ok(false);
+                }
+            }
+            ConditionOpType::Lte => {
+                if let (Some(val_num), Some(op_num)) = (value.as_f64(), op_value.as_f64()) {
+                    if val_num > op_num {
+                        return Ok(false);
+                    }
+                } else if let (Some(val_str), Some(op_str)) = (value.as_str(), op_value.as_str()) {
+                    if val_str > op_str {
+                        return Ok(false);
+                    }
+                } else {
+                    return Ok(false);
+                }
+            }
+            ConditionOpType::Gte => {
+                if let (Some(val_num), Some(op_num)) = (value.as_f64(), op_value.as_f64()) {
+                    if val_num < op_num {
+                        return Ok(false);
+                    }
+                } else if let (Some(val_str), Some(op_str)) = (value.as_str(), op_value.as_str()) {
+                    if val_str < op_str {
+                        return Ok(false);
+                    }
+                } else {
+                    return Ok(false);
+                }
+            }
+        }
+    }
+    
+    Ok(true)
 }
 
 /// Returns the set of pre_request interceptor names referenced in any route condition
@@ -299,10 +489,7 @@ mod tests {
     #[test]
     fn test_eq_operator() {
         let mut pre_request_results = HashMap::new();
-        pre_request_results.insert(
-            "guardrail".to_string(),
-            serde_json::json!({"result": true}),
-        );
+        pre_request_results.insert("guardrail".to_string(), serde_json::json!({"result": true}));
 
         let condition = RouteCondition::Expr(HashMap::from([(
             "pre_request.guardrail.result".to_string(),
@@ -311,16 +498,17 @@ mod tests {
             },
         )]));
 
-        assert!(evaluate_conditions(&condition, &pre_request_results, &HashMap::new()));
+        assert!(evaluate_conditions(
+            &condition,
+            &pre_request_results,
+            &HashMap::new()
+        ));
     }
 
     #[test]
     fn test_ne_operator() {
         let mut pre_request_results = HashMap::new();
-        pre_request_results.insert(
-            "guardrail".to_string(),
-            serde_json::json!({"result": true}),
-        );
+        pre_request_results.insert("guardrail".to_string(), serde_json::json!({"result": true}));
 
         let condition = RouteCondition::Expr(HashMap::from([(
             "pre_request.guardrail.result".to_string(),
@@ -329,7 +517,11 @@ mod tests {
             },
         )]));
 
-        assert!(evaluate_conditions(&condition, &pre_request_results, &HashMap::new()));
+        assert!(evaluate_conditions(
+            &condition,
+            &pre_request_results,
+            &HashMap::new()
+        ));
     }
 
     #[test]
@@ -350,16 +542,17 @@ mod tests {
             },
         )]));
 
-        assert!(evaluate_conditions(&condition, &pre_request_results, &HashMap::new()));
+        assert!(evaluate_conditions(
+            &condition,
+            &pre_request_results,
+            &HashMap::new()
+        ));
     }
 
     #[test]
     fn test_gt_operator_numeric() {
         let mut pre_request_results = HashMap::new();
-        pre_request_results.insert(
-            "guardrail".to_string(),
-            serde_json::json!({"score": 85.5}),
-        );
+        pre_request_results.insert("guardrail".to_string(), serde_json::json!({"score": 85.5}));
 
         let condition = RouteCondition::Expr(HashMap::from([(
             "pre_request.guardrail.score".to_string(),
@@ -368,7 +561,11 @@ mod tests {
             },
         )]));
 
-        assert!(evaluate_conditions(&condition, &pre_request_results, &HashMap::new()));
+        assert!(evaluate_conditions(
+            &condition,
+            &pre_request_results,
+            &HashMap::new()
+        ));
     }
 
     #[test]
@@ -386,16 +583,17 @@ mod tests {
             },
         )]));
 
-        assert!(evaluate_conditions(&condition, &pre_request_results, &HashMap::new()));
+        assert!(evaluate_conditions(
+            &condition,
+            &pre_request_results,
+            &HashMap::new()
+        ));
     }
 
     #[test]
     fn test_lt_operator_numeric() {
         let mut pre_request_results = HashMap::new();
-        pre_request_results.insert(
-            "guardrail".to_string(),
-            serde_json::json!({"score": 75.0}),
-        );
+        pre_request_results.insert("guardrail".to_string(), serde_json::json!({"score": 75.0}));
 
         let condition = RouteCondition::Expr(HashMap::from([(
             "pre_request.guardrail.score".to_string(),
@@ -404,7 +602,11 @@ mod tests {
             },
         )]));
 
-        assert!(evaluate_conditions(&condition, &pre_request_results, &HashMap::new()));
+        assert!(evaluate_conditions(
+            &condition,
+            &pre_request_results,
+            &HashMap::new()
+        ));
     }
 
     #[test]
@@ -422,7 +624,11 @@ mod tests {
             },
         )]));
 
-        assert!(evaluate_conditions(&condition, &pre_request_results, &HashMap::new()));
+        assert!(evaluate_conditions(
+            &condition,
+            &pre_request_results,
+            &HashMap::new()
+        ));
     }
 
     #[test]
@@ -478,7 +684,11 @@ mod tests {
             ),
         ]));
 
-        assert!(evaluate_conditions(&condition, &pre_request_results, &HashMap::new()));
+        assert!(evaluate_conditions(
+            &condition,
+            &pre_request_results,
+            &HashMap::new()
+        ));
     }
 
     #[test]
@@ -497,7 +707,11 @@ mod tests {
             },
         )]));
 
-        assert!(!evaluate_conditions(&condition, &pre_request_results, &HashMap::new()));
+        assert!(!evaluate_conditions(
+            &condition,
+            &pre_request_results,
+            &HashMap::new()
+        ));
 
         // Test in with false condition
         let condition = RouteCondition::Expr(HashMap::from([(
@@ -510,7 +724,11 @@ mod tests {
             },
         )]));
 
-        assert!(!evaluate_conditions(&condition, &pre_request_results, &HashMap::new()));
+        assert!(!evaluate_conditions(
+            &condition,
+            &pre_request_results,
+            &HashMap::new()
+        ));
 
         // Test gt with false condition
         let condition = RouteCondition::Expr(HashMap::from([(
@@ -520,16 +738,17 @@ mod tests {
             },
         )]));
 
-        assert!(!evaluate_conditions(&condition, &pre_request_results, &HashMap::new()));
+        assert!(!evaluate_conditions(
+            &condition,
+            &pre_request_results,
+            &HashMap::new()
+        ));
     }
 
     #[test]
     fn test_lte_operator_numeric() {
         let mut pre_request_results = HashMap::new();
-        pre_request_results.insert(
-            "guardrail".to_string(),
-            serde_json::json!({"score": 75.0}),
-        );
+        pre_request_results.insert("guardrail".to_string(), serde_json::json!({"score": 75.0}));
 
         let condition = RouteCondition::Expr(HashMap::from([(
             "pre_request.guardrail.score".to_string(),
@@ -538,16 +757,17 @@ mod tests {
             },
         )]));
 
-        assert!(evaluate_conditions(&condition, &pre_request_results, &HashMap::new()));
+        assert!(evaluate_conditions(
+            &condition,
+            &pre_request_results,
+            &HashMap::new()
+        ));
     }
 
     #[test]
     fn test_lte_operator_numeric_equal() {
         let mut pre_request_results = HashMap::new();
-        pre_request_results.insert(
-            "guardrail".to_string(),
-            serde_json::json!({"score": 80.0}),
-        );
+        pre_request_results.insert("guardrail".to_string(), serde_json::json!({"score": 80.0}));
 
         let condition = RouteCondition::Expr(HashMap::from([(
             "pre_request.guardrail.score".to_string(),
@@ -556,7 +776,11 @@ mod tests {
             },
         )]));
 
-        assert!(evaluate_conditions(&condition, &pre_request_results, &HashMap::new()));
+        assert!(evaluate_conditions(
+            &condition,
+            &pre_request_results,
+            &HashMap::new()
+        ));
     }
 
     #[test]
@@ -574,7 +798,11 @@ mod tests {
             },
         )]));
 
-        assert!(evaluate_conditions(&condition, &pre_request_results, &HashMap::new()));
+        assert!(evaluate_conditions(
+            &condition,
+            &pre_request_results,
+            &HashMap::new()
+        ));
     }
 
     #[test]
@@ -592,16 +820,17 @@ mod tests {
             },
         )]));
 
-        assert!(evaluate_conditions(&condition, &pre_request_results, &HashMap::new()));
+        assert!(evaluate_conditions(
+            &condition,
+            &pre_request_results,
+            &HashMap::new()
+        ));
     }
 
     #[test]
     fn test_gte_operator_numeric() {
         let mut pre_request_results = HashMap::new();
-        pre_request_results.insert(
-            "guardrail".to_string(),
-            serde_json::json!({"score": 85.0}),
-        );
+        pre_request_results.insert("guardrail".to_string(), serde_json::json!({"score": 85.0}));
 
         let condition = RouteCondition::Expr(HashMap::from([(
             "pre_request.guardrail.score".to_string(),
@@ -610,16 +839,17 @@ mod tests {
             },
         )]));
 
-        assert!(evaluate_conditions(&condition, &pre_request_results, &HashMap::new()));
+        assert!(evaluate_conditions(
+            &condition,
+            &pre_request_results,
+            &HashMap::new()
+        ));
     }
 
     #[test]
     fn test_gte_operator_numeric_equal() {
         let mut pre_request_results = HashMap::new();
-        pre_request_results.insert(
-            "guardrail".to_string(),
-            serde_json::json!({"score": 80.0}),
-        );
+        pre_request_results.insert("guardrail".to_string(), serde_json::json!({"score": 80.0}));
 
         let condition = RouteCondition::Expr(HashMap::from([(
             "pre_request.guardrail.score".to_string(),
@@ -628,7 +858,11 @@ mod tests {
             },
         )]));
 
-        assert!(evaluate_conditions(&condition, &pre_request_results, &HashMap::new()));
+        assert!(evaluate_conditions(
+            &condition,
+            &pre_request_results,
+            &HashMap::new()
+        ));
     }
 
     #[test]
@@ -646,7 +880,11 @@ mod tests {
             },
         )]));
 
-        assert!(evaluate_conditions(&condition, &pre_request_results, &HashMap::new()));
+        assert!(evaluate_conditions(
+            &condition,
+            &pre_request_results,
+            &HashMap::new()
+        ));
     }
 
     #[test]
@@ -664,7 +902,11 @@ mod tests {
             },
         )]));
 
-        assert!(evaluate_conditions(&condition, &pre_request_results, &HashMap::new()));
+        assert!(evaluate_conditions(
+            &condition,
+            &pre_request_results,
+            &HashMap::new()
+        ));
     }
 
     #[test]
@@ -683,7 +925,11 @@ mod tests {
             },
         )]));
 
-        assert!(!evaluate_conditions(&condition, &pre_request_results, &HashMap::new()));
+        assert!(!evaluate_conditions(
+            &condition,
+            &pre_request_results,
+            &HashMap::new()
+        ));
 
         // Test gte with false condition (apple < zebra)
         let condition = RouteCondition::Expr(HashMap::from([(
@@ -693,6 +939,10 @@ mod tests {
             },
         )]));
 
-        assert!(!evaluate_conditions(&condition, &pre_request_results, &HashMap::new()));
+        assert!(!evaluate_conditions(
+            &condition,
+            &pre_request_results,
+            &HashMap::new()
+        ));
     }
 }
