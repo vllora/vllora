@@ -103,6 +103,7 @@ impl MessageMapper {
                                 r#type: MessageContentType::Text,
                                 value: c.text.clone().unwrap_or("".to_string()),
                                 additional_options: None,
+                                cache_control: c.cache_control.clone(),
                             },
                             ContentType::ImageUrl => MessageContentPart {
                                 r#type: MessageContentType::ImageUrl,
@@ -112,6 +113,7 @@ impl MessageMapper {
                                     .map(|url| url.url.clone())
                                     .unwrap_or("".to_string()),
                                 additional_options: None,
+                                cache_control: c.cache_control.clone(),
                             },
                             ContentType::InputAudio => {
                                 let audio = c.audio.as_ref().ok_or(GatewayError::CustomError(
@@ -133,6 +135,7 @@ impl MessageMapper {
                                             },
                                         },
                                     )),
+                                    cache_control: c.cache_control.clone(),
                                 }
                             }
                         })

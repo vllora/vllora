@@ -7,6 +7,7 @@ use serde_tuple::{Deserialize_tuple, Serialize_tuple};
 use serde_with::serde_as;
 
 use super::{gateway::ToolCall, message::MessageType};
+use crate::types::gateway::CacheControl;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MessageThread {
@@ -104,6 +105,8 @@ pub struct MessageContentPart {
     pub r#type: MessageContentType,
     pub value: String,
     pub additional_options: Option<MessageContentPartOptions>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_control: Option<CacheControl>,
 }
 
 impl From<MessageContentPart> for Value {
@@ -207,11 +210,13 @@ mod tests {
                 r#type: super::MessageContentType::ImageUrl,
                 value: "image/base64".to_string(),
                 additional_options: None,
+                cache_control: None,
             },
             MessageContentPart {
                 r#type: super::MessageContentType::Text,
                 value: "How is my image".to_string(),
                 additional_options: None,
+                cache_control: None,
             },
         ];
 
