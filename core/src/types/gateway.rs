@@ -291,20 +291,22 @@ pub struct InputAudio {
     pub format: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ContentType {
+    #[default]
     Text,
     ImageUrl,
     InputAudio,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq, Default)]
 pub struct Content {
     pub r#type: ContentType,
     pub text: Option<String>,
     pub image_url: Option<ImageUrl>,
     pub audio: Option<InputAudio>,
+    pub cache_control: Option<CacheControl>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
@@ -775,6 +777,28 @@ pub enum ImageStyle {
     Natural,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq, Eq)]
+pub struct CacheControl {
+    r#type: CacheControlType,
+    ttl: Option<CacheControlTtl>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum CacheControlType {
+    Ephemeral,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Default, Hash, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum CacheControlTtl {
+    #[default]
+    #[serde(rename = "5m")]
+    FiveMinutes,
+    #[serde(rename = "1h")]
+    OneHour,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -785,25 +809,22 @@ mod tests {
             Content {
                 r#type: ContentType::Text,
                 text: Some("Hello".to_string()),
-                image_url: None,
-                audio: None,
+                ..Default::default()
             },
             Content {
                 r#type: ContentType::ImageUrl,
-                text: None,
                 image_url: Some(ImageUrl {
                     url: "https://example.com/image.jpg".to_string(),
                 }),
-                audio: None,
+                ..Default::default()
             },
             Content {
                 r#type: ContentType::InputAudio,
-                text: None,
-                image_url: None,
                 audio: Some(InputAudio {
                     data: "audio data".to_string(),
                     format: "mp3".to_string(),
                 }),
+                ..Default::default()
             },
         ]);
 
@@ -867,5 +888,39 @@ mod tests {
 
         let v = serde_json::to_string(&v).unwrap();
         println!("{v}");
+    }
+
+    #[test]
+    fn test_cache_control() {
+        let cache_control_initial = CacheControl {
+            r#type: CacheControlType::Ephemeral,
+            ttl: Some(CacheControlTtl::FiveMinutes),
+        };
+        let v = serde_json::to_string(&cache_control_initial).unwrap();
+        println!("{v}");
+        let cache_control = serde_json::from_str::<CacheControl>(&v).unwrap();
+        println!("{cache_control:#?}");
+        assert_eq!(cache_control_initial, cache_control);
+    }
+
+    #[test]
+    fn test_deserialize_cache_control() {
+        // Test with ttl
+        let json_with_ttl = r#"{"type":"ephemeral","ttl":"5m"}"#;
+        let cache_control = serde_json::from_str::<CacheControl>(json_with_ttl).unwrap();
+        assert_eq!(cache_control.r#type, CacheControlType::Ephemeral);
+        assert_eq!(cache_control.ttl, Some(CacheControlTtl::FiveMinutes));
+
+        // Test without ttl
+        let json_without_ttl = r#"{"type":"ephemeral"}"#;
+        let cache_control = serde_json::from_str::<CacheControl>(json_without_ttl).unwrap();
+        assert_eq!(cache_control.r#type, CacheControlType::Ephemeral);
+        assert_eq!(cache_control.ttl, None);
+
+        // Test with one hour ttl
+        let json_one_hour = r#"{"type":"ephemeral","ttl":"1h"}"#;
+        let cache_control = serde_json::from_str::<CacheControl>(json_one_hour).unwrap();
+        assert_eq!(cache_control.r#type, CacheControlType::Ephemeral);
+        assert_eq!(cache_control.ttl, Some(CacheControlTtl::OneHour));
     }
 }
