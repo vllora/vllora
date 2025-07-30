@@ -7,7 +7,6 @@ use thiserror::Error;
 
 mod factory;
 pub mod guard;
-pub mod rate_limiter;
 pub mod transformer;
 pub mod types;
 

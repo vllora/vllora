@@ -1,9 +1,8 @@
 use crate::routing::interceptor::types::{TransformDirection, TransformRule};
 use crate::routing::interceptor::{Interceptor, InterceptorContext, InterceptorError};
-use crate::types::gateway::{ChatCompletionMessage, ChatCompletionContent};
+use crate::types::gateway::{ChatCompletionContent, ChatCompletionMessage};
 use regex::Regex;
 use serde_json::Value;
-use std::collections::HashMap;
 
 /// Message transformer interceptor implementation
 pub struct MessageTransformerInterceptor {
@@ -19,26 +18,28 @@ impl MessageTransformerInterceptor {
     /// Apply transformation rules to a string
     fn apply_rules(&self, content: &str) -> String {
         let mut transformed = content.to_string();
-        
+
         for rule in &self.rules {
             if let Ok(regex) = Regex::new(&rule.pattern) {
                 let flags = rule.flags.as_deref().unwrap_or("");
-                
+
                 // Apply regex flags if specified
-                let mut regex = regex;
+                let regex = regex;
                 if flags.contains('i') {
                     // Case insensitive - handled by regex crate
                 }
                 if flags.contains('g') {
                     // Global replacement
-                    transformed = regex.replace_all(&transformed, &rule.replacement).to_string();
+                    transformed = regex
+                        .replace_all(&transformed, &rule.replacement)
+                        .to_string();
                 } else {
                     // Single replacement
                     transformed = regex.replace(&transformed, &rule.replacement).to_string();
                 }
             }
         }
-        
+
         transformed
     }
 
@@ -94,7 +95,7 @@ impl Interceptor for MessageTransformerInterceptor {
         match self.direction {
             TransformDirection::PreRequest | TransformDirection::Both => {
                 self.transform_messages(&mut context.request.messages);
-                
+
                 Ok(serde_json::json!({
                     "transformed": true,
                     "direction": "pre_request",
@@ -121,7 +122,7 @@ impl Interceptor for MessageTransformerInterceptor {
             TransformDirection::PostResponse | TransformDirection::Both => {
                 let mut response_clone = response.clone();
                 self.transform_response(&mut response_clone);
-                
+
                 Ok(serde_json::json!({
                     "transformed": true,
                     "direction": "post_response",
@@ -145,7 +146,10 @@ impl Interceptor for MessageTransformerInterceptor {
 pub struct MessageTransformerFactory;
 
 impl MessageTransformerFactory {
-    pub fn create(rules: Vec<TransformRule>, direction: TransformDirection) -> MessageTransformerInterceptor {
+    pub fn create(
+        rules: Vec<TransformRule>,
+        direction: TransformDirection,
+    ) -> MessageTransformerInterceptor {
         MessageTransformerInterceptor::new(rules, direction)
     }
 }
@@ -153,40 +157,41 @@ impl MessageTransformerFactory {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::gateway::{ChatCompletionRequest, ChatCompletionMessage, ChatCompletionContent};
+    use crate::routing::interceptor::InterceptorState;
+    use crate::types::gateway::{
+        ChatCompletionContent, ChatCompletionMessage, ChatCompletionRequest,
+    };
+    use std::collections::HashMap;
+    use std::sync::Arc;
 
     fn create_test_request() -> ChatCompletionRequest {
         ChatCompletionRequest {
             model: "openai/gpt-4".to_string(),
-            messages: vec![
-                ChatCompletionMessage {
-                    role: "user".to_string(),
-                    content: Some(ChatCompletionContent::Text("Hello, world!".to_string())),
-                    tool_calls: None,
-                    refusal: None,
-                    tool_call_id: None,
-                }
-            ],
+            messages: vec![ChatCompletionMessage {
+                role: "user".to_string(),
+                content: Some(ChatCompletionContent::Text("Hello, world!".to_string())),
+                tool_calls: None,
+                refusal: None,
+                tool_call_id: None,
+            }],
             ..Default::default()
         }
     }
 
     #[test]
     fn test_message_transformer_basic() {
-        let rules = vec![
-            TransformRule {
-                pattern: r"world".to_string(),
-                replacement: "universe".to_string(),
-                flags: Some("i".to_string()), // Case insensitive
-            }
-        ];
-        
+        let rules = vec![TransformRule {
+            pattern: r"world".to_string(),
+            replacement: "universe".to_string(),
+            flags: Some("i".to_string()), // Case insensitive
+        }];
+
         let transformer = MessageTransformerInterceptor::new(rules, TransformDirection::PreRequest);
         let mut request = create_test_request();
-        
+
         // Transform the messages
         transformer.transform_messages(&mut request.messages);
-        
+
         let transformed_content = request.messages[0].content.as_ref().unwrap();
         match transformed_content {
             ChatCompletionContent::Text(text) => {
@@ -208,14 +213,14 @@ mod tests {
                 pattern: r"Hello".to_string(),
                 replacement: "Hi".to_string(),
                 flags: None,
-            }
+            },
         ];
-        
+
         let transformer = MessageTransformerInterceptor::new(rules, TransformDirection::PreRequest);
         let mut request = create_test_request();
-        
+
         transformer.transform_messages(&mut request.messages);
-        
+
         let transformed_content = request.messages[0].content.as_ref().unwrap();
         match transformed_content {
             ChatCompletionContent::Text(text) => {
@@ -227,17 +232,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_message_transformer_pre_request() {
-        let rules = vec![
-            TransformRule {
-                pattern: r"world".to_string(),
-                replacement: "universe".to_string(),
-                flags: None,
-            }
-        ];
-        
+        let rules = vec![TransformRule {
+            pattern: r"world".to_string(),
+            replacement: "universe".to_string(),
+            flags: None,
+        }];
+
         let transformer = MessageTransformerInterceptor::new(rules, TransformDirection::PreRequest);
-        let mut headers = HashMap::new();
-        let state = Arc::new(tokio::sync::RwLock::new(HashMap::new()));
+        let headers = HashMap::new();
+        let state = Arc::new(tokio::sync::RwLock::new(InterceptorState::new()));
         let mut context = InterceptorContext {
             request: create_test_request(),
             headers,
@@ -247,14 +250,14 @@ mod tests {
             chain_position: 0,
             results: HashMap::new(),
         };
-        
+
         let result = transformer.pre_request(&mut context).await;
         assert!(result.is_ok());
-        
+
         let result_value = result.unwrap();
         assert_eq!(result_value["transformed"], true);
         assert_eq!(result_value["direction"], "pre_request");
-        
+
         // Check that the message was actually transformed
         let transformed_content = context.request.messages[0].content.as_ref().unwrap();
         match transformed_content {
@@ -267,18 +270,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_message_transformer_post_response() {
-        let rules = vec![
-            TransformRule {
-                pattern: r"world".to_string(),
-                replacement: "universe".to_string(),
-                flags: None,
-            }
-        ];
-        
-        let transformer = MessageTransformerInterceptor::new(rules, TransformDirection::PostResponse);
-        let mut headers = HashMap::new();
-        let state = Arc::new(tokio::sync::RwLock::new(HashMap::new()));
-        let context = InterceptorContext {
+        let rules = vec![TransformRule {
+            pattern: r"world".to_string(),
+            replacement: "universe".to_string(),
+            flags: None,
+        }];
+
+        let transformer =
+            MessageTransformerInterceptor::new(rules, TransformDirection::PostResponse);
+        let headers = HashMap::new();
+        let state = Arc::new(tokio::sync::RwLock::new(InterceptorState::new()));
+        let mut context = InterceptorContext {
             request: create_test_request(),
             headers,
             state,
@@ -287,7 +289,7 @@ mod tests {
             chain_position: 0,
             results: HashMap::new(),
         };
-        
+
         let response = serde_json::json!({
             "choices": [
                 {
@@ -297,14 +299,14 @@ mod tests {
                 }
             ]
         });
-        
-        let result = transformer.post_request(&context, &response).await;
+
+        let result = transformer.post_request(&mut context, &response).await;
         assert!(result.is_ok());
-        
+
         let result_value = result.unwrap();
         assert_eq!(result_value["transformed"], true);
         assert_eq!(result_value["direction"], "post_response");
-        
+
         // Check that the response was transformed
         let transformed_response = result_value["response"].as_object().unwrap();
         let choices = transformed_response["choices"].as_array().unwrap();

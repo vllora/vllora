@@ -120,6 +120,7 @@ impl RoutedExecutor {
                 let executor_result = llm_router
                     .route(
                         request.request.clone(),
+                        request.extra.as_ref(),
                         Arc::clone(&executor_context.model_metadata_factory),
                         executor_context.headers.clone(),
                         &metrics_repository,

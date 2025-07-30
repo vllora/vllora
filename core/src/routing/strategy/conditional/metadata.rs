@@ -1,4 +1,4 @@
-use crate::types::gateway::{Extra, RequestUser};
+use crate::types::gateway::Extra;
 use serde_json::Value;
 use std::collections::HashMap;
 use thiserror::Error;
@@ -7,10 +7,10 @@ use thiserror::Error;
 pub enum MetadataError {
     #[error("Metadata extraction failed: {0}")]
     ExtractionError(String),
-    
+
     #[error("Invalid metadata field: {0}")]
     InvalidFieldError(String),
-    
+
     #[error("Metadata validation failed: {0}")]
     ValidationError(String),
 }
@@ -23,17 +23,17 @@ pub enum MetadataField {
     UserName,
     UserEmail,
     UserTiers,
-    
+
     // Dynamic variables from Extra.variables
     Variable(String), // Dynamic access to Extra.variables
-    
+
     // Guardrail results from Extra.guards
     GuardrailResult(String), // Access guardrail results
 }
 
 impl MetadataField {
     /// Extract the value for this metadata field from the Extra struct
-    pub fn extract(&self, extra: &Option<Extra>) -> Result<Option<Value>, MetadataError> {
+    pub fn extract(&self, extra: Option<&Extra>) -> Result<Option<Value>, MetadataError> {
         match self {
             MetadataField::UserId => {
                 if let Some(extra) = extra {
@@ -46,7 +46,7 @@ impl MetadataField {
                     Ok(None)
                 }
             }
-            
+
             MetadataField::UserName => {
                 if let Some(extra) = extra {
                     if let Some(user) = &extra.user {
@@ -58,11 +58,14 @@ impl MetadataField {
                     Ok(None)
                 }
             }
-            
+
             MetadataField::UserEmail => {
                 if let Some(extra) = extra {
                     if let Some(user) = &extra.user {
-                        Ok(user.email.as_ref().map(|email| Value::String(email.clone())))
+                        Ok(user
+                            .email
+                            .as_ref()
+                            .map(|email| Value::String(email.clone())))
                     } else {
                         Ok(None)
                     }
@@ -70,12 +73,13 @@ impl MetadataField {
                     Ok(None)
                 }
             }
-            
+
             MetadataField::UserTiers => {
                 if let Some(extra) = extra {
                     if let Some(user) = &extra.user {
                         if let Some(tiers) = &user.tiers {
-                            let tiers_array: Vec<Value> = tiers.iter()
+                            let tiers_array: Vec<Value> = tiers
+                                .iter()
                                 .map(|tier| Value::String(tier.clone()))
                                 .collect();
                             Ok(Some(Value::Array(tiers_array)))
@@ -89,7 +93,7 @@ impl MetadataField {
                     Ok(None)
                 }
             }
-            
+
             MetadataField::Variable(var_name) => {
                 if let Some(extra) = extra {
                     if let Some(variables) = &extra.variables {
@@ -101,9 +105,9 @@ impl MetadataField {
                     Ok(None)
                 }
             }
-            
-            MetadataField::GuardrailResult(guard_id) => {
-                if let Some(extra) = extra {
+
+            MetadataField::GuardrailResult(_guard_id) => {
+                if let Some(_extra) = extra {
                     // For now, we'll return a placeholder since guardrail results
                     // need to be integrated with the actual guardrail system
                     // This will be enhanced when we implement the guardrail system
@@ -114,7 +118,7 @@ impl MetadataField {
             }
         }
     }
-    
+
     /// Parse a metadata field from a string representation
     pub fn from_string(field_str: &str) -> Result<Self, MetadataError> {
         match field_str {
@@ -133,16 +137,17 @@ impl MetadataField {
             _ => Err(MetadataError::InvalidFieldError(field_str.to_string())),
         }
     }
-    
-    /// Convert the metadata field to a string representation
-    pub fn to_string(&self) -> String {
+}
+
+impl std::fmt::Display for MetadataField {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            MetadataField::UserId => "user.id".to_string(),
-            MetadataField::UserName => "user.name".to_string(),
-            MetadataField::UserEmail => "user.email".to_string(),
-            MetadataField::UserTiers => "user.tiers".to_string(),
-            MetadataField::Variable(var_name) => format!("variables.{}", var_name),
-            MetadataField::GuardrailResult(guard_id) => format!("guards.{}", guard_id),
+            MetadataField::UserId => write!(f, "user.id"),
+            MetadataField::UserName => write!(f, "user.name"),
+            MetadataField::UserEmail => write!(f, "user.email"),
+            MetadataField::UserTiers => write!(f, "user.tiers"),
+            MetadataField::Variable(var_name) => write!(f, "variables.{var_name}"),
+            MetadataField::GuardrailResult(guard_id) => write!(f, "guards.{guard_id}"),
         }
     }
 }
@@ -160,20 +165,20 @@ impl MetadataManager {
             cache_ttl: std::time::Duration::from_secs(300), // 5 minutes default TTL
         }
     }
-    
+
     pub fn with_cache_ttl(mut self, ttl: std::time::Duration) -> Self {
         self.cache_ttl = ttl;
         self
     }
-    
+
     /// Extract metadata for a specific field
     pub fn extract_metadata(
         &mut self,
         field: &MetadataField,
-        extra: &Option<Extra>,
+        extra: Option<&Extra>,
     ) -> Result<Option<Value>, MetadataError> {
         let cache_key = field.to_string();
-        
+
         // Check cache first
         if let Some((cached_value, timestamp)) = self.cache.get(&cache_key) {
             if timestamp.elapsed() < self.cache_ttl {
@@ -183,25 +188,26 @@ impl MetadataManager {
                 self.cache.remove(&cache_key);
             }
         }
-        
+
         // Extract fresh value
         let result = field.extract(extra)?;
-        
+
         // Cache the result if it exists
         if let Some(ref value) = result {
-            self.cache.insert(cache_key, (value.clone(), std::time::Instant::now()));
+            self.cache
+                .insert(cache_key, (value.clone(), std::time::Instant::now()));
         }
-        
+
         Ok(result)
     }
-    
+
     /// Extract all metadata from Extra fields
     pub fn extract_all_metadata(
         &mut self,
-        extra: &Option<Extra>,
+        extra: Option<&Extra>,
     ) -> Result<HashMap<String, Value>, MetadataError> {
         let mut metadata = HashMap::new();
-        
+
         // Extract user metadata
         if let Some(extra) = extra {
             if let Some(user) = &extra.user {
@@ -215,41 +221,45 @@ impl MetadataManager {
                     metadata.insert("user.email".to_string(), Value::String(email.clone()));
                 }
                 if let Some(tiers) = &user.tiers {
-                    let tiers_array: Vec<Value> = tiers.iter()
+                    let tiers_array: Vec<Value> = tiers
+                        .iter()
                         .map(|tier| Value::String(tier.clone()))
                         .collect();
                     metadata.insert("user.tiers".to_string(), Value::Array(tiers_array));
                 }
             }
-            
+
             // Extract variables
             if let Some(variables) = &extra.variables {
                 for (key, value) in variables {
-                    metadata.insert(format!("variables.{}", key), value.clone());
+                    metadata.insert(format!("variables.{key}"), value.clone());
                 }
             }
-            
+
             // Extract guardrail results (placeholder for now)
             for guard in &extra.guards {
                 match guard {
                     crate::types::gateway::GuardOrName::GuardId(guard_id) => {
-                        metadata.insert(format!("guards.{}", guard_id), Value::Bool(true));
+                        metadata.insert(format!("guards.{guard_id}"), Value::Bool(true));
                     }
                     crate::types::gateway::GuardOrName::GuardWithParameters(guard_with_params) => {
-                        metadata.insert(format!("guards.{}", guard_with_params.id), Value::Bool(true));
+                        metadata.insert(
+                            format!("guards.{}", guard_with_params.id),
+                            Value::Bool(true),
+                        );
                     }
                 }
             }
         }
-        
+
         Ok(metadata)
     }
-    
+
     /// Clear the metadata cache
     pub fn clear_cache(&mut self) {
         self.cache.clear();
     }
-    
+
     /// Get cache statistics
     pub fn cache_stats(&self) -> (usize, std::time::Duration) {
         (self.cache.len(), self.cache_ttl)
@@ -266,29 +276,53 @@ impl Default for MetadataManager {
 mod tests {
     use super::*;
     use crate::types::gateway::{Extra, RequestUser};
-    
+
     #[test]
     fn test_metadata_field_parsing() {
-        assert_eq!(MetadataField::from_string("user.id").unwrap(), MetadataField::UserId);
-        assert_eq!(MetadataField::from_string("user.name").unwrap(), MetadataField::UserName);
-        assert_eq!(MetadataField::from_string("user.email").unwrap(), MetadataField::UserEmail);
-        assert_eq!(MetadataField::from_string("user.tiers").unwrap(), MetadataField::UserTiers);
-        assert_eq!(MetadataField::from_string("variables.test_var").unwrap(), MetadataField::Variable("test_var".to_string()));
-        assert_eq!(MetadataField::from_string("guards.toxicity").unwrap(), MetadataField::GuardrailResult("toxicity".to_string()));
-        
+        assert_eq!(
+            MetadataField::from_string("user.id").unwrap(),
+            MetadataField::UserId
+        );
+        assert_eq!(
+            MetadataField::from_string("user.name").unwrap(),
+            MetadataField::UserName
+        );
+        assert_eq!(
+            MetadataField::from_string("user.email").unwrap(),
+            MetadataField::UserEmail
+        );
+        assert_eq!(
+            MetadataField::from_string("user.tiers").unwrap(),
+            MetadataField::UserTiers
+        );
+        assert_eq!(
+            MetadataField::from_string("variables.test_var").unwrap(),
+            MetadataField::Variable("test_var".to_string())
+        );
+        assert_eq!(
+            MetadataField::from_string("guards.toxicity").unwrap(),
+            MetadataField::GuardrailResult("toxicity".to_string())
+        );
+
         assert!(MetadataField::from_string("invalid.field").is_err());
     }
-    
+
     #[test]
     fn test_metadata_field_to_string() {
         assert_eq!(MetadataField::UserId.to_string(), "user.id");
         assert_eq!(MetadataField::UserName.to_string(), "user.name");
         assert_eq!(MetadataField::UserEmail.to_string(), "user.email");
         assert_eq!(MetadataField::UserTiers.to_string(), "user.tiers");
-        assert_eq!(MetadataField::Variable("test_var".to_string()).to_string(), "variables.test_var");
-        assert_eq!(MetadataField::GuardrailResult("toxicity".to_string()).to_string(), "guards.toxicity");
+        assert_eq!(
+            MetadataField::Variable("test_var".to_string()).to_string(),
+            "variables.test_var"
+        );
+        assert_eq!(
+            MetadataField::GuardrailResult("toxicity".to_string()).to_string(),
+            "guards.toxicity"
+        );
     }
-    
+
     #[test]
     fn test_user_metadata_extraction() {
         let user = RequestUser {
@@ -297,92 +331,115 @@ mod tests {
             email: Some("john@example.com".to_string()),
             tiers: Some(vec!["premium".to_string(), "enterprise".to_string()]),
         };
-        
+
         let extra = Some(Extra {
             user: Some(user),
             guards: vec![],
             cache: None,
             variables: None,
         });
-        
+
         assert_eq!(
-            MetadataField::UserId.extract(&extra).unwrap(),
+            MetadataField::UserId.extract(extra.as_ref()).unwrap(),
             Some(Value::String("user123".to_string()))
         );
-        
+
         assert_eq!(
-            MetadataField::UserName.extract(&extra).unwrap(),
+            MetadataField::UserName.extract(extra.as_ref()).unwrap(),
             Some(Value::String("John Doe".to_string()))
         );
-        
+
         assert_eq!(
-            MetadataField::UserEmail.extract(&extra).unwrap(),
+            MetadataField::UserEmail.extract(extra.as_ref()).unwrap(),
             Some(Value::String("john@example.com".to_string()))
         );
-        
-        let tiers = MetadataField::UserTiers.extract(&extra).unwrap().unwrap();
+
+        let tiers = MetadataField::UserTiers
+            .extract(extra.as_ref())
+            .unwrap()
+            .unwrap();
         assert_eq!(tiers.as_array().unwrap().len(), 2);
     }
-    
+
     #[test]
     fn test_variables_metadata_extraction() {
         let mut variables = HashMap::new();
         variables.insert("priority".to_string(), Value::String("high".to_string()));
-        variables.insert("department".to_string(), Value::String("engineering".to_string()));
-        variables.insert("budget".to_string(), Value::Number(serde_json::Number::from(1000)));
-        
+        variables.insert(
+            "department".to_string(),
+            Value::String("engineering".to_string()),
+        );
+        variables.insert(
+            "budget".to_string(),
+            Value::Number(serde_json::Number::from(1000)),
+        );
+
         let extra = Some(Extra {
             user: None,
             guards: vec![],
             cache: None,
             variables: Some(variables),
         });
-        
+
         assert_eq!(
-            MetadataField::Variable("priority".to_string()).extract(&extra).unwrap(),
+            MetadataField::Variable("priority".to_string())
+                .extract(extra.as_ref())
+                .unwrap(),
             Some(Value::String("high".to_string()))
         );
-        
+
         assert_eq!(
-            MetadataField::Variable("department".to_string()).extract(&extra).unwrap(),
+            MetadataField::Variable("department".to_string())
+                .extract(extra.as_ref())
+                .unwrap(),
             Some(Value::String("engineering".to_string()))
         );
-        
+
         assert_eq!(
-            MetadataField::Variable("budget".to_string()).extract(&extra).unwrap(),
+            MetadataField::Variable("budget".to_string())
+                .extract(extra.as_ref())
+                .unwrap(),
             Some(Value::Number(serde_json::Number::from(1000)))
         );
-        
+
         assert_eq!(
-            MetadataField::Variable("nonexistent".to_string()).extract(&extra).unwrap(),
+            MetadataField::Variable("nonexistent".to_string())
+                .extract(extra.as_ref())
+                .unwrap(),
             None
         );
     }
-    
+
     #[test]
     fn test_metadata_manager() {
         let mut manager = MetadataManager::new();
-        
+
         let user = RequestUser {
             id: Some("user123".to_string()),
             name: Some("John Doe".to_string()),
             email: None,
             tiers: Some(vec!["premium".to_string()]),
         };
-        
+
         let extra = Some(Extra {
             user: Some(user),
             guards: vec![],
             cache: None,
             variables: None,
         });
-        
-        let metadata = manager.extract_all_metadata(&extra).unwrap();
-        
-        assert_eq!(metadata.get("user.id").unwrap(), &Value::String("user123".to_string()));
-        assert_eq!(metadata.get("user.name").unwrap(), &Value::String("John Doe".to_string()));
+
+        let metadata = manager.extract_all_metadata(extra.as_ref()).unwrap();
+
+        assert_eq!(
+            metadata.get("user.id").unwrap(),
+            &Value::String("user123".to_string())
+        );
+        assert_eq!(
+            metadata.get("user.name").unwrap(),
+            &Value::String("John Doe".to_string())
+        );
         assert_eq!(metadata.get("user.email"), None);
-        
+
         let tiers = metadata.get("user.tiers").unwrap().as_array().unwrap();
         assert_eq!(tiers.len(), 1);
         assert_eq!(tiers[0], Value::String("premium".to_string()));

@@ -30,7 +30,6 @@ impl Interceptor for RouterGuardrailInterceptor {
         &self,
         context: &mut InterceptorContext,
     ) -> Result<serde_json::Value, InterceptorError> {
-        tracing::warn!("Pre-request guardrail: {:#?}", self.guard_id);
         let result = self
             .executor_context
             .evaluator_service

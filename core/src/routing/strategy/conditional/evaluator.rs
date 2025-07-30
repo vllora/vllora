@@ -1,6 +1,6 @@
 use crate::routing::interceptor::LazyInterceptorManager;
+use crate::routing::strategy::conditional::metadata::MetadataField;
 use crate::routing::{ConditionOpType, Route, RouteCondition};
-use crate::routing::strategy::conditional::metadata::{MetadataField, MetadataManager, MetadataError};
 use crate::types::gateway::Extra;
 use std::collections::{HashMap, HashSet};
 
@@ -9,7 +9,7 @@ pub fn evaluate_conditions(
     condition: &RouteCondition,
     pre_request_results: &HashMap<String, serde_json::Value>,
     metadata: &HashMap<String, serde_json::Value>,
-    extra: &Option<Extra>,
+    extra: Option<&Extra>,
 ) -> bool {
     tracing::warn!("Evaluating conditions: {:#?}", condition);
     tracing::warn!("Pre request results: {:#?}", pre_request_results);
@@ -32,7 +32,7 @@ pub async fn evaluate_conditions_lazy(
     condition: &RouteCondition,
     lazy_manager: &mut LazyInterceptorManager,
     metadata: &HashMap<String, serde_json::Value>,
-    extra: &Option<Extra>,
+    extra: Option<&Extra>,
 ) -> Result<bool, crate::routing::interceptor::InterceptorError> {
     tracing::warn!("Evaluating conditions lazily: {:#?}", condition);
 
@@ -68,7 +68,7 @@ fn evaluate_expr(
     expr: &crate::routing::ConditionExpr,
     pre_request_results: &HashMap<String, serde_json::Value>,
     metadata: &HashMap<String, serde_json::Value>,
-    extra: &Option<Extra>,
+    extra: Option<&Extra>,
 ) -> bool {
     match expr {
         crate::routing::ConditionExpr::Expr(map) => map
@@ -81,7 +81,7 @@ async fn evaluate_expr_lazy(
     expr: &crate::routing::ConditionExpr,
     lazy_manager: &mut LazyInterceptorManager,
     metadata: &HashMap<String, serde_json::Value>,
-    extra: &Option<Extra>,
+    extra: Option<&Extra>,
 ) -> Result<bool, crate::routing::interceptor::InterceptorError> {
     match expr {
         crate::routing::ConditionExpr::Expr(map) => {
@@ -100,7 +100,7 @@ fn evaluate_op(
     op: &crate::routing::ConditionOp,
     pre_request_results: &HashMap<String, serde_json::Value>,
     metadata: &HashMap<String, serde_json::Value>,
-    extra: &Option<Extra>,
+    extra: Option<&Extra>,
 ) -> bool {
     // Helper function to get the value to compare against
     let get_value = |key: &str| -> Option<serde_json::Value> {
@@ -147,7 +147,15 @@ fn evaluate_op(
                 }
             }
             ConditionOpType::In => {
-                if let Some(array) = op_value.as_array() {
+                // For In operator, we check if the op_value is contained within the value (which should be an array)
+                // OR if the value is contained within the op_value (which should be an array)
+                if let Some(array) = value.as_array() {
+                    // Case 1: value is an array, check if op_value is in it
+                    if !array.contains(op_value) {
+                        return false;
+                    }
+                } else if let Some(array) = op_value.as_array() {
+                    // Case 2: op_value is an array, check if value is in it
                     if !array.contains(&value) {
                         return false;
                     }
@@ -218,7 +226,7 @@ async fn evaluate_op_lazy(
     op: &crate::routing::ConditionOp,
     lazy_manager: &mut LazyInterceptorManager,
     metadata: &HashMap<String, serde_json::Value>,
-    extra: &Option<Extra>,
+    extra: Option<&Extra>,
 ) -> Result<bool, crate::routing::interceptor::InterceptorError> {
     // Helper function to get the value to compare against
     let get_value = |key: &str| -> Option<serde_json::Value> {
@@ -250,12 +258,12 @@ async fn evaluate_op_lazy(
         if parts.len() == 3 {
             let interceptor_name = parts[1];
             let field_name = parts[2];
-            
+
             // Execute the interceptor if needed
             let interceptor_result = lazy_manager
                 .get_interceptor_result(interceptor_name)
                 .await?;
-            
+
             if let Some(result_data) = interceptor_result {
                 if let Some(obj) = result_data.as_object() {
                     let field_value = obj.get(field_name).cloned();
@@ -353,7 +361,7 @@ async fn evaluate_op_lazy(
             }
         }
     }
-    
+
     Ok(true)
 }
 
@@ -494,7 +502,12 @@ mod tests {
         // Evaluate routes
         let mut selected = None;
         for route in &routing.routes {
-            if evaluate_conditions(&route.conditions, &pre_request_results, &HashMap::new(, &None), &None) {
+            if evaluate_conditions(
+                &route.conditions,
+                &pre_request_results,
+                &HashMap::new(),
+                None,
+            ) {
                 selected = Some(route);
                 break;
             }
@@ -524,7 +537,8 @@ mod tests {
         assert!(evaluate_conditions(
             &condition,
             &pre_request_results,
-            &HashMap::new()
+            &HashMap::new(),
+            None
         ));
     }
 
@@ -543,7 +557,8 @@ mod tests {
         assert!(evaluate_conditions(
             &condition,
             &pre_request_results,
-            &HashMap::new()
+            &HashMap::new(),
+            None
         ));
     }
 
@@ -568,7 +583,8 @@ mod tests {
         assert!(evaluate_conditions(
             &condition,
             &pre_request_results,
-            &HashMap::new()
+            &HashMap::new(),
+            None
         ));
     }
 
@@ -587,7 +603,8 @@ mod tests {
         assert!(evaluate_conditions(
             &condition,
             &pre_request_results,
-            &HashMap::new()
+            &HashMap::new(),
+            None
         ));
     }
 
@@ -609,7 +626,8 @@ mod tests {
         assert!(evaluate_conditions(
             &condition,
             &pre_request_results,
-            &HashMap::new()
+            &HashMap::new(),
+            None
         ));
     }
 
@@ -628,7 +646,8 @@ mod tests {
         assert!(evaluate_conditions(
             &condition,
             &pre_request_results,
-            &HashMap::new()
+            &HashMap::new(),
+            None
         ));
     }
 
@@ -650,7 +669,8 @@ mod tests {
         assert!(evaluate_conditions(
             &condition,
             &pre_request_results,
-            &HashMap::new()
+            &HashMap::new(),
+            None
         ));
     }
 
@@ -668,7 +688,12 @@ mod tests {
             },
         )]));
 
-        assert!(evaluate_conditions(&condition, &HashMap::new(), &metadata), &None);
+        assert!(evaluate_conditions(
+            &condition,
+            &HashMap::new(),
+            &metadata,
+            None
+        ));
 
         // Test in with metadata
         let condition = RouteCondition::Expr(HashMap::from([(
@@ -681,7 +706,12 @@ mod tests {
             },
         )]));
 
-        assert!(evaluate_conditions(&condition, &HashMap::new(), &metadata), &None);
+        assert!(evaluate_conditions(
+            &condition,
+            &HashMap::new(),
+            &metadata,
+            None
+        ));
     }
 
     #[test]
@@ -710,7 +740,8 @@ mod tests {
         assert!(evaluate_conditions(
             &condition,
             &pre_request_results,
-            &HashMap::new()
+            &HashMap::new(),
+            None
         ));
     }
 
@@ -733,7 +764,8 @@ mod tests {
         assert!(!evaluate_conditions(
             &condition,
             &pre_request_results,
-            &HashMap::new()
+            &HashMap::new(),
+            None
         ));
 
         // Test in with false condition
@@ -750,7 +782,8 @@ mod tests {
         assert!(!evaluate_conditions(
             &condition,
             &pre_request_results,
-            &HashMap::new()
+            &HashMap::new(),
+            None
         ));
 
         // Test gt with false condition
@@ -764,7 +797,8 @@ mod tests {
         assert!(!evaluate_conditions(
             &condition,
             &pre_request_results,
-            &HashMap::new()
+            &HashMap::new(),
+            None
         ));
     }
 
@@ -783,7 +817,8 @@ mod tests {
         assert!(evaluate_conditions(
             &condition,
             &pre_request_results,
-            &HashMap::new()
+            &HashMap::new(),
+            None
         ));
     }
 
@@ -802,7 +837,8 @@ mod tests {
         assert!(evaluate_conditions(
             &condition,
             &pre_request_results,
-            &HashMap::new()
+            &HashMap::new(),
+            None
         ));
     }
 
@@ -824,7 +860,8 @@ mod tests {
         assert!(evaluate_conditions(
             &condition,
             &pre_request_results,
-            &HashMap::new()
+            &HashMap::new(),
+            None
         ));
     }
 
@@ -846,7 +883,8 @@ mod tests {
         assert!(evaluate_conditions(
             &condition,
             &pre_request_results,
-            &HashMap::new()
+            &HashMap::new(),
+            None
         ));
     }
 
@@ -865,7 +903,8 @@ mod tests {
         assert!(evaluate_conditions(
             &condition,
             &pre_request_results,
-            &HashMap::new()
+            &HashMap::new(),
+            None
         ));
     }
 
@@ -884,7 +923,8 @@ mod tests {
         assert!(evaluate_conditions(
             &condition,
             &pre_request_results,
-            &HashMap::new()
+            &HashMap::new(),
+            None
         ));
     }
 
@@ -906,7 +946,8 @@ mod tests {
         assert!(evaluate_conditions(
             &condition,
             &pre_request_results,
-            &HashMap::new()
+            &HashMap::new(),
+            None
         ));
     }
 
@@ -928,7 +969,8 @@ mod tests {
         assert!(evaluate_conditions(
             &condition,
             &pre_request_results,
-            &HashMap::new()
+            &HashMap::new(),
+            None
         ));
     }
 
@@ -951,7 +993,8 @@ mod tests {
         assert!(!evaluate_conditions(
             &condition,
             &pre_request_results,
-            &HashMap::new()
+            &HashMap::new(),
+            None
         ));
 
         // Test gte with false condition (apple < zebra)
@@ -966,21 +1009,21 @@ mod tests {
             &condition,
             &pre_request_results,
             &HashMap::new(),
-            &None
+            None
         ));
     }
 
     #[test]
     fn test_extra_user_metadata() {
         use crate::types::gateway::{Extra, RequestUser};
-        
+
         let user = RequestUser {
             id: Some("user123".to_string()),
             name: Some("John Doe".to_string()),
             email: Some("john@example.com".to_string()),
             tiers: Some(vec!["premium".to_string(), "enterprise".to_string()]),
         };
-        
+
         let extra = Some(Extra {
             user: Some(user),
             guards: vec![],
@@ -989,43 +1032,57 @@ mod tests {
         });
 
         // Test user.id
-        let condition = RouteCondition::Expr(HashMap::from([
-            (
-                "extra.user.id".to_string(),
-                ConditionOp {
-                    op: HashMap::from([
-                        (ConditionOpType::Eq, serde_json::Value::String("user123".to_string())),
-                    ]),
-                },
-            ),
-        ]));
+        let condition = RouteCondition::Expr(HashMap::from([(
+            "extra.user.id".to_string(),
+            ConditionOp {
+                op: HashMap::from([(
+                    ConditionOpType::Eq,
+                    serde_json::Value::String("user123".to_string()),
+                )]),
+            },
+        )]));
 
-        assert!(evaluate_conditions(&condition, &HashMap::new(), &HashMap::new(, &None), &extra));
+        assert!(evaluate_conditions(
+            &condition,
+            &HashMap::new(),
+            &HashMap::new(),
+            extra.as_ref()
+        ));
 
         // Test user.tiers with in operator
-        let condition = RouteCondition::Expr(HashMap::from([
-            (
-                "extra.user.tiers".to_string(),
-                ConditionOp {
-                    op: HashMap::from([
-                        (ConditionOpType::In, serde_json::Value::String("premium".to_string())),
-                    ]),
-                },
-            ),
-        ]));
+        let condition = RouteCondition::Expr(HashMap::from([(
+            "extra.user.tiers".to_string(),
+            ConditionOp {
+                op: HashMap::from([(
+                    ConditionOpType::In,
+                    serde_json::Value::String("premium".to_string()),
+                )]),
+            },
+        )]));
 
-        assert!(evaluate_conditions(&condition, &HashMap::new(), &HashMap::new(, &None), &extra));
+        assert!(evaluate_conditions(
+            &condition,
+            &HashMap::new(),
+            &HashMap::new(),
+            extra.as_ref()
+        ));
     }
 
     #[test]
     fn test_extra_variables_metadata() {
-        use crate::types::gateway::{Extra, RequestUser};
+        use crate::types::gateway::Extra;
         use std::collections::HashMap;
-        
+
         let mut variables = HashMap::new();
-        variables.insert("priority".to_string(), serde_json::Value::String("high".to_string()));
-        variables.insert("budget".to_string(), serde_json::Value::Number(serde_json::Number::from(1000)));
-        
+        variables.insert(
+            "priority".to_string(),
+            serde_json::Value::String("high".to_string()),
+        );
+        variables.insert(
+            "budget".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(1000)),
+        );
+
         let extra = Some(Extra {
             user: None,
             guards: vec![],
@@ -1034,31 +1091,39 @@ mod tests {
         });
 
         // Test variables.priority
-        let condition = RouteCondition::Expr(HashMap::from([
-            (
-                "extra.variables.priority".to_string(),
-                ConditionOp {
-                    op: HashMap::from([
-                        (ConditionOpType::Eq, serde_json::Value::String("high".to_string())),
-                    ]),
-                },
-            ),
-        ]));
+        let condition = RouteCondition::Expr(HashMap::from([(
+            "extra.variables.priority".to_string(),
+            ConditionOp {
+                op: HashMap::from([(
+                    ConditionOpType::Eq,
+                    serde_json::Value::String("high".to_string()),
+                )]),
+            },
+        )]));
 
-        assert!(evaluate_conditions(&condition, &HashMap::new(), &HashMap::new(, &None), &extra));
+        assert!(evaluate_conditions(
+            &condition,
+            &HashMap::new(),
+            &HashMap::new(),
+            extra.as_ref()
+        ));
 
         // Test variables.budget with numeric comparison
-        let condition = RouteCondition::Expr(HashMap::from([
-            (
-                "extra.variables.budget".to_string(),
-                ConditionOp {
-                    op: HashMap::from([
-                        (ConditionOpType::Gt, serde_json::Value::Number(serde_json::Number::from(500))),
-                    ]),
-                },
-            ),
-        ]));
+        let condition = RouteCondition::Expr(HashMap::from([(
+            "extra.variables.budget".to_string(),
+            ConditionOp {
+                op: HashMap::from([(
+                    ConditionOpType::Gt,
+                    serde_json::Value::Number(serde_json::Number::from(500)),
+                )]),
+            },
+        )]));
 
-        assert!(evaluate_conditions(&condition, &HashMap::new(), &HashMap::new(, &None), &extra));
+        assert!(evaluate_conditions(
+            &condition,
+            &HashMap::new(),
+            &HashMap::new(),
+            extra.as_ref()
+        ));
     }
 }

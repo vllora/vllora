@@ -3,7 +3,7 @@ use crate::routing::metrics::MetricsRepository;
 // use crate::routing::strategy::script::ScriptError;
 // use crate::routing::strategy::script::ScriptStrategy;
 use crate::routing::strategy::conditional::ConditionalRouter;
-use crate::types::gateway::ChatCompletionRequest;
+use crate::types::gateway::{ChatCompletionRequest, Extra};
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::sync::Arc;
@@ -273,6 +273,7 @@ pub trait RouteStrategy {
     async fn route<M: MetricsRepository + Send + Sync>(
         &self,
         request: ChatCompletionRequest,
+        extra: Option<&Extra>,
         model_metadata_factory: Arc<Box<dyn ModelMetadataFactory>>,
         headers: HashMap<String, String>,
         metrics_repository: &M,
@@ -284,7 +285,8 @@ pub trait RouteStrategy {
 impl RouteStrategy for LlmRouter {
     async fn route<M: MetricsRepository + Send + Sync>(
         &self,
-        _request: ChatCompletionRequest,
+        request: ChatCompletionRequest,
+        extra: Option<&Extra>,
         _model_metadata_factory: Arc<Box<dyn ModelMetadataFactory>>,
         _headers: HashMap<String, String>,
         metrics_repository: &M,
@@ -348,7 +350,13 @@ impl RouteStrategy for LlmRouter {
                 };
                 let headers = HashMap::new(); // TODO: pass real headers
                 let target_opt = router
-                    .get_target(interceptor_factory, &_request, &headers, &HashMap::new())
+                    .get_target(
+                        interceptor_factory,
+                        &request,
+                        &headers,
+                        &HashMap::new(),
+                        extra,
+                    )
                     .await;
                 tracing::info!("Target: {:#?}", target_opt);
                 match target_opt {
@@ -506,6 +514,7 @@ mod tests {
         let result = router
             .route(
                 request,
+                None,
                 model_metadata_factory,
                 headers,
                 &metrics_repo,
@@ -644,6 +653,7 @@ mod tests {
         let result = router
             .route(
                 ChatCompletionRequest::default(),
+                None,
                 model_metadata_factory,
                 HashMap::new(),
                 &DummyMetricsRepo,
@@ -662,6 +672,7 @@ mod tests {
         let result = router
             .route(
                 ChatCompletionRequest::default(),
+                None,
                 model_metadata_factory,
                 HashMap::new(),
                 &DummyMetricsRepo,
