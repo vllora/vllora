@@ -272,6 +272,8 @@ pub struct ModelMetadata {
     pub description: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parameters: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub benchmark_info: Option<serde_json::Value>,
     #[serde(default)]
     pub virtual_model_id: Option<String>,
 }
@@ -300,6 +302,7 @@ impl Default for ModelMetadata {
             description: "".to_string(),
             parameters: None,
             virtual_model_id: None,
+            benchmark_info: None,
         }
     }
 }
