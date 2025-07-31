@@ -987,7 +987,6 @@ impl AnthropicModel {
                 .iter()
                 .find(|m| m.r#type == MessageType::SystemMessage)
                 .map(|message| {
-                    tracing::warn!("Found system message: {:#?}", message);
                     if let Some(content) = &message.content {
                         SystemPrompt::new(content.clone())
                     } else {
@@ -1016,8 +1015,6 @@ impl AnthropicModel {
                     }
                 });
         }
-
-        tracing::warn!("System message: {:#?}", system_message);
 
         let previous_messages = Self::map_previous_messages(previous_messages)?;
         conversational_messages.extend(previous_messages);
