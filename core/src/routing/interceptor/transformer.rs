@@ -173,6 +173,7 @@ mod tests {
                 tool_calls: None,
                 refusal: None,
                 tool_call_id: None,
+                cache_control: None,
             }],
             ..Default::default()
         }

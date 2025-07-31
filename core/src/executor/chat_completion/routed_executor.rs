@@ -173,7 +173,7 @@ impl RoutedExecutor {
 
         let llm_model = executor_context
             .model_metadata_factory
-            .get_model_metadata(&request.request.model, false)
+            .get_model_metadata(&request.request.model, false, false)
             .await?;
         let response = execute(
             request,

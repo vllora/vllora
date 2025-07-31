@@ -1,8 +1,6 @@
 use crate::routing::interceptor::{InterceptorFactory, LazyInterceptorManager};
 use crate::routing::{
-    strategy::conditional::evaluator::{
-        evaluate_conditions, referenced_pre_request_interceptors,
-    },
+    strategy::conditional::evaluator::{evaluate_conditions, referenced_pre_request_interceptors},
     ConditionalRouting, TargetSpec,
 };
 
@@ -49,9 +47,7 @@ impl ConditionalRouter {
 
         // Evaluate routes in order with lazy interceptor execution
         for route in &self.routing.routes {
-            match evaluate_conditions(&route.conditions, &mut lazy_manager, metadata, extra)
-                .await
-            {
+            match evaluate_conditions(&route.conditions, &mut lazy_manager, metadata, extra).await {
                 Ok(true) => {
                     if let Some(targets) = &route.targets {
                         return Some(targets);

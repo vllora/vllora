@@ -721,6 +721,7 @@ pub trait ModelMetadataFactory: Send + Sync {
         &self,
         model_name: &str,
         include_parameters: bool,
+        include_benchmark: bool,
     ) -> Result<ModelMetadata, GatewayApiError>;
 }
 
@@ -742,6 +743,7 @@ impl ModelMetadataFactory for DefaultModelMetadataFactory {
         &self,
         model_name: &str,
         _include_parameters: bool,
+        _include_benchmark: bool,
     ) -> Result<ModelMetadata, GatewayApiError> {
         find_model_by_full_name(model_name, &self.models)
     }
