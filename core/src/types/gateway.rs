@@ -323,6 +323,13 @@ impl ChatCompletionContent {
             _ => None,
         }
     }
+
+    pub fn as_content(&self) -> Option<Vec<Content>> {
+        match self {
+            ChatCompletionContent::Content(content) => Some(content.clone()),
+            _ => None,
+        }
+    }
 }
 
 impl Default for ChatCompletionContent {
@@ -508,19 +515,29 @@ pub struct ImageGenerationModelUsage {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PromptTokensDetails {
     cached_tokens: u32,
+    cache_creation_tokens: u32,
     audio_tokens: u32,
 }
 
 impl PromptTokensDetails {
-    pub fn new(cached_tokens: Option<u32>, audio_tokens: Option<u32>) -> Self {
+    pub fn new(
+        cached_tokens: Option<u32>,
+        cache_creation_tokens: Option<u32>,
+        audio_tokens: Option<u32>,
+    ) -> Self {
         Self {
             cached_tokens: cached_tokens.unwrap_or(0),
+            cache_creation_tokens: cache_creation_tokens.unwrap_or(0),
             audio_tokens: audio_tokens.unwrap_or(0),
         }
     }
 
     pub fn cached_tokens(&self) -> u32 {
         self.cached_tokens
+    }
+
+    pub fn cache_creation_tokens(&self) -> u32 {
+        self.cache_creation_tokens
     }
 
     pub fn audio_tokens(&self) -> u32 {
@@ -567,6 +584,8 @@ pub struct CostCalculationResult {
     pub per_input_token: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub per_cached_input_token: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub per_cached_input_write_token: Option<f64>,
     pub per_output_token: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub per_image_cost: Option<ImageCostCalculationResult>,
@@ -901,6 +920,39 @@ mod tests {
         let cache_control = serde_json::from_str::<CacheControl>(&v).unwrap();
         println!("{cache_control:#?}");
         assert_eq!(cache_control_initial, cache_control);
+    }
+
+    #[test]
+    fn test_message_with_cache_control() {
+        let cache_control_initial = CacheControl {
+            r#type: CacheControlType::Ephemeral,
+            ttl: Some(CacheControlTtl::FiveMinutes),
+        };
+        let message = ChatCompletionMessage {
+            role: "user".to_string(),
+            content: Some(ChatCompletionContent::Content(vec![Content {
+                r#type: ContentType::Text,
+                text: Some("Hello".to_string()),
+                cache_control: Some(cache_control_initial.clone()),
+                ..Default::default()
+            }])),
+            ..Default::default()
+        };
+        let v = serde_json::to_string(&message).unwrap();
+        println!("{v}");
+        let message = serde_json::from_str::<ChatCompletionMessage>(&v).unwrap();
+        println!("{message:#?}");
+        assert_eq!(
+            message
+                .content
+                .unwrap()
+                .as_content()
+                .unwrap()
+                .first()
+                .unwrap()
+                .cache_control,
+            Some(cache_control_initial)
+        );
     }
 
     #[test]

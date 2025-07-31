@@ -31,7 +31,7 @@ futures = "0.3"
 
 serde_with = { version = "3.14.0", features = ["json"] }
 validator = { version = "0.20", features = ["derive"] }
-clust = { version = "0.9.3", package = "langdb_clust" }
+clust = { version = "0.9.4", package = "langdb_clust" }
 indexmap = { version = "2.10.0", features = ["serde"] }
 serde_tuple = "1.1.0"
 minijinja = "2.11.0"

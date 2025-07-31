@@ -15,8 +15,8 @@ use crate::model::types::LLMFirstToken;
 use crate::model::{async_trait, DEFAULT_MAX_RETRIES};
 use crate::types::credentials::ApiKeyCredentials;
 use crate::types::engine::{AnthropicModelParams, ExecutionOptions, Prompt};
-use crate::types::gateway::CompletionModelUsage;
 use crate::types::gateway::{ChatCompletionContent, ChatCompletionMessage, ToolCall};
+use crate::types::gateway::{CompletionModelUsage, PromptTokensDetails};
 use crate::types::message::{MessageType, PromptMessage};
 use crate::types::threads::{InnerMessage, Message};
 use crate::{create_model_span, GatewayResult};
@@ -219,11 +219,17 @@ impl AnthropicModel {
         &self,
         stream: impl Stream<Item = Result<MessageChunk, StreamError>>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
-    ) -> GatewayResult<(StopReason, Vec<ToolUse>, Option<Usage>)> {
+    ) -> GatewayResult<(StopReason, Vec<ToolUse>, Usage)> {
         let mut tool_call_states: HashMap<u32, ToolUse> = HashMap::new();
         tokio::pin!(stream);
         let mut json_states: HashMap<u32, String> = HashMap::new();
-        let mut input_tokens = 0;
+        let mut usage = Usage {
+            input_tokens: 0,
+            output_tokens: 0,
+            cache_read_input_tokens: None,
+            cache_creation_input_tokens: None,
+            cache_creation: None,
+        };
         let mut first_response_received = false;
 
         loop {
@@ -299,7 +305,11 @@ impl AnthropicModel {
                         }
                     },
                     MessageChunk::MessageStart(start) => {
-                        input_tokens = start.message.usage.input_tokens;
+                        usage.input_tokens = start.message.usage.input_tokens;
+                        usage.cache_read_input_tokens = start.message.usage.cache_read_input_tokens;
+                        usage.cache_creation_input_tokens =
+                            start.message.usage.cache_creation_input_tokens;
+                        usage.cache_creation = start.message.usage.cache_creation;
                     }
 
                     MessageChunk::Ping(_) => {}
@@ -314,10 +324,7 @@ impl AnthropicModel {
                         }
                     }
                     MessageChunk::MessageDelta(delta) => {
-                        let usage = Some(clust::messages::Usage {
-                            input_tokens,
-                            output_tokens: delta.usage.output_tokens,
-                        });
+                        usage.output_tokens = delta.usage.output_tokens;
 
                         if let Some(stop_reason) = delta.delta.stop_reason {
                             return Ok((
@@ -397,10 +404,19 @@ impl AnthropicModel {
             clust::messages::StopReason::EndTurn | clust::messages::StopReason::StopSequence => {
                 let message_content = response.content;
 
+                let prompt_tokens_details = PromptTokensDetails::new(
+                    response.usage.cache_read_input_tokens,
+                    response.usage.cache_creation_input_tokens,
+                    None,
+                );
+                let input_tokens = response.usage.input_tokens
+                    + response.usage.cache_read_input_tokens.unwrap_or(0)
+                    + response.usage.cache_creation_input_tokens.unwrap_or(0);
                 let usage = CompletionModelUsage {
-                    input_tokens: response.usage.input_tokens,
+                    input_tokens,
                     output_tokens: response.usage.output_tokens,
-                    total_tokens: response.usage.input_tokens + response.usage.output_tokens,
+                    total_tokens: input_tokens + response.usage.output_tokens,
+                    prompt_tokens_details: Some(prompt_tokens_details),
                     ..Default::default()
                 };
 
@@ -710,13 +726,18 @@ impl AnthropicModel {
         Ok(())
     }
 
-    fn map_usage(usage: Option<&Usage>) -> Option<CompletionModelUsage> {
-        usage.map(|u| CompletionModelUsage {
-            input_tokens: u.input_tokens,
-            output_tokens: u.output_tokens,
-            total_tokens: u.input_tokens + u.output_tokens,
+    fn map_usage(usage: &Usage) -> CompletionModelUsage {
+        CompletionModelUsage {
+            input_tokens: usage.input_tokens,
+            output_tokens: usage.output_tokens,
+            total_tokens: usage.input_tokens + usage.output_tokens,
+            prompt_tokens_details: Some(PromptTokensDetails::new(
+                usage.cache_read_input_tokens,
+                usage.cache_creation_input_tokens,
+                None,
+            )),
             ..Default::default()
-        })
+        }
     }
 
     fn map_finish_reason(reason: &StopReason) -> ModelFinishReason {
@@ -774,10 +795,11 @@ impl AnthropicModel {
             .await?;
 
         let trace_finish_reason = Self::map_finish_reason(&stop_reason);
-        let usage = Self::map_usage(usage.as_ref());
-        if let Some(usage) = &usage {
-            span.record("usage", JsonValue(&serde_json::to_value(usage)?).as_value());
-        }
+        let usage = Self::map_usage(&usage);
+        span.record(
+            "usage",
+            JsonValue(&serde_json::to_value(usage.clone())?).as_value(),
+        );
         tx.send(Some(ModelEvent::new(
             &span,
             ModelEventType::LlmStop(LLMFinishEvent {
@@ -789,7 +811,7 @@ impl AnthropicModel {
                     .map(|m| m.to_string())
                     .unwrap_or_default(),
                 output: None,
-                usage,
+                usage: Some(usage),
                 finish_reason: trace_finish_reason.clone(),
                 credentials_ident: credentials_ident.clone(),
                 tool_calls: tool_calls
@@ -964,8 +986,38 @@ impl AnthropicModel {
             system_message = previous_messages
                 .iter()
                 .find(|m| m.r#type == MessageType::SystemMessage)
-                .map(|message| SystemPrompt::new(message.content.clone().unwrap_or_default()));
+                .map(|message| {
+                    tracing::warn!("Found system message: {:#?}", message);
+                    if let Some(content) = &message.content {
+                        SystemPrompt::new(content.clone())
+                    } else {
+                        SystemPrompt::from_content_blocks(
+                            message
+                                .content_array
+                                .iter()
+                                .map(|c| match &c.cache_control {
+                                    Some(_cache_control) => {
+                                        let cache_control = clust::messages::CacheControl {
+                                            _type: clust::messages::CacheControlType::Ephemeral,
+                                        };
+                                        ContentBlock::Text(
+                                            TextContentBlock::new_with_cache_control(
+                                                c.value.clone(),
+                                                cache_control,
+                                            ),
+                                        )
+                                    }
+                                    None => {
+                                        ContentBlock::Text(TextContentBlock::new(c.value.clone()))
+                                    }
+                                })
+                                .collect(),
+                        )
+                    }
+                });
         }
+
+        tracing::warn!("System message: {:#?}", system_message);
 
         let previous_messages = Self::map_previous_messages(previous_messages)?;
         conversational_messages.extend(previous_messages);
@@ -1025,7 +1077,17 @@ fn construct_user_message(m: &InnerMessage) -> ClustMessage {
             for m in content_array {
                 let msg: ContentBlock = match m.r#type {
                     crate::types::threads::MessageContentType::Text => {
-                        ContentBlock::Text(TextContentBlock::new(m.value.clone()))
+                        if let Some(_cache_control) = &m.cache_control {
+                            let cache_control = clust::messages::CacheControl {
+                                _type: clust::messages::CacheControlType::Ephemeral,
+                            };
+                            ContentBlock::Text(TextContentBlock::new_with_cache_control(
+                                m.value.clone(),
+                                cache_control.clone(),
+                            ))
+                        } else {
+                            ContentBlock::Text(TextContentBlock::new(m.value.clone()))
+                        }
                     }
                     crate::types::threads::MessageContentType::ImageUrl => {
                         let url = m.value.clone();

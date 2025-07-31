@@ -292,6 +292,7 @@ impl Default for ModelMetadata {
                 per_input_token: 0.0,
                 per_output_token: 0.0,
                 per_cached_input_token: None,
+                per_cached_input_write_token: None,
                 valid_from: None,
             }),
             input_formats: Vec::new(),

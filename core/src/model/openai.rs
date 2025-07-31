@@ -734,7 +734,11 @@ impl<C: Config> OpenAIModel<C> {
             output_tokens: u.completion_tokens,
             total_tokens: u.total_tokens,
             prompt_tokens_details: u.prompt_tokens_details.as_ref().map(|p| {
-                crate::types::gateway::PromptTokensDetails::new(p.cached_tokens, p.audio_tokens)
+                crate::types::gateway::PromptTokensDetails::new(
+                    p.cached_tokens,
+                    Some(0),
+                    p.audio_tokens,
+                )
             }),
             completion_tokens_details: u.completion_tokens_details.as_ref().map(|c| {
                 crate::types::gateway::CompletionTokensDetails::new(
