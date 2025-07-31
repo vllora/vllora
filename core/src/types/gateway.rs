@@ -345,6 +345,7 @@ pub struct ChatCompletionMessage {
     pub tool_calls: Option<Vec<ToolCall>>,
     pub refusal: Option<String>,
     pub tool_call_id: Option<String>,
+    pub cache_control: Option<CacheControl>,
 }
 
 impl ChatCompletionMessage {

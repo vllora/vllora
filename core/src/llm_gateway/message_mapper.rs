@@ -85,7 +85,13 @@ impl MessageMapper {
     ) -> Result<Message, GatewayError> {
         let content = if let Some(content) = &message.content {
             match content {
-                ChatCompletionContent::Text(content) => Some(content.clone()),
+                ChatCompletionContent::Text(content) => {
+                    if message.cache_control.is_none() {
+                        Some(content.clone())
+                    } else {
+                        None
+                    }
+                }
                 ChatCompletionContent::Content(_) => None,
             }
         } else {
@@ -94,7 +100,18 @@ impl MessageMapper {
 
         let content_array = if let Some(content) = &message.content {
             match content {
-                ChatCompletionContent::Text(_) => Ok(vec![]),
+                ChatCompletionContent::Text(content) => {
+                    if message.cache_control.is_none() {
+                        Ok(vec![])
+                    } else {
+                        Ok(vec![MessageContentPart {
+                            r#type: MessageContentType::Text,
+                            value: content.clone(),
+                            additional_options: None,
+                            cache_control: message.cache_control.clone(),
+                        }])
+                    }
+                }
                 ChatCompletionContent::Content(content) => content
                     .iter()
                     .map(|c| {
