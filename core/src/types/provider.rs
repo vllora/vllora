@@ -108,6 +108,7 @@ pub struct CompletionModelPrice {
     pub per_input_token: f64,
     pub per_output_token: f64,
     pub per_cached_input_token: Option<f64>,
+    pub per_cached_input_write_token: Option<f64>,
     pub valid_from: Option<NaiveDate>,
 }
 
