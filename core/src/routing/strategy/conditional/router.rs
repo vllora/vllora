@@ -1,7 +1,7 @@
 use crate::routing::interceptor::{InterceptorFactory, LazyInterceptorManager};
 use crate::routing::{
     strategy::conditional::evaluator::{
-        evaluate_conditions_lazy, referenced_pre_request_interceptors,
+        evaluate_conditions, referenced_pre_request_interceptors,
     },
     ConditionalRouting, TargetSpec,
 };
@@ -23,7 +23,6 @@ impl ConditionalRouter {
         extra: Option<&crate::types::gateway::Extra>,
     ) -> Option<&TargetSpec> {
         let referenced = referenced_pre_request_interceptors(&self.routing.routes);
-        tracing::warn!("Referenced interceptors: {:#?}", referenced);
 
         // Create interceptors map for lazy execution
         let mut interceptors = std::collections::HashMap::new();
@@ -50,7 +49,7 @@ impl ConditionalRouter {
 
         // Evaluate routes in order with lazy interceptor execution
         for route in &self.routing.routes {
-            match evaluate_conditions_lazy(&route.conditions, &mut lazy_manager, metadata, extra)
+            match evaluate_conditions(&route.conditions, &mut lazy_manager, metadata, extra)
                 .await
             {
                 Ok(true) => {

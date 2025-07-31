@@ -180,9 +180,9 @@ pub enum InterceptorType {
 pub struct Route {
     pub name: String,
     pub conditions: RouteCondition,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub targets: Option<TargetSpec>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message_mapper: Option<MessageMapper>,
 }
 
@@ -248,6 +248,7 @@ pub enum ConditionOpType {
     Lt,
     Gte,
     Lte,
+    Contains,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
@@ -257,9 +258,17 @@ pub enum TargetSpec {
         #[serde(rename = "$any")]
         any: Vec<String>,
         #[serde(default)]
-        sort: Option<HashMap<String, String>>,
+        sort: Option<HashMap<String, TargetSortOrder>>,
     },
     List(Vec<HashMap<String, serde_json::Value>>),
+    Single(String),
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+#[serde(rename_all = "snake_case")]
+pub enum TargetSortOrder {
+    Min,
+    Max,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
@@ -361,6 +370,12 @@ impl RouteStrategy for LlmRouter {
                 tracing::info!("Target: {:#?}", target_opt);
                 match target_opt {
                     Some(TargetSpec::List(targets)) => targets.clone(),
+                    Some(TargetSpec::Single(model)) => {
+                        vec![HashMap::from([(
+                            "model".to_string(),
+                            serde_json::Value::String(model.clone()),
+                        )])]
+                    }
                     Some(TargetSpec::Any { any, .. }) => any
                         .iter()
                         .map(|model| {
@@ -694,7 +709,7 @@ mod tests {
                     },
                     "targets": {
                         "$any": ["anthropic/claude-4-opus"],
-                        "sort": { "ttft": "MIN" }
+                        "sort": { "ttft": "min" }
                     },
                     "message_mapper": null  
                 }
@@ -702,5 +717,18 @@ mod tests {
         let route: Route = serde_json::from_str(route).unwrap();
 
         eprintln!("{}", serde_json::to_string_pretty(&route).unwrap());
+    }
+
+    #[test]
+    fn test_serialize_route_single() {
+        let route = Route {
+            name: "basic_user".to_string(),
+            conditions: RouteCondition::All { all: vec![] },
+            targets: Some(TargetSpec::Single("anthropic/claude-4-opus".to_string())),
+            message_mapper: None,
+        };
+
+        let route_str = serde_json::to_string_pretty(&route).unwrap();
+        eprintln!("{route_str}");
     }
 }

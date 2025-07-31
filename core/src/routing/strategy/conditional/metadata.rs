@@ -125,7 +125,7 @@ impl MetadataField {
             "user.id" => Ok(MetadataField::UserId),
             "user.name" => Ok(MetadataField::UserName),
             "user.email" => Ok(MetadataField::UserEmail),
-            "user.tiers" => Ok(MetadataField::UserTiers),
+            "user.tiers" | "user.tier" => Ok(MetadataField::UserTiers),
             s if s.starts_with("variables.") => {
                 let var_name = s.strip_prefix("variables.").unwrap();
                 Ok(MetadataField::Variable(var_name.to_string()))
