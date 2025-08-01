@@ -17,7 +17,7 @@ path = "src/lib.rs"
 
 [dependencies]
 tokio = { workspace = true }
-tokio-stream = { version = "0.1.15", features = ["io-util"] }
+tokio-stream = { version = "0.1.17", features = ["io-util"] }
 tracing-futures = { workspace = true }
 tracing-opentelemetry = { workspace = true }
 uuid = { version = "1.17.0", features = ["serde", "v4"] }
@@ -31,7 +31,7 @@ futures = "0.3"
 
 serde_with = { version = "3.14.0", features = ["json"] }
 validator = { version = "0.20", features = ["derive"] }
-clust = { version = "0.9.4", package = "langdb_clust" }
+clust = { version = "0.9.5", package = "langdb_clust" }
 indexmap = { version = "2.10.0", features = ["serde"] }
 serde_tuple = "1.1.0"
 minijinja = "2.11.0"
@@ -81,7 +81,7 @@ rmcp = { version = "0.2.1", default-features = true, features = [
 ] }
 rmcp-macros = { version = "0.2.1", default-features = true}
 parking_lot = "0.12.4"
-rand = "0.9.1"
+rand = "0.9.2"
 url = "2.5.4"
 # deno_core = "0.334.0"
 

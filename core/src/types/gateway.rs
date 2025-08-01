@@ -803,6 +803,12 @@ pub struct CacheControl {
     ttl: Option<CacheControlTtl>,
 }
 
+impl CacheControl {
+    pub fn ttl(&self) -> Option<CacheControlTtl> {
+        self.ttl.clone()
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum CacheControlType {
@@ -817,6 +823,15 @@ pub enum CacheControlTtl {
     FiveMinutes,
     #[serde(rename = "1h")]
     OneHour,
+}
+
+impl From<CacheControlTtl> for clust::messages::CacheTtl {
+    fn from(val: CacheControlTtl) -> Self {
+        match val {
+            CacheControlTtl::FiveMinutes => clust::messages::CacheTtl::FiveMinutes,
+            CacheControlTtl::OneHour => clust::messages::CacheTtl::OneHour,
+        }
+    }
 }
 
 #[cfg(test)]

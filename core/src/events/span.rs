@@ -12,6 +12,7 @@ macro_rules! create_model_span {
             output = field::Empty,
             error = field::Empty,
             usage = field::Empty,
+            raw_usage = field::Empty,
             ttft = field::Empty,
             $($field_name = $field_value,)*
         )
