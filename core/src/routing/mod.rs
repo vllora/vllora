@@ -339,12 +339,11 @@ impl RouteStrategy for LlmRouter {
                             .and_then(|v| v.as_str().map(|s| s.to_string()))
                     })
                     .collect::<Vec<_>>();
-                let metrics = metrics_repository.get_metrics().await?;
                 let model = strategy::metric::route(
                     &models,
-                    &metrics,
                     metric,
                     self.metrics_duration.as_ref(),
+                    metrics_repository,
                 )
                 .await?;
                 vec![HashMap::from([(
@@ -376,17 +375,20 @@ impl RouteStrategy for LlmRouter {
                             serde_json::Value::String(model.clone()),
                         )])]
                     }
-                    Some(TargetSpec::Any { any, .. }) => any
-                        .iter()
-                        .map(|model| {
-                            let mut map = HashMap::new();
-                            map.insert(
-                                "model".to_string(),
-                                serde_json::Value::String(model.clone()),
-                            );
-                            map
-                        })
-                        .collect(),
+                    Some(TargetSpec::Any { any, .. }) => {
+                        let model = strategy::metric::route(
+                            any,
+                            &strategy::metric::MetricSelector::Latency,
+                            self.metrics_duration.as_ref(),
+                            metrics_repository,
+                        )
+                        .await?;
+
+                        vec![HashMap::from([(
+                            "model".to_string(),
+                            serde_json::Value::String(model),
+                        )])]
+                    }
                     None => {
                         return Err(RouterError::MetricRouterError(
                             "No conditional route matched".to_string(),

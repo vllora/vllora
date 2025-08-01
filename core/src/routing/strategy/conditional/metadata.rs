@@ -23,6 +23,7 @@ pub enum MetadataField {
     UserName,
     UserEmail,
     UserTiers,
+    UserTier,
 
     // Dynamic variables from Extra.variables
     Variable(String), // Dynamic access to Extra.variables
@@ -66,6 +67,22 @@ impl MetadataField {
                             .email
                             .as_ref()
                             .map(|email| Value::String(email.clone())))
+                    } else {
+                        Ok(None)
+                    }
+                } else {
+                    Ok(None)
+                }
+            }
+
+            MetadataField::UserTier => {
+                if let Some(extra) = extra {
+                    if let Some(user) = &extra.user {
+                        if let Some(tiers) = &user.tiers {
+                            Ok(tiers.first().map(|tier| Value::String(tier.clone())))
+                        } else {
+                            Ok(None)
+                        }
                     } else {
                         Ok(None)
                     }
@@ -125,7 +142,8 @@ impl MetadataField {
             "user.id" => Ok(MetadataField::UserId),
             "user.name" => Ok(MetadataField::UserName),
             "user.email" => Ok(MetadataField::UserEmail),
-            "user.tiers" | "user.tier" => Ok(MetadataField::UserTiers),
+            "user.tiers" => Ok(MetadataField::UserTiers),
+            "user.tier" => Ok(MetadataField::UserTier),
             s if s.starts_with("variables.") => {
                 let var_name = s.strip_prefix("variables.").unwrap();
                 Ok(MetadataField::Variable(var_name.to_string()))
@@ -146,6 +164,7 @@ impl std::fmt::Display for MetadataField {
             MetadataField::UserName => write!(f, "user.name"),
             MetadataField::UserEmail => write!(f, "user.email"),
             MetadataField::UserTiers => write!(f, "user.tiers"),
+            MetadataField::UserTier => write!(f, "user.tier"),
             MetadataField::Variable(var_name) => write!(f, "variables.{var_name}"),
             MetadataField::GuardrailResult(guard_id) => write!(f, "guards.{guard_id}"),
         }
