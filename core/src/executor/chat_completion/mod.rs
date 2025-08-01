@@ -295,14 +295,10 @@ pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Cl
     )?;
 
     let db_model = Model {
-        name: request.model.clone(),
-        description: Some("Generated model for chat completion".to_string()),
+        name: llm_model.model.clone(),
+        inference_model_name: llm_model.inference_provider.model_name.clone(),
         provider_name: llm_model.inference_provider.provider.to_string(),
-        prompt_name: None,
-        model_params: HashMap::new(),
-        tools: tools.clone(),
         model_type: ModelType::Completions,
-        response_schema: None,
         credentials: key,
     };
 

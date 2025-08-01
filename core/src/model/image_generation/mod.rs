@@ -131,7 +131,7 @@ impl TracedImageGenerationModelDefinition {
 impl From<ImageGenerationModelDefinition> for TracedImageGenerationModelDefinition {
     fn from(value: ImageGenerationModelDefinition) -> Self {
         Self {
-            model_name: value.db_model.name.clone(),
+            model_name: value.db_model.inference_model_name.clone(),
             name: value.name.clone(),
             provider_name: value.db_model.provider_name.clone(),
             engine_name: value.engine.engine_name().to_string(),

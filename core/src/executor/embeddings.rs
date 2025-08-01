@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::embed_mod::Embed;
 use crate::embed_mod::OpenAIEmbed;
 use crate::error::GatewayError;
@@ -13,7 +11,7 @@ use tracing::Span;
 
 use crate::types::embed::OpenAiEmbeddingParams;
 use crate::types::{
-    engine::{Model, ModelTools, ModelType},
+    engine::{Model, ModelType},
     gateway::{CreateEmbeddingRequest, Input},
 };
 use tracing_futures::Instrument;
@@ -45,6 +43,7 @@ pub async fn handle_embeddings_invoke(
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<Option<ModelEvent>>(1000);
     let model_name = llm_model.model.clone();
+    let inference_model_name = llm_model.inference_provider.model_name.clone();
 
     let callback_handler = callback_handler.clone();
     tokio::spawn(async move {
@@ -53,13 +52,9 @@ pub async fn handle_embeddings_invoke(
                 msg,
                 Model {
                     name: model_name.clone(),
-                    description: None,
+                    inference_model_name: inference_model_name.clone(),
                     provider_name: "openai".to_string(),
-                    prompt_name: None,
-                    model_params: HashMap::new(),
-                    tools: ModelTools(vec![]),
                     model_type: ModelType::Embedding,
-                    response_schema: None,
                     credentials: None,
                 }
                 .into(),
