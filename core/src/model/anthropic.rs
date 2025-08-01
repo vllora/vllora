@@ -388,8 +388,13 @@ impl AnthropicModel {
             span.record("output", serde_json::to_string(&response)?);
 
             span.record(
-                "usage",
+                "raw_usage",
                 JsonValue(&serde_json::to_value(response.usage).unwrap()).as_value(),
+            );
+            let usage = Self::map_usage(&response.usage);
+            span.record(
+                "usage",
+                JsonValue(&serde_json::to_value(usage).unwrap()).as_value(),
             );
 
             Ok::<_, GatewayError>(response)
@@ -795,6 +800,10 @@ impl AnthropicModel {
             .await?;
 
         let trace_finish_reason = Self::map_finish_reason(&stop_reason);
+        span.record(
+            "raw_usage",
+            JsonValue(&serde_json::to_value(usage).unwrap()).as_value(),
+        );
         let usage = Self::map_usage(&usage);
         span.record(
             "usage",
@@ -995,9 +1004,10 @@ impl AnthropicModel {
                                 .content_array
                                 .iter()
                                 .map(|c| match &c.cache_control {
-                                    Some(_cache_control) => {
+                                    Some(cache_control) => {
                                         let cache_control = clust::messages::CacheControl {
                                             _type: clust::messages::CacheControlType::Ephemeral,
+                                            ttl: cache_control.ttl().map(|t| t.into()),
                                         };
                                         ContentBlock::Text(
                                             TextContentBlock::new_with_cache_control(
@@ -1074,9 +1084,10 @@ fn construct_user_message(m: &InnerMessage) -> ClustMessage {
             for m in content_array {
                 let msg: ContentBlock = match m.r#type {
                     crate::types::threads::MessageContentType::Text => {
-                        if let Some(_cache_control) = &m.cache_control {
+                        if let Some(cache_control) = &m.cache_control {
                             let cache_control = clust::messages::CacheControl {
                                 _type: clust::messages::CacheControlType::Ephemeral,
+                                ttl: cache_control.ttl().map(|t| t.into()),
                             };
                             ContentBlock::Text(TextContentBlock::new_with_cache_control(
                                 m.value.clone(),

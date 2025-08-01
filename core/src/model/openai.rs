@@ -515,8 +515,13 @@ impl<C: Config> OpenAIModel<C> {
             span.record("output", serde_json::to_string(&response)?);
             if let Some(ref usage) = response.usage {
                 span.record(
-                    "usage",
+                    "raw_usage",
                     JsonValue(&serde_json::to_value(usage).unwrap()).as_value(),
+                );
+                span.record(
+                    "usage",
+                    JsonValue(&serde_json::to_value(Self::map_usage(Some(usage))).unwrap())
+                        .as_value(),
                 );
             }
             Ok::<_, GatewayError>(response)
@@ -801,7 +806,11 @@ impl<C: Config> OpenAIModel<C> {
         .await
         .map_err(|e| GatewayError::CustomError(e.to_string()))?;
         if let Some(usage) = usage {
-            tracing::warn!("Usage: {:#?}", usage);
+            span.record(
+                "raw_usage",
+                JsonValue(&serde_json::to_value(usage.clone()).unwrap()).as_value(),
+            );
+            let usage = Self::map_usage(Some(&usage));
             span.record(
                 "usage",
                 JsonValue(&serde_json::to_value(usage).unwrap()).as_value(),
