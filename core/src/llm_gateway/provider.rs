@@ -43,6 +43,7 @@ impl Provider {
                     top_p: request.top_p,
                     user: request.user.clone(),
                     response_format: request.response_format.clone(),
+                    prompt_cache_key: request.prompt_cache_key.clone(),
                 };
                 let mut custom_endpoint = None;
                 let api_key_credentials = credentials.and_then(|cred| match cred {

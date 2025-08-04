@@ -359,6 +359,10 @@ impl<C: Config> OpenAIModel<C> {
             builder.response_format(schema.clone());
         }
 
+        if let Some(prompt_cache_key) = &model_params.prompt_cache_key {
+            builder.prompt_cache_key(prompt_cache_key.clone());
+        }
+
         builder
             .model(model_params.model.as_ref().unwrap())
             .messages(messages)
