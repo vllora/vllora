@@ -3,7 +3,7 @@ use std::fmt::Display;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use serde_tuple::{Deserialize_tuple, Serialize_tuple};
+use serde_tuple::Serialize_tuple;
 use serde_with::serde_as;
 
 use super::{gateway::ToolCall, message::MessageType};
@@ -100,7 +100,7 @@ impl From<Message> for InnerMessage {
     }
 }
 
-#[derive(Serialize_tuple, Deserialize_tuple, Debug, Clone)]
+#[derive(Serialize_tuple, Debug, Clone)]
 pub struct MessageContentPart {
     pub r#type: MessageContentType,
     pub value: String,
@@ -109,11 +109,63 @@ pub struct MessageContentPart {
     pub cache_control: Option<CacheControl>,
 }
 
+impl<'de> Deserialize<'de> for MessageContentPart {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        // Use a custom deserializer that can handle both 3-tuple and 4-tuple formats
+        struct MessageContentPartVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for MessageContentPartVisitor {
+            type Value = MessageContentPart;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a tuple of 3 or 4 elements")
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                let r#type: MessageContentType = seq
+                    .next_element()?
+                    .ok_or_else(|| serde::de::Error::invalid_length(0, &self))?;
+
+                let value: String = seq
+                    .next_element()?
+                    .ok_or_else(|| serde::de::Error::invalid_length(1, &self))?;
+
+                let additional_options: Option<MessageContentPartOptions> = seq
+                    .next_element()?
+                    .ok_or_else(|| serde::de::Error::invalid_length(2, &self))?;
+
+                // Try to get the fourth element (cache_control), but it's optional
+                let cache_control: Option<CacheControl> = match seq.next_element()? {
+                    Some(serde_json::Value::Null) => None,
+                    Some(value) => serde_json::from_value(value).ok(),
+                    None => None,
+                };
+
+                Ok(MessageContentPart {
+                    r#type,
+                    value,
+                    additional_options,
+                    cache_control,
+                })
+            }
+        }
+
+        deserializer.deserialize_seq(MessageContentPartVisitor)
+    }
+}
+
 impl From<MessageContentPart> for Value {
     fn from(val: MessageContentPart) -> Self {
         Value::Array(vec![
             val.r#type.to_string().into(),
             val.value.into(),
+            Value::Null,
             Value::Null,
             // self.additional_options.map_or("".to_string(), |m| {
             //     serde_json::to_string(&m).unwrap_or_default()
@@ -147,19 +199,19 @@ pub enum MessageContentValue {
     ImageUrl(Vec<MessageContentPart>),
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(untagged)]
 pub enum MessageContentPartOptions {
     Image(ImageDetail),
     Audio(AudioDetail),
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct AudioDetail {
     pub r#type: AudioFormat,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum AudioFormat {
     Mp3,
     Wav,
@@ -173,7 +225,7 @@ impl MessageContentPartOptions {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum ImageDetail {
     Auto,
     Low,
@@ -229,5 +281,46 @@ mod tests {
                 ["Text", "How is my image", null]
             ])
         );
+    }
+
+    #[test]
+    fn message_deserialization_3_tuple() {
+        // Test deserialization of 3-tuple format (without cache_control)
+        let json_data = json!([["Text", "Hello world", null]]);
+
+        let result: Vec<MessageContentPart> = serde_json::from_value(json_data).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].r#type, super::MessageContentType::Text);
+        assert_eq!(result[0].value, "Hello world");
+        assert_eq!(result[0].additional_options, None);
+        assert_eq!(result[0].cache_control, None);
+    }
+
+    #[test]
+    fn message_deserialization_4_tuple() {
+        // Test deserialization of 4-tuple format (with cache_control)
+        let json_data = json!([["Text", "Hello world", null, null]]);
+
+        let result: Vec<MessageContentPart> = serde_json::from_value(json_data).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].r#type, super::MessageContentType::Text);
+        assert_eq!(result[0].value, "Hello world");
+        assert_eq!(result[0].additional_options, None);
+        assert_eq!(result[0].cache_control, None);
+    }
+
+    #[test]
+    fn message_deserialization_4_tuple_with_cache_control() {
+        // Test deserialization of 4-tuple format with actual cache_control
+        let json_data = json!([
+            ["Text", "Hello world", null, {"type": "ephemeral", "ttl": "5m"}]
+        ]);
+
+        let result: Vec<MessageContentPart> = serde_json::from_value(json_data).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].r#type, super::MessageContentType::Text);
+        assert_eq!(result[0].value, "Hello world");
+        assert_eq!(result[0].additional_options, None);
+        assert!(result[0].cache_control.is_some());
     }
 }
