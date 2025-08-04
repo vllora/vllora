@@ -535,6 +535,9 @@ pub struct OpenAiModelParams {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub response_format: Option<ResponseFormat>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_cache_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Validate)]
