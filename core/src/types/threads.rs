@@ -165,8 +165,9 @@ impl From<MessageContentPart> for Value {
         Value::Array(vec![
             val.r#type.to_string().into(),
             val.value.into(),
-            val.additional_options
-                .map_or(Value::Null, |m| serde_json::to_value(m).unwrap_or(Value::Null)),
+            val.additional_options.map_or(Value::Null, |m| {
+                serde_json::to_value(m).unwrap_or(Value::Null)
+            }),
         ])
     }
 }

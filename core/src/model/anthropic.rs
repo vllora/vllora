@@ -732,10 +732,13 @@ impl AnthropicModel {
     }
 
     fn map_usage(usage: &Usage) -> CompletionModelUsage {
+        let input_tokens = usage.input_tokens
+            + usage.cache_read_input_tokens.unwrap_or(0)
+            + usage.cache_creation_input_tokens.unwrap_or(0);
         CompletionModelUsage {
-            input_tokens: usage.input_tokens,
+            input_tokens,
             output_tokens: usage.output_tokens,
-            total_tokens: usage.input_tokens + usage.output_tokens,
+            total_tokens: usage.output_tokens + input_tokens,
             prompt_tokens_details: Some(PromptTokensDetails::new(
                 usage.cache_read_input_tokens,
                 usage.cache_creation_input_tokens,
