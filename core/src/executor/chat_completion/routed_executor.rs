@@ -95,6 +95,7 @@ impl RoutedExecutor {
                     SPAN_REQUEST_ROUTING,
                     router_name = router_name,
                     before = JsonValue(&serde_json::to_value(&request.request)?).as_value(),
+                    router_resolution = field::Empty,
                     after = field::Empty
                 );
 

@@ -1,8 +1,11 @@
 use crate::{
+    events::JsonValue,
     routing::{metrics::MetricsRepository, MetricsDuration, RouterError},
     usage::Metrics,
 };
 use rand::seq::IteratorRandom;
+use tracing::Span;
+use valuable::Valuable;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Default, Clone)]
 #[serde(rename_all = "snake_case")]
@@ -107,7 +110,6 @@ pub async fn route<M: MetricsRepository + Send + Sync>(
         }
     }
 
-    tracing::warn!("Candidates: {:#?}", candidates);
     if candidates.is_empty() {
         // If no candidates have metrics, select a random model from the available models
         let mut rng = rand::rng();
@@ -116,7 +118,7 @@ pub async fn route<M: MetricsRepository + Send + Sync>(
         }
     }
     // Find the best candidate
-    let best_model = candidates.into_iter().min_by(|(_, value_a), (_, value_b)| {
+    let best_model = candidates.iter().min_by(|(_, value_a), (_, value_b)| {
         if minimize {
             value_a.partial_cmp(value_b).unwrap()
         } else {
@@ -124,10 +126,18 @@ pub async fn route<M: MetricsRepository + Send + Sync>(
         }
     });
 
-    match best_model {
-        Some((model, _)) => Ok(model),
-        None => Ok(models.first().cloned().unwrap_or_default()),
-    }
+    let model = match best_model {
+        Some((model, _)) => model.clone(),
+        None => models.first().cloned().unwrap_or_default(),
+    };
+
+    let span = Span::current();
+    span.record(
+        "router_resolution",
+        JsonValue(&serde_json::json!({"candidates": candidates, "best_model": model})).as_value(),
+    );
+
+    Ok(model)
 }
 
 #[cfg(test)]

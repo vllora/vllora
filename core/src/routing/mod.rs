@@ -374,7 +374,7 @@ impl RouteStrategy for LlmRouter {
                         extra,
                     )
                     .await;
-                tracing::info!("Target: {:#?}", target_opt);
+
                 match target_opt {
                     Some(TargetSpec::List(targets)) => targets.clone(),
                     Some(TargetSpec::Single(model)) => {
