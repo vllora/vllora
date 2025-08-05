@@ -8,8 +8,6 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::sync::Arc;
 use thiserror::Error;
-use tracing::Span;
-use tracing_futures::Instrument;
 
 pub mod interceptor;
 pub mod metrics;
@@ -294,7 +292,7 @@ pub trait RouteStrategy {
         request: ChatCompletionRequest,
         extra: Option<&Extra>,
         model_metadata_factory: Arc<Box<dyn ModelMetadataFactory>>,
-        headers: HashMap<String, String>,
+        metadata: HashMap<String, serde_json::Value>,
         metrics_repository: &M,
         interceptor_factory: Box<dyn interceptor::InterceptorFactory>,
     ) -> Result<RoutingResult, RouterError>;
@@ -307,7 +305,7 @@ impl RouteStrategy for LlmRouter {
         request: ChatCompletionRequest,
         extra: Option<&Extra>,
         _model_metadata_factory: Arc<Box<dyn ModelMetadataFactory>>,
-        _headers: HashMap<String, String>,
+        metadata: HashMap<String, serde_json::Value>,
         metrics_repository: &M,
         interceptor_factory: Box<dyn interceptor::InterceptorFactory>,
     ) -> Result<RoutingResult, RouterError> {
@@ -367,13 +365,7 @@ impl RouteStrategy for LlmRouter {
                 };
                 let headers = HashMap::new(); // TODO: pass real headers
                 let target_opt = router
-                    .get_target(
-                        interceptor_factory,
-                        &request,
-                        &headers,
-                        &HashMap::new(),
-                        extra,
-                    )
+                    .get_target(interceptor_factory, &request, &headers, &metadata, extra)
                     .await;
 
                 match target_opt {

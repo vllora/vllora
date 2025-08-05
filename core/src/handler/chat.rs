@@ -79,6 +79,7 @@ pub async fn create_chat_completion(
                 as Box<dyn ModelMetadataFactory>,
         ),
         &req,
+        HashMap::new(),
         guardrails_evaluator_service,
     )?;
 

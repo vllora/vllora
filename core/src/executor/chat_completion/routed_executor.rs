@@ -123,7 +123,7 @@ impl RoutedExecutor {
                         request.request.clone(),
                         request.extra.as_ref(),
                         Arc::clone(&executor_context.model_metadata_factory),
-                        executor_context.headers.clone(),
+                        executor_context.metadata.clone(),
                         &metrics_repository,
                         interceptor_factory,
                     )

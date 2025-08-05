@@ -17,7 +17,7 @@ pub struct ExecutorContext {
     pub callbackhandler: CallbackHandlerFn,
     pub cost_calculator: Arc<Box<dyn CostCalculator>>,
     pub tags: HashMap<String, String>,
-    pub headers: HashMap<String, String>,
+    pub metadata: HashMap<String, serde_json::Value>,
     pub key_credentials: Option<Credentials>,
     pub providers_config: Option<ProvidersConfig>,
     pub evaluator_service: Arc<Box<dyn GuardrailsEvaluator>>,
@@ -34,14 +34,10 @@ impl ExecutorContext {
         cost_calculator: Arc<Box<dyn CostCalculator>>,
         model_metadata_factory: Arc<Box<dyn ModelMetadataFactory>>,
         req: &HttpRequest,
+        metadata: HashMap<String, serde_json::Value>,
         evaluator_service: Arc<Box<dyn GuardrailsEvaluator>>,
     ) -> Result<Self, GatewayError> {
         let tags = extract_tags(req)?;
-        let headers = req
-            .headers()
-            .into_iter()
-            .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
-            .collect();
 
         let key_credentials = req.extensions().get::<Credentials>().cloned();
         let providers_config = req.app_data::<ProvidersConfig>().cloned();
@@ -51,8 +47,8 @@ impl ExecutorContext {
             cost_calculator,
             model_metadata_factory,
             tags,
-            headers,
             key_credentials,
+            metadata,
             providers_config,
             evaluator_service,
         })
