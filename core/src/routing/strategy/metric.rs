@@ -114,6 +114,11 @@ pub async fn route<M: MetricsRepository + Send + Sync>(
         // If no candidates have metrics, select a random model from the available models
         let mut rng = rand::rng();
         if let Some(random_model) = models.iter().choose(&mut rng) {
+            let span = Span::current();
+            span.record(
+                "router_resolution",
+                JsonValue(&serde_json::json!({"candidates": [], "best_model": random_model, "metric": metric, "metrics_duration": metrics_duration})).as_value(),
+            );
             return Ok(random_model.clone());
         }
     }
@@ -134,8 +139,10 @@ pub async fn route<M: MetricsRepository + Send + Sync>(
     let span = Span::current();
     span.record(
         "router_resolution",
-        JsonValue(&serde_json::json!({"candidates": candidates, "best_model": model})).as_value(),
+        JsonValue(&serde_json::json!({"candidates": candidates, "best_model": model, "metric": metric, "metrics_duration": metrics_duration})).as_value(),
     );
+
+    tracing::info!("Router resolution: {:#?}", model);
 
     Ok(model)
 }

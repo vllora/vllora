@@ -8,6 +8,8 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::sync::Arc;
 use thiserror::Error;
+use tracing::Span;
+use tracing_futures::Instrument;
 
 pub mod interceptor;
 pub mod metrics;
@@ -360,7 +362,6 @@ impl RouteStrategy for LlmRouter {
                 )])]
             }
             RoutingStrategy::Conditional { routing } => {
-                tracing::info!("Conditional routing: {:#?}", routing);
                 let router = ConditionalRouter {
                     routing: routing.clone(),
                 };
