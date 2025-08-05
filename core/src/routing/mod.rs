@@ -241,13 +241,21 @@ pub struct ConditionOp {
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone, PartialEq, Eq, Hash)]
 #[serde(rename_all = "lowercase")]
 pub enum ConditionOpType {
+    #[serde(alias = "$eq")]
     Eq,
+    #[serde(alias = "$ne")]
     Ne,
+    #[serde(alias = "$in")]
     In,
+    #[serde(alias = "$gt")]
     Gt,
+    #[serde(alias = "$lt")]
     Lt,
+    #[serde(alias = "$gte")]
     Gte,
+    #[serde(alias = "$lte")]
     Lte,
+    #[serde(alias = "$contains")]
     Contains,
 }
 
