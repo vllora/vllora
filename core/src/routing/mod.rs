@@ -304,7 +304,7 @@ impl RouteStrategy for LlmRouter {
         &self,
         request: ChatCompletionRequest,
         extra: Option<&Extra>,
-        _model_metadata_factory: Arc<Box<dyn ModelMetadataFactory>>,
+        model_metadata_factory: Arc<Box<dyn ModelMetadataFactory>>,
         metadata: HashMap<String, serde_json::Value>,
         metrics_repository: &M,
         interceptor_factory: Box<dyn interceptor::InterceptorFactory>,
@@ -376,14 +376,33 @@ impl RouteStrategy for LlmRouter {
                             serde_json::Value::String(model.clone()),
                         )])]
                     }
-                    Some(TargetSpec::Any { any, .. }) => {
-                        let model = strategy::metric::route(
-                            any,
-                            &strategy::metric::MetricSelector::Latency,
-                            self.metrics_duration.as_ref(),
-                            metrics_repository,
-                        )
-                        .await?;
+                    Some(TargetSpec::Any { any, sort }) => {
+                        let model = if let Some(sort) = sort {
+                            if sort.contains_key("price") {
+                                let models = any.iter().map(|m| m.to_string()).collect::<Vec<_>>();
+                                let model = model_metadata_factory
+                                    .get_cheapest_model_metadata(&models)
+                                    .await
+                                    .map_err(|e| RouterError::MetricRouterError(e.to_string()))?;
+                                model.qualified_model_name()
+                            } else {
+                                strategy::metric::route(
+                                    any,
+                                    &strategy::metric::MetricSelector::Latency,
+                                    self.metrics_duration.as_ref(),
+                                    metrics_repository,
+                                )
+                                .await?
+                            }
+                        } else {
+                            strategy::metric::route(
+                                any,
+                                &strategy::metric::MetricSelector::Latency,
+                                self.metrics_duration.as_ref(),
+                                metrics_repository,
+                            )
+                            .await?
+                        };
 
                         vec![HashMap::from([(
                             "model".to_string(),

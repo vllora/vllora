@@ -11,6 +11,7 @@ use crate::types::gateway::{
 };
 use crate::types::guardrails::service::GuardrailsEvaluator;
 use crate::types::guardrails::{GuardError, GuardResult, GuardStage};
+use crate::types::provider::ModelPrice;
 use crate::types::threads::Message;
 use crate::GatewayResult;
 use anthropic::AnthropicModel;
@@ -723,6 +724,11 @@ pub trait ModelMetadataFactory: Send + Sync {
         include_parameters: bool,
         include_benchmark: bool,
     ) -> Result<ModelMetadata, GatewayApiError>;
+
+    async fn get_cheapest_model_metadata(
+        &self,
+        model_names: &[String],
+    ) -> Result<ModelMetadata, GatewayApiError>;
 }
 
 pub struct DefaultModelMetadataFactory {
@@ -747,4 +753,41 @@ impl ModelMetadataFactory for DefaultModelMetadataFactory {
     ) -> Result<ModelMetadata, GatewayApiError> {
         find_model_by_full_name(model_name, &self.models)
     }
+
+    async fn get_cheapest_model_metadata(
+        &self,
+        model_names: &[String],
+    ) -> Result<ModelMetadata, GatewayApiError> {
+        let models = self
+            .models
+            .clone()
+            .into_iter()
+            .filter(|m| model_names.contains(&m.model.clone()))
+            .collect::<Vec<ModelMetadata>>();
+
+        get_cheapest_model_metadata(&models)
+    }
+}
+
+pub fn get_cheapest_model_metadata(
+    models: &[ModelMetadata],
+) -> Result<ModelMetadata, GatewayApiError> {
+    let cheapest_model = models
+        .iter()
+        .min_by(|a, b| {
+            let price_a = match &a.price {
+                ModelPrice::Completion(price) => price.per_input_token,
+                _ => f64::INFINITY,
+            };
+            let price_b = match &b.price {
+                ModelPrice::Completion(price) => price.per_input_token,
+                _ => f64::INFINITY,
+            };
+            price_a
+                .partial_cmp(&price_b)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .ok_or(GatewayApiError::CustomError("No model found".to_string()))?;
+
+    Ok(cheapest_model.clone())
 }
