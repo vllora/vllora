@@ -273,11 +273,17 @@ pub enum TargetSpec {
     Any {
         #[serde(rename = "$any")]
         any: Vec<String>,
-        #[serde(default)]
-        sort: Option<HashMap<TargetSort, TargetSortOrder>>,
+        #[serde(default, skip_serializing_if = "Option::is_none", flatten)]
+        sort: Option<TargetSortSpec>,
     },
     List(Vec<HashMap<String, serde_json::Value>>),
     Single(String),
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+pub struct TargetSortSpec {
+    pub sort_by: TargetSort,
+    pub sort_order: Option<TargetSortOrder>,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
@@ -386,39 +392,41 @@ impl RouteStrategy for LlmRouter {
                         )])]
                     }
                     Some(TargetSpec::Any { any, sort }) => {
-                        let is_sort_by_price = sort
-                            .as_ref()
-                            .map(|s| s.contains_key(&TargetSort::Price))
-                            .unwrap_or(false);
-                        let model = if is_sort_by_price {
-                            let models = any.iter().map(|m| m.to_string()).collect::<Vec<_>>();
-                            let model = model_metadata_factory
-                                .get_cheapest_model_metadata(&models)
-                                .await
-                                .map_err(|e| RouterError::MetricRouterError(e.to_string()))?;
-                            model.qualified_model_name()
-                        } else {
-                            let key = sort.as_ref().unwrap().keys().next().unwrap();
-                            let minimize = sort.as_ref().unwrap().get(key).map(|s| match s {
-                                TargetSortOrder::Min => true,
-                                TargetSortOrder::Max => false,
-                            });
-                            let metric = match key {
-                                TargetSort::Metric(m) => m,
-                                _ => {
-                                    return Err(RouterError::InvalidMetric(format!(
-                                        "Invalid metric: {key:?}"
-                                    )))
+                        let model = match sort {
+                            Some(TargetSortSpec {
+                                sort_by,
+                                sort_order,
+                            }) => match sort_by {
+                                TargetSort::Price => {
+                                    let models =
+                                        any.iter().map(|m| m.to_string()).collect::<Vec<_>>();
+                                    let model = model_metadata_factory
+                                        .get_cheapest_model_metadata(&models)
+                                        .await
+                                        .map_err(|e| {
+                                            RouterError::MetricRouterError(e.to_string())
+                                        })?;
+                                    model.qualified_model_name()
                                 }
-                            };
-                            strategy::metric::route(
-                                any,
-                                metric,
-                                self.metrics_duration.as_ref(),
-                                metrics_repository,
-                                minimize,
-                            )
-                            .await?
+                                TargetSort::Metric(metric) => {
+                                    let minimize = sort_order
+                                        .as_ref()
+                                        .map(|s| matches!(s, TargetSortOrder::Min));
+                                    strategy::metric::route(
+                                        any,
+                                        metric,
+                                        self.metrics_duration.as_ref(),
+                                        metrics_repository,
+                                        minimize,
+                                    )
+                                    .await?
+                                }
+                            },
+                            None => {
+                                return Err(RouterError::MetricRouterError(
+                                    "No sort order specified".to_string(),
+                                ))
+                            }
                         };
 
                         vec![HashMap::from([(
@@ -748,7 +756,8 @@ mod tests {
                     },
                     "targets": {
                         "$any": ["anthropic/claude-4-opus"],
-                        "sort": { "ttft": "min" }
+                        "sort_by": "ttft",
+                        "sort_order": "min"
                     },
                     "message_mapper": null  
                 }
