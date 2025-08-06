@@ -7,7 +7,7 @@ use rand::seq::IteratorRandom;
 use tracing::Span;
 use valuable::Valuable;
 
-#[derive(Debug, serde::Serialize, serde::Deserialize, Default, Clone)]
+#[derive(Debug, serde::Serialize, serde::Deserialize, Default, Clone, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum MetricSelector {
     Requests,
@@ -50,27 +50,51 @@ pub async fn route<M: MetricsRepository + Send + Sync>(
     metric: &MetricSelector,
     metrics_duration: Option<&MetricsDuration>,
     metrics_repository: &M,
+    minimize: Option<bool>,
 ) -> Result<String, RouterError> {
-    let minimize = metric.get_optimization_direction() == MetricOptimizationDirection::Minimize;
+    let minimize = minimize
+        .unwrap_or(metric.get_optimization_direction() == MetricOptimizationDirection::Minimize);
 
     // Collect all model candidates with their metrics
     let mut candidates = Vec::new();
 
     for model in models {
         if let Some((provider, model_name)) = model.split_once('/') {
-            // Provider specified, fetch metrics for this specific provider/model
-            if let Ok(Some(model_metrics)) = metrics_repository
-                .get_model_metrics(provider, model_name)
-                .await
-            {
-                let period_metrics = match metrics_duration {
-                    Some(MetricsDuration::Total) | None => &model_metrics.metrics.total,
-                    Some(MetricsDuration::LastHour) => &model_metrics.metrics.last_hour,
-                    Some(MetricsDuration::Last15Minutes) => &model_metrics.metrics.last_15_minutes,
-                };
+            if model_name == "*" {
+                if let Ok(Some(provider_metrics)) =
+                    metrics_repository.get_provider_metrics(provider).await
+                {
+                    for (model_name, model_metrics) in provider_metrics.models {
+                        let period_metrics = match metrics_duration {
+                            Some(MetricsDuration::Total) | None => &model_metrics.metrics.total,
+                            Some(MetricsDuration::LastHour) => &model_metrics.metrics.last_hour,
+                            Some(MetricsDuration::Last15Minutes) => {
+                                &model_metrics.metrics.last_15_minutes
+                            }
+                        };
 
-                if let Some(value) = metric.get_value(period_metrics) {
-                    candidates.push((model.clone(), value));
+                        if let Some(value) = metric.get_value(period_metrics) {
+                            candidates.push((format!("{provider}/{model_name}"), value));
+                        }
+                    }
+                }
+            } else {
+                // Provider specified, fetch metrics for this specific provider/model
+                if let Ok(Some(model_metrics)) = metrics_repository
+                    .get_model_metrics(provider, model_name)
+                    .await
+                {
+                    let period_metrics = match metrics_duration {
+                        Some(MetricsDuration::Total) | None => &model_metrics.metrics.total,
+                        Some(MetricsDuration::LastHour) => &model_metrics.metrics.last_hour,
+                        Some(MetricsDuration::Last15Minutes) => {
+                            &model_metrics.metrics.last_15_minutes
+                        }
+                    };
+
+                    if let Some(value) = metric.get_value(period_metrics) {
+                        candidates.push((model.clone(), value));
+                    }
                 }
             }
         } else {
@@ -261,9 +285,15 @@ mod tests {
         let metrics_repository = MockMetricsRepository::new(metrics);
 
         // Test with TTFT metric (minimize)
-        let new_model = super::route(&models, &MetricSelector::Ttft, None, &metrics_repository)
-            .await
-            .unwrap();
+        let new_model = super::route(
+            &models,
+            &MetricSelector::Ttft,
+            None,
+            &metrics_repository,
+            None,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(new_model, "gemini/gemini-1.5-flash-latest".to_string());
 
@@ -273,6 +303,7 @@ mod tests {
             &MetricSelector::Requests,
             None,
             &metrics_repository,
+            None,
         )
         .await
         .unwrap();
@@ -334,16 +365,28 @@ mod tests {
         let metrics_repository = MockMetricsRepository::new(metrics);
 
         // Test with TTFT metric (minimize)
-        let new_model = super::route(&models, &MetricSelector::Ttft, None, &metrics_repository)
-            .await
-            .unwrap();
+        let new_model = super::route(
+            &models,
+            &MetricSelector::Ttft,
+            None,
+            &metrics_repository,
+            None,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(new_model, "provider_c/model_a".to_string());
 
         // Test with request duration (minimize)
-        let new_model = super::route(&models, &MetricSelector::Latency, None, &metrics_repository)
-            .await
-            .unwrap();
+        let new_model = super::route(
+            &models,
+            &MetricSelector::Latency,
+            None,
+            &metrics_repository,
+            None,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(new_model, "provider_b/model_a".to_string());
     }
@@ -371,16 +414,28 @@ mod tests {
         let metrics_repository = MockMetricsRepository::new(metrics);
 
         // Test with TTFT metric (minimize)
-        let new_model = super::route(&models, &MetricSelector::Ttft, None, &metrics_repository)
-            .await
-            .unwrap();
+        let new_model = super::route(
+            &models,
+            &MetricSelector::Ttft,
+            None,
+            &metrics_repository,
+            None,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(new_model, "openai/gpt-4o-mini".to_string());
 
         // Test with request duration (maximize)
-        let new_model = super::route(&models, &MetricSelector::Latency, None, &metrics_repository)
-            .await
-            .unwrap();
+        let new_model = super::route(
+            &models,
+            &MetricSelector::Latency,
+            None,
+            &metrics_repository,
+            None,
+        )
+        .await
+        .unwrap();
 
         // All models have same request count, so first one should be selected
         assert_eq!(new_model, "openai/gpt-4o-mini".to_string());
@@ -399,12 +454,105 @@ mod tests {
         ];
 
         // Test that we get one of the models randomly when no metrics are available
-        let selected_model =
-            super::route(&models, &MetricSelector::Latency, None, &metrics_repository)
-                .await
-                .unwrap();
+        let selected_model = super::route(
+            &models,
+            &MetricSelector::Latency,
+            None,
+            &metrics_repository,
+            None,
+        )
+        .await
+        .unwrap();
 
         // Should be one of the available models
         assert!(models.contains(&selected_model));
+    }
+
+    #[tokio::test]
+    async fn test_provider_models_sort_with_wildcard() {
+        // Test the wildcard functionality where model name is "openai/*"
+        let openai_models = std::collections::BTreeMap::from([
+            (
+                "gpt-4o-mini".to_string(),
+                create_model_metrics(Some(1550.0), Some(1800.0)),
+            ),
+            (
+                "gpt-4o".to_string(),
+                create_model_metrics(Some(2550.0), Some(1900.0)),
+            ),
+            (
+                "gpt-3.5-turbo".to_string(),
+                create_model_metrics(Some(500.0), Some(1000.0)),
+            ),
+        ]);
+        let openai_metrics = crate::usage::ProviderMetrics {
+            models: openai_models,
+        };
+
+        let gemini_models = std::collections::BTreeMap::from([
+            (
+                "gemini-1.5-flash-latest".to_string(),
+                create_model_metrics(Some(800.0), Some(1200.0)),
+            ),
+            (
+                "gemini-1.5-pro-latest".to_string(),
+                create_model_metrics(Some(4500.0), Some(1100.0)),
+            ),
+        ]);
+        let gemini_metrics = crate::usage::ProviderMetrics {
+            models: gemini_models,
+        };
+
+        let metrics = std::collections::BTreeMap::from([
+            ("openai".to_string(), openai_metrics),
+            ("gemini".to_string(), gemini_metrics),
+        ]);
+
+        // Test with wildcard model specification
+        let models = vec!["openai/*".to_string()];
+
+        let metrics_repository = MockMetricsRepository::new(metrics);
+
+        // Test with TTFT metric (minimize) - should select the model with lowest TTFT
+        let selected_model = super::route(
+            &models,
+            &MetricSelector::Ttft,
+            None,
+            &metrics_repository,
+            None,
+        )
+        .await
+        .unwrap();
+
+        // Should select gpt-3.5-turbo as it has the lowest TTFT (1000.0)
+        assert_eq!(selected_model, "openai/gpt-3.5-turbo".to_string());
+
+        // Test with Latency metric (minimize) - should select the model with lowest latency
+        let selected_model = super::route(
+            &models,
+            &MetricSelector::Latency,
+            None,
+            &metrics_repository,
+            None,
+        )
+        .await
+        .unwrap();
+
+        // Should select gpt-3.5-turbo as it has the lowest latency (500.0)
+        assert_eq!(selected_model, "openai/gpt-3.5-turbo".to_string());
+
+        // Test with Requests metric (maximize) - all models have same request count
+        let selected_model = super::route(
+            &models,
+            &MetricSelector::Requests,
+            None,
+            &metrics_repository,
+            None,
+        )
+        .await
+        .unwrap();
+
+        // All models have same request count (100.0), so should select the first one alphabetically
+        assert_eq!(selected_model, "openai/gpt-3.5-turbo".to_string());
     }
 }

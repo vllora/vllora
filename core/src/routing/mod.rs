@@ -259,6 +259,14 @@ pub enum ConditionOpType {
     Contains,
 }
 
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum TargetSort {
+    Price,
+    #[serde(untagged)]
+    Metric(strategy::metric::MetricSelector),
+}
+
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
 #[serde(untagged)]
 pub enum TargetSpec {
@@ -266,7 +274,7 @@ pub enum TargetSpec {
         #[serde(rename = "$any")]
         any: Vec<String>,
         #[serde(default)]
-        sort: Option<HashMap<String, TargetSortOrder>>,
+        sort: Option<HashMap<TargetSort, TargetSortOrder>>,
     },
     List(Vec<HashMap<String, serde_json::Value>>),
     Single(String),
@@ -352,6 +360,7 @@ impl RouteStrategy for LlmRouter {
                     metric,
                     self.metrics_duration.as_ref(),
                     metrics_repository,
+                    None,
                 )
                 .await?;
                 vec![HashMap::from([(
@@ -377,29 +386,37 @@ impl RouteStrategy for LlmRouter {
                         )])]
                     }
                     Some(TargetSpec::Any { any, sort }) => {
-                        let model = if let Some(sort) = sort {
-                            if sort.contains_key("price") {
-                                let models = any.iter().map(|m| m.to_string()).collect::<Vec<_>>();
-                                let model = model_metadata_factory
-                                    .get_cheapest_model_metadata(&models)
-                                    .await
-                                    .map_err(|e| RouterError::MetricRouterError(e.to_string()))?;
-                                model.qualified_model_name()
-                            } else {
-                                strategy::metric::route(
-                                    any,
-                                    &strategy::metric::MetricSelector::Latency,
-                                    self.metrics_duration.as_ref(),
-                                    metrics_repository,
-                                )
-                                .await?
-                            }
+                        let is_sort_by_price = sort
+                            .as_ref()
+                            .map(|s| s.contains_key(&TargetSort::Price))
+                            .unwrap_or(false);
+                        let model = if is_sort_by_price {
+                            let models = any.iter().map(|m| m.to_string()).collect::<Vec<_>>();
+                            let model = model_metadata_factory
+                                .get_cheapest_model_metadata(&models)
+                                .await
+                                .map_err(|e| RouterError::MetricRouterError(e.to_string()))?;
+                            model.qualified_model_name()
                         } else {
+                            let key = sort.as_ref().unwrap().keys().next().unwrap();
+                            let minimize = sort.as_ref().unwrap().get(key).map(|s| match s {
+                                TargetSortOrder::Min => true,
+                                TargetSortOrder::Max => false,
+                            });
+                            let metric = match key {
+                                TargetSort::Metric(m) => m,
+                                _ => {
+                                    return Err(RouterError::InvalidMetric(format!(
+                                        "Invalid metric: {key:?}"
+                                    )))
+                                }
+                            };
                             strategy::metric::route(
                                 any,
-                                &strategy::metric::MetricSelector::Latency,
+                                metric,
                                 self.metrics_duration.as_ref(),
                                 metrics_repository,
+                                minimize,
                             )
                             .await?
                         };
