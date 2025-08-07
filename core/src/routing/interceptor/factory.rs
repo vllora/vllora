@@ -34,6 +34,9 @@ impl InterceptorFactory for RouterInterceptorFactory {
                     guard_id.clone(),
                 )))
             }
+            InterceptorType::RateLimiter { limit, period, target } => {
+                unimplemented!()
+            }
         }
     }
 }

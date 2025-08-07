@@ -1,6 +1,6 @@
 use chrono::{Months, Utc};
 use parking_lot::RwLock;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -28,7 +28,8 @@ pub fn get_total_key(company_id: &str, key: &str) -> String {
     format!("{company_id}:{key}:total")
 }
 
-#[derive(Debug, Eq, PartialEq, Hash, Clone)]
+#[derive(Debug, Eq, PartialEq, Hash, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum LimitPeriod {
     Hour,
     Day,

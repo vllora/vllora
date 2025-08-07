@@ -4,6 +4,7 @@ use crate::routing::metrics::MetricsRepository;
 // use crate::routing::strategy::script::ScriptStrategy;
 use crate::routing::strategy::conditional::ConditionalRouter;
 use crate::types::gateway::{ChatCompletionRequest, Extra};
+use crate::usage::LimitPeriod;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::sync::Arc;
@@ -175,6 +176,20 @@ pub struct InterceptorSpec {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum InterceptorType {
     Guardrail { guard_id: String },
+    RateLimiter {
+        limit: u64,
+        period: LimitPeriod,
+        target: LimitTarget,
+    }
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+#[serde(rename_all = "snake_case")]
+pub enum LimitTarget {
+    #[serde(alias = "user_id")]
+    UserId,
+    #[serde(alias = "user_tier")]
+    UserTier,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
