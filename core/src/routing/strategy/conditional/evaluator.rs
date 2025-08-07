@@ -114,96 +114,82 @@ async fn evaluate_op(
     };
 
     for (op_name, op_value) in &op.op {
-        match op_name {
-            ConditionOpType::Eq => {
-                if value != *op_value {
-                    return Ok(false);
-                }
-            }
-            ConditionOpType::Ne => {
-                if value == *op_value {
-                    return Ok(false);
-                }
-            }
-            ConditionOpType::In => {
-                if let Some(array) = op_value.as_array() {
-                    if !array.contains(&value) {
-                        return Ok(false);
-                    }
-                } else {
-                    return Ok(false);
-                }
-            }
-            ConditionOpType::Gt => {
-                if let (Some(val_num), Some(op_num)) = (value.as_f64(), op_value.as_f64()) {
-                    if val_num <= op_num {
-                        return Ok(false);
-                    }
-                } else if let (Some(val_str), Some(op_str)) = (value.as_str(), op_value.as_str()) {
-                    if val_str <= op_str {
-                        return Ok(false);
-                    }
-                } else {
-                    return Ok(false);
-                }
-            }
-            ConditionOpType::Lt => {
-                if let (Some(val_num), Some(op_num)) = (value.as_f64(), op_value.as_f64()) {
-                    if val_num >= op_num {
-                        return Ok(false);
-                    }
-                } else if let (Some(val_str), Some(op_str)) = (value.as_str(), op_value.as_str()) {
-                    if val_str >= op_str {
-                        return Ok(false);
-                    }
-                } else {
-                    return Ok(false);
-                }
-            }
-            ConditionOpType::Lte => {
-                if let (Some(val_num), Some(op_num)) = (value.as_f64(), op_value.as_f64()) {
-                    if val_num > op_num {
-                        return Ok(false);
-                    }
-                } else if let (Some(val_str), Some(op_str)) = (value.as_str(), op_value.as_str()) {
-                    if val_str > op_str {
-                        return Ok(false);
-                    }
-                } else {
-                    return Ok(false);
-                }
-            }
-            ConditionOpType::Gte => {
-                if let (Some(val_num), Some(op_num)) = (value.as_f64(), op_value.as_f64()) {
-                    if val_num < op_num {
-                        return Ok(false);
-                    }
-                } else if let (Some(val_str), Some(op_str)) = (value.as_str(), op_value.as_str()) {
-                    if val_str < op_str {
-                        return Ok(false);
-                    }
-                } else {
-                    return Ok(false);
-                }
-            }
-            ConditionOpType::Contains => {
-                if let Some(vec) = value.as_array() {
-                    return Ok(vec.contains(op_value));
-                } else {
-                    return Ok(false);
-                }
-            }
+        if !compare_values(op_name, op_value, &value) {
+            return Ok(false);
         }
     }
 
     Ok(true)
 }
 
+pub fn compare_values(
+    condition_op: &ConditionOpType,
+    op_value: &serde_json::Value,
+    value: &serde_json::Value,
+) -> bool {
+    match condition_op {
+        ConditionOpType::Eq => *value == *op_value,
+        ConditionOpType::Ne => *value != *op_value,
+        ConditionOpType::In => {
+            if let Some(array) = op_value.as_array() {
+                array.contains(value)
+            } else {
+                false
+            }
+        }
+        ConditionOpType::Gt => {
+            if let (Some(val_num), Some(op_num)) = (value.as_f64(), op_value.as_f64()) {
+                val_num > op_num
+            } else if let (Some(val_str), Some(op_str)) = (value.as_str(), op_value.as_str()) {
+                val_str > op_str
+            } else {
+                false
+            }
+        }
+        ConditionOpType::Lt => {
+            if let (Some(val_num), Some(op_num)) = (value.as_f64(), op_value.as_f64()) {
+                val_num < op_num
+            } else if let (Some(val_str), Some(op_str)) = (value.as_str(), op_value.as_str()) {
+                val_str < op_str
+            } else {
+                false
+            }
+        }
+        ConditionOpType::Lte => {
+            if let (Some(val_num), Some(op_num)) = (value.as_f64(), op_value.as_f64()) {
+                val_num <= op_num
+            } else if let (Some(val_str), Some(op_str)) = (value.as_str(), op_value.as_str()) {
+                val_str <= op_str
+            } else {
+                false
+            }
+        }
+        ConditionOpType::Gte => {
+            if let (Some(val_num), Some(op_num)) = (value.as_f64(), op_value.as_f64()) {
+                val_num >= op_num
+            } else if let (Some(val_str), Some(op_str)) = (value.as_str(), op_value.as_str()) {
+                val_str >= op_str
+            } else {
+                false
+            }
+        }
+        ConditionOpType::Contains => {
+            if let Some(vec) = value.as_array() {
+                vec.contains(op_value)
+            } else {
+                false
+            }
+        }
+    }
+}
+
 /// Returns the set of pre_request interceptor names referenced in any route condition
 pub fn referenced_pre_request_interceptors(routes: &[Route]) -> HashSet<String> {
     let mut set = HashSet::new();
     for route in routes {
-        collect_pre_request_keys(&route.conditions, &mut set);
+        if let Some(conditions) = &route.conditions {
+            collect_pre_request_keys(conditions, &mut set);
+        }
     }
     set
 }

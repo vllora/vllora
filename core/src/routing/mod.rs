@@ -180,7 +180,8 @@ pub enum InterceptorType {
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
 pub struct Route {
     pub name: String,
-    pub conditions: RouteCondition,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conditions: Option<RouteCondition>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub targets: Option<TargetSpec>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -276,6 +277,8 @@ pub enum TargetSpec {
         any: Vec<String>,
         #[serde(default, skip_serializing_if = "Option::is_none", flatten)]
         sort: Option<TargetSortSpec>,
+        #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+        filter: HashMap<TargetSort, HashMap<ConditionOpType, serde_json::Value>>,
     },
     List(Vec<HashMap<String, serde_json::Value>>),
     Single(String),
@@ -368,6 +371,7 @@ impl RouteStrategy for LlmRouter {
                     self.metrics_duration.as_ref(),
                     metrics_repository,
                     None,
+                    None,
                 )
                 .await?;
                 vec![HashMap::from([(
@@ -392,7 +396,7 @@ impl RouteStrategy for LlmRouter {
                             serde_json::Value::String(model.clone()),
                         )])]
                     }
-                    Some(TargetSpec::Any { any, sort }) => {
+                    Some(TargetSpec::Any { any, sort, filter }) => {
                         let model = match sort {
                             Some(TargetSortSpec {
                                 sort_by,
@@ -413,12 +417,19 @@ impl RouteStrategy for LlmRouter {
                                     let minimize = sort_order
                                         .as_ref()
                                         .map(|s| matches!(s, TargetSortOrder::Min));
+                                    let mut filters = HashMap::new();
+                                    for (sort, value) in filter {
+                                        if let TargetSort::Metric(metric) = sort {
+                                            filters.insert(metric.clone(), value.clone());
+                                        }
+                                    }
                                     strategy::metric::route(
                                         any,
                                         metric,
                                         self.metrics_duration.as_ref(),
                                         metrics_repository,
                                         minimize,
+                                        Some(&filters),
                                     )
                                     .await?
                                 }
@@ -687,12 +698,12 @@ mod tests {
             }],
             routes: vec![Route {
                 name: "guarded_route".to_string(),
-                conditions: RouteCondition::Expr(HashMap::from([(
+                conditions: Some(RouteCondition::Expr(HashMap::from([(
                     "pre_request.guardrail.result".to_string(),
                     ConditionOp {
                         op: HashMap::from([(ConditionOpType::Eq, serde_json::json!(true))]),
                     },
-                )])),
+                )]))),
                 targets: Some(TargetSpec::List(vec![HashMap::from([(
                     "model".to_string(),
                     serde_json::json!("mock/model"),
@@ -772,7 +783,7 @@ mod tests {
     fn test_serialize_route_single() {
         let route = Route {
             name: "basic_user".to_string(),
-            conditions: RouteCondition::All { all: vec![] },
+            conditions: Some(RouteCondition::All { all: vec![] }),
             targets: Some(TargetSpec::Single("anthropic/claude-4-opus".to_string())),
             message_mapper: None,
         };

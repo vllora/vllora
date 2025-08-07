@@ -1,6 +1,12 @@
+use std::collections::HashMap;
+
+use crate::routing::ConditionOpType;
 use crate::{
     events::JsonValue,
-    routing::{metrics::MetricsRepository, MetricsDuration, RouterError},
+    routing::{
+        metrics::MetricsRepository, strategy::conditional::evaluator::compare_values,
+        MetricsDuration, RouterError,
+    },
     usage::Metrics,
 };
 use rand::seq::IteratorRandom;
@@ -51,6 +57,7 @@ pub async fn route<M: MetricsRepository + Send + Sync>(
     metrics_duration: Option<&MetricsDuration>,
     metrics_repository: &M,
     minimize: Option<bool>,
+    filters: Option<&HashMap<MetricSelector, HashMap<ConditionOpType, serde_json::Value>>>,
 ) -> Result<String, RouterError> {
     let minimize = minimize
         .unwrap_or(metric.get_optimization_direction() == MetricOptimizationDirection::Minimize);
@@ -73,9 +80,8 @@ pub async fn route<M: MetricsRepository + Send + Sync>(
                             }
                         };
 
-                        if let Some(value) = metric.get_value(period_metrics) {
-                            candidates.push((format!("{provider}/{model_name}"), value));
-                        }
+                        candidates
+                            .push((format!("{provider}/{model_name}"), period_metrics.clone()));
                     }
                 }
             } else {
@@ -92,49 +98,53 @@ pub async fn route<M: MetricsRepository + Send + Sync>(
                         }
                     };
 
-                    if let Some(value) = metric.get_value(period_metrics) {
-                        candidates.push((model.clone(), value));
-                    }
+                    candidates.push((format!("{provider}/{model_name}"), period_metrics.clone()));
                 }
             }
         } else {
             // No provider specified, look in all providers for this model
             // We need to fetch all provider metrics to find this model
             if let Ok(all_metrics) = metrics_repository.get_metrics().await {
-                let mut all_matches: Vec<_> = all_metrics
-                    .iter()
-                    .filter_map(|(provider, provider_metrics)| {
-                        provider_metrics.models.get(model).and_then(|metrics| {
-                            let period_metrics = match metrics_duration {
-                                Some(MetricsDuration::Total) | None => &metrics.metrics.total,
-                                Some(MetricsDuration::LastHour) => &metrics.metrics.last_hour,
-                                Some(MetricsDuration::Last15Minutes) => {
-                                    &metrics.metrics.last_15_minutes
-                                }
-                            };
+                for (provider, provider_metrics) in all_metrics {
+                    if let Some(metrics) = provider_metrics.models.get(model) {
+                        let period_metrics = match metrics_duration {
+                            Some(MetricsDuration::Total) | None => &metrics.metrics.total,
+                            Some(MetricsDuration::LastHour) => &metrics.metrics.last_hour,
+                            Some(MetricsDuration::Last15Minutes) => {
+                                &metrics.metrics.last_15_minutes
+                            }
+                        };
 
-                            metric
-                                .get_value(period_metrics)
-                                .map(|value| (format!("{provider}/{model}"), value))
-                        })
-                    })
-                    .collect();
-
-                // Sort by metric value and take the best one
-                if minimize {
-                    all_matches.sort_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap());
-                } else {
-                    all_matches.sort_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap());
-                }
-
-                if let Some((model_with_provider, value)) = all_matches.into_iter().next() {
-                    candidates.push((model_with_provider, value));
+                        candidates.push((format!("{provider}/{model}"), period_metrics.clone()));
+                    }
                 }
             }
         }
     }
 
-    if candidates.is_empty() {
+    if let Some(filters) = filters {
+        candidates.retain(|(_model, metrics)| {
+            filters.iter().all(|(filter_metric, filter_value)| {
+                if let Some(value) = filter_metric.get_value(metrics) {
+                    for (op_type, op_value) in filter_value {
+                        if !compare_values(op_type, op_value, &serde_json::json!(value)) {
+                            return false;
+                        }
+                    }
+                    true
+                } else {
+                    false
+                }
+            })
+        });
+    }
+
+    let filtered_candidates: Vec<(String, f64)> = candidates
+        .into_iter()
+        .filter_map(|(model, metrics)| metric.get_value(&metrics).map(|value| (model, value)))
+        .collect();
+
+    if filtered_candidates.is_empty() {
         // If no candidates have metrics, select a random model from the available models
         let mut rng = rand::rng();
         if let Some(random_model) = models.iter().choose(&mut rng) {
@@ -147,13 +157,15 @@ pub async fn route<M: MetricsRepository + Send + Sync>(
         }
     }
     // Find the best candidate
-    let best_model = candidates.iter().min_by(|(_, value_a), (_, value_b)| {
-        if minimize {
-            value_a.partial_cmp(value_b).unwrap()
-        } else {
-            value_b.partial_cmp(value_a).unwrap()
-        }
-    });
+    let best_model = filtered_candidates
+        .iter()
+        .min_by(|(_, value_a), (_, value_b)| {
+            if minimize {
+                value_a.partial_cmp(value_b).unwrap()
+            } else {
+                value_b.partial_cmp(value_a).unwrap()
+            }
+        });
 
     let model = match best_model {
         Some((model, _)) => model.clone(),
@@ -163,7 +175,7 @@ pub async fn route<M: MetricsRepository + Send + Sync>(
     let span = Span::current();
     span.record(
         "router_resolution",
-        JsonValue(&serde_json::json!({"candidates": candidates, "best_model": model, "metric": metric, "metrics_duration": metrics_duration})).as_value(),
+        JsonValue(&serde_json::json!({"candidates": filtered_candidates, "best_model": model, "metric": metric, "metrics_duration": metrics_duration})).as_value(),
     );
 
     tracing::info!("Router resolution: {:#?}", model);
@@ -291,6 +303,7 @@ mod tests {
             None,
             &metrics_repository,
             None,
+            None,
         )
         .await
         .unwrap();
@@ -303,6 +316,7 @@ mod tests {
             &MetricSelector::Requests,
             None,
             &metrics_repository,
+            None,
             None,
         )
         .await
@@ -371,6 +385,7 @@ mod tests {
             None,
             &metrics_repository,
             None,
+            None,
         )
         .await
         .unwrap();
@@ -383,6 +398,7 @@ mod tests {
             &MetricSelector::Latency,
             None,
             &metrics_repository,
+            None,
             None,
         )
         .await
@@ -420,6 +436,7 @@ mod tests {
             None,
             &metrics_repository,
             None,
+            None,
         )
         .await
         .unwrap();
@@ -432,6 +449,7 @@ mod tests {
             &MetricSelector::Latency,
             None,
             &metrics_repository,
+            None,
             None,
         )
         .await
@@ -459,6 +477,7 @@ mod tests {
             &MetricSelector::Latency,
             None,
             &metrics_repository,
+            None,
             None,
         )
         .await
@@ -520,6 +539,7 @@ mod tests {
             None,
             &metrics_repository,
             None,
+            None,
         )
         .await
         .unwrap();
@@ -534,6 +554,7 @@ mod tests {
             None,
             &metrics_repository,
             None,
+            None,
         )
         .await
         .unwrap();
@@ -547,6 +568,7 @@ mod tests {
             &MetricSelector::Requests,
             None,
             &metrics_repository,
+            None,
             None,
         )
         .await

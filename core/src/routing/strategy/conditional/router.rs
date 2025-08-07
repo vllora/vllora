@@ -47,26 +47,31 @@ impl ConditionalRouter {
 
         // Evaluate routes in order with lazy interceptor execution
         for route in &self.routing.routes {
-            match evaluate_conditions(&route.conditions, &mut lazy_manager, metadata, extra).await {
-                Ok(true) => {
-                    if let Some(targets) = &route.targets {
-                        return Some(targets);
+            if let Some(conditions) = &route.conditions {
+                match evaluate_conditions(conditions, &mut lazy_manager, metadata, extra).await {
+                    Ok(true) => {
+                        if let Some(targets) = &route.targets {
+                            return Some(targets);
+                        }
+                    }
+                    Ok(false) => {
+                        // Condition not met, continue to next route
+                        continue;
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            "Error evaluating conditions for route {}: {}",
+                            route.name,
+                            e
+                        );
+                        continue;
                     }
                 }
-                Ok(false) => {
-                    // Condition not met, continue to next route
-                    continue;
-                }
-                Err(e) => {
-                    tracing::error!(
-                        "Error evaluating conditions for route {}: {}",
-                        route.name,
-                        e
-                    );
-                    continue;
-                }
+            } else if let Some(targets) = &route.targets {
+                return Some(targets);
             }
         }
+
         None
     }
 }
@@ -142,12 +147,12 @@ mod tests {
             }],
             routes: vec![Route {
                 name: "guarded_route".to_string(),
-                conditions: RouteCondition::Expr(HashMap::from([(
+                conditions: Some(RouteCondition::Expr(HashMap::from([(
                     "pre_request.guardrail.result".to_string(),
                     ConditionOp {
                         op: HashMap::from([(ConditionOpType::Eq, serde_json::json!(true))]),
                     },
-                )])),
+                )]))),
                 targets: Some(TargetSpec::List(vec![HashMap::from([(
                     "model".to_string(),
                     serde_json::json!("mock/model"),
@@ -187,12 +192,12 @@ mod tests {
             }],
             routes: vec![Route {
                 name: "guarded_route".to_string(),
-                conditions: RouteCondition::Expr(HashMap::from([(
+                conditions: Some(RouteCondition::Expr(HashMap::from([(
                     "pre_request.guardrail.result".to_string(),
                     ConditionOp {
                         op: HashMap::from([(ConditionOpType::Eq, serde_json::json!(true))]),
                     },
-                )])),
+                )]))),
                 targets: Some(TargetSpec::List(vec![HashMap::from([(
                     "model".to_string(),
                     serde_json::json!("mock/model"),
@@ -221,12 +226,12 @@ mod tests {
             pre_request: vec![],
             routes: vec![Route {
                 name: "meta_route".to_string(),
-                conditions: RouteCondition::Expr(HashMap::from([(
+                conditions: Some(RouteCondition::Expr(HashMap::from([(
                     "metadata.region".to_string(),
                     ConditionOp {
                         op: HashMap::from([(ConditionOpType::Eq, serde_json::json!("EU"))]),
                     },
-                )])),
+                )]))),
                 targets: Some(TargetSpec::List(vec![HashMap::from([(
                     "model".to_string(),
                     serde_json::json!("meta/model"),
@@ -269,12 +274,12 @@ mod tests {
             routes: vec![
                 Route {
                     name: "first".to_string(),
-                    conditions: RouteCondition::Expr(HashMap::from([(
+                    conditions: Some(RouteCondition::Expr(HashMap::from([(
                         "pre_request.guardrail.result".to_string(),
                         ConditionOp {
                             op: HashMap::from([(ConditionOpType::Eq, serde_json::json!(true))]),
                         },
-                    )])),
+                    )]))),
                     targets: Some(TargetSpec::List(vec![HashMap::from([(
                         "model".to_string(),
                         serde_json::json!("first/model"),
@@ -283,12 +288,12 @@ mod tests {
                 },
                 Route {
                     name: "second".to_string(),
-                    conditions: RouteCondition::Expr(HashMap::from([(
+                    conditions: Some(RouteCondition::Expr(HashMap::from([(
                         "metadata.region".to_string(),
                         ConditionOp {
                             op: HashMap::from([(ConditionOpType::Eq, serde_json::json!("EU"))]),
                         },
-                    )])),
+                    )]))),
                     targets: Some(TargetSpec::List(vec![HashMap::from([(
                         "model".to_string(),
                         serde_json::json!("second/model"),
@@ -331,12 +336,12 @@ mod tests {
             }],
             routes: vec![Route {
                 name: "guarded_route".to_string(),
-                conditions: RouteCondition::Expr(HashMap::from([(
+                conditions: Some(RouteCondition::Expr(HashMap::from([(
                     "pre_request.guardrail.result".to_string(),
                     ConditionOp {
                         op: HashMap::from([(ConditionOpType::Eq, serde_json::json!(true))]),
                     },
-                )])),
+                )]))),
                 targets: Some(TargetSpec::List(vec![HashMap::from([(
                     "model".to_string(),
                     serde_json::json!("mock/model"),
@@ -382,12 +387,12 @@ mod tests {
             routes: vec![
                 Route {
                     name: "first_route".to_string(),
-                    conditions: RouteCondition::Expr(HashMap::from([(
+                    conditions: Some(RouteCondition::Expr(HashMap::from([(
                         "pre_request.guardrail1.result".to_string(),
                         ConditionOp {
                             op: HashMap::from([(ConditionOpType::Eq, serde_json::json!(true))]),
                         },
-                    )])),
+                    )]))),
                     targets: Some(TargetSpec::List(vec![HashMap::from([(
                         "model".to_string(),
                         serde_json::json!("first/model"),
@@ -397,12 +402,12 @@ mod tests {
                 // This route should never be reached because first_route matches
                 Route {
                     name: "second_route".to_string(),
-                    conditions: RouteCondition::Expr(HashMap::from([(
+                    conditions: Some(RouteCondition::Expr(HashMap::from([(
                         "pre_request.guardrail2.result".to_string(),
                         ConditionOp {
                             op: HashMap::from([(ConditionOpType::Eq, serde_json::json!(true))]),
                         },
-                    )])),
+                    )]))),
                     targets: Some(TargetSpec::List(vec![HashMap::from([(
                         "model".to_string(),
                         serde_json::json!("second/model"),
