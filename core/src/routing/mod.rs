@@ -117,6 +117,7 @@ pub enum RoutingStrategy {
     },
     /// Conditional routing based on request or context conditions
     Conditional {
+        #[serde(flatten)]
         routing: ConditionalRouting,
     },
 }
