@@ -7,6 +7,7 @@ use thiserror::Error;
 
 mod factory;
 pub mod guard;
+pub mod rate_limiter;
 pub mod transformer;
 pub mod types;
 
@@ -99,6 +100,7 @@ pub struct InterceptorContext {
 impl InterceptorContext {
     pub fn new(
         request: ChatCompletionRequest,
+        extra: Option<crate::types::gateway::Extra>,
         headers: HashMap<String, String>,
         state: Arc<tokio::sync::RwLock<InterceptorState>>,
     ) -> Self {
@@ -107,7 +109,7 @@ impl InterceptorContext {
             headers,
             state,
             metadata: HashMap::new(),
-            extra: None,
+            extra,
             chain_position: 0,
             results: HashMap::new(),
         }
@@ -444,7 +446,7 @@ mod tests {
         let request = ChatCompletionRequest::default();
         let headers = HashMap::new();
 
-        let mut context = InterceptorContext::new(request, headers, state.clone());
+        let mut context = InterceptorContext::new(request, None, headers, state.clone());
 
         manager.execute_pre_request(&mut context).await.unwrap();
 
@@ -466,7 +468,7 @@ mod tests {
         let state = Arc::new(tokio::sync::RwLock::new(InterceptorState::new()));
         let request = ChatCompletionRequest::default();
         let headers = HashMap::new();
-        let context = InterceptorContext::new(request, headers, state.clone());
+        let context = InterceptorContext::new(request, None, headers, state.clone());
 
         let mut lazy_manager = LazyInterceptorManager::new(interceptors, context);
 
@@ -535,7 +537,7 @@ mod tests {
         let state = Arc::new(tokio::sync::RwLock::new(super::InterceptorState::new()));
         let request = ChatCompletionRequest::default();
         let headers = HashMap::new();
-        let mut context = super::InterceptorContext::new(request, headers, state.clone());
+        let mut context = super::InterceptorContext::new(request, None, headers, state.clone());
 
         manager.execute_pre_request(&mut context).await.unwrap();
         let state_read = state.read().await;

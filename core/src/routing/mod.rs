@@ -175,21 +175,31 @@ pub struct InterceptorSpec {
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum InterceptorType {
-    Guardrail { guard_id: String },
+    Guardrail {
+        guard_id: String,
+    },
     RateLimiter {
-        limit: u64,
+        limit: f64,
         period: LimitPeriod,
         target: LimitTarget,
-    }
+        entity: LimitEntity,
+    },
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+#[serde(rename_all = "snake_case")]
+pub enum LimitEntity {
+    #[serde(alias = "user_id")]
+    UserId,
+    #[serde(alias = "user_tier")]
+    UserTier,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
 #[serde(rename_all = "snake_case")]
 pub enum LimitTarget {
-    #[serde(alias = "user_id")]
-    UserId,
-    #[serde(alias = "user_tier")]
-    UserTier,
+    Cost,
+    Requests,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
@@ -805,5 +815,27 @@ mod tests {
 
         let route_str = serde_json::to_string_pretty(&route).unwrap();
         eprintln!("{route_str}");
+    }
+
+    #[test]
+    fn test_deserialize_conditional_router_with_rate_limiter() {
+        let conditional_router = ConditionalRouting {
+            pre_request: vec![InterceptorSpec {
+                name: "rate_limiter".to_string(),
+                interceptor_type: InterceptorType::RateLimiter {
+                    limit: 10.0,
+                    period: LimitPeriod::Hour,
+                    target: LimitTarget::Requests,
+                    entity: LimitEntity::UserId,
+                },
+                extra: HashMap::new(),
+            }],
+            routes: vec![],
+            post_request: vec![],
+        };
+        let json = serde_json::to_string_pretty(&conditional_router).unwrap();
+        eprintln!("{json}");
+
+        let _conditional_router: ConditionalRouting = serde_json::from_str(&json).unwrap();
     }
 }

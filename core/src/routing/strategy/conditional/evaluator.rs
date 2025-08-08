@@ -274,6 +274,7 @@ mod tests {
             interceptors,
             InterceptorContext::new(
                 ChatCompletionRequest::default(),
+                None,
                 HashMap::new(),
                 Arc::new(tokio::sync::RwLock::new(InterceptorState::new())),
             ),

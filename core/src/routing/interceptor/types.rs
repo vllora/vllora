@@ -73,30 +73,6 @@ pub enum MetadataSource {
     External(String), // External API or service
 }
 
-/// Rate limiting targets
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum LimitTarget {
-    InputTokens,
-    OutputTokens,
-    Requests,
-    Cost,
-    Custom(String),
-}
-
-/// Rate limiting entities
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum LimitEntity {
-    UserName,
-    UserId,
-    ProjectId,
-    OrganizationId,
-    Model,
-    Provider,
-    Custom(String),
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

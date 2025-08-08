@@ -54,9 +54,9 @@ impl LimitPeriod {
             LimitPeriod::Hour => {
                 // Calculate seconds until end of hour
                 let now = Utc::now();
-                let next_hour = (now + chrono::Duration::minutes(1))
-                    // .with_minute(0)
-                    // .unwrap()
+                let next_hour = (now + chrono::Duration::hours(1))
+                    .with_minute(0)
+                    .unwrap()
                     .with_second(0)
                     .unwrap()
                     .naive_utc();

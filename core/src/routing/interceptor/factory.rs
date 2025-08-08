@@ -4,8 +4,9 @@ use crate::{
     executor::context::ExecutorContext,
     routing::{
         interceptor::{
-            guard::RouterGuardrailInterceptor, Interceptor, InterceptorError, InterceptorFactory,
-            InterceptorSpec,
+            guard::RouterGuardrailInterceptor,
+            rate_limiter::{RateLimiter, RateLimiterConfig},
+            Interceptor, InterceptorError, InterceptorFactory, InterceptorSpec,
         },
         InterceptorType,
     },
@@ -34,8 +35,24 @@ impl InterceptorFactory for RouterInterceptorFactory {
                     guard_id.clone(),
                 )))
             }
-            InterceptorType::RateLimiter { limit, period, target } => {
-                unimplemented!()
+            InterceptorType::RateLimiter {
+                limit,
+                period,
+                target,
+                entity,
+            } => {
+                let config = RateLimiterConfig {
+                    limit: *limit,
+                    limit_target: target.clone(),
+                    limit_entity: entity.clone(),
+                    period: period.clone(),
+                    burst_protection: None,
+                    action: None,
+                };
+
+                let rate_limiter =
+                    RateLimiter::new(self.executor_context.rate_limiter_service.clone(), config);
+                Ok(Arc::new(rate_limiter))
             }
         }
     }

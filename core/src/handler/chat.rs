@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use crate::events::JsonValue;
 use crate::executor::context::ExecutorContext;
 use crate::model::DefaultModelMetadataFactory;
+use crate::routing::interceptor::rate_limiter::InMemoryRateLimiterService;
 use crate::routing::RoutingStrategy;
 use crate::types::gateway::ChatCompletionRequestWithTools;
 use crate::types::gateway::CompletionModelUsage;
@@ -69,7 +70,7 @@ pub async fn create_chat_completion(
     }
 
     let memory_storage = req.app_data::<Arc<Mutex<InMemoryStorage>>>().cloned();
-
+    let rate_limiter_service = InMemoryRateLimiterService::new();
     let guardrails_evaluator_service = evaluator_service.clone().into_inner();
     let executor_context = ExecutorContext::new(
         callback_handler.get_ref().clone(),
@@ -81,6 +82,7 @@ pub async fn create_chat_completion(
         &req,
         HashMap::new(),
         guardrails_evaluator_service,
+        Arc::new(rate_limiter_service),
     )?;
 
     let executor = RoutedExecutor::new(request.clone());

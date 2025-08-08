@@ -37,6 +37,7 @@ impl ConditionalRouter {
         ));
         let context = crate::routing::interceptor::InterceptorContext::new(
             request.clone(),
+            extra.cloned(),
             headers.clone(),
             state.clone(),
         )

@@ -1,4 +1,5 @@
 use crate::model::ModelMetadataFactory;
+use crate::routing::interceptor::rate_limiter::RateLimiterService;
 use crate::types::guardrails::service::GuardrailsEvaluator;
 use crate::{
     error::GatewayError,
@@ -22,6 +23,7 @@ pub struct ExecutorContext {
     pub providers_config: Option<ProvidersConfig>,
     pub evaluator_service: Arc<Box<dyn GuardrailsEvaluator>>,
     pub model_metadata_factory: Arc<Box<dyn ModelMetadataFactory>>,
+    pub rate_limiter_service: Arc<dyn RateLimiterService>,
 }
 
 // Implement Send + Sync since all fields are Send + Sync
@@ -36,6 +38,7 @@ impl ExecutorContext {
         req: &HttpRequest,
         metadata: HashMap<String, serde_json::Value>,
         evaluator_service: Arc<Box<dyn GuardrailsEvaluator>>,
+        rate_limiter_service: Arc<dyn RateLimiterService>,
     ) -> Result<Self, GatewayError> {
         let tags = extract_tags(req)?;
 
@@ -51,6 +54,7 @@ impl ExecutorContext {
             metadata,
             providers_config,
             evaluator_service,
+            rate_limiter_service,
         })
     }
 
