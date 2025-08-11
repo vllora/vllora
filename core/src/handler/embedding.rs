@@ -24,7 +24,7 @@ pub async fn embeddings_handler(
     can_execute_llm_for_request(&req).await?;
     let request = request.into_inner();
     let available_models = models.into_inner();
-    let llm_model = find_model_by_full_name(&request.model, &available_models)?;
+    let llm_model = find_model_by_full_name(&request.model, &available_models.0)?;
     let key_credentials = req.extensions().get::<Credentials>().cloned();
 
     let span = Span::or_current(tracing::info_span!(

@@ -34,15 +34,9 @@ pub struct CompletionModelDefinition {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Model {
     pub name: String,
-    pub description: Option<String>,
+    pub inference_model_name: String,
     pub provider_name: String,
-    pub prompt_name: Option<String>,
-    #[serde_as(as = "JsonStringCond")]
-    pub model_params: HashMap<String, Value>,
-    #[serde_as(as = "JsonStringCond")]
-    pub tools: ModelTools,
     pub model_type: ModelType,
-    pub response_schema: Option<String>,
 
     // Following fields are secret and virtual and not to be stored.
     // They will be borrowed from provider.

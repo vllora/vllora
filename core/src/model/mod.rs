@@ -11,6 +11,7 @@ use crate::types::gateway::{
 };
 use crate::types::guardrails::service::GuardrailsEvaluator;
 use crate::types::guardrails::{GuardError, GuardResult, GuardStage};
+use crate::types::provider::ModelPrice;
 use crate::types::threads::Message;
 use crate::GatewayResult;
 use anthropic::AnthropicModel;
@@ -30,7 +31,11 @@ use types::{ModelEvent, ModelEventType};
 use valuable::Valuable;
 pub mod handler;
 use self::openai::OpenAIModel;
+use crate::handler::find_model_by_full_name;
 use crate::model::proxy::OpenAISpecModel;
+use crate::models::ModelMetadata;
+use crate::GatewayApiError;
+
 pub mod anthropic;
 pub mod bedrock;
 pub mod cached;
@@ -382,7 +387,7 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
             model = model_str,
             provider_name = provider_name,
             model_name = model_name.clone(),
-            inference_model_name = self.definition.db_model.name.to_string(),
+            inference_model_name = self.definition.db_model.inference_model_name.to_string(),
             output = tracing::field::Empty,
             error = tracing::field::Empty,
             credentials_identifier = credentials_ident.to_string(),
@@ -538,7 +543,7 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
             model = model_str,
             provider_name = provider_name,
             model_name = model_name.clone(),
-            inference_model_name = self.definition.db_model.name.to_string(),
+            inference_model_name = self.definition.db_model.inference_model_name.to_string(),
             output = tracing::field::Empty,
             error = tracing::field::Empty,
             credentials_identifier = credentials_ident.to_string(),
@@ -709,4 +714,80 @@ pub async fn apply_guardrails(
     }
 
     Ok(())
+}
+
+#[async_trait]
+pub trait ModelMetadataFactory: Send + Sync {
+    async fn get_model_metadata(
+        &self,
+        model_name: &str,
+        include_parameters: bool,
+        include_benchmark: bool,
+    ) -> Result<ModelMetadata, GatewayApiError>;
+
+    async fn get_cheapest_model_metadata(
+        &self,
+        model_names: &[String],
+    ) -> Result<ModelMetadata, GatewayApiError>;
+}
+
+pub struct DefaultModelMetadataFactory {
+    models: Vec<ModelMetadata>,
+}
+
+impl DefaultModelMetadataFactory {
+    pub fn new(models: &[ModelMetadata]) -> Self {
+        Self {
+            models: models.to_vec(),
+        }
+    }
+}
+
+#[async_trait]
+impl ModelMetadataFactory for DefaultModelMetadataFactory {
+    async fn get_model_metadata(
+        &self,
+        model_name: &str,
+        _include_parameters: bool,
+        _include_benchmark: bool,
+    ) -> Result<ModelMetadata, GatewayApiError> {
+        find_model_by_full_name(model_name, &self.models)
+    }
+
+    async fn get_cheapest_model_metadata(
+        &self,
+        model_names: &[String],
+    ) -> Result<ModelMetadata, GatewayApiError> {
+        let models = self
+            .models
+            .clone()
+            .into_iter()
+            .filter(|m| model_names.contains(&m.model.clone()))
+            .collect::<Vec<ModelMetadata>>();
+
+        get_cheapest_model_metadata(&models)
+    }
+}
+
+pub fn get_cheapest_model_metadata(
+    models: &[ModelMetadata],
+) -> Result<ModelMetadata, GatewayApiError> {
+    let cheapest_model = models
+        .iter()
+        .min_by(|a, b| {
+            let price_a = match &a.price {
+                ModelPrice::Completion(price) => price.per_input_token,
+                _ => f64::INFINITY,
+            };
+            let price_b = match &b.price {
+                ModelPrice::Completion(price) => price.per_input_token,
+                _ => f64::INFINITY,
+            };
+            price_a
+                .partial_cmp(&price_b)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .ok_or(GatewayApiError::CustomError("No model found".to_string()))?;
+
+    Ok(cheapest_model.clone())
 }
