@@ -150,7 +150,7 @@ pub async fn route<M: MetricsRepository + Send + Sync>(
         if let Some(random_model) = models.iter().choose(&mut rng) {
             let span = Span::current();
             span.record(
-                "router_resolution",
+                "router.metric_resolution",
                 JsonValue(&serde_json::json!({"candidates": [], "best_model": random_model, "metric": metric, "metrics_duration": metrics_duration})).as_value(),
             );
             return Ok(random_model.clone());
@@ -174,11 +174,11 @@ pub async fn route<M: MetricsRepository + Send + Sync>(
 
     let span = Span::current();
     span.record(
-        "router_resolution",
+        "router.metric_resolution",
         JsonValue(&serde_json::json!({"candidates": filtered_candidates, "best_model": model, "metric": metric, "metrics_duration": metrics_duration})).as_value(),
     );
 
-    tracing::info!("Router resolution: {:#?}", model);
+    tracing::info!("Router metric resolution: {:#?}", model);
 
     Ok(model)
 }

@@ -1,3 +1,4 @@
+use crate::events::JsonValue;
 use crate::model::ModelMetadataFactory;
 use crate::routing::metrics::MetricsRepository;
 // use crate::routing::strategy::script::ScriptError;
@@ -9,6 +10,7 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::sync::Arc;
 use thiserror::Error;
+use valuable::Valuable;
 
 pub mod interceptor;
 pub mod metrics;
@@ -436,6 +438,11 @@ impl RouteStrategy for LlmRouter {
                                         .map_err(|e| {
                                             RouterError::MetricRouterError(e.to_string())
                                         })?;
+                                    let span = tracing::Span::current();
+                                    span.record(
+                                        "router.metric_resolution",
+                                        JsonValue(&serde_json::json!({"candidates": [], "best_model": model.qualified_model_name(), "metric": "cost"})).as_value(),
+                                    );
                                     model.qualified_model_name()
                                 }
                                 TargetSort::Metric(metric) => {

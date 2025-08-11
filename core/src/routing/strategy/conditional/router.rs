@@ -51,6 +51,8 @@ impl ConditionalRouter {
             if let Some(conditions) = &route.conditions {
                 match evaluate_conditions(conditions, &mut lazy_manager, metadata, extra).await {
                     Ok(true) => {
+                        let span = tracing::Span::current();
+                        span.record("router.execution_route", &route.name);
                         if let Some(targets) = &route.targets {
                             return Some(targets);
                         }
