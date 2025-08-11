@@ -61,8 +61,6 @@ impl CachedModel {
         &self,
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
     ) -> GatewayResult<ChatCompletionMessage> {
-        tracing::warn!("Cached model invoke");
-
         for event in &self.events {
             if let ModelEventType::LlmStop(e) = &event.event {
                 let mut u = e.usage.clone();

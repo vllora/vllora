@@ -1,12 +1,18 @@
+use crate::events::JsonValue;
+use crate::model::ModelMetadataFactory;
 use crate::routing::metrics::MetricsRepository;
 // use crate::routing::strategy::script::ScriptError;
 // use crate::routing::strategy::script::ScriptStrategy;
-use crate::handler::AvailableModels;
-use crate::types::gateway::ChatCompletionRequest;
+use crate::routing::strategy::conditional::ConditionalRouter;
+use crate::types::gateway::{ChatCompletionRequest, Extra};
+use crate::usage::LimitPeriod;
 use std::collections::HashMap;
 use std::fmt::Display;
+use std::sync::Arc;
 use thiserror::Error;
+use valuable::Valuable;
 
+pub mod interceptor;
 pub mod metrics;
 pub mod strategy;
 
@@ -37,6 +43,9 @@ pub enum RouterError {
 
     #[error("Metrics repository error: {0}")]
     MetricsRepositoryError(String),
+
+    #[error("Interceptor error: {0}")]
+    InterceptorError(#[from] interceptor::InterceptorError),
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
@@ -58,6 +67,39 @@ pub struct LlmRouter {
     pub metrics_duration: Option<MetricsDuration>,
 }
 
+impl LlmRouter {
+    pub fn new(name: String, strategy: RoutingStrategy) -> Self {
+        Self {
+            name,
+            strategy,
+            targets: Vec::new(),
+            metrics_duration: None,
+        }
+    }
+
+    pub fn with_targets(mut self, targets: Vec<HashMap<String, serde_json::Value>>) -> Self {
+        self.targets = targets;
+        self
+    }
+
+    pub fn with_metrics_duration(mut self, duration: MetricsDuration) -> Self {
+        self.metrics_duration = Some(duration);
+        self
+    }
+}
+
+/// Extended routing result that includes interceptor state
+#[derive(Debug, Clone)]
+pub struct RoutingResult {
+    pub targets: Targets,
+}
+
+impl RoutingResult {
+    pub fn new(targets: Targets) -> Self {
+        Self { targets }
+    }
+}
+
 /// Defines the primary optimization strategy for model selection
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -76,6 +118,11 @@ pub enum RoutingStrategy {
     Optimized {
         metric: strategy::metric::MetricSelector,
     },
+    /// Conditional routing based on request or context conditions
+    Conditional {
+        #[serde(flatten)]
+        routing: ConditionalRouting,
+    },
 }
 
 impl Display for RoutingStrategy {
@@ -85,6 +132,7 @@ impl Display for RoutingStrategy {
             RoutingStrategy::Percentage { .. } => write!(f, "Percentage"),
             RoutingStrategy::Random => write!(f, "Random"),
             RoutingStrategy::Optimized { .. } => write!(f, "Optimized"),
+            RoutingStrategy::Conditional { .. } => write!(f, "Conditional"),
         }
     }
 }
@@ -108,44 +156,218 @@ pub enum TargetOrRouterName {
     Target(Target),
 }
 
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+pub struct ConditionalRouting {
+    #[serde(default)]
+    pub pre_request: Vec<InterceptorSpec>,
+    pub routes: Vec<Route>,
+    #[serde(default)]
+    pub post_request: Vec<InterceptorSpec>,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+pub struct InterceptorSpec {
+    pub name: String,
+    #[serde(flatten)]
+    pub interceptor_type: InterceptorType,
+    #[serde(flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum InterceptorType {
+    Guardrail {
+        guard_id: String,
+    },
+    RateLimiter {
+        limit: f64,
+        period: LimitPeriod,
+        target: LimitTarget,
+        entity: LimitEntity,
+    },
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+#[serde(rename_all = "snake_case")]
+pub enum LimitEntity {
+    #[serde(alias = "user_id")]
+    UserId,
+    #[serde(alias = "user_tier")]
+    UserTier,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+#[serde(rename_all = "snake_case")]
+pub enum LimitTarget {
+    Cost,
+    Requests,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+pub struct Route {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conditions: Option<RouteCondition>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub targets: Option<TargetSpec>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message_mapper: Option<MessageMapper>,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+#[serde(untagged)]
+pub enum RouteCondition {
+    All { all: Vec<ConditionExpr> },
+    Any { any: Vec<ConditionExpr> },
+    Expr(HashMap<String, ConditionOp>),
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+#[serde(untagged)]
+pub enum ConditionExpr {
+    Expr(HashMap<String, ConditionOp>),
+}
+
+impl ConditionExpr {
+    /// Validates that all keys in the condition expression match allowed patterns.
+    /// Allowed keys:
+    /// - "metadata.user.tier"
+    /// - "metadata.user.id"
+    /// - "metadata.region"
+    /// - "pre_request.*.*"
+    /// - "metrics.provider.*"
+    /// - "metrics.model:*"
+    pub fn validate_keys(&self) -> Result<(), String> {
+        match self {
+            ConditionExpr::Expr(map) => {
+                for key in map.keys() {
+                    if !Self::is_valid_key(key) {
+                        return Err(format!("Invalid condition key: {key}"));
+                    }
+                }
+                Ok(())
+            }
+        }
+    }
+
+    fn is_valid_key(key: &str) -> bool {
+        key == "metadata.user.tier"
+            || key == "metadata.user.id"
+            || key == "metadata.region"
+            || key.starts_with("pre_request.")
+            || key.starts_with("metrics.provider.")
+            || key.starts_with("metrics.model.")
+    }
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub struct ConditionOp {
+    #[serde(flatten)]
+    pub op: HashMap<ConditionOpType, serde_json::Value>,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone, PartialEq, Eq, Hash)]
+#[serde(rename_all = "lowercase")]
+pub enum ConditionOpType {
+    #[serde(alias = "$eq")]
+    Eq,
+    #[serde(alias = "$ne")]
+    Ne,
+    #[serde(alias = "$in")]
+    In,
+    #[serde(alias = "$gt")]
+    Gt,
+    #[serde(alias = "$lt")]
+    Lt,
+    #[serde(alias = "$gte")]
+    Gte,
+    #[serde(alias = "$lte")]
+    Lte,
+    #[serde(alias = "$contains")]
+    Contains,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum TargetSort {
+    Price,
+    #[serde(untagged)]
+    Metric(strategy::metric::MetricSelector),
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+#[serde(untagged)]
+pub enum TargetSpec {
+    Any {
+        #[serde(rename = "$any")]
+        any: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none", flatten)]
+        sort: Option<TargetSortSpec>,
+        #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+        filter: HashMap<TargetSort, HashMap<ConditionOpType, serde_json::Value>>,
+    },
+    List(Vec<HashMap<String, serde_json::Value>>),
+    Single(String),
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+pub struct TargetSortSpec {
+    pub sort_by: TargetSort,
+    pub sort_order: Option<TargetSortOrder>,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+#[serde(rename_all = "snake_case")]
+pub enum TargetSortOrder {
+    Min,
+    Max,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+pub struct MessageMapper {
+    pub modifier: String,
+    pub content: String,
+}
+
 #[async_trait::async_trait]
 pub trait RouteStrategy {
     async fn route<M: MetricsRepository + Send + Sync>(
         &self,
         request: ChatCompletionRequest,
-        available_models: &AvailableModels,
-        headers: HashMap<String, String>,
+        extra: Option<&Extra>,
+        model_metadata_factory: Arc<Box<dyn ModelMetadataFactory>>,
+        metadata: HashMap<String, serde_json::Value>,
         metrics_repository: &M,
-    ) -> Result<Targets, RouterError>;
+        interceptor_factory: Box<dyn interceptor::InterceptorFactory>,
+    ) -> Result<RoutingResult, RouterError>;
 }
 
 #[async_trait::async_trait]
 impl RouteStrategy for LlmRouter {
     async fn route<M: MetricsRepository + Send + Sync>(
         &self,
-        _request: ChatCompletionRequest,
-        _available_models: &AvailableModels,
-        _headers: HashMap<String, String>,
+        request: ChatCompletionRequest,
+        extra: Option<&Extra>,
+        model_metadata_factory: Arc<Box<dyn ModelMetadataFactory>>,
+        metadata: HashMap<String, serde_json::Value>,
         metrics_repository: &M,
-    ) -> Result<Targets, RouterError> {
-        match &self.strategy {
-            RoutingStrategy::Fallback => Ok(self.targets.clone()),
+        interceptor_factory: Box<dyn interceptor::InterceptorFactory>,
+    ) -> Result<RoutingResult, RouterError> {
+        // Routing logic only, no interceptors
+        let targets = match &self.strategy {
+            RoutingStrategy::Fallback => self.targets.clone(),
             RoutingStrategy::Random => {
-                // Randomly select between available models
                 use rand::Rng;
-
                 let mut rng = rand::rng();
                 let idx = rng.random_range(0..self.targets.len());
-                Ok(vec![self.targets[idx].clone()])
+                vec![self.targets[idx].clone()]
             }
             RoutingStrategy::Percentage {
                 targets_percentages,
             } => {
-                // it should be 100, but it is not restricted
                 let total_percentages: f64 = targets_percentages.iter().sum();
-                // A/B testing between models based on ModelPairWithSplit
                 let rand_val = rand::random::<f64>() * total_percentages;
-
                 let mut sum = 0.0;
                 let idx = targets_percentages
                     .iter()
@@ -155,23 +377,12 @@ impl RouteStrategy for LlmRouter {
                         rand_val >= prev_sum && rand_val < sum
                     })
                     .unwrap_or(0);
-
                 let target = match self.targets.get(idx) {
                     Some(target) => target.clone(),
                     None => return Err(RouterError::TargetByIndexNotFound(idx)),
                 };
-
-                Ok(vec![target])
+                vec![target]
             }
-            // RoutingStrategy::Script { script } => {
-            //     let result =
-            //         ScriptStrategy::run(script, &request, &headers, available_models, &metrics)?;
-
-            //     let r = serde_json::from_value(result)
-            //         .map_err(RouterError::FailedToDeserializeRequestResult)?;
-
-            //     Ok(vec![r])
-            // }
             RoutingStrategy::Optimized { metric } => {
                 let models = self
                     .targets
@@ -181,29 +392,110 @@ impl RouteStrategy for LlmRouter {
                             .and_then(|v| v.as_str().map(|s| s.to_string()))
                     })
                     .collect::<Vec<_>>();
-
-                // Fetch metrics from the repository
-                let metrics = metrics_repository.get_metrics().await?;
-
                 let model = strategy::metric::route(
                     &models,
-                    &metrics,
                     metric,
                     self.metrics_duration.as_ref(),
+                    metrics_repository,
+                    None,
+                    None,
                 )
                 .await?;
-
-                Ok(vec![HashMap::from([(
+                vec![HashMap::from([(
                     "model".to_string(),
                     serde_json::Value::String(model),
-                )])])
+                )])]
             }
-        }
+            RoutingStrategy::Conditional { routing } => {
+                let router = ConditionalRouter {
+                    routing: routing.clone(),
+                };
+                let headers = HashMap::new(); // TODO: pass real headers
+                let target_opt = router
+                    .get_target(interceptor_factory, &request, &headers, &metadata, extra)
+                    .await;
+
+                match target_opt {
+                    Some(TargetSpec::List(targets)) => targets.clone(),
+                    Some(TargetSpec::Single(model)) => {
+                        vec![HashMap::from([(
+                            "model".to_string(),
+                            serde_json::Value::String(model.clone()),
+                        )])]
+                    }
+                    Some(TargetSpec::Any { any, sort, filter }) => {
+                        let model = match sort {
+                            Some(TargetSortSpec {
+                                sort_by,
+                                sort_order,
+                            }) => match sort_by {
+                                TargetSort::Price => {
+                                    let models =
+                                        any.iter().map(|m| m.to_string()).collect::<Vec<_>>();
+                                    let model = model_metadata_factory
+                                        .get_cheapest_model_metadata(&models)
+                                        .await
+                                        .map_err(|e| {
+                                            RouterError::MetricRouterError(e.to_string())
+                                        })?;
+                                    let span = tracing::Span::current();
+                                    span.record(
+                                        "router.metric_resolution",
+                                        JsonValue(&serde_json::json!({"candidates": [], "best_model": model.qualified_model_name(), "metric": "cost"})).as_value(),
+                                    );
+                                    model.qualified_model_name()
+                                }
+                                TargetSort::Metric(metric) => {
+                                    let minimize = sort_order
+                                        .as_ref()
+                                        .map(|s| matches!(s, TargetSortOrder::Min));
+                                    let mut filters = HashMap::new();
+                                    for (sort, value) in filter {
+                                        if let TargetSort::Metric(metric) = sort {
+                                            filters.insert(metric.clone(), value.clone());
+                                        }
+                                    }
+                                    strategy::metric::route(
+                                        any,
+                                        metric,
+                                        self.metrics_duration.as_ref(),
+                                        metrics_repository,
+                                        minimize,
+                                        Some(&filters),
+                                    )
+                                    .await?
+                                }
+                            },
+                            None => {
+                                return Err(RouterError::MetricRouterError(
+                                    "No sort order specified".to_string(),
+                                ))
+                            }
+                        };
+
+                        vec![HashMap::from([(
+                            "model".to_string(),
+                            serde_json::Value::String(model),
+                        )])]
+                    }
+                    None => {
+                        return Err(RouterError::MetricRouterError(
+                            "No conditional route matched".to_string(),
+                        ))
+                    }
+                }
+            }
+        };
+        Ok(RoutingResult::new(targets))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::model::DefaultModelMetadataFactory;
+    use std::sync::Arc;
+
+    use crate::routing::interceptor::InterceptorFactory;
 
     use super::*;
 
@@ -229,7 +521,7 @@ mod tests {
                 HashMap::from([
                     (
                         "model".to_string(),
-                        serde_json::Value::String("openai/gpt-4o-mini".to_string()),
+                        serde_json::Value::String("openai/gpt-4.1-nano".to_string()),
                     ),
                     (
                         "frequence_penality".to_string(),
@@ -239,7 +531,7 @@ mod tests {
                 HashMap::from([
                     (
                         "model".to_string(),
-                        serde_json::Value::String("openai/gpt-4o-mini".to_string()),
+                        serde_json::Value::String("openai/gpt-4.1-nano".to_string()),
                     ),
                     (
                         "frequence_penality".to_string(),
@@ -307,121 +599,250 @@ mod tests {
 
         // Test routing
         let request = ChatCompletionRequest::default();
-        let available_models = AvailableModels(vec![]);
+        let model_metadata_factory = Arc::new(
+            Box::new(DefaultModelMetadataFactory::new(&[])) as Box<dyn ModelMetadataFactory>
+        );
         let headers = HashMap::new();
 
+        struct DummyFactory;
+        impl interceptor::InterceptorFactory for DummyFactory {
+            fn create_interceptor(
+                &self,
+                _spec: &InterceptorSpec,
+            ) -> Result<Arc<dyn interceptor::Interceptor>, interceptor::InterceptorError>
+            {
+                Err(interceptor::InterceptorError::ExecutionError(
+                    "DummyFactory: no interceptors".to_string(),
+                ))
+            }
+        }
+        let dummy_factory = Box::new(DummyFactory) as Box<dyn InterceptorFactory>;
         let result = router
-            .route(request, &available_models, headers, &metrics_repo)
+            .route(
+                request,
+                None,
+                model_metadata_factory,
+                headers,
+                &metrics_repo,
+                dummy_factory,
+            )
             .await;
 
         assert!(result.is_ok());
-        let targets = result.unwrap();
-        assert_eq!(targets.len(), 1);
+        let routing_result = result.unwrap();
+        assert_eq!(routing_result.targets.len(), 1);
         assert_eq!(
-            targets[0].get("model").unwrap().as_str().unwrap(),
+            routing_result.targets[0]
+                .get("model")
+                .unwrap()
+                .as_str()
+                .unwrap(),
             "openai/gpt-4"
         );
     }
 
-    // #[tokio::test]
-    // async fn test_script_router() {
-    //     let router = LlmRouter {
-    //         name: "test".to_string(),
-    //         strategy: RoutingStrategy::Script {
-    //             script: r#"
-    //                 function route(params) {
-    //                     const { request, models, metrics } = params;
-    //                     if (request.messages.length > 5) {
-    //                         return { ...request, model: "openai/gpt-4" };
-    //                     }
-    //                     return { ...request, model: "openai/gpt-3.5-turbo" };
-    //                 }
-    //             "#
-    //             .to_string(),
-    //         },
-    //         targets: vec![],
-    //         metrics_duration: None,
-    //     };
+    #[tokio::test]
+    async fn test_llm_router_conditional() {
+        use crate::model::DefaultModelMetadataFactory;
+        use crate::routing::interceptor::{
+            Interceptor, InterceptorContext, InterceptorError, InterceptorFactory,
+        };
+        use crate::routing::metrics::MetricsRepository;
+        use crate::routing::{
+            ConditionOp, ConditionalRouting, InterceptorSpec, Route, RouteCondition, TargetSpec,
+        };
+        use crate::types::gateway::ChatCompletionRequest;
+        use std::collections::BTreeMap;
+        use std::collections::HashMap;
+        use std::sync::Arc;
 
-    //     // Test case 1: Short conversation (≤ 5 messages)
-    //     let request = ChatCompletionRequest {
-    //         model: "router/test".to_string(),
-    //         messages: vec![
-    //             ChatCompletionMessage::new_text("user".to_string(), "Hello".to_string()),
-    //             ChatCompletionMessage::new_text("assistant".to_string(), "Hi there!".to_string()),
-    //         ],
-    //         ..Default::default()
-    //     };
+        struct MockGuardrail {
+            result: bool,
+        }
+        #[async_trait::async_trait]
+        impl Interceptor for MockGuardrail {
+            fn name(&self) -> &str {
+                "guardrail"
+            }
+            async fn pre_request(
+                &self,
+                _context: &mut InterceptorContext,
+            ) -> Result<serde_json::Value, InterceptorError> {
+                Ok(serde_json::json!({"result": self.result}))
+            }
+            async fn post_request(
+                &self,
+                _context: &mut InterceptorContext,
+                _response: &serde_json::Value,
+            ) -> Result<serde_json::Value, InterceptorError> {
+                Ok(serde_json::json!({"result": self.result}))
+            }
+        }
+        struct MockFactory {
+            result: bool,
+        }
+        impl InterceptorFactory for MockFactory {
+            fn create_interceptor(
+                &self,
+                spec: &InterceptorSpec,
+            ) -> Result<Arc<dyn Interceptor>, InterceptorError> {
+                if spec.name == "guardrail" {
+                    Ok(Arc::new(MockGuardrail {
+                        result: self.result,
+                    }))
+                } else {
+                    Err(InterceptorError::ExecutionError(
+                        "Unknown interceptor".to_string(),
+                    ))
+                }
+            }
+        }
+        struct DummyMetricsRepo;
+        #[async_trait::async_trait]
+        impl MetricsRepository for DummyMetricsRepo {
+            async fn get_metrics(
+                &self,
+            ) -> Result<BTreeMap<String, crate::usage::ProviderMetrics>, RouterError> {
+                Ok(BTreeMap::new())
+            }
+            async fn get_provider_metrics(
+                &self,
+                _provider: &str,
+            ) -> Result<Option<crate::usage::ProviderMetrics>, RouterError> {
+                Ok(Some(crate::usage::ProviderMetrics::default()))
+            }
+            async fn get_model_metrics(
+                &self,
+                _provider: &str,
+                _model: &str,
+            ) -> Result<Option<crate::usage::ModelMetrics>, RouterError> {
+                Ok(None)
+            }
+        }
+        // Passing guardrail
+        let routing = ConditionalRouting {
+            pre_request: vec![InterceptorSpec {
+                name: "guardrail".to_string(),
+                interceptor_type: InterceptorType::Guardrail {
+                    guard_id: "guard_id".to_string(),
+                },
+                extra: HashMap::new(),
+            }],
+            routes: vec![Route {
+                name: "guarded_route".to_string(),
+                conditions: Some(RouteCondition::Expr(HashMap::from([(
+                    "pre_request.guardrail.result".to_string(),
+                    ConditionOp {
+                        op: HashMap::from([(ConditionOpType::Eq, serde_json::json!(true))]),
+                    },
+                )]))),
+                targets: Some(TargetSpec::List(vec![HashMap::from([(
+                    "model".to_string(),
+                    serde_json::json!("mock/model"),
+                )])])),
+                message_mapper: None,
+            }],
+            post_request: vec![],
+        };
+        let router = LlmRouter {
+            name: "conditional_test".to_string(),
+            strategy: RoutingStrategy::Conditional {
+                routing: routing.clone(),
+            },
+            targets: vec![],
+            metrics_duration: None,
+        };
+        let factory = Box::new(MockFactory { result: true }) as Box<dyn InterceptorFactory>;
+        let model_metadata_factory = Arc::new(
+            Box::new(DefaultModelMetadataFactory::new(&[])) as Box<dyn ModelMetadataFactory>
+        );
+        let result = router
+            .route(
+                ChatCompletionRequest::default(),
+                None,
+                model_metadata_factory,
+                HashMap::new(),
+                &DummyMetricsRepo,
+                factory,
+            )
+            .await;
+        assert!(result.is_ok());
+        let routing_result = result.unwrap();
+        assert_eq!(routing_result.targets.len(), 1);
+        assert_eq!(routing_result.targets[0]["model"], "mock/model");
+        // Failing guardrail
+        let factory = Box::new(MockFactory { result: false }) as Box<dyn InterceptorFactory>;
+        let model_metadata_factory = Arc::new(
+            Box::new(DefaultModelMetadataFactory::new(&[])) as Box<dyn ModelMetadataFactory>
+        );
+        let result = router
+            .route(
+                ChatCompletionRequest::default(),
+                None,
+                model_metadata_factory,
+                HashMap::new(),
+                &DummyMetricsRepo,
+                factory,
+            )
+            .await;
+        assert!(result.is_err());
+    }
 
-    //     let headers = HashMap::new();
-    //     let available_models = AvailableModels(vec![]);
-    //     let metrics = BTreeMap::new();
+    #[test]
+    fn test_deserialize_route() {
+        let route = r#"
+        {
+                    "name": "toxic",
+                    "conditions": {
+                        "all": [
+                            { "pre_request.toxic.passed": { "eq": false } }
+                        ]
+                    },
+                    "targets": {
+                        "$any": ["anthropic/claude-4-opus"],
+                        "sort_by": "ttft",
+                        "sort_order": "min"
+                    },
+                    "message_mapper": null  
+                }
+        "#;
+        let route: Route = serde_json::from_str(route).unwrap();
 
-    //     let result = router
-    //         .route(
-    //             request.clone(),
-    //             &available_models,
-    //             headers.clone(),
-    //             metrics.clone(),
-    //         )
-    //         .await;
+        eprintln!("{}", serde_json::to_string_pretty(&route).unwrap());
+    }
 
-    //     assert!(result.is_ok());
-    //     assert_eq!(
-    //         result
-    //             .unwrap()
-    //             .first()
-    //             .expect("No targets")
-    //             .get("model")
-    //             .expect("No model")
-    //             .as_str()
-    //             .expect("No model string")
-    //             .to_string(),
-    //         "openai/gpt-3.5-turbo"
-    //     );
+    #[test]
+    fn test_serialize_route_single() {
+        let route = Route {
+            name: "basic_user".to_string(),
+            conditions: Some(RouteCondition::All { all: vec![] }),
+            targets: Some(TargetSpec::Single("anthropic/claude-4-opus".to_string())),
+            message_mapper: None,
+        };
 
-    //     // Test case 2: Long conversation (> 5 messages)
-    //     let long_request = ChatCompletionRequest {
-    //         model: "router/test".to_string(),
-    //         messages: vec![
-    //             ChatCompletionMessage::new_text("user".to_string(), "Message 1".to_string()),
-    //             ChatCompletionMessage::new_text("assistant".to_string(), "Response 1".to_string()),
-    //             ChatCompletionMessage::new_text("user".to_string(), "Message 2".to_string()),
-    //             ChatCompletionMessage::new_text("assistant".to_string(), "Response 2".to_string()),
-    //             ChatCompletionMessage::new_text("user".to_string(), "Message 3".to_string()),
-    //             ChatCompletionMessage::new_text("assistant".to_string(), "Response 3".to_string()),
-    //         ],
-    //         ..Default::default()
-    //     };
+        let route_str = serde_json::to_string_pretty(&route).unwrap();
+        eprintln!("{route_str}");
+    }
 
-    //     let result = router
-    //         .route(long_request, &available_models, headers, metrics)
-    //         .await;
+    #[test]
+    fn test_deserialize_conditional_router_with_rate_limiter() {
+        let conditional_router = ConditionalRouting {
+            pre_request: vec![InterceptorSpec {
+                name: "rate_limiter".to_string(),
+                interceptor_type: InterceptorType::RateLimiter {
+                    limit: 10.0,
+                    period: LimitPeriod::Hour,
+                    target: LimitTarget::Requests,
+                    entity: LimitEntity::UserId,
+                },
+                extra: HashMap::new(),
+            }],
+            routes: vec![],
+            post_request: vec![],
+        };
+        let json = serde_json::to_string_pretty(&conditional_router).unwrap();
+        eprintln!("{json}");
 
-    //     assert!(result.is_ok());
-    //     assert_eq!(
-    //         result
-    //             .unwrap()
-    //             .first()
-    //             .expect("No targets")
-    //             .get("model")
-    //             .expect("No model")
-    //             .as_str()
-    //             .expect("No model string")
-    //             .to_string(),
-    //         "openai/gpt-4"
-    //     );
-
-    //     // Test serialization
-    //     let serialized = serde_json::to_string_pretty(&router).unwrap();
-    //     let deserialized: LlmRouter = serde_json::from_str(&serialized).unwrap();
-    //     assert_eq!(router.name, deserialized.name);
-    //     assert_eq!(router.targets, deserialized.targets);
-    //     match (&router.strategy, &deserialized.strategy) {
-    //         (RoutingStrategy::Script { script: s1 }, RoutingStrategy::Script { script: s2 }) => {
-    //             assert_eq!(s1, s2);
-    //         }
-    //         _ => panic!("Deserialized strategy does not match"),
-    //     }
-    // }
+        let _conditional_router: ConditionalRouting = serde_json::from_str(&json).unwrap();
+    }
 }

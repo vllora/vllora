@@ -16,7 +16,7 @@ use crate::{
     model::types::ModelEventType,
     types::{
         credentials::Credentials,
-        engine::{Model, ModelTools, ModelType},
+        engine::{Model, ModelType},
         gateway::CostCalculator,
     },
 };
@@ -54,13 +54,9 @@ pub async fn handle_image_generation(
 
     let db_model = Model {
         name: llm_model.model.clone(),
-        description: None,
+        inference_model_name: llm_model.inference_provider.model_name.clone(),
         provider_name: api_provider_name.clone(),
-        prompt_name: None,
-        model_params: HashMap::new(),
-        tools: ModelTools(vec![]),
         model_type: ModelType::ImageGeneration,
-        response_schema: None,
         credentials: key_credentials.cloned(),
     };
 

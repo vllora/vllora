@@ -25,7 +25,7 @@ pub async fn create_image(
 
     let request = request.into_inner();
     let available_models = models.into_inner();
-    let llm_model = find_model_by_full_name(&request.model, &available_models)?;
+    let llm_model = find_model_by_full_name(&request.model, &available_models.0)?;
 
     let span = Span::or_current(tracing::info_span!(
         target: "langdb::user_tracing::api_invoke",
