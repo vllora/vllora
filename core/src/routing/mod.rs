@@ -178,9 +178,7 @@ pub struct InterceptorSpec {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum InterceptorType {
     #[serde(alias = "guard")]
-    Guardrail {
-        guard_id: String,
-    },
+    Guardrail { guard_id: String },
     RateLimiter {
         limit: f64,
         period: LimitPeriod,

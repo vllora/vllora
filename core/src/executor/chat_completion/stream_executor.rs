@@ -89,11 +89,10 @@ pub async fn stream_chunks(
             let (result, _) = join(result_fut, forward_fut).await;
             if let Err(e) = result {
                 let error_message = format!("{e:?}");
-                if let Err(send_error) = outer_tx
-                    .send(Err(GatewayApiError::GatewayError(e)))
-                    .await {
-                        tracing::error!("Error in sending error: {send_error}. Error: {error_message}");
-                    }
+                if let Err(send_error) = outer_tx.send(Err(GatewayApiError::GatewayError(e))).await
+                {
+                    tracing::error!("Error in sending error: {send_error}. Error: {error_message}");
+                }
             }
         }
         .in_current_span(),
