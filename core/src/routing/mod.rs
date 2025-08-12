@@ -177,6 +177,7 @@ pub struct InterceptorSpec {
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum InterceptorType {
+    #[serde(alias = "guard")]
     Guardrail {
         guard_id: String,
     },
