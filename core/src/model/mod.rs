@@ -501,7 +501,7 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
 
             if let Ok(message) = &result {
                 apply_guardrails(
-                    &[message.clone()],
+                    std::slice::from_ref(message),
                     self.extra.as_ref(),
                     self.executor_context.evaluator_service.as_ref().as_ref(),
                     &self.executor_context,
