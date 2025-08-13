@@ -23,14 +23,14 @@ use async_openai::config::Config;
 use async_openai::config::{AzureConfig, OpenAIConfig};
 use async_openai::error::OpenAIError;
 use async_openai::types::{
-    ChatCompletionMessageToolCall, ChatCompletionMessageToolCallChunk,
+    ChatChoice, ChatCompletionMessageToolCall, ChatCompletionMessageToolCallChunk,
     ChatCompletionRequestAssistantMessageArgs, ChatCompletionRequestMessage,
     ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestToolMessage,
     ChatCompletionRequestToolMessageContent, ChatCompletionRequestUserMessageArgs,
-    ChatCompletionRequestUserMessageContentPart, ChatCompletionTool, ChatCompletionToolArgs,
-    ChatCompletionToolChoiceOption, ChatCompletionToolType, CreateChatCompletionRequest,
-    CreateChatCompletionRequestArgs, FinishReason, FunctionCall, FunctionCallStream,
-    FunctionObject,
+    ChatCompletionRequestUserMessageContentPart, ChatCompletionResponseMessage, ChatCompletionTool,
+    ChatCompletionToolArgs, ChatCompletionToolChoiceOption, ChatCompletionToolType,
+    CreateChatCompletionRequest, CreateChatCompletionRequestArgs, CreateChatCompletionResponse,
+    FinishReason, FunctionCall, FunctionCallStream, FunctionObject,
 };
 use async_openai::types::{
     ChatCompletionRequestMessageContentPartImage, CreateChatCompletionStreamResponse, ImageUrl,
@@ -382,6 +382,49 @@ impl<C: Config> OpenAIModel<C> {
         Ok(builder.build().map_err(custom_err)?)
     }
 
+    fn build_response(
+        first_chunk: Option<&CreateChatCompletionStreamResponse>,
+        tool_call_states: &[ChatCompletionMessageToolCall],
+        usage: Option<async_openai::types::CompletionUsage>,
+        stream_content: String,
+        finish_reason: &FinishReason,
+    ) -> Option<CreateChatCompletionResponse> {
+        match first_chunk {
+            Some(first_chunk) => {
+                let choices = if let Some(first_chunk) = first_chunk.choices.first() {
+                    vec![ChatChoice {
+                        index: 0,
+                        message: ChatCompletionResponseMessage {
+                            content: Some(stream_content),
+                            role: first_chunk.delta.role.unwrap_or_default(),
+                            tool_calls: Some(tool_call_states.to_vec()),
+                            refusal: first_chunk.delta.refusal.clone(),
+                            #[allow(deprecated)]
+                            function_call: None,
+                            audio: None,
+                        },
+                        finish_reason: Some(*finish_reason),
+                        logprobs: None,
+                    }]
+                } else {
+                    vec![]
+                };
+
+                Some(CreateChatCompletionResponse {
+                    id: first_chunk.id.clone(),
+                    created: first_chunk.created,
+                    model: first_chunk.model.clone(),
+                    object: "chat.completion".to_string(),
+                    usage: usage.clone(),
+                    choices,
+                    service_tier: first_chunk.service_tier.clone(),
+                    system_fingerprint: first_chunk.system_fingerprint.clone(),
+                })
+            }
+            None => None,
+        }
+    }
+
     async fn process_stream(
         &self,
         mut stream: impl Stream<Item = Result<CreateChatCompletionStreamResponse, OpenAIError>> + Unpin,
@@ -391,8 +434,11 @@ impl<C: Config> OpenAIModel<C> {
         FinishReason,
         Vec<ChatCompletionMessageToolCall>,
         Option<async_openai::types::CompletionUsage>,
+        Option<CreateChatCompletionResponse>,
     )> {
         let mut tool_call_states: HashMap<u32, ChatCompletionMessageToolCall> = HashMap::new();
+        let mut first_chunk = None;
+        let mut stream_content = String::new();
         while let Some(result) = stream.next().await {
             match result {
                 Ok(mut response) => {
@@ -404,6 +450,7 @@ impl<C: Config> OpenAIModel<C> {
                         )))
                         .await
                         .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+                        first_chunk = Some(response.clone());
                     }
                     if response.choices.is_empty() {
                         // XAI bug workaround
@@ -414,11 +461,16 @@ impl<C: Config> OpenAIModel<C> {
                                 _ => FinishReason::ToolCalls,
                             };
 
-                            return Ok((
-                                reason,
-                                tool_call_states.into_values().collect(),
-                                Some(usage),
-                            ));
+                            let tool_calls =
+                                tool_call_states.clone().into_values().collect::<Vec<_>>();
+                            let response = Self::build_response(
+                                first_chunk.as_ref(),
+                                &tool_calls,
+                                Some(usage.clone()),
+                                stream_content,
+                                &reason,
+                            );
+                            return Ok((reason, tool_calls.clone(), Some(usage.clone()), response));
                         }
 
                         continue;
@@ -461,6 +513,7 @@ impl<C: Config> OpenAIModel<C> {
                                 }),
                             )))
                             .await;
+                        stream_content.push_str(content);
                     }
 
                     if let Some(reason) = &chat_choice.finish_reason {
@@ -471,7 +524,17 @@ impl<C: Config> OpenAIModel<C> {
                                 usage = Some(u);
                             }
                         }
-                        return Ok((*reason, tool_call_states.into_values().collect(), usage));
+
+                        let tool_calls = tool_call_states.clone().into_values().collect::<Vec<_>>();
+                        let response = Self::build_response(
+                            first_chunk.as_ref(),
+                            &tool_calls,
+                            usage.clone(),
+                            stream_content,
+                            reason,
+                        );
+
+                        return Ok((*reason, tool_calls, usage, response));
                     }
                 }
                 Err(err) => {
@@ -789,11 +852,12 @@ impl<C: Config> OpenAIModel<C> {
             .create_stream(request)
             .await
             .map_err(ModelError::OpenAIApi)?;
-        let (finish_reason, tool_calls, usage) = self
+        let (finish_reason, tool_calls, usage, response) = self
             .process_stream(stream, tx, first_response_received)
             .instrument(span.clone())
             .await?;
 
+        span.record("output", serde_json::to_string(&response)?);
         let trace_finish_reason = Self::map_finish_reason(&finish_reason);
         tx.send(Some(ModelEvent::new(
             &span,
@@ -820,11 +884,7 @@ impl<C: Config> OpenAIModel<C> {
                 JsonValue(&serde_json::to_value(usage).unwrap()).as_value(),
             );
         }
-        let response = serde_json::json!({
-            "finish_reason": trace_finish_reason,
-            "tool_calls": tool_calls
-        });
-        span.record("output", response.to_string());
+
         match finish_reason {
             FinishReason::Stop => Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
                 ..Default::default()
