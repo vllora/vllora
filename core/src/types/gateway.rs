@@ -343,10 +343,15 @@ impl Default for ChatCompletionContent {
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Hash, PartialEq, Eq)]
 pub struct ChatCompletionMessage {
     pub role: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<ChatCompletionContent>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<ToolCall>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub refusal: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_call_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub cache_control: Option<CacheControl>,
 }
 
