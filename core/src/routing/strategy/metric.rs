@@ -133,7 +133,11 @@ pub async fn route<M: MetricsRepository + Send + Sync>(
                     }
                     true
                 } else {
-                    false
+                    match filter_metric {
+                        // Error rate is always true when no metrics are available
+                        MetricSelector::ErrorRate => true,
+                        _ => false,
+                    }
                 }
             })
         });
