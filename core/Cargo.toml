@@ -72,7 +72,7 @@ clickhouse = { version = "0.11.6", package = "langdb_clickhouse", features = [
   "uuid",
 ], optional = true }
 tokio-util = { version = "0.7.16", optional = true }
-rmcp = { version = "0.2.1", default-features = true, features = [
+rmcp = { version = "0.5.0", default-features = true, features = [
   "transport-sse-client",
   "reqwest",
   "client",
