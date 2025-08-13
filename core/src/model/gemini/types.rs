@@ -133,6 +133,8 @@ pub struct PartFunctionResponse {
 pub struct GenerateContentResponse {
     pub candidates: Vec<Candidate>,
     pub usage_metadata: Option<UsageMetadata>,
+    pub model_version: String,
+    pub response_id: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -181,6 +183,7 @@ pub struct UsageMetadata {
     pub candidates_token_count: Option<i32>,
     pub prompt_token_count: i32,
     pub total_token_count: i32,
+    pub thoughts_token_count: Option<i32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
