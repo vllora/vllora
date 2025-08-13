@@ -16,7 +16,7 @@ use crate::events::SPAN_GEMINI;
 use crate::events::{self, RecordResult};
 use crate::model::error::AuthorizationError;
 use crate::model::gemini::types::{
-    FunctionDeclaration, GenerationConfig, PartWithThought, Role, Tools,
+    Candidate, FunctionDeclaration, GenerationConfig, PartWithThought, Role, Tools,
 };
 use crate::model::handler::handle_tool_call;
 use crate::model::types::LLMFirstToken;
@@ -210,12 +210,17 @@ impl GeminiModel {
         FinishReason,
         Vec<(String, HashMap<String, Value>)>,
         Option<UsageMetadata>,
+        Option<GenerateContentResponse>,
     )> {
         let mut calls: Vec<(String, HashMap<String, Value>)> = vec![];
         let mut usage_metadata = None;
         let mut finish_reason = None;
         let mut first_response_received = false;
+        let mut content = String::new();
+        let mut model_version = String::new();
+        let mut response_id = String::new();
         while let Some(res) = stream.next().await {
+            tracing::error!("res: {:#?}", res);
             match res {
                 Ok(res) => {
                     if let Some(res) = res {
@@ -227,11 +232,14 @@ impl GeminiModel {
                             )))
                             .await
                             .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+                            model_version = res.model_version;
+                            response_id = res.response_id;
                         }
                         for candidate in res.candidates {
                             for part in candidate.content.parts {
                                 match part.part {
                                     Part::Text(text) => {
+                                        content.push_str(&text);
                                         let _ = tx
                                             .send(Some(ModelEvent::new(
                                                 &Span::current(),
@@ -269,8 +277,39 @@ impl GeminiModel {
         }
 
         if let Some(reason) = finish_reason {
-            return Ok((reason, calls, usage_metadata));
+            let mut parts: Vec<PartWithThought> = vec![];
+            if !content.is_empty() {
+                parts.push(Part::Text(content).into());
+            }
+
+            for (name, args) in &calls {
+                parts.push(
+                    Part::FunctionCall {
+                        name: name.clone(),
+                        args: args.clone(),
+                    }
+                    .into(),
+                );
+            }
+
+            let response = GenerateContentResponse {
+                candidates: vec![Candidate {
+                    content: Content {
+                        role: Role::Model,
+                        parts,
+                    },
+                    citation_metadata: None,
+                    finish_reason: Some(reason.clone()),
+                    safety_ratings: None,
+                }],
+                response_id,
+                model_version,
+                usage_metadata: usage_metadata.clone(),
+            };
+
+            return Ok((reason, calls, usage_metadata, Some(response)));
         }
+
         unreachable!();
     }
 
@@ -619,7 +658,7 @@ impl GeminiModel {
         .await
         .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
-        let (finish_reason, tool_calls, usage) = self
+        let (finish_reason, tool_calls, usage, output) = self
             .process_stream(stream, &tx)
             .instrument(call_span.clone())
             .await?;
@@ -649,11 +688,7 @@ impl GeminiModel {
         .await
         .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
-        let response = serde_json::json!({
-            "finish_reason": finish_reason,
-            "tool_calls": tool_calls
-        });
-        call_span.record("output", response.to_string());
+        call_span.record("output", serde_json::to_string(&output)?);
         if !tool_calls.is_empty() {
             let mut call_messages = vec![];
             let mut tools = vec![];
