@@ -20,6 +20,7 @@ use crate::types::gateway::{CompletionModelUsage, PromptTokensDetails};
 use crate::types::message::{MessageType, PromptMessage};
 use crate::types::threads::{InnerMessage, Message};
 use crate::{create_model_span, GatewayResult};
+use clust::messages::MessagesResponseBody;
 use clust::messages::{
     Content, ContentBlock, ImageContentBlock, ImageContentSource, Message as ClustMessage,
     MessageChunk, MessagesRequestBody, MessagesRequestBuilder, StopReason, StreamError,
@@ -215,11 +216,43 @@ impl AnthropicModel {
         )
         .into()
     }
+
+    fn build_response(
+        &self,
+        id: String,
+        tool_call_states: &[ToolUse],
+        usage: Usage,
+        stream_content: String,
+        stop_reason: &StopReason,
+    ) -> MessagesResponseBody {
+        let content = if tool_call_states.is_empty() {
+            Content::SingleText(stream_content)
+        } else {
+            Content::MultipleBlocks(
+                tool_call_states
+                    .iter()
+                    .map(|t| ContentBlock::ToolUse(ToolUseContentBlock::new(t.clone())))
+                    .collect(),
+            )
+        };
+
+        MessagesResponseBody {
+            id,
+            content,
+            model: self.params.model.clone().expect("model is required").into(),
+            role: clust::messages::Role::Assistant,
+            stop_reason: Some(*stop_reason),
+            stop_sequence: None,
+            usage,
+            _type: clust::messages::MessageObjectType::Message,
+        }
+    }
+
     async fn process_stream(
         &self,
         stream: impl Stream<Item = Result<MessageChunk, StreamError>>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
-    ) -> GatewayResult<(StopReason, Vec<ToolUse>, Usage)> {
+    ) -> GatewayResult<(StopReason, Vec<ToolUse>, Usage, MessagesResponseBody)> {
         let mut tool_call_states: HashMap<u32, ToolUse> = HashMap::new();
         tokio::pin!(stream);
         let mut json_states: HashMap<u32, String> = HashMap::new();
@@ -231,7 +264,8 @@ impl AnthropicModel {
             cache_creation: None,
         };
         let mut first_response_received = false;
-
+        let mut stream_content = String::new();
+        let mut response_id = "".to_string();
         loop {
             let r = stream.next().await.transpose();
             if !first_response_received {
@@ -250,11 +284,12 @@ impl AnthropicModel {
                             tx.send(Some(ModelEvent::new(
                                 &tracing::Span::current(),
                                 ModelEventType::LlmContent(LLMContentEvent {
-                                    content: block.text,
+                                    content: block.text.clone(),
                                 }),
                             )))
                             .await
                             .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+                            stream_content.push_str(&block.text);
                         }
                         clust::messages::ContentBlockStart::ThinkingContentBlock(thinking) => {
                             tx.send(Some(ModelEvent::new(
@@ -276,21 +311,23 @@ impl AnthropicModel {
                             tx.send(Some(ModelEvent::new(
                                 &tracing::Span::current(),
                                 ModelEventType::LlmContent(LLMContentEvent {
-                                    content: delta.text,
+                                    content: delta.text.clone(),
                                 }),
                             )))
                             .await
                             .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+                            stream_content.push_str(&delta.text);
                         }
                         clust::messages::ContentBlockDelta::ThinkingDeltaContentBlock(delta) => {
                             tx.send(Some(ModelEvent::new(
                                 &tracing::Span::current(),
                                 ModelEventType::LlmContent(LLMContentEvent {
-                                    content: delta.thinking,
+                                    content: delta.thinking.clone(),
                                 }),
                             )))
                             .await
                             .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+                            stream_content.push_str(&delta.thinking);
                         }
                         clust::messages::ContentBlockDelta::SignatureDeltaContentBlock(_) => {}
                         clust::messages::ContentBlockDelta::InputJsonDeltaBlock(
@@ -305,6 +342,7 @@ impl AnthropicModel {
                         }
                     },
                     MessageChunk::MessageStart(start) => {
+                        response_id = start.message.id;
                         usage.input_tokens = start.message.usage.input_tokens;
                         usage.cache_read_input_tokens = start.message.usage.cache_read_input_tokens;
                         usage.cache_creation_input_tokens =
@@ -327,10 +365,18 @@ impl AnthropicModel {
                         usage.output_tokens = delta.usage.output_tokens;
 
                         if let Some(stop_reason) = delta.delta.stop_reason {
+                            let response = self.build_response(
+                                response_id.clone(),
+                                &tool_call_states.values().cloned().collect::<Vec<_>>(),
+                                usage,
+                                stream_content,
+                                &stop_reason,
+                            );
                             return Ok((
                                 stop_reason,
                                 tool_call_states.values().cloned().collect(),
                                 usage,
+                                response,
                             ));
                         }
                     }
@@ -797,11 +843,12 @@ impl AnthropicModel {
             .create_a_message_stream(request)
             .await
             .map_err(custom_err)?;
-        let (stop_reason, tool_calls, usage) = self
+        let (stop_reason, tool_calls, usage, response) = self
             .process_stream(stream, tx)
             .instrument(span.clone())
             .await?;
 
+        span.record("output", serde_json::to_string(&response)?);
         let trace_finish_reason = Self::map_finish_reason(&stop_reason);
         span.record(
             "raw_usage",
@@ -834,12 +881,6 @@ impl AnthropicModel {
         )))
         .await
         .map_err(|e| GatewayError::CustomError(e.to_string()))?;
-
-        let response = serde_json::json!({
-            "stop_reason": trace_finish_reason,
-            "tool_calls": tool_calls
-        });
-        span.record("output", response.to_string());
 
         match stop_reason {
             StopReason::EndTurn | StopReason::StopSequence => {
