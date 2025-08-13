@@ -697,11 +697,13 @@ impl BedrockModel {
         StopReason,
         Option<(ConversationRole, Vec<ToolUseBlock>)>,
         Option<TokenUsage>,
+        ConverseOutput,
     )> {
         let mut stream = stream.stream;
         let mut role = None;
         let mut tool_uses: HashMap<i32, ToolUseBlock> = HashMap::new();
         let mut usage: Option<TokenUsage> = None;
+        let mut accumulated_text = String::new();
         let mut first_response_received = false;
         while let Some(result) = stream.recv().await.transpose() {
             let output = result.map_err(|e| ModelError::Bedrock(Box::new(e.into())))?;
@@ -718,6 +720,8 @@ impl BedrockModel {
                 ConverseStreamOutput::ContentBlockDelta(a) => {
                     match a.delta {
                         Some(ContentBlockDelta::Text(t)) => {
+                            // Save streamed text content
+                            accumulated_text.push_str(&t);
                             tx.send(Some(ModelEvent::new(
                                 &Span::current(),
                                 ModelEventType::LlmContent(LLMContentEvent { content: t }),
@@ -774,10 +778,26 @@ impl BedrockModel {
                     if let Ok(Some(ConverseStreamOutput::Metadata(m))) = stream.recv().await {
                         usage = m.usage;
                     }
+                    // Build a ConverseOutput::Message assembled from accumulated content and tool uses
+                    let mut content_blocks: Vec<ContentBlock> = Vec::new();
+                    if !accumulated_text.is_empty() {
+                        content_blocks.push(ContentBlock::Text(accumulated_text.clone()));
+                    }
+                    let tool_use_blocks: Vec<ToolUseBlock> = tool_uses.clone().into_values().collect();
+                    for t in tool_use_blocks.iter().cloned() {
+                        content_blocks.push(ContentBlock::ToolUse(t));
+                    }
+                    let message = Message::builder()
+                        .role(role.clone().unwrap_or(ConversationRole::Assistant))
+                        .set_content(Some(content_blocks))
+                        .build()
+                        .map_err(build_err)?;
+                    let response = ConverseOutput::Message(message);
                     return Ok((
                         event.stop_reason,
                         role.map(|role| (role, tool_uses.into_values().collect())),
                         usage,
+                        response,
                     ));
                 }
                 ConverseStreamOutput::Metadata(m) => {
@@ -894,10 +914,12 @@ impl BedrockModel {
         .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
         let response = builder.send().await.map_err(map_converse_stream_error)?;
-        let (stop_reason, msg, usage) = self
+        let (stop_reason, msg, usage, response_message) = self
             .process_stream(response, tx)
             .instrument(span.clone())
             .await?;
+        
+        span.record("output", format!("{response_message:?}"));
         let trace_finish_reason = Self::map_finish_reason(&stop_reason);
         let usage = Self::map_usage(usage.as_ref());
         if let Some(usage) = &usage {
@@ -934,11 +956,6 @@ impl BedrockModel {
         .await
         .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
-        let response = serde_json::json!({
-            "stop_reason": format!("{stop_reason:?}"),
-            "msg": format!("{msg:?}")
-        });
-        span.record("output", response.to_string());
         match stop_reason {
             StopReason::ToolUse => {
                 let Some((role, tool_uses)) = msg else {
