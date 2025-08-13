@@ -783,7 +783,8 @@ impl BedrockModel {
                     if !accumulated_text.is_empty() {
                         content_blocks.push(ContentBlock::Text(accumulated_text.clone()));
                     }
-                    let tool_use_blocks: Vec<ToolUseBlock> = tool_uses.clone().into_values().collect();
+                    let tool_use_blocks: Vec<ToolUseBlock> =
+                        tool_uses.clone().into_values().collect();
                     for t in tool_use_blocks.iter().cloned() {
                         content_blocks.push(ContentBlock::ToolUse(t));
                     }
@@ -918,7 +919,7 @@ impl BedrockModel {
             .process_stream(response, tx)
             .instrument(span.clone())
             .await?;
-        
+
         span.record("output", format!("{response_message:?}"));
         let trace_finish_reason = Self::map_finish_reason(&stop_reason);
         let usage = Self::map_usage(usage.as_ref());
