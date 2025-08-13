@@ -276,6 +276,13 @@ pub struct ModelMetadata {
     pub benchmark_info: Option<serde_json::Value>,
     #[serde(default)]
     pub virtual_model_id: Option<String>,
+    pub min_service_level: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub release_date: Option<chrono::NaiveDate>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub license: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub knowledge_cutoff_date: Option<chrono::NaiveDate>,
 }
 
 impl Default for ModelMetadata {
@@ -304,6 +311,10 @@ impl Default for ModelMetadata {
             parameters: None,
             virtual_model_id: None,
             benchmark_info: None,
+            min_service_level: 0,
+            release_date: None,
+            license: None,
+            knowledge_cutoff_date: None,
         }
     }
 }
