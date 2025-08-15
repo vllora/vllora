@@ -89,6 +89,7 @@ impl Default for ClickhouseHttp {
             "default",
             None,
             None,
+            &[],
             None,
         )
     }
@@ -101,15 +102,26 @@ impl ClickhouseHttp {
         database: &str,
         host: Option<String>,
         protocol: Option<String>,
+        roles: &[String],
         ssh: Option<SshSettings>,
     ) -> Self {
+        let mut url = format!(
+            "{protocol}://{user_string}@{host}",
+            protocol = protocol.unwrap_or(get_protocol()),
+            user_string = get_user_string(user, password),
+            host = host.unwrap_or(get_url())
+        );
+
+        if !roles.is_empty() {
+            let mut roles_str = vec![];
+            for role in roles {
+                roles_str.push(format!("role={}", role));
+            }
+            url = format!("{url}?{}", roles_str.join("&"));
+        }
+
         Self {
-            url: format!(
-                "{protocol}://{user_string}@{host}",
-                protocol = protocol.unwrap_or(get_protocol()),
-                user_string = get_user_string(user, password),
-                host = host.unwrap_or(get_url())
-            ),
+            url,
             format: Default::default(),
             database: database.to_string(),
             ssh,
