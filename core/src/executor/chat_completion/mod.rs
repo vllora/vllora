@@ -231,6 +231,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
             Some(handle),
             input_vars,
             basic_cache_context,
+            Some(resolved_model_context.db_model.clone()),
         )
         .instrument(span)
         .await;
