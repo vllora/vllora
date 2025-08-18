@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::model::types::ModelEvent;
 use crate::model::types::{LLMFinishEvent, ToolStartEvent};
+use crate::types::engine::Model;
 use crate::types::gateway::ChatCompletionMessage;
 use crate::GatewayError;
 
@@ -44,6 +45,7 @@ pub async fn execute(
     handle: Option<FinishEventHandle>,
     input_vars: HashMap<String, serde_json::Value>,
     cache_context: BasicCacheContext,
+    model_metadata: Option<Model>,
 ) -> Result<ChatCompletionResponse, GatewayApiError> {
     let (inner_tx, mut rx) = tokio::sync::mpsc::channel::<Option<ModelEvent>>(100);
     tokio::spawn(async move {
@@ -105,7 +107,9 @@ pub async fn execute(
         id: Uuid::new_v4().to_string(),
         object: "chat.completion".to_string(),
         created: chrono::Utc::now().timestamp(),
-        model: request.model.clone(),
+        model: model_metadata.map_or(request.model.clone(), |m| {
+            format!("{}/{}", m.provider_name, m.name)
+        }),
         choices: vec![ChatCompletionChoice {
             index: 0,
             message: response.clone(),
