@@ -19,6 +19,7 @@ pub async fn handle_create_response(
     llm_model: &ModelMetadata,
     req: &HttpRequest,
 ) -> Result<Response, GatewayError> {
+    let mut responses_request = request.clone();
     let mut custom_endpoint = None;
     let providers_config = req.app_data::<ProvidersConfig>().cloned();
     let key = match get_key_credentials(
@@ -39,9 +40,11 @@ pub async fn handle_create_response(
 
     let client = OpenAIResponses::new(key.as_ref(), custom_endpoint.as_deref()).unwrap();
 
+    responses_request.model = llm_model.inference_provider.model_name.clone();
+    
     let (tx, _rx) = tokio::sync::mpsc::channel::<Option<ModelEvent>>(1000);
     let response = client
-        .invoke(request.clone(), Some(tx.clone()))
+        .invoke(responses_request, Some(tx.clone()))
         .await
         .unwrap();
 
