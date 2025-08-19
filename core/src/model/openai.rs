@@ -439,6 +439,9 @@ impl<C: Config> OpenAIModel<C> {
         let mut tool_call_states: HashMap<u32, ChatCompletionMessageToolCall> = HashMap::new();
         let mut first_chunk = None;
         let mut stream_content = String::new();
+        let mut finish_reason = None;
+        let mut usage = None;
+
         while let Some(result) = stream.next().await {
             match result {
                 Ok(mut response) => {
@@ -452,6 +455,7 @@ impl<C: Config> OpenAIModel<C> {
                         .map_err(|e| GatewayError::CustomError(e.to_string()))?;
                         first_chunk = Some(response.clone());
                     }
+
                     if response.choices.is_empty() {
                         // XAI bug workaround
                         if let Some(usage) = response.usage {
@@ -517,31 +521,11 @@ impl<C: Config> OpenAIModel<C> {
                     }
 
                     if let Some(reason) = &chat_choice.finish_reason {
-                        // Collect last chunk. Some providers sends usage with last chunk instead of separate chunk
-                        let mut usage = response.usage;
-                        if let Some(r) = stream.next().await {
-                            match r {
-                                Ok(response) => {
-                                    if let Some(u) = response.usage {
-                                        usage = Some(u);
-                                    }
-                                }
-                                Err(err) => {
-                                    tracing::error!("Usage fetch error: {err:#?}");
-                                }
-                            }
-                        }
+                        finish_reason = Some(*reason);
+                    }
 
-                        let tool_calls = tool_call_states.clone().into_values().collect::<Vec<_>>();
-                        let response = Self::build_response(
-                            first_chunk.as_ref(),
-                            &tool_calls,
-                            usage.clone(),
-                            stream_content,
-                            reason,
-                        );
-
-                        return Ok((*reason, tool_calls, usage, response));
+                    if response.usage.is_some() {
+                        usage = response.usage.clone();
                     }
                 }
                 Err(err) => {
@@ -550,7 +534,22 @@ impl<C: Config> OpenAIModel<C> {
                 }
             }
         }
-        unreachable!();
+
+        match finish_reason {
+            Some(finish_reason) => {
+                let tool_calls = tool_call_states.clone().into_values().collect::<Vec<_>>();
+                let response = Self::build_response(
+                    first_chunk.as_ref(),
+                    &tool_calls,
+                    usage.clone(),
+                    stream_content,
+                    &finish_reason,
+                );
+
+                Ok((finish_reason, tool_calls, usage, response))
+            }
+            _ => unreachable!(),
+        }
     }
 
     async fn execute_inner(
