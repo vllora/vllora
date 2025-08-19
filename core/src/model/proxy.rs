@@ -9,7 +9,7 @@ use crate::types::credentials::ApiKeyCredentials;
 use crate::types::engine::ExecutionOptions;
 use crate::types::engine::OpenAiModelParams;
 use crate::types::engine::Prompt;
-use crate::types::gateway::ChatCompletionMessage;
+use crate::types::gateway::ChatCompletionMessageWithFinishReason;
 use crate::types::threads::Message;
 use crate::GatewayResult;
 use async_openai::config::OpenAIConfig;
@@ -68,7 +68,7 @@ impl ModelInstance for OpenAISpecModel {
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<ChatCompletionMessage> {
+    ) -> GatewayResult<ChatCompletionMessageWithFinishReason> {
         let span = Span::current();
         self.openai_model
             .invoke(input_variables, tx, previous_messages, tags)

@@ -15,7 +15,8 @@ use crate::types::aws::{get_shared_config, get_user_shared_config};
 use crate::types::credentials::AwsCredentials;
 use crate::types::engine::{BedrockModelParams, ExecutionOptions, Prompt};
 use crate::types::gateway::{
-    ChatCompletionContent, ChatCompletionMessage, CompletionModelUsage, ToolCall,
+    ChatCompletionContent, ChatCompletionMessage, ChatCompletionMessageWithFinishReason,
+    CompletionModelUsage, ToolCall,
 };
 use crate::types::message::{MessageType, PromptMessage};
 use crate::types::provider::BedrockProvider;
@@ -59,7 +60,7 @@ macro_rules! target {
 }
 
 enum InnerExecutionResult {
-    Finish(ChatCompletionMessage),
+    Finish(ChatCompletionMessageWithFinishReason),
     NextCall(Vec<Message>),
 }
 
@@ -420,7 +421,7 @@ impl BedrockModel {
         system_messages: Vec<SystemContentBlock>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<ChatCompletionMessage> {
+    ) -> GatewayResult<ChatCompletionMessageWithFinishReason> {
         let mut calls = vec![input_messages];
 
         let mut retries_left = self
@@ -552,11 +553,11 @@ impl BedrockModel {
                     ))?;
                     match message {
                         ContentBlock::Text(content) => {
-                            Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
+                            Ok(InnerExecutionResult::Finish(ChatCompletionMessageWithFinishReason::new(ChatCompletionMessage {
                                 role: "assistant".to_string(),
                                 content: Some(ChatCompletionContent::Text(content.clone())),
                                 ..Default::default()
-                            }))
+                            }, ModelFinishReason::Stop)))
                         }
                         _ => {
                             Err(ModelError::FinishError(
@@ -655,12 +656,17 @@ impl BedrockModel {
                                 .await
                                 .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
-                                Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
-                                    role: "assistant".to_string(),
-                                    tool_calls: Some(tool_calls),
-                                    content: content.map(ChatCompletionContent::Text),
-                                    ..Default::default()
-                                }))
+                                Ok(InnerExecutionResult::Finish(
+                                    ChatCompletionMessageWithFinishReason::new(
+                                        ChatCompletionMessage {
+                                            role: "assistant".to_string(),
+                                            tool_calls: Some(tool_calls),
+                                            content: content.map(ChatCompletionContent::Text),
+                                            ..Default::default()
+                                        },
+                                        ModelFinishReason::ToolCalls,
+                                    ),
+                                ))
                             } else {
                                 let tools_message = Self::handle_tool_calls(
                                     tool_uses,
@@ -968,9 +974,14 @@ impl BedrockModel {
 
                 let tool = self.tools.get(&tool_calls[0].tool_name).unwrap();
                 if tool.stop_at_call() {
-                    return Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
-                        ..Default::default()
-                    }));
+                    return Ok(InnerExecutionResult::Finish(
+                        ChatCompletionMessageWithFinishReason::new(
+                            ChatCompletionMessage {
+                                ..Default::default()
+                            },
+                            ModelFinishReason::ToolCalls,
+                        ),
+                    ));
                 }
 
                 let mut conversational_messages = input_messages.clone();
@@ -995,11 +1006,14 @@ impl BedrockModel {
 
                 Ok(InnerExecutionResult::NextCall(conversational_messages))
             }
-            StopReason::EndTurn | StopReason::StopSequence => {
-                Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
-                    ..Default::default()
-                }))
-            }
+            StopReason::EndTurn | StopReason::StopSequence => Ok(InnerExecutionResult::Finish(
+                ChatCompletionMessageWithFinishReason::new(
+                    ChatCompletionMessage {
+                        ..Default::default()
+                    },
+                    ModelFinishReason::Stop,
+                ),
+            )),
             other => Err(Self::handle_stop_reason(other).into()),
         }
     }
@@ -1025,7 +1039,7 @@ impl ModelInstance for BedrockModel {
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         previous_messages: Vec<LMessage>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<ChatCompletionMessage> {
+    ) -> GatewayResult<ChatCompletionMessageWithFinishReason> {
         let (initial_messages, system_messages) =
             self.construct_messages(input_vars.clone(), previous_messages)?;
         self.execute(initial_messages.clone(), system_messages.clone(), &tx, tags)

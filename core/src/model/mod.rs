@@ -6,8 +6,8 @@ use crate::model::error::ModelError;
 use crate::types::engine::{CompletionEngineParams, CompletionModelParams};
 use crate::types::engine::{CompletionModelDefinition, ModelTools, ModelType};
 use crate::types::gateway::{
-    ChatCompletionContent, ChatCompletionMessage, ContentType, Extra, GuardOrName,
-    GuardWithParameters, Usage,
+    ChatCompletionContent, ChatCompletionMessage, ChatCompletionMessageWithFinishReason,
+    ContentType, Extra, GuardOrName, GuardWithParameters, Usage,
 };
 use crate::types::guardrails::service::GuardrailsEvaluator;
 use crate::types::guardrails::{GuardError, GuardResult, GuardStage};
@@ -58,7 +58,7 @@ pub trait ModelInstance: Sync + Send {
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<ChatCompletionMessage>;
+    ) -> GatewayResult<ChatCompletionMessageWithFinishReason>;
 
     async fn stream(
         &self,
@@ -368,7 +368,7 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
         outer_tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<ChatCompletionMessage> {
+    ) -> GatewayResult<ChatCompletionMessageWithFinishReason> {
         let credentials_ident = credentials_identifier(&self.definition.model_params);
         let traced_model: TraceModelDefinition = self.definition.clone().into();
         let model = traced_model.sanitize_json()?;
@@ -482,7 +482,7 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
                 .await;
             let _ = result
                 .as_ref()
-                .map(|r| match r.content.as_ref() {
+                .map(|r| match r.message().content.as_ref() {
                     Some(content) => match content {
                         ChatCompletionContent::Text(t) => t.to_string(),
                         ChatCompletionContent::Content(b) => b
@@ -501,7 +501,7 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
 
             if let Ok(message) = &result {
                 apply_guardrails(
-                    std::slice::from_ref(message),
+                    std::slice::from_ref(message.message()),
                     self.extra.as_ref(),
                     self.executor_context.evaluator_service.as_ref().as_ref(),
                     &self.executor_context,

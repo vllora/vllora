@@ -24,7 +24,8 @@ use crate::model::{async_trait, CredentialsIdent, DEFAULT_MAX_RETRIES};
 use crate::types::credentials::ApiKeyCredentials;
 use crate::types::engine::{ExecutionOptions, GeminiModelParams, Prompt};
 use crate::types::gateway::{
-    ChatCompletionContent, ChatCompletionMessage, CompletionModelUsage, ToolCall,
+    ChatCompletionContent, ChatCompletionMessage, ChatCompletionMessageWithFinishReason,
+    CompletionModelUsage, ToolCall,
 };
 use crate::types::message::{MessageType, PromptMessage};
 use crate::types::threads::{AudioFormat, InnerMessage, Message, MessageContentPartOptions};
@@ -73,7 +74,7 @@ pub fn gemini_client(credentials: Option<&ApiKeyCredentials>) -> Result<Client, 
 }
 
 enum InnerExecutionResult {
-    Finish(ChatCompletionMessage),
+    Finish(ChatCompletionMessageWithFinishReason),
     NextCall(Vec<Content>),
 }
 
@@ -453,32 +454,37 @@ impl GeminiModel {
                     .await
                     .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
-                    return Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
-                        role: "assistant".to_string(),
-                        content: if text.is_empty() {
-                            None
-                        } else {
-                            Some(ChatCompletionContent::Text(text.clone()))
-                        },
-                        tool_calls: Some(
-                            calls
-                                .iter()
-                                .enumerate()
-                                .map(|(index, (tool_name, params))| {
-                                    Ok(ToolCall {
-                                        index: Some(index),
-                                        id: tool_name.clone(),
-                                        r#type: "function".to_string(),
-                                        function: crate::types::gateway::FunctionCall {
-                                            name: tool_name.clone(),
-                                            arguments: serde_json::to_string(params)?,
-                                        },
-                                    })
-                                })
-                                .collect::<Result<Vec<ToolCall>, GatewayError>>()?,
+                    return Ok(InnerExecutionResult::Finish(
+                        ChatCompletionMessageWithFinishReason::new(
+                            ChatCompletionMessage {
+                                role: "assistant".to_string(),
+                                content: if text.is_empty() {
+                                    None
+                                } else {
+                                    Some(ChatCompletionContent::Text(text.clone()))
+                                },
+                                tool_calls: Some(
+                                    calls
+                                        .iter()
+                                        .enumerate()
+                                        .map(|(index, (tool_name, params))| {
+                                            Ok(ToolCall {
+                                                index: Some(index),
+                                                id: tool_name.clone(),
+                                                r#type: "function".to_string(),
+                                                function: crate::types::gateway::FunctionCall {
+                                                    name: tool_name.clone(),
+                                                    arguments: serde_json::to_string(params)?,
+                                                },
+                                            })
+                                        })
+                                        .collect::<Result<Vec<ToolCall>, GatewayError>>()?,
+                                ),
+                                ..Default::default()
+                            },
+                            ModelFinishReason::ToolCalls,
                         ),
-                        ..Default::default()
-                    }));
+                    ));
                 }
             }
             tools_span.follows_from(span.id());
@@ -528,11 +534,16 @@ impl GeminiModel {
                 .await
                 .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
-                Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
-                    role: "assistant".to_string(),
-                    content: Some(ChatCompletionContent::Text(text)),
-                    ..Default::default()
-                }))
+                Ok(InnerExecutionResult::Finish(
+                    ChatCompletionMessageWithFinishReason::new(
+                        ChatCompletionMessage {
+                            role: "assistant".to_string(),
+                            content: Some(ChatCompletionContent::Text(text)),
+                            ..Default::default()
+                        },
+                        ModelFinishReason::Stop,
+                    ),
+                ))
             }
             _ => {
                 let err = Self::handle_finish_reason(finish_reason);
@@ -547,7 +558,7 @@ impl GeminiModel {
         input_messages: Vec<Content>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<ChatCompletionMessage> {
+    ) -> GatewayResult<ChatCompletionMessageWithFinishReason> {
         let mut gemini_calls = vec![input_messages];
         let mut retries_left = self
             .execution_options
@@ -723,9 +734,14 @@ impl GeminiModel {
             let tool = self.tools.get(&tool_calls[0].0);
             if let Some(tool) = tool {
                 if tool.stop_at_call() {
-                    return Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
-                        ..Default::default()
-                    }));
+                    return Ok(InnerExecutionResult::Finish(
+                        ChatCompletionMessageWithFinishReason::new(
+                            ChatCompletionMessage {
+                                ..Default::default()
+                            },
+                            ModelFinishReason::ToolCalls,
+                        ),
+                    ));
                 }
             }
 
@@ -745,9 +761,14 @@ impl GeminiModel {
         }
 
         match finish_reason {
-            FinishReason::Stop => Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
-                ..Default::default()
-            })),
+            FinishReason::Stop => Ok(InnerExecutionResult::Finish(
+                ChatCompletionMessageWithFinishReason::new(
+                    ChatCompletionMessage {
+                        ..Default::default()
+                    },
+                    ModelFinishReason::Stop,
+                ),
+            )),
             other => Err(Self::handle_finish_reason(Some(other))),
         }
     }
@@ -888,7 +909,7 @@ impl ModelInstance for GeminiModel {
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<ChatCompletionMessage> {
+    ) -> GatewayResult<ChatCompletionMessageWithFinishReason> {
         let conversational_messages =
             self.construct_messages(input_variables, previous_messages)?;
         self.execute(conversational_messages, &tx, tags).await

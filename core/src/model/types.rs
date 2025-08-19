@@ -121,7 +121,7 @@ pub struct ModelToolCall {
     pub tool_name: String,
     pub input: String,
 }
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ModelFinishReason {
     Stop,

@@ -124,7 +124,7 @@ impl Evaluator for LlmJudgeEvaluator {
             match result {
                 Ok(response) => {
                     // Extract the response content
-                    let content = extract_text_content(&response)?;
+                    let content = extract_text_content(response.message())?;
 
                     // Try to parse as JSON
                     match serde_json::from_str::<Value>(&content) {

@@ -1,8 +1,8 @@
 use crate::error::GatewayError;
 use crate::events::{JsonValue, SPAN_CACHE};
-use crate::model::types::{ModelEvent, ModelEventType};
+use crate::model::types::{ModelEvent, ModelEventType, ModelFinishReason};
 use crate::model::ModelInstance;
-use crate::types::gateway::ChatCompletionMessage;
+use crate::types::gateway::{ChatCompletionMessage, ChatCompletionMessageWithFinishReason};
 use crate::types::threads::Message;
 use crate::{create_model_span, GatewayResult};
 use async_trait::async_trait;
@@ -60,7 +60,7 @@ impl CachedModel {
     async fn invoke_inner(
         &self,
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
-    ) -> GatewayResult<ChatCompletionMessage> {
+    ) -> GatewayResult<ChatCompletionMessageWithFinishReason> {
         for event in &self.events {
             if let ModelEventType::LlmStop(e) = &event.event {
                 let mut u = e.usage.clone();
@@ -81,7 +81,10 @@ impl CachedModel {
         tx.send(None).await?;
 
         if let Some(response) = &self.response {
-            return Ok(response.clone());
+            return Ok(ChatCompletionMessageWithFinishReason::new(
+                response.clone(),
+                ModelFinishReason::Stop,
+            ));
         }
 
         Err(GatewayError::CustomError(
@@ -110,7 +113,7 @@ impl ModelInstance for CachedModel {
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         _previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<ChatCompletionMessage> {
+    ) -> GatewayResult<ChatCompletionMessageWithFinishReason> {
         let span = create_model_span!(SPAN_CACHE, target!("chat"), &tags, 0, cache_state = "HIT");
 
         self.invoke_inner(tx).instrument(span).await
