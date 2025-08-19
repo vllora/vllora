@@ -64,18 +64,18 @@ pub async fn execute(
         .map_err(|e| record_map_err(e, span.clone()))?;
 
     if let Some(response_sender) = cache_context.response_sender {
-        response_sender.send(response.clone()).unwrap();
+        response_sender.send(response.message().clone()).unwrap();
     }
 
-    let finish_reason = match (&response.tool_calls, &response.content) {
+    let finish_reason = match (&response.message().tool_calls, &response.message().content) {
         (Some(_), _) => {
-            let calls = serde_json::to_string(&response.tool_calls).unwrap();
+            let calls = serde_json::to_string(&response.message().tool_calls).unwrap();
             span.record("response", calls);
             Ok("tool_calls".to_string())
         }
         (None, Some(c)) => {
             span.record("response", c.as_string());
-            Ok("stop".to_string())
+            Ok(response.finish_reason().to_string())
         }
         _ => Err(GatewayApiError::GatewayError(GatewayError::CustomError(
             "No content in response".to_string(),
@@ -112,7 +112,7 @@ pub async fn execute(
         }),
         choices: vec![ChatCompletionChoice {
             index: 0,
-            message: response.clone(),
+            message: response.message().clone(),
             finish_reason: Some(finish_reason.clone()),
         }],
         usage,

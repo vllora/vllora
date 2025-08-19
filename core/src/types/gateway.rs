@@ -1,4 +1,5 @@
 use crate::model::tools::Tool;
+use crate::model::types::ModelFinishReason;
 use crate::types::cache::ResponseCacheOptions;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -353,6 +354,29 @@ pub struct ChatCompletionMessage {
     pub tool_call_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cache_control: Option<CacheControl>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ChatCompletionMessageWithFinishReason {
+    message: ChatCompletionMessage,
+    finish_reason: ModelFinishReason,
+}
+
+impl ChatCompletionMessageWithFinishReason {
+    pub fn new(message: ChatCompletionMessage, finish_reason: ModelFinishReason) -> Self {
+        Self {
+            message,
+            finish_reason,
+        }
+    }
+
+    pub fn finish_reason(&self) -> &ModelFinishReason {
+        &self.finish_reason
+    }
+
+    pub fn message(&self) -> &ChatCompletionMessage {
+        &self.message
+    }
 }
 
 impl ChatCompletionMessage {

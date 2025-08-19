@@ -15,7 +15,9 @@ use crate::model::types::LLMFirstToken;
 use crate::model::{async_trait, DEFAULT_MAX_RETRIES};
 use crate::types::credentials::ApiKeyCredentials;
 use crate::types::engine::{AnthropicModelParams, ExecutionOptions, Prompt};
-use crate::types::gateway::{ChatCompletionContent, ChatCompletionMessage, ToolCall};
+use crate::types::gateway::{
+    ChatCompletionContent, ChatCompletionMessage, ChatCompletionMessageWithFinishReason, ToolCall,
+};
 use crate::types::gateway::{CompletionModelUsage, PromptTokensDetails};
 use crate::types::message::{MessageType, PromptMessage};
 use crate::types::threads::{InnerMessage, Message};
@@ -49,7 +51,7 @@ macro_rules! target {
 }
 
 enum InnerExecutionResult {
-    Finish(ChatCompletionMessage),
+    Finish(ChatCompletionMessageWithFinishReason),
     NextCall((Option<SystemPrompt>, Vec<ClustMessage>)),
 }
 
@@ -493,11 +495,16 @@ impl AnthropicModel {
                         .await
                         .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
-                        Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
-                            content: Some(ChatCompletionContent::Text(content.to_owned())),
-                            role: "assistant".to_string(),
-                            ..Default::default()
-                        }))
+                        Ok(InnerExecutionResult::Finish(
+                            ChatCompletionMessageWithFinishReason::new(
+                                ChatCompletionMessage {
+                                    content: Some(ChatCompletionContent::Text(content.to_owned())),
+                                    role: "assistant".to_string(),
+                                    ..Default::default()
+                                },
+                                ModelFinishReason::Stop,
+                            ),
+                        ))
                     }
                     Content::MultipleBlocks(blocks) => {
                         let mut final_text = String::new();
@@ -539,11 +546,16 @@ impl AnthropicModel {
                         .await
                         .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
-                        Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
-                            content: Some(ChatCompletionContent::Text(final_text)),
-                            role: "assistant".to_string(),
-                            ..Default::default()
-                        }))
+                        Ok(InnerExecutionResult::Finish(
+                            ChatCompletionMessageWithFinishReason::new(
+                                ChatCompletionMessage {
+                                    content: Some(ChatCompletionContent::Text(final_text)),
+                                    role: "assistant".to_string(),
+                                    ..Default::default()
+                                },
+                                ModelFinishReason::Stop,
+                            ),
+                        ))
                     }
                 }
             }
@@ -622,28 +634,35 @@ impl AnthropicModel {
                     .await
                     .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
-                    Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
-                        role: "assistant".to_string(),
-                        content: text_content.map(ChatCompletionContent::Text),
-                        tool_calls: Some(
-                            tool_runs
-                                .iter()
-                                .enumerate()
-                                .map(|(index, tool_call)| {
-                                    Ok(ToolCall {
-                                        index: Some(index),
-                                        id: tool_call.id.clone(),
-                                        r#type: "function".to_string(),
-                                        function: crate::types::gateway::FunctionCall {
-                                            name: tool_call.name.clone(),
-                                            arguments: serde_json::to_string(&tool_call.input)?,
-                                        },
-                                    })
-                                })
-                                .collect::<Result<Vec<ToolCall>, GatewayError>>()?,
+                    Ok(InnerExecutionResult::Finish(
+                        ChatCompletionMessageWithFinishReason::new(
+                            ChatCompletionMessage {
+                                role: "assistant".to_string(),
+                                content: text_content.map(ChatCompletionContent::Text),
+                                tool_calls: Some(
+                                    tool_runs
+                                        .iter()
+                                        .enumerate()
+                                        .map(|(index, tool_call)| {
+                                            Ok(ToolCall {
+                                                index: Some(index),
+                                                id: tool_call.id.clone(),
+                                                r#type: "function".to_string(),
+                                                function: crate::types::gateway::FunctionCall {
+                                                    name: tool_call.name.clone(),
+                                                    arguments: serde_json::to_string(
+                                                        &tool_call.input,
+                                                    )?,
+                                                },
+                                            })
+                                        })
+                                        .collect::<Result<Vec<ToolCall>, GatewayError>>()?,
+                                ),
+                                ..Default::default()
+                            },
+                            ModelFinishReason::ToolCalls,
                         ),
-                        ..Default::default()
-                    }))
+                    ))
                 } else {
                     let result_tool_calls =
                         Self::handle_tool_calls(tool_runs.iter(), &self.tools, tx, tags.clone())
@@ -667,7 +686,7 @@ impl AnthropicModel {
         input_messages: Vec<ClustMessage>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<ChatCompletionMessage> {
+    ) -> GatewayResult<ChatCompletionMessageWithFinishReason> {
         let mut calls = vec![(system_message, input_messages)];
         let mut retries_left = self
             .execution_options
@@ -883,11 +902,14 @@ impl AnthropicModel {
         .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
         match stop_reason {
-            StopReason::EndTurn | StopReason::StopSequence => {
-                Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
-                    ..Default::default()
-                }))
-            }
+            StopReason::EndTurn | StopReason::StopSequence => Ok(InnerExecutionResult::Finish(
+                ChatCompletionMessageWithFinishReason::new(
+                    ChatCompletionMessage {
+                        ..Default::default()
+                    },
+                    ModelFinishReason::Stop,
+                ),
+            )),
             StopReason::MaxTokens => Err(Self::handle_max_tokens_error()),
             StopReason::ToolUse => {
                 let tool_calls_str = serde_json::to_string(&tool_calls)?;
@@ -906,9 +928,14 @@ impl AnthropicModel {
                     .await
                     .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
-                    Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
-                        ..Default::default()
-                    }))
+                    Ok(InnerExecutionResult::Finish(
+                        ChatCompletionMessageWithFinishReason::new(
+                            ChatCompletionMessage {
+                                ..Default::default()
+                            },
+                            ModelFinishReason::ToolCalls,
+                        ),
+                    ))
                 } else {
                     let mut messages = vec![ClustMessage::assistant(Content::MultipleBlocks(
                         tool_calls
@@ -1000,7 +1027,7 @@ impl ModelInstance for AnthropicModel {
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<ChatCompletionMessage> {
+    ) -> GatewayResult<ChatCompletionMessageWithFinishReason> {
         let (system_prompt, conversational_messages) =
             self.construct_messages(input_variables, previous_messages)?;
         self.execute(system_prompt, conversational_messages, &tx, tags)

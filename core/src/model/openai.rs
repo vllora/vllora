@@ -14,8 +14,8 @@ use crate::model::types::LLMFirstToken;
 use crate::model::{async_trait, DEFAULT_MAX_RETRIES};
 use crate::types::credentials::ApiKeyCredentials;
 use crate::types::engine::{ExecutionOptions, OpenAiModelParams, Prompt};
-use crate::types::gateway::CompletionModelUsage;
 use crate::types::gateway::{ChatCompletionContent, ChatCompletionMessage, ToolCall};
+use crate::types::gateway::{ChatCompletionMessageWithFinishReason, CompletionModelUsage};
 use crate::types::message::{MessageType, PromptMessage};
 use crate::types::threads::{InnerMessage, Message};
 use crate::{create_model_span, GatewayResult};
@@ -58,7 +58,7 @@ macro_rules! target {
 }
 
 enum InnerExecutionResult {
-    Finish(ChatCompletionMessage),
+    Finish(ChatCompletionMessageWithFinishReason),
     NextCall(Vec<ChatCompletionRequestMessage>),
 }
 
@@ -363,6 +363,12 @@ impl<C: Config> OpenAIModel<C> {
             builder.prompt_cache_key(prompt_cache_key.clone());
         }
 
+        if stream {
+            builder.stream_options(ChatCompletionStreamOptions {
+                include_usage: true,
+            });
+        }
+
         builder
             .model(model_params.model.as_ref().unwrap())
             .messages(messages)
@@ -371,12 +377,6 @@ impl<C: Config> OpenAIModel<C> {
             builder
                 .tools(chat_completion_tools)
                 .tool_choice(ChatCompletionToolChoiceOption::Auto);
-        }
-
-        if stream {
-            builder.stream_options(ChatCompletionStreamOptions {
-                include_usage: true,
-            });
         }
 
         Ok(builder.build().map_err(custom_err)?)
@@ -519,9 +519,16 @@ impl<C: Config> OpenAIModel<C> {
                     if let Some(reason) = &chat_choice.finish_reason {
                         // Collect last chunk. Some providers sends usage with last chunk instead of separate chunk
                         let mut usage = response.usage;
-                        if let Some(Ok(response)) = stream.next().await {
-                            if let Some(u) = response.usage {
-                                usage = Some(u);
+                        if let Some(r) = stream.next().await {
+                            match r {
+                                Ok(response) => {
+                                    if let Some(u) = response.usage {
+                                        usage = Some(u);
+                                    }
+                                }
+                                Err(err) => {
+                                    tracing::error!("Usage fetch error: {err:#?}");
+                                }
                             }
                         }
 
@@ -644,7 +651,7 @@ impl<C: Config> OpenAIModel<C> {
                             model_name: self.params.model.clone().unwrap_or_default(),
                             output: content.clone(),
                             usage: Self::map_usage(response.usage.as_ref()),
-                            finish_reason,
+                            finish_reason: finish_reason.clone(),
                             tool_calls: tool_calls.iter().map(Self::map_tool_call).collect(),
                             credentials_ident: self.credentials_ident.clone(),
                         }),
@@ -652,28 +659,35 @@ impl<C: Config> OpenAIModel<C> {
                     .await
                     .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
-                    Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
-                        role: "assistant".to_string(),
-                        content: content.map(ChatCompletionContent::Text),
-                        tool_calls: Some(
-                            tool_calls
-                                .iter()
-                                .enumerate()
-                                .map(|(index, tool_call)| ToolCall {
-                                    index: Some(index),
-                                    id: tool_call.id.clone(),
-                                    r#type: match tool_call.r#type {
-                                        ChatCompletionToolType::Function => "function".to_string(),
-                                    },
-                                    function: crate::types::gateway::FunctionCall {
-                                        name: tool_call.function.name.clone(),
-                                        arguments: tool_call.function.arguments.clone(),
-                                    },
-                                })
-                                .collect(),
+                    Ok(InnerExecutionResult::Finish(
+                        ChatCompletionMessageWithFinishReason::new(
+                            ChatCompletionMessage {
+                                role: "assistant".to_string(),
+                                content: content.map(ChatCompletionContent::Text),
+                                tool_calls: Some(
+                                    tool_calls
+                                        .iter()
+                                        .enumerate()
+                                        .map(|(index, tool_call)| ToolCall {
+                                            index: Some(index),
+                                            id: tool_call.id.clone(),
+                                            r#type: match tool_call.r#type {
+                                                ChatCompletionToolType::Function => {
+                                                    "function".to_string()
+                                                }
+                                            },
+                                            function: crate::types::gateway::FunctionCall {
+                                                name: tool_call.function.name.clone(),
+                                                arguments: tool_call.function.arguments.clone(),
+                                            },
+                                        })
+                                        .collect(),
+                                ),
+                                ..Default::default()
+                            },
+                            finish_reason,
                         ),
-                        ..Default::default()
-                    }))
+                    ))
                 } else {
                     let mut messages: Vec<ChatCompletionRequestMessage> =
                         vec![ChatCompletionRequestMessage::Assistant(
@@ -698,7 +712,7 @@ impl<C: Config> OpenAIModel<C> {
                 }
             }
 
-            Some(&FinishReason::Stop) => {
+            Some(&FinishReason::Stop) | Some(&FinishReason::Length) => {
                 let finish_reason = Self::map_finish_reason(
                     &finish_reason.expect("Finish reason is already checked"),
                 );
@@ -711,7 +725,7 @@ impl<C: Config> OpenAIModel<C> {
                             model_name: self.params.model.clone().unwrap_or_default(),
                             output: Some(content.clone()),
                             usage: Self::map_usage(response.usage.as_ref()),
-                            finish_reason,
+                            finish_reason: finish_reason.clone(),
                             tool_calls: vec![],
                             credentials_ident: self.credentials_ident.clone(),
                         }),
@@ -719,11 +733,16 @@ impl<C: Config> OpenAIModel<C> {
                     .await
                     .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
-                    Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
-                        role: "assistant".to_string(),
-                        content: Some(ChatCompletionContent::Text(content.to_string())),
-                        ..Default::default()
-                    }))
+                    Ok(InnerExecutionResult::Finish(
+                        ChatCompletionMessageWithFinishReason::new(
+                            ChatCompletionMessage {
+                                role: "assistant".to_string(),
+                                content: Some(ChatCompletionContent::Text(content.to_string())),
+                                ..Default::default()
+                            },
+                            finish_reason,
+                        ),
+                    ))
                 } else {
                     Err(custom_err("no finish reason").into())
                 }
@@ -741,7 +760,7 @@ impl<C: Config> OpenAIModel<C> {
         input_messages: Vec<ChatCompletionRequestMessage>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<ChatCompletionMessage> {
+    ) -> GatewayResult<ChatCompletionMessageWithFinishReason> {
         let mut openai_calls = vec![input_messages];
         let mut retries_left = self
             .execution_options
@@ -781,10 +800,6 @@ impl<C: Config> OpenAIModel<C> {
 
     fn handle_finish_reason(finish_reason: Option<FinishReason>) -> GatewayError {
         match finish_reason {
-            Some(FinishReason::Length) => ModelError::FinishError(
-                "the maximum number of tokens specified in the request was reached".to_string(),
-            )
-            .into(),
             Some(FinishReason::ContentFilter) => {
                 ModelError::FinishError("Content filter blocked the completion".to_string()).into()
             }
@@ -886,9 +901,14 @@ impl<C: Config> OpenAIModel<C> {
         }
 
         match finish_reason {
-            FinishReason::Stop => Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
-                ..Default::default()
-            })),
+            FinishReason::Stop | FinishReason::Length => Ok(InnerExecutionResult::Finish(
+                ChatCompletionMessageWithFinishReason::new(
+                    ChatCompletionMessage {
+                        ..Default::default()
+                    },
+                    Self::map_finish_reason(&finish_reason),
+                ),
+            )),
             FinishReason::ToolCalls => {
                 let tool = self
                     .tools
@@ -907,9 +927,14 @@ impl<C: Config> OpenAIModel<C> {
                 tools_span.follows_from(span.id());
 
                 if tool.stop_at_call() {
-                    Ok(InnerExecutionResult::Finish(ChatCompletionMessage {
-                        ..Default::default()
-                    }))
+                    Ok(InnerExecutionResult::Finish(
+                        ChatCompletionMessageWithFinishReason::new(
+                            ChatCompletionMessage {
+                                ..Default::default()
+                            },
+                            Self::map_finish_reason(&finish_reason),
+                        ),
+                    ))
                 } else {
                     let mut messages: Vec<ChatCompletionRequestMessage> =
                         vec![ChatCompletionRequestMessage::Assistant(
@@ -1064,7 +1089,7 @@ impl<C: Config + std::marker::Sync + std::marker::Send> ModelInstance for OpenAI
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<ChatCompletionMessage> {
+    ) -> GatewayResult<ChatCompletionMessageWithFinishReason> {
         let conversational_messages =
             self.construct_messages(input_variables, previous_messages.clone())?;
         self.execute(conversational_messages, &tx, tags).await

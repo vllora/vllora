@@ -41,7 +41,7 @@ pub async fn handle_create_response(
     let client = OpenAIResponses::new(key.as_ref(), custom_endpoint.as_deref()).unwrap();
 
     responses_request.model = llm_model.inference_provider.model_name.clone();
-    
+
     let (tx, _rx) = tokio::sync::mpsc::channel::<Option<ModelEvent>>(1000);
     let response = client
         .invoke(responses_request, Some(tx.clone()))
