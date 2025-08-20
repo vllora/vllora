@@ -729,6 +729,12 @@ pub trait ModelMetadataFactory: Send + Sync {
         &self,
         model_names: &[String],
     ) -> Result<ModelMetadata, GatewayApiError>;
+
+    async fn get_top_by_ranking(
+        &self,
+        ranking_name: &str,
+        top: u8
+    ) -> Result<Vec<ModelMetadata>, GatewayApiError>;
 }
 
 pub struct DefaultModelMetadataFactory {
@@ -766,6 +772,14 @@ impl ModelMetadataFactory for DefaultModelMetadataFactory {
             .collect::<Vec<ModelMetadata>>();
 
         get_cheapest_model_metadata(&models)
+    }
+
+    async fn get_top_by_ranking(
+        &self,
+        _ranking_name: &str,
+        _top: u8
+    ) -> Result<Vec<ModelMetadata>, GatewayApiError> {
+        unimplemented!()
     }
 }
 
