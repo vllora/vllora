@@ -221,7 +221,6 @@ impl GeminiModel {
         let mut model_version = String::new();
         let mut response_id = String::new();
         while let Some(res) = stream.next().await {
-            tracing::error!("res: {:#?}", res);
             match res {
                 Ok(res) => {
                     if let Some(res) = res {
