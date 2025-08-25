@@ -8,9 +8,11 @@ use crate::events::{self, JsonValue, RecordResult, SPAN_BEDROCK};
 use crate::model::error::BedrockError;
 use crate::model::handler::handle_tool_call;
 use crate::model::types::LLMFirstToken;
-use crate::model::Tool as LangdbTool;
 use crate::model::DEFAULT_MAX_RETRIES;
-use crate::models::BedrockMetaCompletionModel;
+use crate::model::{ModelProviderInstance, Tool as LangdbTool};
+use crate::models::{
+    InferenceProvider, Limits, ModelCapability, ModelIOFormats, ModelMetadata, ModelType,
+};
 use crate::types::aws::{get_shared_config, get_user_shared_config};
 use crate::types::credentials::AwsCredentials;
 use crate::types::engine::{BedrockModelParams, ExecutionOptions, Prompt};
@@ -19,11 +21,13 @@ use crate::types::gateway::{
     CompletionModelUsage, ToolCall,
 };
 use crate::types::message::{MessageType, PromptMessage};
-use crate::types::provider::BedrockProvider;
+use crate::types::provider::{CompletionModelPrice, InferenceModelProvider, ModelPrice};
 use crate::types::threads::InnerMessage;
 use crate::types::threads::Message as LMessage;
-use crate::{create_model_span, GatewayResult};
+use crate::{create_model_span, GatewayApiError, GatewayResult};
 use async_trait::async_trait;
+use aws_sdk_bedrock::types::ModelModality;
+use aws_sdk_bedrock::Client as BedrockClient;
 use aws_sdk_bedrockruntime::operation::converse::builders::ConverseFluentBuilder;
 use aws_sdk_bedrockruntime::operation::converse_stream::builders::ConverseStreamFluentBuilder;
 use aws_sdk_bedrockruntime::operation::converse_stream::{self, ConverseStreamError};
@@ -86,6 +90,7 @@ pub struct BedrockToolCall {
 }
 
 pub async fn bedrock_client(credentials: Option<&AwsCredentials>) -> Result<Client, ModelError> {
+    tracing::warn!("Bedrock client credentials: {:?}", credentials);
     let config = match credentials {
         Some(creds) => get_user_shared_config(creds.clone()).await.load().await,
         None => {
@@ -101,45 +106,16 @@ pub async fn bedrock_client(credentials: Option<&AwsCredentials>) -> Result<Clie
 }
 
 impl BedrockModel {
-    fn get_model_region(model_id: &str) -> Option<String> {
-        let us_models = [
-            BedrockMetaCompletionModel::Llama318BInstruct.to_string(),
-            BedrockMetaCompletionModel::Llama3170BInstruct.to_string(),
-            BedrockMetaCompletionModel::Llama321BInstruct.to_string(),
-            BedrockMetaCompletionModel::Llama323BInstruct.to_string(),
-            BedrockMetaCompletionModel::Llama3211BInstruct.to_string(),
-            BedrockMetaCompletionModel::Llama3370BInstruct.to_string(),
-        ];
-
-        if us_models.contains(&model_id.to_string()) {
-            Some("us".to_string())
-        } else {
-            None
-        }
-    }
-
     pub async fn new(
         model_params: BedrockModelParams,
         execution_options: ExecutionOptions,
         credentials: Option<&AwsCredentials>,
         prompt: Prompt,
         tools: HashMap<String, Box<dyn LangdbTool>>,
-        provider: BedrockProvider,
     ) -> Result<Self, ModelError> {
         let client = bedrock_client(credentials).await?;
 
         let model_id = model_params.model_id.clone().unwrap_or_default();
-        let model_name = match credentials {
-            Some(_) => model_id,
-            None => {
-                let provider_name = provider.to_string();
-                let model_id = replace_version(&model_id);
-                match Self::get_model_region(&model_id) {
-                    Some(region) => format!("{region}.{provider_name}.{model_id}"),
-                    None => format!("{provider_name}.{model_id}"),
-                }
-            }
-        };
 
         Ok(Self {
             client,
@@ -147,7 +123,7 @@ impl BedrockModel {
             prompt,
             params: model_params,
             tools: Arc::new(tools),
-            model_name,
+            model_name: model_id,
             credentials_ident: credentials
                 .map(|_c| CredentialsIdent::Own)
                 .unwrap_or(CredentialsIdent::Langdb),
@@ -478,7 +454,7 @@ impl BedrockModel {
             &span,
             ModelEventType::LlmStart(LLMStartEvent {
                 provider_name: SPAN_BEDROCK.to_string(),
-                model_name: self.params.model_id.clone().unwrap_or_default(),
+                model_name: self.model_name.clone(),
                 input: format!("{input_messages:?}"),
             }),
         )))
@@ -871,7 +847,7 @@ impl BedrockModel {
             let builder = self
                 .client
                 .converse_stream()
-                .model_id(replace_version(&self.model_name))
+                .model_id(&self.model_name)
                 .set_system(Some(system_messages.clone()))
                 .set_tool_config(self.get_tools_config()?)
                 .set_messages(Some(input_messages.clone()));
@@ -1107,6 +1083,131 @@ fn construct_human_message(m: &InnerMessage) -> Result<Message, ModelError> {
         .build()
         .map_err(build_err)?;
     Ok(message)
+}
+
+pub struct BedrockModelProvider {
+    client: BedrockClient,
+}
+
+impl BedrockModelProvider {
+    pub async fn new(credentials: AwsCredentials) -> Self {
+        let config = get_user_shared_config(credentials).await.load().await;
+        let client = BedrockClient::new(&config);
+
+        Self { client }
+    }
+}
+
+#[async_trait]
+impl ModelProviderInstance for BedrockModelProvider {
+    async fn get_private_models(&self) -> Result<Vec<ModelMetadata>, GatewayApiError> {
+        // List foundation models
+        let response = self
+            .client
+            .list_foundation_models()
+            .by_output_modality(ModelModality::Text)
+            .send()
+            .await
+            .map_err(|e| {
+                GatewayApiError::ModelError(Box::new(ModelError::CustomError(format!(
+                    "Failed to list Bedrock models: {}",
+                    e
+                ))))
+            })?;
+
+        let mut models = Vec::new();
+
+        if let Some(model_summaries) = response.model_summaries {
+            for model_summary in model_summaries {
+                // Extract model information
+                let model_id = model_summary.model_id.clone();
+                let model_arn = model_summary.model_arn.clone();
+                let provider_name = model_summary.provider_name.clone().unwrap_or_default();
+                let model_name = model_summary.model_name.clone().unwrap_or_default();
+
+                // Determine capabilities based on modalities
+                let mut capabilities = Vec::new();
+
+                // Check if model supports tools/functions based on known models
+                if model_id.contains("claude") || model_id.contains("mistral") {
+                    capabilities.push(ModelCapability::Tools);
+                }
+
+                // Determine input/output formats from modalities
+                let input_formats = if let Some(input_modalities) = model_summary.input_modalities {
+                    input_modalities
+                        .iter()
+                        .filter_map(|m| match m.as_str() {
+                            "TEXT" => Some(ModelIOFormats::Text),
+                            "IMAGE" => Some(ModelIOFormats::Image),
+                            _ => None,
+                        })
+                        .collect()
+                } else {
+                    vec![ModelIOFormats::Text]
+                };
+
+                let output_formats =
+                    if let Some(output_modalities) = model_summary.output_modalities {
+                        output_modalities
+                            .iter()
+                            .filter_map(|m| match m.as_str() {
+                                "TEXT" => Some(ModelIOFormats::Text),
+                                "IMAGE" => Some(ModelIOFormats::Image),
+                                _ => None,
+                            })
+                            .collect()
+                    } else {
+                        vec![ModelIOFormats::Text]
+                    };
+
+                let inference_provider_model_name =
+                    if let Some(types) = model_summary.inference_types_supported {
+                        if types.iter().any(|t| t.as_str() == "INFERENCE_PROFILE") {
+                            format!("us.{model_id}")
+                        } else {
+                            model_arn.clone()
+                        }
+                    } else {
+                        model_arn.clone()
+                    };
+                // Create ModelMetadata
+                let metadata = ModelMetadata {
+                    model: model_id.clone(),
+                    model_provider: provider_name.clone().to_lowercase(),
+                    inference_provider: InferenceProvider {
+                        provider: InferenceModelProvider::Bedrock,
+                        model_name: inference_provider_model_name,
+                        endpoint: None,
+                    },
+                    price: ModelPrice::Completion(CompletionModelPrice {
+                        per_input_token: 0.0, // Prices would need to be fetched from a pricing API or hardcoded
+                        per_output_token: 0.0,
+                        per_cached_input_token: None,
+                        per_cached_input_write_token: None,
+                        valid_from: None,
+                    }),
+                    input_formats,
+                    output_formats,
+                    capabilities,
+                    r#type: ModelType::Completions,
+                    limits: Limits::new(128000), // Default context size, would need model-specific values
+                    description: model_name,
+                    parameters: None,
+                    benchmark_info: None,
+                    virtual_model_id: None,
+                    min_service_level: 0,
+                    release_date: None,
+                    license: None,
+                    knowledge_cutoff_date: None,
+                };
+
+                models.push(metadata);
+            }
+        }
+
+        Ok(models)
+    }
 }
 
 fn replace_version(model: &str) -> String {

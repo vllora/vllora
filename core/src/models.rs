@@ -185,6 +185,14 @@ impl FromStr for ModelCapability {
     }
 }
 
+impl Display for ModelCapability {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ModelCapability::Tools => write!(f, "tools"),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum ModelIOFormats {
@@ -204,6 +212,17 @@ impl FromStr for ModelIOFormats {
             "audio" => Ok(ModelIOFormats::Audio),
             "video" => Ok(ModelIOFormats::Video),
             _ => Err("Invalid ModelIOFormats".to_string()),
+        }
+    }
+}
+
+impl Display for ModelIOFormats {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ModelIOFormats::Text => write!(f, "text"),
+            ModelIOFormats::Image => write!(f, "image"),
+            ModelIOFormats::Audio => write!(f, "audio"),
+            ModelIOFormats::Video => write!(f, "video"),
         }
     }
 }

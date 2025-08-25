@@ -87,7 +87,7 @@ pub async fn create_chat_completion(
 
     let executor = RoutedExecutor::new(request.clone());
     executor
-        .execute(&executor_context, memory_storage)
+        .execute(&executor_context, memory_storage, None)
         .instrument(span.clone())
         .await
 }
