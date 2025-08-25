@@ -90,7 +90,6 @@ pub struct BedrockToolCall {
 }
 
 pub async fn bedrock_client(credentials: Option<&AwsCredentials>) -> Result<Client, ModelError> {
-    tracing::warn!("Bedrock client credentials: {:?}", credentials);
     let config = match credentials {
         Some(creds) => get_user_shared_config(creds.clone()).await.load().await,
         None => {
