@@ -733,7 +733,7 @@ pub trait ModelMetadataFactory: Send + Sync {
     async fn get_top_by_ranking(
         &self,
         ranking_name: &str,
-        top: u8
+        top: u8,
     ) -> Result<Vec<ModelMetadata>, GatewayApiError>;
 }
 
@@ -777,7 +777,7 @@ impl ModelMetadataFactory for DefaultModelMetadataFactory {
     async fn get_top_by_ranking(
         &self,
         _ranking_name: &str,
-        _top: u8
+        _top: u8,
     ) -> Result<Vec<ModelMetadata>, GatewayApiError> {
         unimplemented!()
     }
