@@ -44,6 +44,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
     router_span: tracing::Span,
     stream_cache_context: StreamCacheContext,
     basic_cache_context: BasicCacheContext,
+    project_id: Option<&uuid::Uuid>,
 ) -> Result<
     Either<
         Result<ChatCompletionStream, GatewayApiError>,
@@ -115,13 +116,14 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         request_with_tools.request.messages.clone(),
         cached_instance,
         cache_state,
+        project_id,
     )
     .await?;
 
     let mut request = request_with_tools.request.clone();
     let llm_model = executor_context
         .model_metadata_factory
-        .get_model_metadata(&request.model, false, false)
+        .get_model_metadata(&request.model, false, false, project_id)
         .await?;
     request.model = llm_model.inference_provider.model_name.clone();
 
@@ -265,10 +267,11 @@ pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Cl
     initial_messages: Vec<ChatCompletionMessage>,
     cached_model: Option<CachedModel>,
     cache_state: Option<ResponseCacheState>,
+    project_id: Option<&uuid::Uuid>,
 ) -> Result<ResolvedModelContext, GatewayApiError> {
     let llm_model = executor_context
         .model_metadata_factory
-        .get_model_metadata(&request.request.model, false, false)
+        .get_model_metadata(&request.request.model, false, false, project_id)
         .await?;
     let (key_credentials, llm_model) = use_langdb_proxy(executor_context, llm_model.clone());
 

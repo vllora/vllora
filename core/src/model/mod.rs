@@ -69,6 +69,11 @@ pub trait ModelInstance: Sync + Send {
     ) -> GatewayResult<()>;
 }
 
+#[async_trait]
+pub trait ModelProviderInstance: Sync + Send {
+    async fn get_private_models(&self) -> Result<Vec<ModelMetadata>, GatewayApiError>;
+}
+
 pub const DEFAULT_MAX_RETRIES: u32 = 0;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -128,7 +133,7 @@ pub async fn init_completion_model_instance(
             params,
             execution_options,
             credentials,
-            provider,
+            ..
         } => Ok(Box::new(TracedModel {
             inner: BedrockModel::new(
                 params.clone(),
@@ -136,7 +141,6 @@ pub async fn init_completion_model_instance(
                 credentials.as_ref(),
                 definition.prompt.clone(),
                 tools,
-                provider.clone(),
             )
             .await?,
             definition,
@@ -723,6 +727,7 @@ pub trait ModelMetadataFactory: Send + Sync {
         model_name: &str,
         include_parameters: bool,
         include_benchmark: bool,
+        project_id: Option<&uuid::Uuid>,
     ) -> Result<ModelMetadata, GatewayApiError>;
 
     async fn get_cheapest_model_metadata(
@@ -756,6 +761,7 @@ impl ModelMetadataFactory for DefaultModelMetadataFactory {
         model_name: &str,
         _include_parameters: bool,
         _include_benchmark: bool,
+        _project_id: Option<&uuid::Uuid>,
     ) -> Result<ModelMetadata, GatewayApiError> {
         find_model_by_full_name(model_name, &self.models)
     }

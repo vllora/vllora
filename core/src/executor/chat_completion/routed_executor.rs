@@ -61,6 +61,7 @@ impl RoutedExecutor {
         &self,
         executor_context: &ExecutorContext,
         memory_storage: Option<Arc<Mutex<InMemoryStorage>>>,
+        project_id: Option<&uuid::Uuid>,
     ) -> Result<HttpResponse, GatewayApiError> {
         let span = Span::current();
 
@@ -141,7 +142,7 @@ impl RoutedExecutor {
                     }
                 }
             } else {
-                let result = Self::execute_request(&request, executor_context).await;
+                let result = Self::execute_request(&request, executor_context, project_id).await;
 
                 match result {
                     Ok(response) => return Ok(response),
@@ -165,6 +166,7 @@ impl RoutedExecutor {
     async fn execute_request(
         request: &ChatCompletionRequestWithTools<RoutingStrategy>,
         executor_context: &ExecutorContext,
+        project_id: Option<&uuid::Uuid>,
     ) -> Result<HttpResponse, GatewayApiError> {
         let span = tracing::Span::current();
         span.record("request", &serde_json::to_string(&request)?);
@@ -174,7 +176,7 @@ impl RoutedExecutor {
 
         let llm_model = executor_context
             .model_metadata_factory
-            .get_model_metadata(&request.request.model, false, false)
+            .get_model_metadata(&request.request.model, false, false, project_id)
             .await?;
         let response = execute(
             request,
@@ -182,6 +184,7 @@ impl RoutedExecutor {
             span.clone(),
             StreamCacheContext::default(),
             BasicCacheContext::default(),
+            project_id,
         )
         .instrument(span.clone())
         .await?;
