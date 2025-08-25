@@ -374,6 +374,8 @@ impl BedrockModel {
             .set_stop_sequences(model_params.stop_sequences.clone())
             .build();
 
+        tracing::warn!("Bedrock Model name: {}", self.model_name);
+
         Ok(self
             .client
             .converse()
@@ -850,6 +852,8 @@ impl BedrockModel {
                 system_prompt = field::Empty
             );
 
+            tracing::warn!("Bedrock Model name: {}", self.model_name);
+            
             let builder = self
                 .client
                 .converse_stream()
