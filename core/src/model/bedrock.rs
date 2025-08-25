@@ -853,7 +853,7 @@ impl BedrockModel {
             );
 
             tracing::warn!("Bedrock Model name: {}", self.model_name);
-            
+
             let builder = self
                 .client
                 .converse_stream()
@@ -1131,7 +1131,7 @@ impl ModelProviderInstance for BedrockModelProvider {
             for model_summary in model_summaries {
                 // Extract model information
                 let model_id = model_summary.model_id.clone();
-                let model_arn = model_summary.model_arn.clone();
+                // let model_arn = model_summary.model_arn.clone();
                 let provider_name = model_summary.provider_name.clone().unwrap_or_default();
                 let model_name = model_summary.model_name.clone().unwrap_or_default();
 
@@ -1176,10 +1176,10 @@ impl ModelProviderInstance for BedrockModelProvider {
                         if types.iter().any(|t| t.as_str() == "INFERENCE_PROFILE") {
                             format!("us.{model_id}")
                         } else {
-                            model_arn.clone()
+                            model_id.clone()
                         }
                     } else {
-                        model_arn.clone()
+                        model_id.clone()
                     };
                 // Create ModelMetadata
                 let metadata = ModelMetadata {
