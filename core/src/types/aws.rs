@@ -6,7 +6,7 @@ use super::credentials::AwsCredentials;
 pub async fn get_user_shared_config(credentials: AwsCredentials) -> aws_config::ConfigLoader {
     let region_name = credentials
         .region
-        .unwrap_or(std::env::var("AWS_DEFAULT_REGION").map_or("us-east-1".to_string(), |r| r.into()));
+        .unwrap_or(std::env::var("AWS_DEFAULT_REGION").map_or("us-east-1".to_string(), |r| r));
     let region = Region::new(region_name);
     let credentials = Credentials::new(
         credentials.access_key,
