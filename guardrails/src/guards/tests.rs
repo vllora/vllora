@@ -3,7 +3,9 @@ use std::collections::HashMap;
 use crate::guards::config::load_guards_from_yaml;
 use crate::guards::llm_judge::LlmJudgeEvaluator;
 use langdb_core::model::types::ModelEvent;
+use langdb_core::model::types::ModelFinishReason;
 use langdb_core::model::ModelInstance;
+use langdb_core::types::gateway::ChatCompletionMessageWithFinishReason;
 use langdb_core::types::gateway::{
     ChatCompletionContent, ChatCompletionMessage, ChatCompletionRequest,
 };
@@ -225,12 +227,15 @@ impl ModelInstance for MockModelInstance {
         _tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         _previous_messages: Vec<Message>,
         _tags: HashMap<String, String>,
-    ) -> GatewayResult<ChatCompletionMessage> {
-        Ok(ChatCompletionMessage {
-            role: "assistant".to_string(),
-            content: Some(ChatCompletionContent::Text(self.0.clone())),
-            ..Default::default()
-        })
+    ) -> GatewayResult<ChatCompletionMessageWithFinishReason> {
+        Ok(ChatCompletionMessageWithFinishReason::new(
+            ChatCompletionMessage {
+                role: "assistant".to_string(),
+                content: Some(ChatCompletionContent::Text(self.0.clone())),
+                ..Default::default()
+            },
+            ModelFinishReason::Stop,
+        ))
     }
 
     async fn stream(

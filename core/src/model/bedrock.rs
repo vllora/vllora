@@ -35,9 +35,9 @@ use aws_sdk_bedrockruntime::types::builders::ImageBlockBuilder;
 use aws_sdk_bedrockruntime::types::ConverseOutput::Message as MessageVariant;
 use aws_sdk_bedrockruntime::types::{
     ContentBlock, ContentBlockDelta, ContentBlockStart, ConversationRole, ConverseOutput,
-    ConverseStreamOutput, InferenceConfiguration, Message, StopReason, SystemContentBlock,
-    TokenUsage, Tool, ToolConfiguration, ToolInputSchema, ToolResultBlock, ToolResultContentBlock,
-    ToolResultStatus, ToolSpecification, ToolUseBlock,
+    ConverseStreamOutput, InferenceConfiguration, Message, ReasoningContentBlock, StopReason,
+    SystemContentBlock, TokenUsage, Tool, ToolConfiguration, ToolInputSchema, ToolResultBlock,
+    ToolResultContentBlock, ToolResultStatus, ToolSpecification, ToolUseBlock,
 };
 use aws_sdk_bedrockruntime::Client;
 use aws_smithy_types::{Blob, Document};
@@ -95,7 +95,7 @@ pub async fn bedrock_client(credentials: Option<&AwsCredentials>) -> Result<Clie
         Some(creds) => get_user_shared_config(creds.clone()).await.load().await,
         None => {
             // TODO: read from env
-            get_shared_config(Some(aws_config::Region::new("us-east-1".to_string())))
+            get_shared_config(Some(aws_config::Region::new("us-west-2".to_string())))
                 .await
                 .load()
                 .await
@@ -380,7 +380,7 @@ impl BedrockModel {
             .converse()
             .set_system(Some(system_messages.to_vec()))
             .set_tool_config(self.get_tools_config()?)
-            .model_id(replace_version(&self.model_name))
+            .model_id(&self.model_name)
             .set_messages(Some(input_messages.to_vec()))
             .additional_model_request_fields(Document::deserialize(
                 model_params
@@ -532,6 +532,13 @@ impl BedrockModel {
                             Ok(InnerExecutionResult::Finish(ChatCompletionMessageWithFinishReason::new(ChatCompletionMessage {
                                 role: "assistant".to_string(),
                                 content: Some(ChatCompletionContent::Text(content.clone())),
+                                ..Default::default()
+                            }, ModelFinishReason::Stop)))
+                        }
+                        ContentBlock::ReasoningContent(ReasoningContentBlock::ReasoningText(content)) => {
+                            Ok(InnerExecutionResult::Finish(ChatCompletionMessageWithFinishReason::new(ChatCompletionMessage {
+                                role: "assistant".to_string(),
+                                content: Some(ChatCompletionContent::Text(content.text().to_string())),
                                 ..Default::default()
                             }, ModelFinishReason::Stop)))
                         }
@@ -1208,18 +1215,6 @@ impl ModelProviderInstance for BedrockModelProvider {
 
         Ok(models)
     }
-}
-
-fn replace_version(model: &str) -> String {
-    regex::Regex::new(r"(.*)v(\d+)\.(\d+)")
-        .unwrap()
-        .replace_all(model, |caps: &regex::Captures| {
-            model.replace(
-                &format!("v{}.{}", &caps[2], &caps[3]),
-                &format!("v{}:{}", &caps[2], &caps[3]),
-            )
-        })
-        .to_string()
 }
 
 fn map_converse_stream_error(
