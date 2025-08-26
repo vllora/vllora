@@ -2545,9 +2545,9 @@ dependencies = [
 
 [[package]]
 name = "langdb_clust"
-version = "0.9.5"
+version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c289a0594f077e1eda1872ca0390cc93712c03b3e8bba4f158ceba1e2efe4b65"
+checksum = "acc4a4ca33cc7b89c191de21bc2e1710b5399a4f2910336f41f9b4721843cf30"
 dependencies = [
  "bytes",
  "futures-core",

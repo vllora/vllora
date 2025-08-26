@@ -150,13 +150,20 @@ impl AnthropicModel {
 
     fn build_request(
         &self,
-        system_message: SystemPrompt,
+        system_message: Option<&SystemPrompt>,
         messages: Vec<ClustMessage>,
         stream: bool,
     ) -> Result<MessagesRequestBody, AnthropicError> {
         let model = self.params.model.as_ref().unwrap();
-        let builder = MessagesRequestBuilder::new(**model).system(system_message);
+        let builder = MessagesRequestBuilder::new(**model);
         let model_params = &self.params;
+
+        let builder = if let Some(system_message) = system_message {
+            builder.system(system_message.clone())
+        } else {
+            builder
+        };
+
         let builder = if let Some(max_tokens) = model_params.max_tokens {
             builder.max_tokens(max_tokens)
         } else {
@@ -703,17 +710,16 @@ impl AnthropicModel {
                 system_prompt = field::Empty
             );
 
-            let Some(system_prompt) = system_message else {
-                return Err(ModelError::SystemPromptMissing.into());
-            };
             let request = self
-                .build_request(system_prompt.clone(), input_messages.clone(), false)
+                .build_request(system_message.as_ref(), input_messages.clone(), false)
                 .map_err(custom_err)?;
             call_span.record(
                 "request",
                 serde_json::to_string(&request).unwrap_or_default(),
             );
-            call_span.record("system_prompt", format!("{system_prompt}"));
+            if let Some(system_message) = &system_message {
+                call_span.record("system_prompt", format!("{system_message}"));
+            }
 
             match self
                 .execute_inner(call_span.clone(), request, tx, tags.clone())
@@ -728,7 +734,7 @@ impl AnthropicModel {
                     if retries_left == 0 {
                         return Err(e);
                     } else {
-                        calls.push((Some(system_prompt), input_messages));
+                        calls.push((system_message, input_messages));
                     }
                     retries_left -= 1;
                 }
@@ -761,17 +767,16 @@ impl AnthropicModel {
                 system_prompt = field::Empty
             );
 
-            let Some(system_prompt) = system_message else {
-                return Err(ModelError::SystemPromptMissing.into());
-            };
             let request = self
-                .build_request(system_prompt.clone(), input_messages.clone(), true)
+                .build_request(system_message.as_ref(), input_messages.clone(), true)
                 .map_err(custom_err)?;
             call_span.record(
                 "request",
                 serde_json::to_string(&request).unwrap_or_default(),
             );
-            call_span.record("system_prompt", format!("{system_prompt}"));
+            if let Some(system_message) = &system_message {
+                call_span.record("system_prompt", format!("{system_message}"));
+            }
 
             match self
                 .execute_stream_inner(request, call_span.clone(), tx, tags.clone())
@@ -786,7 +791,7 @@ impl AnthropicModel {
                     if retries_left == 0 {
                         return Err(e);
                     } else {
-                        calls.push((Some(system_prompt), input_messages));
+                        calls.push((system_message, input_messages));
                     }
                     retries_left -= 1;
                 }
