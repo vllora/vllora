@@ -94,7 +94,7 @@ pub async fn bedrock_client(credentials: Option<&AwsCredentials>) -> Result<Clie
         Some(creds) => get_user_shared_config(creds.clone()).await.load().await,
         None => {
             // TODO: read from env
-            get_shared_config(Some(aws_config::Region::new("us-west-2".to_string())))
+            get_shared_config(Some(aws_config::Region::new("us-east-1".to_string())))
                 .await
                 .load()
                 .await
