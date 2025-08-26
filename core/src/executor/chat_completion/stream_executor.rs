@@ -69,13 +69,7 @@ pub async fn stream_chunks(
                         msg.clone(),
                         Some(db_model.clone()),
                     ));
-                    let e = outer_tx.send(Ok(msg)).await;
-                    match e {
-                        Ok(_) => {}
-                        Err(e) => {
-                            tracing::error!("Error in sending message: {e}");
-                        }
-                    }
+                    let _e = outer_tx.send(Ok(msg)).await;
                 }
 
                 let span = Span::current();
