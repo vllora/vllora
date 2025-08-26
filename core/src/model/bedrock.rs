@@ -1127,6 +1127,21 @@ impl ModelProviderInstance for BedrockModelProvider {
 
         let mut models = Vec::new();
 
+        let mut region_prefix = "";
+
+        if let Some(region) = self.client.config().region() {
+            let region = region.to_string();
+            region_prefix = if region.starts_with("us") {
+                "us."
+            } else if region.starts_with("ap") {
+                "apac."
+            } else if region.starts_with("eu") {
+                "eu."
+            } else {
+                ""
+            };
+        }
+
         if let Some(model_summaries) = response.model_summaries {
             for model_summary in model_summaries {
                 // Extract model information
@@ -1177,7 +1192,7 @@ impl ModelProviderInstance for BedrockModelProvider {
                 let inference_provider_model_name =
                     if let Some(types) = model_summary.inference_types_supported {
                         if types.iter().any(|t| t.as_str() == "INFERENCE_PROFILE") {
-                            format!("us.{model_id}")
+                            format!("{region_prefix}{model_id}")
                         } else {
                             model_arn.clone()
                         }
