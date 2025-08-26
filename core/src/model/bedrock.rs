@@ -381,7 +381,7 @@ impl BedrockModel {
             .converse()
             .set_system(Some(system_messages.to_vec()))
             .set_tool_config(self.get_tools_config()?)
-            .model_id(&self.model_name)
+            .model_id(replace_version(&self.model_name))
             .set_messages(Some(input_messages.to_vec()))
             .additional_model_request_fields(Document::deserialize(
                 model_params
@@ -857,7 +857,7 @@ impl BedrockModel {
             let builder = self
                 .client
                 .converse_stream()
-                .model_id(&self.model_name)
+                .model_id(replace_version(&self.model_name))
                 .set_system(Some(system_messages.clone()))
                 .set_tool_config(self.get_tools_config()?)
                 .set_messages(Some(input_messages.clone()));
@@ -1238,4 +1238,16 @@ fn map_converse_stream_error(
         },
         _ => ModelError::Bedrock(Box::new(e.into())),
     }
+}
+
+fn replace_version(model: &str) -> String {
+    regex::Regex::new(r"(.*)v(\d+)\.(\d+)")
+        .unwrap()
+        .replace_all(model, |caps: &regex::Captures| {
+            model.replace(
+                &format!("v{}.{}", &caps[2], &caps[3]),
+                &format!("v{}:{}", &caps[2], &caps[3]),
+            )
+        })
+        .to_string()
 }
