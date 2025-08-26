@@ -1219,7 +1219,7 @@ impl ModelProviderInstance for BedrockModelProvider {
                     output_formats,
                     capabilities,
                     r#type: ModelType::Completions,
-                    limits: Limits::new(128000), // Default context size, would need model-specific values
+                    limits: Limits::new(0), // Default context size, would need model-specific values
                     description: model_name,
                     parameters: None,
                     benchmark_info: None,
