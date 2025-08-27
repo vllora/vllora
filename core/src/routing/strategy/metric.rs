@@ -7,7 +7,7 @@ use crate::{
         metrics::MetricsRepository, strategy::conditional::evaluator::compare_values,
         MetricsDuration, RouterError,
     },
-    usage::Metrics,
+    usage::{Metrics, ModelMetrics, TimeMetrics},
 };
 use rand::seq::IteratorRandom;
 use tracing::Span;
@@ -51,6 +51,20 @@ impl MetricSelector {
     }
 }
 
+fn create_default_metrics() -> Metrics {
+    Metrics {
+        requests: Some(0.0),
+        input_tokens: Some(0.0),
+        output_tokens: Some(0.0),
+        total_tokens: Some(0.0),
+        latency: Some(0.0),
+        ttft: Some(0.0),
+        llm_usage: Some(0.0),
+        tps: Some(0.0),
+        error_rate: Some(0.0),
+    }
+}
+
 pub async fn route<M: MetricsRepository + Send + Sync>(
     models: &[String],
     metric: &MetricSelector,
@@ -63,7 +77,7 @@ pub async fn route<M: MetricsRepository + Send + Sync>(
         .unwrap_or(metric.get_optimization_direction() == MetricOptimizationDirection::Minimize);
 
     // Collect all model candidates with their metrics
-    let mut candidates = Vec::new();
+    let mut candidates = HashMap::new();
 
     for model in models {
         if let Some((provider, model_name)) = model.split_once('/') {
@@ -81,29 +95,39 @@ pub async fn route<M: MetricsRepository + Send + Sync>(
                         };
 
                         candidates
-                            .push((format!("{provider}/{model_name}"), period_metrics.clone()));
+                            .insert(format!("{provider}/{model_name}"), period_metrics.clone());
                     }
                 }
             } else {
                 // Provider specified, fetch metrics for this specific provider/model
-                if let Ok(Some(model_metrics)) = metrics_repository
+                let model_metrics = if let Ok(Some(metrics)) = metrics_repository
                     .get_model_metrics(provider, model_name)
                     .await
                 {
-                    let period_metrics = match metrics_duration {
-                        Some(MetricsDuration::Total) | None => &model_metrics.metrics.total,
-                        Some(MetricsDuration::LastHour) => &model_metrics.metrics.last_hour,
-                        Some(MetricsDuration::Last15Minutes) => {
-                            &model_metrics.metrics.last_15_minutes
-                        }
-                    };
+                    metrics
+                } else {
+                    // Use default metrics (0) when no metrics are available for direct model access
+                    ModelMetrics {
+                        metrics: TimeMetrics {
+                            total: create_default_metrics(),
+                            last_15_minutes: create_default_metrics(),
+                            last_hour: create_default_metrics(),
+                        },
+                    }
+                };
 
-                    candidates.push((format!("{provider}/{model_name}"), period_metrics.clone()));
-                }
+                let period_metrics = match metrics_duration {
+                    Some(MetricsDuration::Total) | None => &model_metrics.metrics.total,
+                    Some(MetricsDuration::LastHour) => &model_metrics.metrics.last_hour,
+                    Some(MetricsDuration::Last15Minutes) => &model_metrics.metrics.last_15_minutes,
+                };
+
+                candidates.insert(format!("{provider}/{model_name}"), period_metrics.clone());
             }
         } else {
             // No provider specified, look in all providers for this model
             // We need to fetch all provider metrics to find this model
+            let mut found_model = false;
             if let Ok(all_metrics) = metrics_repository.get_metrics().await {
                 for (provider, provider_metrics) in all_metrics {
                     if let Some(metrics) = provider_metrics.models.get(model) {
@@ -115,15 +139,22 @@ pub async fn route<M: MetricsRepository + Send + Sync>(
                             }
                         };
 
-                        candidates.push((format!("{provider}/{model}"), period_metrics.clone()));
+                        candidates.insert(format!("{provider}/{model}"), period_metrics.clone());
+                        found_model = true;
                     }
                 }
+            }
+
+            // If no provider has this model, add it with default metrics for direct model access
+            if !found_model {
+                let default_metrics = create_default_metrics();
+                candidates.insert(model.clone(), default_metrics);
             }
         }
     }
 
     if let Some(filters) = filters {
-        candidates.retain(|(_model, metrics)| {
+        candidates.retain(|_model, metrics| {
             filters.iter().all(|(filter_metric, filter_value)| {
                 if let Some(value) = filter_metric.get_value(metrics) {
                     for (op_type, op_value) in filter_value {
@@ -163,11 +194,18 @@ pub async fn route<M: MetricsRepository + Send + Sync>(
     // Find the best candidate
     let best_model = filtered_candidates
         .iter()
-        .min_by(|(_, value_a), (_, value_b)| {
-            if minimize {
+        .min_by(|(model_a, value_a), (model_b, value_b)| {
+            let metric_comparison = if minimize {
                 value_a.partial_cmp(value_b).unwrap()
             } else {
                 value_b.partial_cmp(value_a).unwrap()
+            };
+
+            // If metrics are equal, sort by model name for deterministic behavior
+            if metric_comparison == std::cmp::Ordering::Equal {
+                model_a.cmp(model_b)
+            } else {
+                metric_comparison
             }
         });
 
@@ -326,8 +364,8 @@ mod tests {
         .await
         .unwrap();
 
-        // All models have same request count, so first one should be selected
-        assert_eq!(new_model, "openai/gpt-4o-mini".to_string());
+        // All models have same request count, so first one alphabetically should be selected
+        assert_eq!(new_model, "gemini/gemini-1.5-flash-latest".to_string());
     }
 
     #[tokio::test]
@@ -580,5 +618,57 @@ mod tests {
 
         // All models have same request count (100.0), so should select the first one alphabetically
         assert_eq!(selected_model, "openai/gpt-3.5-turbo".to_string());
+    }
+
+    #[tokio::test]
+    async fn test_metric_router_with_default_metrics_for_missing_models() {
+        // Test that models without metrics get default metrics (0) for direct model access
+        let openai_models = std::collections::BTreeMap::from([(
+            "gpt-4o-mini".to_string(),
+            create_model_metrics(Some(1550.0), Some(1800.0)),
+        )]);
+        let openai_metrics = crate::usage::ProviderMetrics {
+            models: openai_models,
+        };
+
+        let metrics = std::collections::BTreeMap::from([("openai".to_string(), openai_metrics)]);
+
+        let models = vec![
+            "openai/gpt-4o-mini".to_string(), // Has metrics
+            "openai/gpt-4o".to_string(),      // No metrics - should get defaults
+            "nonexistent-model".to_string(),  // No metrics - should get defaults
+        ];
+
+        let metrics_repository = MockMetricsRepository::new(metrics);
+
+        // Test with latency metric (minimize) - should select the model with lowest latency
+        let selected_model = super::route(
+            &models,
+            &MetricSelector::Latency,
+            None,
+            &metrics_repository,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+        // Should select "nonexistent-model" as it has default latency (0.0) which is lowest
+        assert_eq!(selected_model, "nonexistent-model".to_string());
+
+        // Test with requests metric (maximize) - should select the model with highest requests
+        let selected_model = super::route(
+            &models,
+            &MetricSelector::Requests,
+            None,
+            &metrics_repository,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+        // Should select "openai/gpt-4o-mini" as it has requests (100.0) vs defaults (0.0)
+        assert_eq!(selected_model, "openai/gpt-4o-mini".to_string());
     }
 }
