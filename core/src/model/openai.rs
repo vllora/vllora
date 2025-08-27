@@ -414,7 +414,7 @@ impl<C: Config> OpenAIModel<C> {
                     id: first_chunk.id.clone(),
                     created: first_chunk.created,
                     model: first_chunk.model.clone(),
-                    object: "chat.completion".to_string(),
+                    object: Some("chat.completion".to_string()),
                     usage: usage.clone(),
                     choices,
                     service_tier: first_chunk.service_tier.clone(),
