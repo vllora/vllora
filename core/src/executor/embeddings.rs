@@ -2,13 +2,13 @@ use crate::embed_mod::Embed;
 use crate::embed_mod::OpenAIEmbed;
 use crate::error::GatewayError;
 use crate::model::types::ModelEvent;
+use crate::model::CredentialsIdent;
 use crate::models::ModelMetadata;
 use crate::types::credentials::ApiKeyCredentials;
 use crate::types::credentials::Credentials;
 use actix_web::HttpRequest;
 use async_openai::types::EmbeddingInput;
 use tracing::Span;
-use crate::model::CredentialsIdent;
 
 use crate::types::embed::OpenAiEmbeddingParams;
 use crate::types::{

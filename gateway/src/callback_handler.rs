@@ -103,6 +103,7 @@ pub fn init_callback_handler(
                                         .as_ref(),
                                     duration.map(|d| d as u64),
                                     ttft.map(|t| t as u64),
+                                    &model.price,
                                 )
                                 .await;
 
@@ -131,6 +132,7 @@ pub fn init_callback_handler(
                                     ),
                                     None,
                                     None,
+                                    &model.price,
                                 )
                                 .await;
 

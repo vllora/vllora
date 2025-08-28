@@ -112,7 +112,7 @@ impl ApiServer {
     ) -> Result<impl Future<Output = Result<(), ServerError>>, ServerError> {
         let server_config = self.clone();
 
-        let cost_calculator = GatewayCostCalculator::new(models.clone());
+        let cost_calculator = GatewayCostCalculator::new();
         let callback = if let Some(storage) = &storage {
             init_callback_handler(storage.clone(), cost_calculator.clone())
         } else {
