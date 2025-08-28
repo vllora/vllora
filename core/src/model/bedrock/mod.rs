@@ -1261,10 +1261,16 @@ impl ModelProviderInstance for BedrockModelProvider {
                     },
                     price: ModelPrice::Completion(CompletionModelPrice {
                         per_input_token: price
-                            .and_then(|p| p.input_cost_per_token.map(|c| ((c * 1000000.0) * 1000.0).round() / 1000.0))
+                            .and_then(|p| {
+                                p.input_cost_per_token
+                                    .map(|c| ((c * 1000000.0) * 1000.0).round() / 1000.0)
+                            })
                             .unwrap_or(0.0),
                         per_output_token: price
-                            .and_then(|p| p.output_cost_per_token.map(|c| ((c * 1000000.0) * 1000.0).round() / 1000.0))
+                            .and_then(|p| {
+                                p.output_cost_per_token
+                                    .map(|c| ((c * 1000000.0) * 1000.0).round() / 1000.0)
+                            })
                             .unwrap_or(0.0),
                         per_cached_input_token: None,
                         per_cached_input_write_token: None,

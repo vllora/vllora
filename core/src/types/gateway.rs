@@ -1,14 +1,14 @@
 use crate::model::tools::Tool;
 use crate::model::types::ModelFinishReason;
+use crate::model::CredentialsIdent;
 use crate::types::cache::ResponseCacheOptions;
+use crate::types::provider::ModelPrice;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::hash::Hash;
 use thiserror::Error;
-use crate::types::provider::ModelPrice;
-use crate::model::CredentialsIdent;
 
 pub use async_openai::types::ResponseFormat as OpenaiResponseFormat;
 pub use async_openai::types::ResponseFormatJsonSchema;
@@ -678,7 +678,6 @@ pub struct CreateEmbeddingResponse {
     pub data: Vec<EmbeddingData>,
     pub model: String,
     pub usage: EmbeddingUsage,
-    pub cost: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -692,6 +691,7 @@ pub struct EmbeddingData {
 pub struct EmbeddingUsage {
     pub prompt_tokens: u32,
     pub total_tokens: u32,
+    pub cost: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

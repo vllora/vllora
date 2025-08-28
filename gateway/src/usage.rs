@@ -8,6 +8,8 @@ use thiserror::Error;
 use tokio::sync::Mutex;
 
 use crate::{cost::GatewayCostCalculator, limit::LLM_USAGE};
+use langdb_core::model::CredentialsIdent;
+use langdb_core::types::provider::ModelPrice;
 
 #[derive(Error, Debug)]
 pub enum UsageSetError {
@@ -22,6 +24,7 @@ pub const REQUESTS: &str = "requests";
 pub const REQUESTS_DURATION: &str = "requests_duration";
 pub const TTFT: &str = "ttft";
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn update_usage(
     storage: Arc<Mutex<InMemoryStorage>>,
     calculator: &GatewayCostCalculator,
@@ -30,10 +33,11 @@ pub(crate) async fn update_usage(
     model_usage: Option<&Usage>,
     duration: Option<u64>,
     ttft: Option<u64>,
+    price: &ModelPrice,
 ) -> Result<(), UsageSetError> {
     if let Some(usage) = model_usage {
         let cost = calculator
-            .calculate_cost(model_name, provider_name, usage)
+            .calculate_cost(price, usage, &CredentialsIdent::Own)
             .await?
             .cost;
 

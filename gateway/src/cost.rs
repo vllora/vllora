@@ -1,5 +1,5 @@
+use langdb_core::model::CredentialsIdent;
 use langdb_core::{
-    models::ModelMetadata,
     pricing::calculator::{calculate_image_price, calculate_tokens_cost},
     types::{
         gateway::{CostCalculationResult, CostCalculator, CostCalculatorError, Usage},
@@ -9,19 +9,13 @@ use langdb_core::{
 
 #[derive(Clone)]
 pub struct GatewayCostCalculator {
-    models: Vec<ModelMetadata>,
     default_image_cost: f64,
-    default_input_cost: f64,
-    default_output_cost: f64,
 }
 
 impl GatewayCostCalculator {
-    pub fn new(models: Vec<ModelMetadata>) -> Self {
+    pub fn new() -> Self {
         Self {
-            models,
             default_image_cost: 0.0,
-            default_input_cost: 0.0,
-            default_output_cost: 0.0,
         }
     }
 }
@@ -32,6 +26,7 @@ impl CostCalculator for GatewayCostCalculator {
         &self,
         price: &ModelPrice,
         usage: &Usage,
+        _credentials_ident: &CredentialsIdent,
     ) -> Result<CostCalculationResult, CostCalculatorError> {
         match usage {
             langdb_core::types::gateway::Usage::ImageGenerationModelUsage(usage) => {

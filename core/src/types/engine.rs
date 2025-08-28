@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::{collections::HashMap, fmt::Display, ops::Deref, str::FromStr};
 
+use crate::model::CredentialsIdent;
 use crate::types::credentials::BedrockCredentials;
 use crate::types::json::JsonStringCond;
 use crate::types::provider::ModelPrice;
@@ -13,7 +14,6 @@ use serde_json::Value;
 use serde_with::serde_as;
 use serde_with::OneOrMany;
 use validator::Validate;
-use crate::model::CredentialsIdent;
 
 use super::message::MessageType;
 use super::message::PromptMessage;

@@ -20,6 +20,7 @@ use crate::types::gateway::{
 };
 use crate::GatewayApiError;
 
+use crate::model::CredentialsIdent;
 use either::Either::{self, Left, Right};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -28,7 +29,6 @@ use std::fmt::Debug;
 use tracing::Span;
 use tracing_futures::Instrument;
 use uuid::Uuid;
-use crate::model::CredentialsIdent;
 
 use super::context::ExecutorContext;
 use super::{get_key_credentials, use_langdb_proxy};
