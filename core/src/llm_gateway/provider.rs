@@ -73,10 +73,7 @@ impl Provider {
                 }
             }
             InferenceModelProvider::Bedrock => {
-                let aws_creds = match credentials {
-                    Some(Credentials::Aws(aws)) => Some(aws),
-                    _ => None,
-                };
+                let aws_creds = credentials.and_then(|cred| cred.to_bedrock_credentials());
                 let provider = match model.model_provider.as_str() {
                     "cohere" => BedrockProvider::Cohere,
                     "meta" => BedrockProvider::Meta,

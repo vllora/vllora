@@ -1,9 +1,9 @@
 use aws_config::{sts::AssumeRoleProvider, Region};
 use aws_sdk_bedrock::config::Credentials;
 
-use super::credentials::AwsCredentials;
+use super::credentials::AwsIAMCredentials;
 
-pub async fn get_user_shared_config(credentials: AwsCredentials) -> aws_config::ConfigLoader {
+pub async fn get_user_shared_config(credentials: AwsIAMCredentials) -> aws_config::ConfigLoader {
     let region_name = credentials
         .region
         .unwrap_or(std::env::var("AWS_DEFAULT_REGION").map_or("us-east-1".to_string(), |r| r));

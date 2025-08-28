@@ -2578,6 +2578,7 @@ dependencies = [
  "async-openai-compat",
  "async-trait",
  "aws-config",
+ "aws-credential-types",
  "aws-sdk-bedrock",
  "aws-sdk-bedrockruntime",
  "aws-smithy-runtime-api",
