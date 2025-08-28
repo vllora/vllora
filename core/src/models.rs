@@ -193,7 +193,7 @@ impl Display for ModelCapability {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum ModelIOFormats {
     Text,
