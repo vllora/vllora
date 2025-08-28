@@ -8,6 +8,7 @@ use crate::types::credentials::Credentials;
 use actix_web::HttpRequest;
 use async_openai::types::EmbeddingInput;
 use tracing::Span;
+use crate::model::CredentialsIdent;
 
 use crate::types::embed::OpenAiEmbeddingParams;
 use crate::types::{
@@ -45,7 +46,12 @@ pub async fn handle_embeddings_invoke(
     let model_name = llm_model.model.clone();
     let inference_model_name = llm_model.inference_provider.model_name.clone();
 
+    let price = llm_model.price.clone();
     let callback_handler = callback_handler.clone();
+    let credentials_ident = match key_credentials {
+        Some(_) => CredentialsIdent::Own,
+        _ => CredentialsIdent::Langdb,
+    };
     tokio::spawn(async move {
         while let Some(Some(msg)) = rx.recv().await {
             callback_handler.on_message(ModelEventWithDetails::new(
@@ -55,7 +61,8 @@ pub async fn handle_embeddings_invoke(
                     inference_model_name: inference_model_name.clone(),
                     provider_name: "openai".to_string(),
                     model_type: ModelType::Embedding,
-                    credentials: None,
+                    price: price.clone(),
+                    credentials_ident: credentials_ident.clone(),
                 }
                 .into(),
             ));

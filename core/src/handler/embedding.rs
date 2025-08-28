@@ -70,6 +70,7 @@ pub async fn embeddings_handler(
             usage: EmbeddingUsage {
                 prompt_tokens: result.usage.prompt_tokens,
                 total_tokens: result.usage.total_tokens,
+                cost: 0.0
             },
         }))
 }

@@ -7,6 +7,8 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::hash::Hash;
 use thiserror::Error;
+use crate::types::provider::ModelPrice;
+use crate::model::CredentialsIdent;
 
 pub use async_openai::types::ResponseFormat as OpenaiResponseFormat;
 pub use async_openai::types::ResponseFormatJsonSchema;
@@ -646,9 +648,9 @@ pub enum Usage {
 pub trait CostCalculator: Send + Sync {
     async fn calculate_cost(
         &self,
-        model_name: &str,
-        provider_name: &str,
+        model_price: &ModelPrice,
         usage: &Usage,
+        credentials_ident: &CredentialsIdent,
     ) -> Result<CostCalculationResult, CostCalculatorError>;
 }
 
@@ -676,6 +678,7 @@ pub struct CreateEmbeddingResponse {
     pub data: Vec<EmbeddingData>,
     pub model: String,
     pub usage: EmbeddingUsage,
+    pub cost: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

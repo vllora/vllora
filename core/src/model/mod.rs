@@ -417,6 +417,7 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
         .await?;
 
         let cost_calculator = self.executor_context.cost_calculator.clone();
+        let price = self.definition.db_model.price.clone();
         tokio::spawn(
             async move {
                 let mut start_time = None;
@@ -434,9 +435,9 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
                             if let Some(u) = &llmfinish_event.usage {
                                 match cost_calculator
                                     .calculate_cost(
-                                        &model_name,
-                                        &provider_name,
+                                        &price,
                                         &Usage::CompletionModelUsage(u.clone()),
+                                        &credentials_ident,
                                     )
                                     .await
                                 {
@@ -603,9 +604,9 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
                                 if let Some(u) = &llmfinish_event.usage {
                                     let cost = cost_calculator
                                         .calculate_cost(
-                                            &model_name,
-                                            &provider_name,
+                                            &self.definition.db_model.price,
                                             &Usage::CompletionModelUsage(u.clone()),
+                                            &credentials_ident,
                                         )
                                         .await;
 

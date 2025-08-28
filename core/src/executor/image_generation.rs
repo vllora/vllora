@@ -6,6 +6,7 @@ use crate::handler::ModelEventWithDetails;
 use crate::llm_gateway::provider::Provider;
 use crate::model::image_generation::initialize_image_generation;
 use crate::model::types::ModelEvent;
+use crate::model::CredentialsIdent;
 use crate::models::ModelMetadata;
 use crate::types::engine::ImageGenerationModelDefinition;
 use crate::types::gateway::CreateImageRequest;
@@ -57,7 +58,11 @@ pub async fn handle_image_generation(
         inference_model_name: llm_model.inference_provider.model_name.clone(),
         provider_name: api_provider_name.clone(),
         model_type: ModelType::ImageGeneration,
-        credentials: key_credentials.cloned(),
+        price: llm_model.price.clone(),
+        credentials_ident: match key_credentials {
+            Some(_) => CredentialsIdent::Own,
+            _ => CredentialsIdent::Langdb,
+        },
     };
 
     let image_model_definition = ImageGenerationModelDefinition {
