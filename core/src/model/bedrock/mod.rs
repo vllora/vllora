@@ -54,6 +54,8 @@ use tracing::log::info;
 use tracing::{field, Instrument, Span};
 use valuable::Valuable;
 
+mod pricing;
+
 use super::error::ModelError;
 
 const DEFAULT_REGION: &str = "us-east-1";
@@ -1164,8 +1166,10 @@ impl ModelProviderInstance for BedrockModelProvider {
             };
         }
 
+        let prices = pricing::fetch_pricing().await?;
+
         if let Some(model_summaries) = response.model_summaries {
-            for model_summary in model_summaries {
+            for model_summary in &model_summaries {
                 // Extract model information
                 let model_id = model_summary.model_id.clone();
                 let model_arn = model_summary.model_arn.clone();
@@ -1178,27 +1182,32 @@ impl ModelProviderInstance for BedrockModelProvider {
                 // Determine capabilities based on modalities
                 let mut capabilities = Vec::new();
 
-                // Check if model supports tools/functions based on known models
-                if model_id.contains("claude") || model_id.contains("mistral") {
-                    capabilities.push(ModelCapability::Tools);
+                // Determine input/output formats from modalities
+                let input_formats =
+                    if let Some(input_modalities) = model_summary.input_modalities.as_ref() {
+                        input_modalities
+                            .iter()
+                            .filter_map(|m| match m.as_str() {
+                                "TEXT" => Some(ModelIOFormats::Text),
+                                "IMAGE" => Some(ModelIOFormats::Image),
+                                "VIDEO" => Some(ModelIOFormats::Video),
+                                _ => None,
+                            })
+                            .collect()
+                    } else {
+                        vec![ModelIOFormats::Text]
+                    };
+
+                if input_formats.len() == 1 {
+                    if let Some(input_format) = input_formats.first() {
+                        if input_format == &ModelIOFormats::Video {
+                            continue;
+                        }
+                    }
                 }
 
-                // Determine input/output formats from modalities
-                let input_formats = if let Some(input_modalities) = model_summary.input_modalities {
-                    input_modalities
-                        .iter()
-                        .filter_map(|m| match m.as_str() {
-                            "TEXT" => Some(ModelIOFormats::Text),
-                            "IMAGE" => Some(ModelIOFormats::Image),
-                            _ => None,
-                        })
-                        .collect()
-                } else {
-                    vec![ModelIOFormats::Text]
-                };
-
                 let output_formats =
-                    if let Some(output_modalities) = model_summary.output_modalities {
+                    if let Some(output_modalities) = model_summary.output_modalities.as_ref() {
                         output_modalities
                             .iter()
                             .filter_map(|m| match m.as_str() {
@@ -1212,7 +1221,7 @@ impl ModelProviderInstance for BedrockModelProvider {
                     };
 
                 let inference_provider_model_name =
-                    if let Some(types) = model_summary.inference_types_supported {
+                    if let Some(types) = model_summary.inference_types_supported.as_ref() {
                         if types.iter().any(|t| t.as_str() == "INFERENCE_PROFILE") {
                             format!("{region_prefix}{model_id}")
                         } else {
@@ -1221,6 +1230,26 @@ impl ModelProviderInstance for BedrockModelProvider {
                     } else {
                         model_arn.clone()
                     };
+
+                let mut price = prices.get(&format!("{region_prefix}{model_id}"));
+
+                if price.is_none() {
+                    price = prices.get(&model_id);
+                }
+
+                if price.is_none() {
+                    tracing::error!("Model is missing in pricing: {:#?}", model_summary);
+                }
+
+                // Check if model supports tools/functions based on known models
+                if model_id.contains("claude") || model_id.contains("mistral") {
+                    capabilities.push(ModelCapability::Tools);
+                } else if let Some(price) = price {
+                    if price.supports_function_calling.unwrap_or(false) {
+                        capabilities.push(ModelCapability::Tools);
+                    }
+                }
+
                 // Create ModelMetadata
                 let metadata = ModelMetadata {
                     model: model_id.clone(),
@@ -1231,8 +1260,12 @@ impl ModelProviderInstance for BedrockModelProvider {
                         endpoint: None,
                     },
                     price: ModelPrice::Completion(CompletionModelPrice {
-                        per_input_token: 0.0, // Prices would need to be fetched from a pricing API or hardcoded
-                        per_output_token: 0.0,
+                        per_input_token: price
+                            .and_then(|p| p.input_cost_per_token.map(|c| c * 1000000.0))
+                            .unwrap_or(0.0),
+                        per_output_token: price
+                            .and_then(|p| p.output_cost_per_token.map(|c| c * 1000000.0))
+                            .unwrap_or(0.0),
                         per_cached_input_token: None,
                         per_cached_input_write_token: None,
                         valid_from: None,
@@ -1241,7 +1274,7 @@ impl ModelProviderInstance for BedrockModelProvider {
                     output_formats,
                     capabilities,
                     r#type: ModelType::Completions,
-                    limits: Limits::new(0), // Default context size, would need model-specific values
+                    limits: Limits::new(price.map(|p| p.max_tokens.unwrap_or(0)).unwrap_or(0)), // Default context size, would need model-specific values
                     description: model_name,
                     parameters: None,
                     benchmark_info: None,
