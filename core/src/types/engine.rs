@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::{collections::HashMap, fmt::Display, ops::Deref, str::FromStr};
 
+use crate::types::credentials::BedrockCredentials;
 use crate::types::json::JsonStringCond;
 use async_openai::types::ResponseFormat;
 use clust::messages as claude;
@@ -15,10 +16,7 @@ use validator::Validate;
 use super::credentials::Credentials;
 use super::message::MessageType;
 use super::message::PromptMessage;
-use super::{
-    credentials::{ApiKeyCredentials, AwsCredentials},
-    provider::BedrockProvider,
-};
+use super::{credentials::ApiKeyCredentials, provider::BedrockProvider};
 use serde::de::Error;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -365,7 +363,7 @@ pub enum CompletionEngineParams {
         endpoint: Option<String>,
     },
     Bedrock {
-        credentials: Option<AwsCredentials>,
+        credentials: Option<BedrockCredentials>,
         execution_options: ExecutionOptions,
         params: BedrockModelParams,
         provider: BedrockProvider,

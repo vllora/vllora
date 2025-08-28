@@ -14,7 +14,7 @@ use crate::models::{
     InferenceProvider, Limits, ModelCapability, ModelIOFormats, ModelMetadata, ModelType,
 };
 use crate::types::aws::{get_shared_config, get_user_shared_config};
-use crate::types::credentials::AwsCredentials;
+use crate::types::credentials::BedrockCredentials;
 use crate::types::engine::{BedrockModelParams, ExecutionOptions, Prompt};
 use crate::types::gateway::{
     ChatCompletionContent, ChatCompletionMessage, ChatCompletionMessageWithFinishReason,
@@ -26,6 +26,8 @@ use crate::types::threads::InnerMessage;
 use crate::types::threads::Message as LMessage;
 use crate::{create_model_span, GatewayApiError, GatewayResult};
 use async_trait::async_trait;
+use aws_config::{BehaviorVersion, SdkConfig};
+use aws_sdk_bedrock::config::SharedTokenProvider;
 use aws_sdk_bedrock::types::ModelModality;
 use aws_sdk_bedrock::Client as BedrockClient;
 use aws_sdk_bedrockruntime::operation::converse::builders::ConverseFluentBuilder;
@@ -53,6 +55,8 @@ use tracing::{field, Instrument, Span};
 use valuable::Valuable;
 
 use super::error::ModelError;
+
+const DEFAULT_REGION: &str = "us-east-1";
 
 macro_rules! target {
     () => {
@@ -89,26 +93,42 @@ pub struct BedrockToolCall {
     pub properties: Value,
 }
 
-pub async fn bedrock_client(credentials: Option<&AwsCredentials>) -> Result<Client, ModelError> {
-    let config = match credentials {
-        Some(creds) => get_user_shared_config(creds.clone()).await.load().await,
+async fn get_sdk_config(credentials: Option<&BedrockCredentials>) -> Result<SdkConfig, ModelError> {
+    Ok(match credentials {
+        Some(BedrockCredentials::IAM(creds)) => {
+            get_user_shared_config(creds.clone()).await.load().await
+        }
+        Some(BedrockCredentials::ApiKey(creds)) => {
+            let token = aws_credential_types::Token::new(creds.api_key.clone(), None);
+            SdkConfig::builder()
+                .token_provider(SharedTokenProvider::new(token))
+                .behavior_version(BehaviorVersion::latest())
+                .region(aws_config::Region::new(
+                    creds.region.clone().unwrap_or(DEFAULT_REGION.to_string()),
+                ))
+                .build()
+        }
         None => {
-            // TODO: read from env
-            get_shared_config(Some(aws_config::Region::new("us-east-1".to_string())))
+            get_shared_config(Some(aws_config::Region::new(DEFAULT_REGION.to_string())))
                 .await
                 .load()
                 .await
         }
-    };
-    let client = Client::new(&config);
-    Ok(client)
+    })
+}
+
+pub async fn bedrock_client(
+    credentials: Option<&BedrockCredentials>,
+) -> Result<Client, ModelError> {
+    let config = get_sdk_config(credentials).await?;
+    Ok(Client::new(&config))
 }
 
 impl BedrockModel {
     pub async fn new(
         model_params: BedrockModelParams,
         execution_options: ExecutionOptions,
-        credentials: Option<&AwsCredentials>,
+        credentials: Option<&BedrockCredentials>,
         prompt: Prompt,
         tools: HashMap<String, Box<dyn LangdbTool>>,
     ) -> Result<Self, ModelError> {
@@ -1100,11 +1120,12 @@ pub struct BedrockModelProvider {
 }
 
 impl BedrockModelProvider {
-    pub async fn new(credentials: AwsCredentials) -> Self {
-        let config = get_user_shared_config(credentials).await.load().await;
+    pub async fn new(credentials: BedrockCredentials) -> Result<Self, GatewayApiError> {
+        let config = get_sdk_config(Some(&credentials))
+            .await
+            .map_err(|e| GatewayApiError::ModelError(Box::new(e)))?;
         let client = BedrockClient::new(&config);
-
-        Self { client }
+        Ok(Self { client })
     }
 }
 
@@ -1119,6 +1140,7 @@ impl ModelProviderInstance for BedrockModelProvider {
             .send()
             .await
             .map_err(|e| {
+                tracing::error!("Failed to list Bedrock models: {:?}", e);
                 GatewayApiError::ModelError(Box::new(ModelError::CustomError(format!(
                     "Failed to list Bedrock models: {}",
                     e
