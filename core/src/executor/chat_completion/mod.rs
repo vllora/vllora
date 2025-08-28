@@ -28,6 +28,7 @@ use std::fmt::Debug;
 use tracing::Span;
 use tracing_futures::Instrument;
 use uuid::Uuid;
+use crate::model::CredentialsIdent;
 
 use super::context::ExecutorContext;
 use super::{get_key_credentials, use_langdb_proxy};
@@ -303,7 +304,11 @@ pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Cl
         inference_model_name: llm_model.inference_provider.model_name.clone(),
         provider_name: llm_model.inference_provider.provider.to_string(),
         model_type: ModelType::Completions,
-        credentials: key,
+        price: llm_model.price.clone(),
+        credentials_ident: match key_credentials {
+            Some(_) => CredentialsIdent::Own,
+            _ => CredentialsIdent::Langdb,
+        },
     };
 
     let completion_model_definition = CompletionModelDefinition {

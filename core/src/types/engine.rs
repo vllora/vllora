@@ -3,6 +3,7 @@ use std::{collections::HashMap, fmt::Display, ops::Deref, str::FromStr};
 
 use crate::types::credentials::BedrockCredentials;
 use crate::types::json::JsonStringCond;
+use crate::types::provider::ModelPrice;
 use async_openai::types::ResponseFormat;
 use clust::messages as claude;
 use minijinja::Environment;
@@ -12,8 +13,8 @@ use serde_json::Value;
 use serde_with::serde_as;
 use serde_with::OneOrMany;
 use validator::Validate;
+use crate::model::CredentialsIdent;
 
-use super::credentials::Credentials;
 use super::message::MessageType;
 use super::message::PromptMessage;
 use super::{credentials::ApiKeyCredentials, provider::BedrockProvider};
@@ -28,18 +29,14 @@ pub struct CompletionModelDefinition {
     pub db_model: Model,
 }
 
-#[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Model {
     pub name: String,
     pub inference_model_name: String,
     pub provider_name: String,
     pub model_type: ModelType,
-
-    // Following fields are secret and virtual and not to be stored.
-    // They will be borrowed from provider.
-    #[serde_as(as = "Option<JsonStringCond>")]
-    pub credentials: Option<Credentials>,
+    pub price: ModelPrice,
+    pub credentials_ident: CredentialsIdent,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]

@@ -155,7 +155,6 @@ impl<Inner: ImageGenerationModelInstance> ImageGenerationModelInstance
         let credentials_ident = traced_model.get_credentials_owner();
         let model = traced_model.sanitize_json()?;
         let model_str = serde_json::to_string(&model)?;
-        let model_name = self.definition.name.clone();
         let provider_name = self.definition.db_model.provider_name.clone();
         let request_str = serde_json::to_string(request)?;
 
@@ -174,6 +173,7 @@ impl<Inner: ImageGenerationModelInstance> ImageGenerationModelInstance
         );
 
         let cost_calculator = self.cost_calculator.clone();
+        let price = self.definition.db_model.price.clone();
         tokio::spawn(
             async move {
                 while let Some(Some(msg)) = rx.recv().await {
@@ -190,9 +190,9 @@ impl<Inner: ImageGenerationModelInstance> ImageGenerationModelInstance
                             };
                             match cost_calculator
                                 .calculate_cost(
-                                    &model_name,
-                                    &provider_name,
+                                    &price,
                                     &Usage::ImageGenerationModelUsage(u.clone()),
+                                    &credentials_ident,
                                 )
                                 .await
                             {
