@@ -168,7 +168,7 @@ impl Display for BedrockMistralCompletionModel {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum ModelCapability {
     Tools,
@@ -227,7 +227,7 @@ impl Display for ModelIOFormats {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum ModelType {
     Completions,

@@ -57,19 +57,32 @@ impl Provider {
                     }
                     _ => None,
                 });
-                if model.inference_provider.provider == InferenceModelProvider::OpenAI {
-                    Ok(CompletionEngineParams::OpenAi {
-                        params,
-                        execution_options: execution_options.unwrap_or_default(),
-                        credentials: api_key_credentials,
-                        endpoint: custom_endpoint,
-                    })
-                } else {
-                    Ok(CompletionEngineParams::Proxy {
-                        params,
-                        execution_options: execution_options.unwrap_or_default(),
-                        credentials: api_key_credentials,
-                    })
+                match &model.inference_provider.provider {
+                    InferenceModelProvider::OpenAI => {
+                        Ok(CompletionEngineParams::OpenAi {
+                            params,
+                            execution_options: execution_options.unwrap_or_default(),
+                            credentials: api_key_credentials,
+                            endpoint: None,
+                        })
+                    }
+                    InferenceModelProvider::Proxy(proxy_provider) => {
+                        if proxy_provider == "azure" {
+                            Ok(CompletionEngineParams::OpenAi {
+                                params,
+                                execution_options: execution_options.unwrap_or_default(),
+                                credentials: api_key_credentials,
+                                endpoint: custom_endpoint,
+                            })
+                        } else {
+                            Ok(CompletionEngineParams::Proxy {
+                                params,
+                                execution_options: execution_options.unwrap_or_default(),
+                                credentials: api_key_credentials,
+                            })
+                        }
+                    }
+                    _ => unreachable!(),
                 }
             }
             InferenceModelProvider::Bedrock => {

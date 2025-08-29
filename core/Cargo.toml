@@ -83,8 +83,6 @@ rmcp = { version = "0.2.1", default-features = true, features = [
 rmcp-macros = { version = "0.2.1", default-features = true}
 parking_lot = "0.12.4"
 rand = "0.9"
-url = "2.5.4"
-# deno_core = "0.334.0"
 
 [features]
 default = ["database"]
