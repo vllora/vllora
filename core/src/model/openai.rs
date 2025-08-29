@@ -66,45 +66,6 @@ fn custom_err(e: impl ToString) -> ModelError {
     ModelError::CustomError(e.to_string())
 }
 
-/// Parse an Azure OpenAI URL into AzureConfig
-/// Format: https://{resource-name}.openai.azure.com/openai/deployments/{deployment-id}/chat/completions?api-version={api-version}
-fn parse_azure_url(endpoint: &str, api_key: String) -> Result<AzureConfig, ModelError> {
-    use url::Url;
-
-    let url = Url::parse(endpoint).map_err(|e| custom_err(format!("Invalid Azure URL: {e}")))?;
-
-    // Extract the base URL (e.g., https://karol-m98i9ysd-eastus2.cognitiveservices.azure.com)
-    let api_base = format!("{}://{}", url.scheme(), url.host_str().unwrap_or_default());
-
-    // Extract the deployment ID (e.g., gpt-4o)
-    let path_segments: Vec<&str> = url.path().split('/').filter(|s| !s.is_empty()).collect();
-    let deployment_id = if path_segments.len() >= 3
-        && path_segments[0] == "openai"
-        && path_segments[1] == "deployments"
-    {
-        path_segments[2].to_string()
-    } else {
-        return Err(custom_err(
-            "Invalid Azure URL format: could not extract deployment ID",
-        ));
-    };
-
-    // Extract the API version (e.g., 2025-01-01-preview)
-    let api_version = url
-        .query_pairs()
-        .find(|(k, _)| k == "api-version")
-        .map(|(_, v)| v.to_string())
-        .unwrap_or_else(|| "2023-05-15".to_string()); // Default if not provided
-
-    let azure_config = AzureConfig::new()
-        .with_api_base(api_base)
-        .with_deployment_id(deployment_id)
-        .with_api_version(api_version)
-        .with_api_key(api_key);
-
-    Ok(azure_config)
-}
-
 /// Helper function to determine if an endpoint is for Azure OpenAI
 pub fn is_azure_endpoint(endpoint: &str) -> bool {
     endpoint.contains("azure.com")
@@ -144,9 +105,15 @@ pub fn openai_client(
 pub fn azure_openai_client(
     api_key: String,
     endpoint: &str,
-) -> Result<Client<AzureConfig>, ModelError> {
-    let azure_config = parse_azure_url(endpoint, api_key)?;
-    Ok(Client::with_config(azure_config))
+    deployment_id: &str,
+) -> Client<AzureConfig> {
+    let azure_config = AzureConfig::new()
+        .with_api_base(endpoint)
+        .with_api_version("2024-10-21".to_string())
+        .with_api_key(api_key)
+        .with_deployment_id(deployment_id.to_string());
+
+    Client::with_config(azure_config)
 }
 
 #[derive(Clone)]
@@ -214,7 +181,7 @@ impl OpenAIModel<AzureConfig> {
                 std::env::var("LANGDB_OPENAI_API_KEY")
                     .map_err(|_| AuthorizationError::InvalidApiKey)?
             };
-            azure_openai_client(api_key, endpoint)?
+            azure_openai_client(api_key, endpoint, &params.model.clone().unwrap_or_default())
         } else {
             return Err(ModelError::CustomError(
                 "Azure OpenAI requires an endpoint URL".to_string(),

@@ -37,6 +37,7 @@ use crate::models::ModelMetadata;
 use crate::GatewayApiError;
 
 pub mod anthropic;
+pub mod azure;
 pub mod bedrock;
 pub mod cached;
 pub mod error;

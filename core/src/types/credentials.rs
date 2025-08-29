@@ -14,6 +14,7 @@ pub enum Credentials {
         endpoint: String,
     },
     Aws(BedrockCredentials),
+    Vertex(VertexCredentials),
     // Hosted LangDB AWS
     // #[serde(other)]
     LangDb,
@@ -63,6 +64,15 @@ pub struct AwsApiKeyCredentials {
 pub enum BedrockCredentials {
     IAM(AwsIAMCredentials),
     ApiKey(AwsApiKeyCredentials),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub struct VertexCredentials {
+    pub region: String,
+    pub r#type: String,
+    pub project_id: String,
+    pub private_key_id: String,
+    pub private_key: String,
 }
 
 #[cfg(test)]

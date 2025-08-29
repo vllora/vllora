@@ -106,6 +106,16 @@
     "supports_response_schema": true,
     "supports_vision": true
   },
+  "amazon.nova-sonic-v1:0": {
+    "input_cost_per_token": 3.4e-05,
+    "max_input_tokens": 300000,
+    "max_output_tokens": 300000,
+    "max_tokens": 300000,
+    "mode": "chat",
+    "output_cost_per_token": 0.000136,
+    "supports_function_calling": false,
+    "supports_tool_choice": false
+  },
   "amazon.rerank-v1:0": {
     "input_cost_per_query": 0.001,
     "input_cost_per_token": 0.0,
