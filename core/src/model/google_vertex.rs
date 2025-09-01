@@ -78,7 +78,8 @@ impl GoogleVertexModelProvider {
         };
 
         let header = Header::new(Algorithm::RS256);
-        let key = EncodingKey::from_rsa_pem(creds.private_key.as_bytes())
+        let pk_pem = creds.private_key.replace("\\n", "\n");
+        let key = EncodingKey::from_rsa_pem(pk_pem.as_bytes())
             .map_err(|e| GatewayApiError::CustomError(e.to_string()))?;
         let jwt = encode(&header, &claims, &key)
             .map_err(|e| GatewayApiError::CustomError(e.to_string()))?;
