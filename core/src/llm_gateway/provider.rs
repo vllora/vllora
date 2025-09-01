@@ -58,14 +58,12 @@ impl Provider {
                     _ => None,
                 });
                 match &model.inference_provider.provider {
-                    InferenceModelProvider::OpenAI => {
-                        Ok(CompletionEngineParams::OpenAi {
-                            params,
-                            execution_options: execution_options.unwrap_or_default(),
-                            credentials: api_key_credentials,
-                            endpoint: None,
-                        })
-                    }
+                    InferenceModelProvider::OpenAI => Ok(CompletionEngineParams::OpenAi {
+                        params,
+                        execution_options: execution_options.unwrap_or_default(),
+                        credentials: api_key_credentials,
+                        endpoint: None,
+                    }),
                     InferenceModelProvider::Proxy(proxy_provider) => {
                         if proxy_provider == "azure" {
                             Ok(CompletionEngineParams::OpenAi {
