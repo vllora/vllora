@@ -19,7 +19,7 @@ secrecy = { version = "0.10.3", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
 tracing-appender = "0.2.3"
 tracing = { version = "0.1.40", features = ["log"] }
-tracing-subscriber = { version = "0.3.0", features = [
+tracing-subscriber = { version = "0.3.20", features = [
   "env-filter",
   "tracing-log",
 ] }
