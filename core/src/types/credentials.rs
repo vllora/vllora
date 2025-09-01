@@ -73,6 +73,10 @@ pub struct VertexCredentials {
     pub project_id: String,
     pub private_key_id: String,
     pub private_key: String,
+    #[serde(default)]
+    pub client_email: String,
+    #[serde(default)]
+    pub token_uri: Option<String>,
 }
 
 #[cfg(test)]
