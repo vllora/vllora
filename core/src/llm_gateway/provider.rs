@@ -8,9 +8,13 @@ use crate::{
         credentials::{ApiKeyCredentials, Credentials},
         engine::{
             AnthropicModelParams, BedrockModelParams, ClaudeModel, CompletionEngineParams,
-            ExecutionOptions, GeminiModelParams, ImageGenerationEngineParams, OpenAiModelParams,
+            EmbeddingsEngineParams, ExecutionOptions, GeminiModelParams,
+            ImageGenerationEngineParams, OpenAiModelParams,
         },
-        gateway::{ChatCompletionRequest, CreateImageRequest, ProviderSpecificRequest},
+        gateway::{
+            ChatCompletionRequest, CreateEmbeddingRequest, CreateImageRequest,
+            ProviderSpecificRequest,
+        },
         provider::{BedrockProvider, InferenceModelProvider},
     },
 };
@@ -213,6 +217,40 @@ impl Provider {
                 model_name: request.model.clone(),
             }),
             InferenceModelProvider::VertexAI
+            | InferenceModelProvider::Anthropic
+            | InferenceModelProvider::Gemini
+            | InferenceModelProvider::Bedrock => Err(GatewayError::CustomError(format!(
+                "Unsupported provider: {}",
+                model.inference_provider.model_name
+            ))),
+        }
+    }
+
+    pub fn get_embeddings_engine_for_model(
+        model: &ModelMetadata,
+        request: &CreateEmbeddingRequest,
+        credentials: Option<&Credentials>,
+    ) -> Result<EmbeddingsEngineParams, GatewayError> {
+        match model.inference_provider.provider {
+            InferenceModelProvider::OpenAI => {
+                let mut custom_endpoint = None;
+                Ok(EmbeddingsEngineParams::OpenAi {
+                    credentials: credentials.and_then(|cred| match cred {
+                        Credentials::ApiKey(key) => Some(key.clone()),
+                        Credentials::ApiKeyWithEndpoint { api_key, endpoint } => {
+                            custom_endpoint = Some(endpoint.clone());
+                            Some(ApiKeyCredentials {
+                                api_key: api_key.clone(),
+                            })
+                        }
+                        _ => None,
+                    }),
+                    model_name: request.model.clone(),
+                    endpoint: custom_endpoint,
+                })
+            }
+            InferenceModelProvider::Proxy(_)
+            | InferenceModelProvider::VertexAI
             | InferenceModelProvider::Anthropic
             | InferenceModelProvider::Gemini
             | InferenceModelProvider::Bedrock => Err(GatewayError::CustomError(format!(
