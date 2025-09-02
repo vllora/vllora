@@ -279,8 +279,6 @@ pub enum ModelType {
     Completions,
     #[serde(rename = "embedding", alias = "Embedding")]
     Embedding,
-    #[serde(rename = "routing", alias = "Routing")]
-    Routing,
     #[serde(rename = "image_generation", alias = "ImageGeneration")]
     ImageGeneration,
 }
@@ -297,7 +295,6 @@ impl Display for ModelType {
         match self {
             ModelType::Completions => write!(f, "completions"),
             ModelType::Embedding => write!(f, "embedding"),
-            ModelType::Routing => write!(f, "routing"),
             ModelType::ImageGeneration => write!(f, "image_generation"),
         }
     }
@@ -424,6 +421,29 @@ impl ImageGenerationEngineParams {
         match self {
             Self::OpenAi { .. } => "openai".to_string(),
             Self::LangdbOpen { .. } => "langdb_open".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub enum EmbeddingsEngineParams {
+    OpenAi {
+        credentials: Option<ApiKeyCredentials>,
+        endpoint: Option<String>,
+        model_name: String,
+    },
+}
+
+impl EmbeddingsEngineParams {
+    pub fn engine_name(&self) -> String {
+        match self {
+            Self::OpenAi { .. } => "openai".to_string(),
+        }
+    }
+
+    pub fn provider_name(&self) -> String {
+        match self {
+            Self::OpenAi { .. } => "openai".to_string(),
         }
     }
 }
@@ -860,6 +880,7 @@ impl From<CompletionModelOptions> for ParentCompletionOptions {
 pub enum ParentDefinition {
     CompletionModel(Box<CompletionModelDefinition>),
     ImageGenerationModel(Box<ImageGenerationModelDefinition>),
+    EmbeddingsModelDefinition(Box<EmbeddingsModelDefinition>),
 }
 
 impl ParentDefinition {
@@ -869,6 +890,9 @@ impl ParentDefinition {
             ParentDefinition::ImageGenerationModel(image_generation_model_definition) => {
                 image_generation_model_definition.name.clone()
             }
+            ParentDefinition::EmbeddingsModelDefinition(embeddings_model_definition) => {
+                embeddings_model_definition.name.clone()
+            }
         }
     }
 
@@ -876,6 +900,7 @@ impl ParentDefinition {
         match self {
             ParentDefinition::CompletionModel(model) => model.prompt.get_variables(),
             ParentDefinition::ImageGenerationModel(_) => vec![],
+            ParentDefinition::EmbeddingsModelDefinition(_) => vec![],
         }
     }
     pub fn get_db_model(&self) -> Model {
@@ -883,6 +908,9 @@ impl ParentDefinition {
             ParentDefinition::CompletionModel(model) => model.db_model.clone(),
             ParentDefinition::ImageGenerationModel(image_generation_model_definition) => {
                 image_generation_model_definition.db_model.clone()
+            }
+            ParentDefinition::EmbeddingsModelDefinition(embeddings_model_definition) => {
+                embeddings_model_definition.db_model.clone()
             }
         }
     }
@@ -892,5 +920,12 @@ impl ParentDefinition {
 pub struct ImageGenerationModelDefinition {
     pub name: String,
     pub engine: ImageGenerationEngineParams,
+    pub db_model: Model,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct EmbeddingsModelDefinition {
+    pub name: String,
+    pub engine: EmbeddingsEngineParams,
     pub db_model: Model,
 }

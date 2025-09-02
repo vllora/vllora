@@ -40,6 +40,7 @@ pub mod anthropic;
 pub mod azure;
 pub mod bedrock;
 pub mod cached;
+pub mod embeddings;
 pub mod error;
 pub mod gemini;
 pub mod google_vertex;

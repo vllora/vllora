@@ -1,4 +1,4 @@
-use crate::executor::embeddings::handle_embeddings_invoke;
+use crate::executor::embeddings::handle_embeddings;
 use crate::types::credentials::Credentials;
 use actix_web::{web, HttpResponse};
 use actix_web::{HttpMessage, HttpRequest};
@@ -6,11 +6,11 @@ use tracing::Span;
 use tracing_futures::Instrument;
 
 use crate::types::gateway::{
-    CreateEmbeddingRequest, CreateEmbeddingResponse, EmbeddingData, EmbeddingUsage,
+    CostCalculator, CreateEmbeddingRequest, CreateEmbeddingResponse, EmbeddingData, EmbeddingUsage,
 };
 
-use crate::handler::AvailableModels;
 use crate::handler::CallbackHandlerFn;
+use crate::handler::{extract_tags, AvailableModels};
 use crate::GatewayApiError;
 
 use super::{can_execute_llm_for_request, find_model_by_full_name};
@@ -20,6 +20,7 @@ pub async fn embeddings_handler(
     models: web::Data<AvailableModels>,
     callback_handler: web::Data<CallbackHandlerFn>,
     req: HttpRequest,
+    cost_calculator: web::Data<Box<dyn CostCalculator>>,
 ) -> Result<HttpResponse, GatewayApiError> {
     can_execute_llm_for_request(&req).await?;
     let request = request.into_inner();
@@ -37,11 +38,15 @@ pub async fn embeddings_handler(
     ));
     span.record("request", &serde_json::to_string(&request)?);
 
-    let result = handle_embeddings_invoke(
+    let tags = extract_tags(&req)?;
+
+    let result = handle_embeddings(
         request,
         callback_handler.get_ref(),
         &llm_model,
         key_credentials.as_ref(),
+        cost_calculator.into_inner(),
+        tags,
         req,
     )
     .instrument(span)
