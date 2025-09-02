@@ -42,6 +42,7 @@ pub mod bedrock;
 pub mod cached;
 pub mod error;
 pub mod gemini;
+pub mod google_vertex;
 pub mod image_generation;
 pub mod mcp;
 pub mod mcp_server;
