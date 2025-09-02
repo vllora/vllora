@@ -28,7 +28,6 @@ use crate::{create_model_span, GatewayApiError, GatewayResult};
 use async_trait::async_trait;
 use aws_config::{BehaviorVersion, SdkConfig};
 use aws_sdk_bedrock::config::SharedTokenProvider;
-use aws_sdk_bedrock::types::ModelModality;
 use aws_sdk_bedrock::Client as BedrockClient;
 use aws_sdk_bedrockruntime::operation::converse::builders::ConverseFluentBuilder;
 use aws_sdk_bedrockruntime::operation::converse_stream::builders::ConverseStreamFluentBuilder;
@@ -1138,7 +1137,6 @@ impl ModelProviderInstance for BedrockModelProvider {
         let response = self
             .client
             .list_foundation_models()
-            .by_output_modality(ModelModality::Text)
             .send()
             .await
             .map_err(|e| {
@@ -1176,6 +1174,27 @@ impl ModelProviderInstance for BedrockModelProvider {
                 if model_arn.ends_with("k") || model_arn.ends_with("m") {
                     continue;
                 }
+
+                let first_modality =
+                    model_summary
+                        .output_modalities
+                        .as_ref()
+                        .and_then(|output_modalities| {
+                            output_modalities.iter().find(|m| {
+                                [
+                                    aws_sdk_bedrock::types::ModelModality::Embedding,
+                                    aws_sdk_bedrock::types::ModelModality::Text,
+                                ]
+                                .contains(m)
+                            })
+                        });
+
+                let model_type = match first_modality {
+                    Some(aws_sdk_bedrock::types::ModelModality::Embedding) => ModelType::Embeddings,
+                    Some(aws_sdk_bedrock::types::ModelModality::Text) => ModelType::Completions,
+                    _ => continue,
+                };
+
                 let provider_name = model_summary.provider_name.clone().unwrap_or_default();
                 let model_name = model_summary.model_name.clone().unwrap_or_default();
 
@@ -1279,7 +1298,7 @@ impl ModelProviderInstance for BedrockModelProvider {
                     input_formats,
                     output_formats,
                     capabilities,
-                    r#type: ModelType::Completions,
+                    r#type: model_type,
                     limits: Limits::new(price.map(|p| p.max_tokens.unwrap_or(0)).unwrap_or(0)), // Default context size, would need model-specific values
                     description: model_name,
                     parameters: None,
