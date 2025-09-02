@@ -183,10 +183,6 @@ pub enum EngineType {
     Bedrock,
     Anthropic,
     Gemini,
-    AwsLambda,
-    LangDBFunctions,
-    Routing,
-    Secrets,
     Proxy(String),
 }
 
@@ -214,10 +210,6 @@ impl<'de> Deserialize<'de> for EngineType {
                     "bedrock" => Ok(EngineType::Bedrock),
                     "anthropic" => Ok(EngineType::Anthropic),
                     "gemini" => Ok(EngineType::Gemini),
-                    "awslambda" => Ok(EngineType::AwsLambda),
-                    "langdbfunctions" => Ok(EngineType::LangDBFunctions),
-                    "routing" => Ok(EngineType::Routing),
-                    "secrets" => Ok(EngineType::Secrets),
                     // For any unknown value, keep the original string
                     _ => Ok(EngineType::Proxy(value.to_string())),
                 }
@@ -239,10 +231,6 @@ impl Serialize for EngineType {
             EngineType::Bedrock => serializer.serialize_str("bedrock"),
             EngineType::Anthropic => serializer.serialize_str("anthropic"),
             EngineType::Gemini => serializer.serialize_str("gemini"),
-            EngineType::AwsLambda => serializer.serialize_str("awslambda"),
-            EngineType::LangDBFunctions => serializer.serialize_str("langdbfunctions"),
-            EngineType::Routing => serializer.serialize_str("routing"),
-            EngineType::Secrets => serializer.serialize_str("secrets"),
             // For Proxy, serialize the original string directly
             EngineType::Proxy(name) => serializer.serialize_str(name),
         }
@@ -256,10 +244,6 @@ impl Display for EngineType {
             EngineType::Bedrock => write!(f, "bedrock"),
             EngineType::Anthropic => write!(f, "anthropic"),
             EngineType::Gemini => write!(f, "gemini"),
-            EngineType::AwsLambda => write!(f, "awslambda"),
-            EngineType::LangDBFunctions => write!(f, "langdbfunctions"),
-            EngineType::Routing => write!(f, "routing"),
-            EngineType::Secrets => write!(f, "secrets"),
             // For Proxy, display the original string directly
             EngineType::Proxy(name) => write!(f, "{name}"),
         }
@@ -328,9 +312,7 @@ impl EngineType {
             | (EngineType::Bedrock, EngineFeature::Completions)
             | (EngineType::OpenAI, EngineFeature::Embeddings)
             | (EngineType::Proxy(_), EngineFeature::Completions)
-            | (EngineType::Proxy(_), EngineFeature::Embeddings)
-            | (EngineType::AwsLambda, EngineFeature::Functions)
-            | (EngineType::LangDBFunctions, EngineFeature::Functions) => true,
+            | (EngineType::Proxy(_), EngineFeature::Embeddings) => true,
 
             (_, _) => false,
         }
@@ -340,12 +322,8 @@ impl EngineType {
         match self {
             EngineType::OpenAI => &[EngineFeature::Completions, EngineFeature::Embeddings],
             EngineType::Bedrock => &[EngineFeature::Completions],
-            EngineType::AwsLambda => &[EngineFeature::Functions],
-            EngineType::LangDBFunctions => &[EngineFeature::Functions],
             EngineType::Anthropic => &[EngineFeature::Completions],
             EngineType::Gemini => &[EngineFeature::Completions],
-            EngineType::Routing => &[EngineFeature::Completions],
-            EngineType::Secrets => &[EngineFeature::Integrations],
             EngineType::Proxy(_) => &[EngineFeature::Completions, EngineFeature::Embeddings],
         }
     }
