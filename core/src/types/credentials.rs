@@ -14,7 +14,7 @@ pub enum Credentials {
         endpoint: String,
     },
     Aws(BedrockCredentials),
-    Vertex(VertexCredentials),
+    Vertex(Box<VertexCredentials>),
     // Hosted LangDB AWS
     // #[serde(other)]
     LangDb,
@@ -67,12 +67,25 @@ pub enum BedrockCredentials {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
-pub struct VertexCredentials {
-    pub region: String,
-    pub r#type: String,
+pub struct VertexCredentialsFile {
+    #[serde(rename = "type")]
+    pub credential_type: String,
     pub project_id: String,
     pub private_key_id: String,
     pub private_key: String,
+    pub client_email: String,
+    pub client_id: String,
+    pub auth_uri: Option<String>,
+    pub token_uri: Option<String>,
+    pub auth_provider_x509_cert_url: Option<String>,
+    pub client_x509_cert_url: Option<String>,
+    pub universe_domain: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub struct VertexCredentials {
+    pub region: String,
+    pub credentials: VertexCredentialsFile,
 }
 
 #[cfg(test)]

@@ -176,6 +176,9 @@ impl Provider {
                     },
                 })
             }
+            InferenceModelProvider::VertexAI => {
+                unimplemented!()
+            }
         }
     }
 
@@ -209,7 +212,8 @@ impl Provider {
                 }),
                 model_name: request.model.clone(),
             }),
-            InferenceModelProvider::Anthropic
+            InferenceModelProvider::VertexAI
+            | InferenceModelProvider::Anthropic
             | InferenceModelProvider::Gemini
             | InferenceModelProvider::Bedrock => Err(GatewayError::CustomError(format!(
                 "Unsupported provider: {}",
