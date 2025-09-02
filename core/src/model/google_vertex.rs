@@ -1,76 +1,66 @@
 use crate::model::ModelProviderInstance;
 use crate::models::{InferenceProvider, ModelCapability, ModelIOFormats, ModelMetadata, ModelType};
-use crate::types::credentials::{ApiKeyCredentials, Credentials, VertexCredentials};
+use crate::types::credentials::{Credentials, VertexCredentials};
 use crate::types::provider::{CompletionModelPrice, InferenceModelProvider, ModelPrice};
 use crate::GatewayApiError;
 use async_trait::async_trait;
-
-use super::gemini::client::Client as GeminiClient;
-use super::gemini::model::gemini_client;
+use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
+use serde::Deserialize;
+use serde::Serialize;
 
 #[derive(Clone)]
 enum GoogleClientKind {
-    Gemini(GeminiClient),
-    Vertex(VertexCredentials),
+    Vertex(Box<VertexCredentials>),
 }
-
 pub struct GoogleVertexModelProvider {
     http: reqwest::Client,
     client: GoogleClientKind,
 }
 
+#[derive(Serialize)]
+pub struct Claims<'a> {
+    iss: &'a str,
+    scope: &'a str,
+    aud: &'a str,
+    exp: usize,
+    iat: usize,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct TokenResp {
+    access_token: String,
+}
+
 impl GoogleVertexModelProvider {
     pub fn new(credentials: Credentials) -> Result<Self, GatewayApiError> {
         match credentials {
-            Credentials::ApiKey(api_key) => {
-                let client = gemini_client(Some(&api_key))
-                    .map_err(|e| GatewayApiError::CustomError(e.to_string()))?;
-                Ok(Self { http: reqwest::Client::new(), client: GoogleClientKind::Gemini(client) })
-            }
-            Credentials::ApiKeyWithEndpoint { api_key, .. } => {
-                let client = gemini_client(Some(&ApiKeyCredentials { api_key }))
-                    .map_err(|e| GatewayApiError::CustomError(e.to_string()))?;
-                Ok(Self { http: reqwest::Client::new(), client: GoogleClientKind::Gemini(client) })
-            }
-            Credentials::Vertex(vertex) => {
-                Ok(Self { http: reqwest::Client::new(), client: GoogleClientKind::Vertex(vertex) })
-            }
+            Credentials::Vertex(vertex) => Ok(Self {
+                http: reqwest::Client::new(),
+                client: GoogleClientKind::Vertex(vertex),
+            }),
             _ => Err(GatewayApiError::CustomError(
                 "Unsupported credentials for Google Vertex".to_string(),
             )),
         }
     }
 
-    async fn fetch_service_account_token(&self, creds: &VertexCredentials) -> Result<String, GatewayApiError> {
-        use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
-        use serde::{Deserialize, Serialize};
-
-        #[derive(Serialize)]
-        struct Claims<'a> {
-            iss: &'a str,
-            scope: &'a str,
-            aud: &'a str,
-            exp: usize,
-            iat: usize,
-        }
-
-        #[derive(Deserialize)]
-        struct TokenResp {
-            access_token: String,
-        }
-
+    async fn fetch_service_account_token(
+        &self,
+        creds: &VertexCredentials,
+    ) -> Result<String, GatewayApiError> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs() as usize;
         let exp = now + 3600;
         let aud = creds
+            .credentials
             .token_uri
             .clone()
             .unwrap_or("https://oauth2.googleapis.com/token".to_string());
 
         let claims = Claims {
-            iss: &creds.client_email,
+            iss: &creds.credentials.client_email,
             scope: "https://www.googleapis.com/auth/cloud-platform",
             aud: &aud,
             exp,
@@ -78,7 +68,7 @@ impl GoogleVertexModelProvider {
         };
 
         let header = Header::new(Algorithm::RS256);
-        let pk_pem = creds.private_key.replace("\\n", "\n");
+        let pk_pem = creds.credentials.private_key.replace("\\n", "\n");
         let key = EncodingKey::from_rsa_pem(pk_pem.as_bytes())
             .map_err(|e| GatewayApiError::CustomError(e.to_string()))?;
         let jwt = encode(&header, &claims, &key)
@@ -106,64 +96,20 @@ impl GoogleVertexModelProvider {
 impl ModelProviderInstance for GoogleVertexModelProvider {
     async fn get_private_models(&self) -> Result<Vec<ModelMetadata>, GatewayApiError> {
         match &self.client {
-            GoogleClientKind::Gemini(gemini) => {
-                let resp = gemini
-                    .models()
-                    .await
-                    .map_err(|e| GatewayApiError::CustomError(e.to_string()))?;
-
-                let mut out = Vec::new();
-                for m in resp.models {
-                    let model_name = m
-                        .name
-                        .split('/')
-                        .last()
-                        .map(|s| s.to_string())
-                        .unwrap_or(m.name.clone());
-                    let input_formats = vec![ModelIOFormats::Text];
-                    let output_formats = vec![ModelIOFormats::Text];
-                    let capabilities = vec![ModelCapability::Tools];
-                    let limits = m.input_token_limit.unwrap_or(0) as u32;
-                    let metadata = ModelMetadata {
-                        model: model_name.clone(),
-                        model_provider: "google".to_string(),
-                        inference_provider: InferenceProvider {
-                            provider: InferenceModelProvider::Gemini,
-                            model_name: model_name.clone(),
-                            endpoint: None,
-                        },
-                        price: ModelPrice::Completion(CompletionModelPrice {
-                            per_input_token: 0.0,
-                            per_output_token: 0.0,
-                            per_cached_input_token: None,
-                            per_cached_input_write_token: None,
-                            valid_from: None,
-                        }),
-                        input_formats,
-                        output_formats,
-                        capabilities,
-                        r#type: ModelType::Completions,
-                        limits: crate::models::Limits::new(limits),
-                        description: m.description,
-                        parameters: None,
-                        benchmark_info: None,
-                        virtual_model_id: None,
-                        min_service_level: 0,
-                        release_date: None,
-                        license: None,
-                        knowledge_cutoff_date: None,
-                    };
-                    out.push(metadata);
-                }
-                Ok(out)
-            }
             GoogleClientKind::Vertex(creds) => {
                 #[derive(serde::Deserialize)]
                 struct VertexModelsResponse {
                     models: Option<Vec<VertexModelEntry>>,
                 }
 
-                #[derive(serde::Deserialize)]
+                #[derive(serde::Deserialize, Debug, Serialize)]
+                struct VertexDeployedModel {
+                    endpoint: String,
+                    #[serde(rename = "deployedModelId")]
+                    deployed_model_id: String,
+                }
+
+                #[derive(serde::Deserialize, Debug)]
                 struct VertexModelEntry {
                     name: String,
                     #[serde(default)]
@@ -171,12 +117,14 @@ impl ModelProviderInstance for GoogleVertexModelProvider {
                     #[allow(dead_code)]
                     #[serde(rename = "displayName")]
                     display_name: Option<String>,
+                    #[serde(rename = "deployedModels")]
+                    deployed_models: Option<Vec<VertexDeployedModel>>,
                 }
 
                 let token = self.fetch_service_account_token(creds).await?;
                 let url = format!(
-                    "https://{}-aiplatform.googleapis.com/v1/projects/{}/locations/{}/publishers/google/models",
-                    creds.region, creds.project_id, creds.region
+                    "https://{}-aiplatform.googleapis.com/v1/projects/{}/locations/{}/models",
+                    creds.region, creds.credentials.project_id, creds.region
                 );
 
                 let resp: VertexModelsResponse = self
@@ -196,7 +144,7 @@ impl ModelProviderInstance for GoogleVertexModelProvider {
                     let model_name = m
                         .name
                         .split('/')
-                        .last()
+                        .next_back()
                         .map(|s| s.to_string())
                         .unwrap_or(m.name.clone());
                     let input_formats = vec![ModelIOFormats::Text];
@@ -207,9 +155,12 @@ impl ModelProviderInstance for GoogleVertexModelProvider {
                         model_provider: "google".to_string(),
                         inference_provider: InferenceProvider {
                             // Execution path is not implemented for Vertex yet; we mark Gemini for compatibility
-                            provider: InferenceModelProvider::Gemini,
+                            provider: InferenceModelProvider::VertexAI,
                             model_name: model_name.clone(),
-                            endpoint: None,
+                            endpoint: m
+                                .deployed_models
+                                .as_ref()
+                                .map(|models| serde_json::to_string(models).unwrap()),
                         },
                         price: ModelPrice::Completion(CompletionModelPrice {
                             per_input_token: 0.0,
@@ -239,4 +190,3 @@ impl ModelProviderInstance for GoogleVertexModelProvider {
         }
     }
 }
-

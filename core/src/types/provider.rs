@@ -51,6 +51,8 @@ pub enum InferenceModelProvider {
     Anthropic,
     Gemini,
     Bedrock,
+    #[serde(alias = "vertex-ai")]
+    VertexAI,
     Proxy(String),
 }
 
@@ -61,6 +63,7 @@ impl From<String> for InferenceModelProvider {
             "anthropic" => InferenceModelProvider::Anthropic,
             "gemini" => InferenceModelProvider::Gemini,
             "bedrock" => InferenceModelProvider::Bedrock,
+            "vertex" | "vertex-ai" | "vertex_ai" => InferenceModelProvider::VertexAI,
             other => InferenceModelProvider::Proxy(other.to_string()),
         }
     }
@@ -72,6 +75,7 @@ impl From<InferenceModelProvider> for String {
             InferenceModelProvider::Anthropic => "anthropic".to_string(),
             InferenceModelProvider::Gemini => "gemini".to_string(),
             InferenceModelProvider::Bedrock => "bedrock".to_string(),
+            InferenceModelProvider::VertexAI => "vertex".to_string(),
             InferenceModelProvider::Proxy(other) => other,
         }
     }
@@ -84,6 +88,7 @@ impl std::fmt::Display for InferenceModelProvider {
             InferenceModelProvider::Anthropic => write!(f, "anthropic"),
             InferenceModelProvider::Gemini => write!(f, "gemini"),
             InferenceModelProvider::Bedrock => write!(f, "bedrock"),
+            InferenceModelProvider::VertexAI => write!(f, "vertex"),
             InferenceModelProvider::Proxy(name) => write!(f, "{name}"),
         }
     }

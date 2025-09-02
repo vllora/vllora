@@ -1,5 +1,5 @@
 use crate::model::ModelProviderInstance;
-use crate::models::{ModelCapability, ModelIOFormats, ModelMetadata, ModelType, InferenceProvider};
+use crate::models::{InferenceProvider, ModelCapability, ModelIOFormats, ModelMetadata, ModelType};
 use crate::types::credentials::Credentials;
 use crate::types::provider::{CompletionModelPrice, InferenceModelProvider, ModelPrice};
 use crate::GatewayApiError;
@@ -90,15 +90,21 @@ impl AzureModelProvider {
 
     async fn fetch_deployments(&self) -> Result<Vec<AzureDeployment>, GatewayApiError> {
         let (api_key, endpoint) = self.get_api_key_and_endpoint()?;
-        
+
         // Extract the base URL from the endpoint
         let base_url = if endpoint.contains("/openai/deployments") {
-            endpoint.split("/openai/deployments").next().unwrap_or(&endpoint)
+            endpoint
+                .split("/openai/deployments")
+                .next()
+                .unwrap_or(&endpoint)
         } else {
             &endpoint
         };
 
-        let deployments_url = format!("{}/openai/deployments?api-version=2023-03-15-preview", base_url);
+        let deployments_url = format!(
+            "{}/openai/deployments?api-version=2023-03-15-preview",
+            base_url
+        );
 
         let response = self
             .client
@@ -117,10 +123,8 @@ impl AzureModelProvider {
             )));
         }
 
-        let deployments_response: AzureDeploymentsResponse = response
-            .json()
-            .await
-            .map_err(|e| {
+        let deployments_response: AzureDeploymentsResponse =
+            response.json().await.map_err(|e| {
                 GatewayApiError::CustomError(format!("Failed to parse Azure response: {}", e))
             })?;
 
@@ -129,10 +133,13 @@ impl AzureModelProvider {
 
     async fn fetch_models(&self) -> Result<Vec<AzureModel>, GatewayApiError> {
         let (api_key, endpoint) = self.get_api_key_and_endpoint()?;
-        
+
         // Extract the base URL from the endpoint
         let base_url = if endpoint.contains("/openai/deployments") {
-            endpoint.split("/openai/deployments").next().unwrap_or(&endpoint)
+            endpoint
+                .split("/openai/deployments")
+                .next()
+                .unwrap_or(&endpoint)
         } else {
             &endpoint
         };
@@ -156,19 +163,16 @@ impl AzureModelProvider {
             )));
         }
 
-        let models_response: AzureModelsResponse = response
-            .json()
-            .await
-            .map_err(|e| {
-                GatewayApiError::CustomError(format!("Failed to parse Azure models response: {}", e))
-            })?;
+        let models_response: AzureModelsResponse = response.json().await.map_err(|e| {
+            GatewayApiError::CustomError(format!("Failed to parse Azure models response: {}", e))
+        })?;
 
         Ok(models_response.data)
     }
 
     fn get_model_capabilities(&self, model_info: Option<&AzureModel>) -> Vec<ModelCapability> {
         let mut capabilities = Vec::new();
-        
+
         // Check if we have detailed model info
         if let Some(model_info) = model_info {
             // Add capabilities based on the model's capabilities
@@ -176,7 +180,7 @@ impl AzureModelProvider {
                 capabilities.push(ModelCapability::Tools);
             }
         }
-        
+
         capabilities
     }
 
@@ -206,7 +210,7 @@ impl AzureModelProvider {
                 return ModelType::Completions;
             }
         }
-        
+
         // Fallback to name-based detection
         if model_name.contains("text-embedding") || model_name.contains("embedding") {
             ModelType::Embeddings
@@ -220,7 +224,7 @@ impl AzureModelProvider {
         // In the future, this could be enhanced based on model capabilities
         let input_formats = vec![ModelIOFormats::Text];
         let output_formats = vec![ModelIOFormats::Text];
-        
+
         (input_formats, output_formats)
     }
 }
@@ -229,10 +233,8 @@ impl AzureModelProvider {
 impl ModelProviderInstance for AzureModelProvider {
     async fn get_private_models(&self) -> Result<Vec<ModelMetadata>, GatewayApiError> {
         // Fetch both deployments and models
-        let (deployments, models) = tokio::try_join!(
-            self.fetch_deployments(),
-            self.fetch_models()
-        )?;
+        let (deployments, models) =
+            tokio::try_join!(self.fetch_deployments(), self.fetch_models())?;
 
         let mut model_info_map = HashMap::new();
         for model in models {
@@ -249,14 +251,14 @@ impl ModelProviderInstance for AzureModelProvider {
 
             let model_name = deployment.model.clone();
             let deployment_id = deployment.id.clone();
-            
+
             // Get model info if available
             let model_info = model_info_map.get(&model_name);
-            
-            let capabilities = self.get_model_capabilities(model_info.clone());
+
+            let capabilities = self.get_model_capabilities(model_info);
             let limits = self.get_model_limits(&model_name);
             let price = self.get_model_pricing(&model_name);
-            let model_type = self.get_model_type(&model_name, model_info.clone());
+            let model_type = self.get_model_type(&model_name, model_info);
             let (input_formats, output_formats) = self.get_input_output_formats();
 
             if model_type != ModelType::Completions {
