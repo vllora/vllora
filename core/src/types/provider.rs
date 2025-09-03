@@ -93,7 +93,7 @@ impl std::fmt::Display for InferenceModelProvider {
         }
     }
 }
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(untagged)]
 #[serde(rename_all = "lowercase")]
 pub enum ModelPrice {
@@ -102,22 +102,25 @@ pub enum ModelPrice {
     ImageGeneration(ImageGenerationPrice),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct EmbeddingModelPrice {
     pub per_input_token: f64,
     pub valid_from: Option<NaiveDate>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CompletionModelPrice {
     pub per_input_token: f64,
     pub per_output_token: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub per_cached_input_token: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub per_cached_input_write_token: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub valid_from: Option<NaiveDate>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ImageGenerationPrice {
     pub type_prices: Option<HashMap<String, HashMap<String, f64>>>,
     pub mp_price: Option<f64>,
