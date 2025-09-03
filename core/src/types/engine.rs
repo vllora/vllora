@@ -432,18 +432,24 @@ pub enum EmbeddingsEngineParams {
         endpoint: Option<String>,
         model_name: String,
     },
+    Gemini {
+        credentials: Option<ApiKeyCredentials>,
+        model_name: String,
+    },
 }
 
 impl EmbeddingsEngineParams {
     pub fn engine_name(&self) -> String {
         match self {
             Self::OpenAi { .. } => "openai".to_string(),
+            Self::Gemini { .. } => "gemini".to_string(),
         }
     }
 
     pub fn provider_name(&self) -> String {
         match self {
             Self::OpenAi { .. } => "openai".to_string(),
+            Self::Gemini { .. } => "gemini".to_string(),
         }
     }
 }
