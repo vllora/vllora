@@ -41,6 +41,8 @@ pub enum GatewayError {
     McpServerError(#[from] Box<McpServerError>),
     #[error(transparent)]
     SendError(#[from] Box<tokio::sync::mpsc::error::SendError<Option<ModelEvent>>>),
+    #[error("Unsupported provider: {0}")]
+    UnsupportedProvider(String),
 }
 
 impl From<ModelError> for GatewayError {

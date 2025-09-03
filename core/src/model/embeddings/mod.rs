@@ -10,7 +10,7 @@ use valuable::Valuable;
 use crate::{
     events::{JsonValue, RecordResult, SPAN_MODEL_CALL},
     model::{
-        embeddings::openai::OpenAIEmbeddings,
+        embeddings::{gemini::GeminiEmbeddings, openai::OpenAIEmbeddings},
         error::ModelError,
         types::{ModelEvent, ModelEventType},
         CredentialsIdent,
@@ -24,6 +24,7 @@ use crate::{
 
 use tokio::sync::mpsc::channel;
 
+pub mod gemini;
 pub mod openai;
 
 #[async_trait::async_trait]
@@ -53,6 +54,11 @@ pub fn initialize_embeddings_model_instance(
                 None,
                 endpoint.as_ref().map(|s| s.as_str()),
             )?,
+            definition: definition.clone(),
+            cost_calculator: cost_calculator.clone(),
+        })),
+        EmbeddingsEngineParams::Gemini { credentials, .. } => Ok(Box::new(TracedEmbeddingsModel {
+            inner: GeminiEmbeddings::new(credentials.clone().as_ref())?,
             definition: definition.clone(),
             cost_calculator: cost_calculator.clone(),
         })),
@@ -86,6 +92,12 @@ impl TracedEmbeddingsModelDefinition {
             } => {
                 credentials.take();
             }
+            EmbeddingsEngineParams::Gemini {
+                ref mut credentials,
+                ..
+            } => {
+                credentials.take();
+            }
         }
         let model = serde_json::to_value(&model)?;
         Ok(model)
@@ -94,6 +106,10 @@ impl TracedEmbeddingsModelDefinition {
     pub fn get_credentials_owner(&self) -> CredentialsIdent {
         match &self.model_params.engine {
             EmbeddingsEngineParams::OpenAi { credentials, .. } => match &credentials {
+                Some(_) => CredentialsIdent::Own,
+                None => CredentialsIdent::Langdb,
+            },
+            EmbeddingsEngineParams::Gemini { credentials, .. } => match &credentials {
                 Some(_) => CredentialsIdent::Own,
                 None => CredentialsIdent::Langdb,
             },

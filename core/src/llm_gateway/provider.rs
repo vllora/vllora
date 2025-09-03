@@ -219,10 +219,9 @@ impl Provider {
             InferenceModelProvider::VertexAI
             | InferenceModelProvider::Anthropic
             | InferenceModelProvider::Gemini
-            | InferenceModelProvider::Bedrock => Err(GatewayError::CustomError(format!(
-                "Unsupported provider: {}",
-                model.inference_provider.model_name
-            ))),
+            | InferenceModelProvider::Bedrock => Err(GatewayError::UnsupportedProvider(
+                model.inference_provider.provider.to_string(),
+            )),
         }
     }
 
@@ -249,14 +248,19 @@ impl Provider {
                     endpoint: custom_endpoint,
                 })
             }
+            InferenceModelProvider::Gemini => Ok(EmbeddingsEngineParams::Gemini {
+                credentials: credentials.and_then(|cred| match cred {
+                    Credentials::ApiKey(key) => Some(key.clone()),
+                    _ => None,
+                }),
+                model_name: request.model.clone(),
+            }),
             InferenceModelProvider::Proxy(_)
             | InferenceModelProvider::VertexAI
             | InferenceModelProvider::Anthropic
-            | InferenceModelProvider::Gemini
-            | InferenceModelProvider::Bedrock => Err(GatewayError::CustomError(format!(
-                "Unsupported provider: {}",
-                model.inference_provider.model_name
-            ))),
+            | InferenceModelProvider::Bedrock => Err(GatewayError::UnsupportedProvider(
+                model.inference_provider.provider.to_string(),
+            )),
         }
     }
 }

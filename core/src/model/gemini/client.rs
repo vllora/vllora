@@ -1,4 +1,8 @@
-use crate::{error::GatewayError, GatewayResult};
+use crate::{
+    error::GatewayError,
+    model::gemini::types::{CreateEmbeddingRequest, CreateEmbeddingResponse},
+    GatewayResult,
+};
 
 use super::types::{
     CountTokensRequest, CountTokensResponse, GenerateContentRequest, GenerateContentResponse,
@@ -108,6 +112,19 @@ impl Client {
         payload: GenerateContentRequest,
     ) -> GatewayResult<GenerateContentResponse> {
         let invoke_url = format!("/{model_name}:generateContent");
+        tracing::debug!(target: "gemini", "Invoking model: {model_name} on {invoke_url} with payload: {:?}", payload);
+        let span = tracing::Span::current();
+        span.record("request", serde_json::to_string(&payload)?);
+        self.make_request(&invoke_url, Some(&payload), Method::Post)
+            .await
+    }
+
+    pub async fn embeddings(
+        &self,
+        model_name: &str,
+        payload: CreateEmbeddingRequest,
+    ) -> GatewayResult<CreateEmbeddingResponse> {
+        let invoke_url = format!("/{model_name}:embedContent");
         tracing::debug!(target: "gemini", "Invoking model: {model_name} on {invoke_url} with payload: {:?}", payload);
         let span = tracing::Span::current();
         span.record("request", serde_json::to_string(&payload)?);

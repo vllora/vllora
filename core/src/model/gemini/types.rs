@@ -57,6 +57,13 @@ impl Content {
             }],
         }
     }
+
+    pub fn user_with_multiple_parts(parts: Vec<PartWithThought>) -> Content {
+        Content {
+            role: Role::User,
+            parts,
+        }
+    }
 }
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
 #[serde(rename_all = "lowercase")]
@@ -287,4 +294,45 @@ pub struct ModelResponse {
 #[serde(rename_all = "camelCase")]
 pub struct ModelsResponse {
     pub models: Vec<ModelResponse>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateEmbeddingRequest {
+    pub content: ContentPart,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub task_type: Option<TaskType>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_dimensionality: Option<u16>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ContentPart {
+    pub parts: Vec<Part>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum TaskType {
+    TaskTypeUnspecified,
+    RetrievalQuery,
+    RetrievalDocument,
+    SemanticSimilarity,
+    Classification,
+    Clustering,
+    QuestionAnswering,
+    FactVerification,
+    CodeRetrievalQuery,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct EmbeddingsValue {
+    pub values: Vec<f32>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CreateEmbeddingResponse {
+    pub embedding: EmbeddingsValue,
 }
