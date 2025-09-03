@@ -286,6 +286,7 @@ impl ModelProviderInstance for AzureModelProvider {
                 release_date: None,
                 license: None,
                 knowledge_cutoff_date: None,
+                is_private: true,
             };
 
             models_metadata.push(metadata);

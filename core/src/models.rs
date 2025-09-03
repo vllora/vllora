@@ -302,6 +302,7 @@ pub struct ModelMetadata {
     pub license: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub knowledge_cutoff_date: Option<chrono::NaiveDate>,
+    pub is_private: bool,
 }
 
 impl Default for ModelMetadata {
@@ -334,6 +335,7 @@ impl Default for ModelMetadata {
             release_date: None,
             license: None,
             knowledge_cutoff_date: None,
+            is_private: false,
         }
     }
 }
