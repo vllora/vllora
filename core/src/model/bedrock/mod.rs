@@ -94,7 +94,9 @@ pub struct BedrockToolCall {
     pub properties: Value,
 }
 
-async fn get_sdk_config(credentials: Option<&BedrockCredentials>) -> Result<SdkConfig, ModelError> {
+pub(crate) async fn get_sdk_config(
+    credentials: Option<&BedrockCredentials>,
+) -> Result<SdkConfig, ModelError> {
     Ok(match credentials {
         Some(BedrockCredentials::IAM(creds)) => {
             get_user_shared_config(creds.clone()).await.load().await

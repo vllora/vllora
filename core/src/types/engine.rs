@@ -436,6 +436,10 @@ pub enum EmbeddingsEngineParams {
         credentials: Option<ApiKeyCredentials>,
         model_name: String,
     },
+    Bedrock {
+        credentials: Option<BedrockCredentials>,
+        model_name: String,
+    },
 }
 
 impl EmbeddingsEngineParams {
@@ -443,6 +447,7 @@ impl EmbeddingsEngineParams {
         match self {
             Self::OpenAi { .. } => "openai".to_string(),
             Self::Gemini { .. } => "gemini".to_string(),
+            Self::Bedrock { .. } => "bedrock".to_string(),
         }
     }
 
@@ -450,6 +455,7 @@ impl EmbeddingsEngineParams {
         match self {
             Self::OpenAi { .. } => "openai".to_string(),
             Self::Gemini { .. } => "gemini".to_string(),
+            Self::Bedrock { .. } => "bedrock".to_string(),
         }
     }
 }

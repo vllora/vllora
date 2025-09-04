@@ -51,6 +51,9 @@ pub enum ModelError {
 
     #[error("Model {0} not found")]
     ModelNotFound(String),
+
+    #[error("Cannot calculate input tokens")]
+    CannotCalculateInputTokens,
 }
 
 impl From<BedrockError> for ModelError {

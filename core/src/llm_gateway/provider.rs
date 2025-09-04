@@ -255,10 +255,16 @@ impl Provider {
                 }),
                 model_name: request.model.clone(),
             }),
+            InferenceModelProvider::Bedrock => Ok(EmbeddingsEngineParams::Bedrock {
+                credentials: credentials.and_then(|cred| match cred {
+                    Credentials::Aws(cred) => Some(cred.clone()),
+                    _ => None,
+                }),
+                model_name: request.model.clone(),
+            }),
             InferenceModelProvider::Proxy(_)
             | InferenceModelProvider::VertexAI
-            | InferenceModelProvider::Anthropic
-            | InferenceModelProvider::Bedrock => Err(GatewayError::UnsupportedProvider(
+            | InferenceModelProvider::Anthropic => Err(GatewayError::UnsupportedProvider(
                 model.inference_provider.provider.to_string(),
             )),
         }

@@ -10,7 +10,9 @@ use valuable::Valuable;
 use crate::{
     events::{JsonValue, RecordResult, SPAN_MODEL_CALL},
     model::{
-        embeddings::{gemini::GeminiEmbeddings, openai::OpenAIEmbeddings},
+        embeddings::{
+            bedrock::BedrockEmbeddings, gemini::GeminiEmbeddings, openai::OpenAIEmbeddings,
+        },
         error::ModelError,
         types::{ModelEvent, ModelEventType},
         CredentialsIdent,
@@ -24,6 +26,7 @@ use crate::{
 
 use tokio::sync::mpsc::channel;
 
+pub mod bedrock;
 pub mod gemini;
 pub mod openai;
 
@@ -37,7 +40,7 @@ pub trait EmbeddingsModelInstance: Sync + Send {
     ) -> GatewayResult<CreateEmbeddingResponse>;
 }
 
-pub fn initialize_embeddings_model_instance(
+pub async fn initialize_embeddings_model_instance(
     definition: EmbeddingsModelDefinition,
     cost_calculator: Option<Arc<Box<dyn CostCalculator>>>,
     _endpoint: Option<&str>,
@@ -62,6 +65,13 @@ pub fn initialize_embeddings_model_instance(
             definition: definition.clone(),
             cost_calculator: cost_calculator.clone(),
         })),
+        EmbeddingsEngineParams::Bedrock { credentials, .. } => {
+            Ok(Box::new(TracedEmbeddingsModel {
+                inner: BedrockEmbeddings::new(credentials.clone().as_ref()).await?,
+                definition: definition.clone(),
+                cost_calculator: cost_calculator.clone(),
+            }))
+        }
     }
 }
 
@@ -98,6 +108,12 @@ impl TracedEmbeddingsModelDefinition {
             } => {
                 credentials.take();
             }
+            EmbeddingsEngineParams::Bedrock {
+                ref mut credentials,
+                ..
+            } => {
+                credentials.take();
+            }
         }
         let model = serde_json::to_value(&model)?;
         Ok(model)
@@ -110,6 +126,10 @@ impl TracedEmbeddingsModelDefinition {
                 None => CredentialsIdent::Langdb,
             },
             EmbeddingsEngineParams::Gemini { credentials, .. } => match &credentials {
+                Some(_) => CredentialsIdent::Own,
+                None => CredentialsIdent::Langdb,
+            },
+            EmbeddingsEngineParams::Bedrock { credentials, .. } => match &credentials {
                 Some(_) => CredentialsIdent::Own,
                 None => CredentialsIdent::Langdb,
             },
