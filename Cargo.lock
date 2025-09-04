@@ -240,7 +240,7 @@ dependencies = [
 
 [[package]]
 name = "ai-gateway"
-version = "0.2.4"
+version = "0.3.0"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -2587,7 +2587,7 @@ dependencies = [
 
 [[package]]
 name = "langdb_core"
-version = "0.2.4"
+version = "0.3.0"
 dependencies = [
  "actix-web",
  "async-openai-compat",
@@ -2642,7 +2642,7 @@ dependencies = [
 
 [[package]]
 name = "langdb_guardrails"
-version = "0.2.4"
+version = "0.3.0"
 dependencies = [
  "async-openai-compat",
  "async-trait",
@@ -4833,7 +4833,7 @@ checksum = "42ff0bf0c66b8238c6f3b578df37d0b7848e55df8577b3f74f92a69acceeb825"
 
 [[package]]
 name = "udfs"
-version = "0.2.4"
+version = "0.3.0"
 dependencies = [
  "async-openai-compat",
  "clap",
