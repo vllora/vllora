@@ -2,6 +2,48 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.3.0](https://github.com/langdb/langdb-cloud/compare/v0.2.4...v0.3.0) (2025-09-04)
+
+
+### Features
+
+* Add API_CALLS_BY_IP constant for enhanced rate limiting functionality ([b3c75e9](https://github.com/langdb/langdb-cloud/commit/b3c75e980e1785d2d26e09d206afff16805c519c))
+* Add async method to retrieve top model metadata by ranking ([d3cbce8](https://github.com/langdb/langdb-cloud/commit/d3cbce8c075b19c897793e2884ba13ad1be60d19))
+* Add benchmark_info field to ModelMetadata ([ffe8aed](https://github.com/langdb/langdb-cloud/commit/ffe8aeda97101bc53c29ab07779b5b09e29e1506))
+* Add build_response method to AnthropicModel for constructing MessagesResponseBody from stream data ([e555e79](https://github.com/langdb/langdb-cloud/commit/e555e79372380228a3d9616fb7c74b5d831adfef))
+* Add is_private field to model metadata for enhanced privacy control ([ac62ace](https://github.com/langdb/langdb-cloud/commit/ac62acee93560c86fdd3eda93ab0b027424de539))
+* Add model metadata support to chat completion execution ([7414ed1](https://github.com/langdb/langdb-cloud/commit/7414ed1b3f50b37d4fcb0f9ea3e555b05f6abd2b))
+* Add new embedding models and enhance model handling ([fd8f5cd](https://github.com/langdb/langdb-cloud/commit/fd8f5cd0dc01faab5cdecf84ac6bfd1a735466e1))
+* Add optional user_email field to RequestUser struct ([cf971fd](https://github.com/langdb/langdb-cloud/commit/cf971fd49a6133d3e495f858d53ec6026d6d3b4d))
+* Add serde alias for InterceptorType Guardrail to support legacy "guard" identifier ([c4cccaa](https://github.com/langdb/langdb-cloud/commit/c4cccaa635462a750a555b93aa0a8bf9251e2588))
+* Add support for cached input token pricing in cost calculations and update related structures ([2372550](https://github.com/langdb/langdb-cloud/commit/23725501f1e53cf765beb67a97c59fd5d95c1545))
+* Add support for roles in ClickhouseHttp URL construction ([cafed05](https://github.com/langdb/langdb-cloud/commit/cafed058f6fcd6c1a21e85a83e356c3202a33e42))
+* Enhance GenerateContentResponse structure to include model_version and response_id, ([6e937f8](https://github.com/langdb/langdb-cloud/commit/6e937f8c499319a9dd5000ace5312a5d7449f201))
+* Enhance logging by recording request payloads in Gemini client ([1f7bb94](https://github.com/langdb/langdb-cloud/commit/1f7bb9452271db70ece63865d90f067b5c91191b))
+* Extend ChatCompletionMessage struct to include optional fields for tool calls, refusal, tool call ID, and cache control ([115e7da](https://github.com/langdb/langdb-cloud/commit/115e7da8e25b074d75ed46fde03c5801c220b3e6))
+* Extend ModelMetadata with new fields for service level, release date, license, and knowledge cutoff date ([0831a0a](https://github.com/langdb/langdb-cloud/commit/0831a0a6ec9eeb4494554366e9dff24f4b79ff49))
+* Fetch models from Google Vertex ([#129](https://github.com/langdb/langdb-cloud/issues/129)) ([6c71e11](https://github.com/langdb/langdb-cloud/commit/6c71e110f4c8bde96f4fa0f9ddba8f6c8ac59a6f))
+* Implement build_response method to construct CreateChatCompletionResponse from stream data for tracing purpose ([1111dd8](https://github.com/langdb/langdb-cloud/commit/1111dd82d80eb5b88f973cc099d0ee109ff5d604))
+* Implement conditional routing strategy ([#116](https://github.com/langdb/langdb-cloud/issues/116)) ([e032eed](https://github.com/langdb/langdb-cloud/commit/e032eedda7486824cd836b5bc730ddd4ebdb22ba))
+* Implement maximum depth limit for request routing in RoutedExecutor ([c2dd0aa](https://github.com/langdb/langdb-cloud/commit/c2dd0aab5e9fc65a3ed23882e5c47e1a71fb6dd1))
+* Integrate cache control logic into message content handling in MessageMapper ([f0396f7](https://github.com/langdb/langdb-cloud/commit/f0396f7c8f3f5d78cd6ab6c753178b982075609b))
+* Introduce CacheControl struct and integrate it into message mapping for content types ([43a3acb](https://github.com/langdb/langdb-cloud/commit/43a3acb73ac1cbe022b6546ff9e022870d0206da))
+* Introduce Gemini embeddings model and enhance provider error handling ([c1732f1](https://github.com/langdb/langdb-cloud/commit/c1732f1b2c0f86f489a503a9bd82299c83ff22e8))
+* Return template directly if no variables are provided in render function ([439d760](https://github.com/langdb/langdb-cloud/commit/439d760080a122d6e040f21f51a8b40b50c3dfaa))
+* Update langdb_clust to version 0.9.4 and enhance token usage tracking in cost calculations ([57b95a3](https://github.com/langdb/langdb-cloud/commit/57b95a37f901b93ca1414f186d2d08d83b21f034))
+
+
+### Bug Fixes
+
+* Add workaround for XAI bug ([40b45cb](https://github.com/langdb/langdb-cloud/commit/40b45cba1e0a33f1533c5316bde15a33f843f4c9))
+* Correct input token cost calculation by ensuring cached tokens are properly subtracted ([eb507a1](https://github.com/langdb/langdb-cloud/commit/eb507a14d448997cd79e536298c9b9d65f780b30))
+* Handle template error during rendering ([e78cf96](https://github.com/langdb/langdb-cloud/commit/e78cf962c9920ccc444ec98ccae83c95d3a287ec))
+* Improve error handling in stream_chunks by logging send errors for GatewayApiError ([290cdf7](https://github.com/langdb/langdb-cloud/commit/290cdf75235327183039f3eea46ad8a33c0949bc))
+* Update apply_guardrails call to use slice reference for message to ensure proper handling ([9917b2a](https://github.com/langdb/langdb-cloud/commit/9917b2a7ef33f0b8c3a1aa226d1f40baafb4b6e9))
+* Update GatewayApiError handling for ModelError to return BAD_REQUEST for ModelNotFound ([45f7b67](https://github.com/langdb/langdb-cloud/commit/45f7b67f16788a8379dffa21f2edc21abc5d04d9))
+* Update routing logic to always return true for ErrorRate metric when no metrics are available ([34a08a6](https://github.com/langdb/langdb-cloud/commit/34a08a6741b991085b4c5808f671e5448ab14e79))
+* Workaround xai tool calls issue ([882b8ac](https://github.com/langdb/langdb-cloud/commit/882b8acc9fadaf2377b0f215cc7132d1b47b0666))
+
 ### [0.2.4](https://github.com/langdb/langdb-cloud/compare/0.2.3...0.2.4) (2025-07-08)
 
 ## [0.2.3](https://github.com/langdb/langdb-cloud/compare/0.2.2...0.2.3) (2025-07-08)
