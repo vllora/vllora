@@ -98,6 +98,7 @@ pub async fn handle_embeddings(
         llm_model.inference_provider.endpoint.as_deref(),
         Some(llm_model.model_provider.as_str()),
     )
+    .await
     .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
     let result = model
