@@ -102,6 +102,24 @@ pub enum ModelPrice {
     ImageGeneration(ImageGenerationPrice),
 }
 
+impl ModelPrice {
+    pub fn per_input_token(&self) -> f64 {
+        match self {
+            ModelPrice::Completion(price) => price.per_input_token,
+            ModelPrice::Embedding(price) => price.per_input_token,
+            ModelPrice::ImageGeneration(price) => price.mp_price.unwrap_or(0.0),
+        }
+    }
+
+    pub fn per_output_token(&self) -> f64 {
+        match self {
+            ModelPrice::Completion(price) => price.per_output_token,
+            ModelPrice::Embedding(_) => 0.0,
+            ModelPrice::ImageGeneration(_) => 0.0,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct EmbeddingModelPrice {
     pub per_input_token: f64,
