@@ -51,15 +51,33 @@ pub async fn initialize_embeddings_model_instance(
             credentials,
             endpoint,
             ..
-        } => Ok(Box::new(TracedEmbeddingsModel {
-            inner: OpenAIEmbeddings::new(
-                credentials.clone().as_ref(),
-                None,
-                endpoint.as_ref().map(|s| s.as_str()),
-            )?,
-            definition: definition.clone(),
-            cost_calculator: cost_calculator.clone(),
-        })),
+        } => {
+            if let Some(ep) = endpoint.as_ref() {
+                if ep.contains("azure.com") {
+                    let client = OpenAIEmbeddings::new_azure(
+                        credentials.clone().as_ref(),
+                        ep,
+                        &definition.name,
+                    )?;
+
+                    return Ok(Box::new(TracedEmbeddingsModel {
+                        inner: client,
+                        definition: definition.clone(),
+                        cost_calculator: cost_calculator.clone(),
+                    }));
+                }
+            }
+
+            Ok(Box::new(TracedEmbeddingsModel {
+                inner: OpenAIEmbeddings::new(
+                    credentials.clone().as_ref(),
+                    None,
+                    endpoint.as_ref().map(|s| s.as_str()),
+                )?,
+                definition: definition.clone(),
+                cost_calculator: cost_calculator.clone(),
+            }))
+        }
         EmbeddingsEngineParams::Gemini { credentials, .. } => Ok(Box::new(TracedEmbeddingsModel {
             inner: GeminiEmbeddings::new(credentials.clone().as_ref())?,
             definition: definition.clone(),

@@ -1,14 +1,17 @@
 use std::collections::HashMap;
 
-use async_openai::{config::OpenAIConfig, Client};
+use async_openai::{
+    config::{AzureConfig, Config, OpenAIConfig},
+    Client,
+};
 use tracing::Span;
 
 use crate::{
     events::SPAN_OPENAI,
     model::{
         embeddings::EmbeddingsModelInstance,
-        error::ModelError,
-        openai::openai_client,
+        error::{AuthorizationError, ModelError},
+        openai::{azure_openai_client, openai_client},
         types::{LLMFinishEvent, ModelEvent, ModelEventType, ModelFinishReason},
         CredentialsIdent,
     },
@@ -19,12 +22,12 @@ use crate::{
     GatewayResult,
 };
 
-pub struct OpenAIEmbeddings {
-    client: Client<OpenAIConfig>,
+pub struct OpenAIEmbeddings<C: Config = OpenAIConfig> {
+    client: Client<C>,
     credentials_ident: CredentialsIdent,
 }
 
-impl OpenAIEmbeddings {
+impl OpenAIEmbeddings<OpenAIConfig> {
     pub fn new(
         credentials: Option<&ApiKeyCredentials>,
         client: Option<Client<OpenAIConfig>>,
@@ -39,8 +42,30 @@ impl OpenAIEmbeddings {
     }
 }
 
+impl OpenAIEmbeddings<AzureConfig> {
+    pub fn new_azure(
+        credentials: Option<&ApiKeyCredentials>,
+        endpoint: &str,
+        deployment_id: &str,
+    ) -> Result<Self, ModelError> {
+        let api_key = if let Some(credentials) = credentials {
+            credentials.api_key.clone()
+        } else {
+            std::env::var("LANGDB_OPENAI_API_KEY").map_err(|_| AuthorizationError::InvalidApiKey)?
+        };
+        Ok(OpenAIEmbeddings {
+            credentials_ident: credentials
+                .map(|_c| CredentialsIdent::Own)
+                .unwrap_or(CredentialsIdent::Langdb),
+            client: azure_openai_client(api_key, endpoint, deployment_id),
+        })
+    }
+}
+
 #[async_trait::async_trait]
-impl EmbeddingsModelInstance for OpenAIEmbeddings {
+impl<C: Config + std::marker::Sync + std::marker::Send> EmbeddingsModelInstance
+    for OpenAIEmbeddings<C>
+{
     async fn embed(
         &self,
         request: &CreateEmbeddingRequest,

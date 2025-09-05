@@ -261,7 +261,7 @@ impl ModelProviderInstance for AzureModelProvider {
             let model_type = self.get_model_type(&model_name, model_info);
             let (input_formats, output_formats) = self.get_input_output_formats();
 
-            if model_type != ModelType::Completions {
+            if model_type != ModelType::Completions && model_type != ModelType::Embeddings {
                 continue;
             }
             let metadata = ModelMetadata {

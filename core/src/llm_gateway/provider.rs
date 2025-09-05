@@ -231,7 +231,7 @@ impl Provider {
         credentials: Option<&Credentials>,
     ) -> Result<EmbeddingsEngineParams, GatewayError> {
         match model.inference_provider.provider {
-            InferenceModelProvider::OpenAI => {
+            InferenceModelProvider::OpenAI | InferenceModelProvider::Proxy(_) => {
                 let mut custom_endpoint = None;
                 Ok(EmbeddingsEngineParams::OpenAi {
                     credentials: credentials.and_then(|cred| match cred {
@@ -262,11 +262,9 @@ impl Provider {
                 }),
                 model_name: request.model.clone(),
             }),
-            InferenceModelProvider::Proxy(_)
-            | InferenceModelProvider::VertexAI
-            | InferenceModelProvider::Anthropic => Err(GatewayError::UnsupportedProvider(
-                model.inference_provider.provider.to_string(),
-            )),
+            InferenceModelProvider::VertexAI | InferenceModelProvider::Anthropic => Err(
+                GatewayError::UnsupportedProvider(model.inference_provider.provider.to_string()),
+            ),
         }
     }
 }
