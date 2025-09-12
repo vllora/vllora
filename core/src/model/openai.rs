@@ -784,7 +784,11 @@ impl<C: Config> OpenAIModel<C> {
     fn map_usage(usage: Option<&CompletionUsage>) -> Option<CompletionModelUsage> {
         usage.map(|u| CompletionModelUsage {
             input_tokens: u.prompt_tokens,
-            output_tokens: u.completion_tokens,
+            output_tokens: u.completion_tokens
+                + u.completion_tokens_details
+                    .as_ref()
+                    .and_then(|c| c.reasoning_tokens)
+                    .unwrap_or(0),
             total_tokens: u.total_tokens,
             prompt_tokens_details: u.prompt_tokens_details.as_ref().map(|p| {
                 crate::types::gateway::PromptTokensDetails::new(
