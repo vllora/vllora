@@ -23,13 +23,13 @@ pub enum McpServerError {
     InvalidServerName(String),
 
     #[error("Server initialization error: {0}")]
-    ServerInitializeError(#[from] Box<rmcp::service::ServerInitializeError<std::io::Error>>),
+    ServerInitializeError(#[from] Box<rmcp::service::ServerInitializeError>),
 
     #[error("SSE transport error: {0}")]
     SseTransportError(#[from] rmcp::transport::sse_client::SseTransportError<reqwest::Error>),
 
     #[error("Client initialization error: {0}")]
-    ClientInitializeError(#[from] Box<rmcp::service::ClientInitializeError<std::io::Error>>),
+    ClientInitializeError(#[from] Box<rmcp::service::ClientInitializeError>),
 
     #[error("Service error: {0}")]
     ServiceError(#[from] rmcp::ServiceError),
@@ -56,14 +56,14 @@ pub enum McpServerError {
     JoinError(#[from] tokio::task::JoinError),
 }
 
-impl From<rmcp::service::ClientInitializeError<std::io::Error>> for McpServerError {
-    fn from(value: rmcp::service::ClientInitializeError<std::io::Error>) -> Self {
+impl From<rmcp::service::ClientInitializeError> for McpServerError {
+    fn from(value: rmcp::service::ClientInitializeError) -> Self {
         McpServerError::ClientInitializeError(Box::new(value))
     }
 }
 
-impl From<rmcp::service::ServerInitializeError<std::io::Error>> for McpServerError {
-    fn from(value: rmcp::service::ServerInitializeError<std::io::Error>) -> Self {
+impl From<rmcp::service::ServerInitializeError> for McpServerError {
+    fn from(value: rmcp::service::ServerInitializeError) -> Self {
         McpServerError::ServerInitializeError(Box::new(value))
     }
 }

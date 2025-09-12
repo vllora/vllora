@@ -1,6 +1,6 @@
 use crate::error::GatewayError;
-use futures::Future;
 use reqwest::Client;
+use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::CallToolResult;
 use rmcp::model::ClientCapabilities;
 use rmcp::model::ClientInfo;
@@ -19,14 +19,14 @@ use rmcp::model::ReadResourceRequestParam;
 use rmcp::model::ReadResourceResult;
 use rmcp::service::RequestContext;
 use rmcp::ClientHandler;
-use rmcp::Error as McpError;
+use rmcp::ErrorData;
 use rmcp::RoleServer;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::env;
 
 use rmcp::{
-    handler::server::{router::tool::ToolRouter, tool::Parameters},
+    handler::server::router::tool::ToolRouter,
     model::{ServerCapabilities, ServerInfo},
     schemars, tool, tool_handler, tool_router, ServerHandler,
 };
@@ -74,14 +74,14 @@ impl TavilySearch {
     pub async fn search(
         &self,
         Parameters(SearchRequest { query }): Parameters<SearchRequest>,
-    ) -> Result<CallToolResult, rmcp::Error> {
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
         let r = search_tavily(&query, &env::var("TAVILY_API_KEY").unwrap()).await;
 
         match r {
             Ok(r) => Ok(CallToolResult::success(vec![Content::text(
                 serde_json::to_string(&r).unwrap(),
             )])),
-            Err(e) => Err(McpError::internal_error(e.to_string(), None)),
+            Err(e) => Err(ErrorData::internal_error(e.to_string(), None)),
         }
     }
 }
@@ -132,7 +132,7 @@ impl ServerHandler for TavilySearch {
         &self,
         _request: Option<PaginatedRequestParam>,
         _: RequestContext<RoleServer>,
-    ) -> Result<ListResourcesResult, McpError> {
+    ) -> Result<ListResourcesResult, ErrorData> {
         Ok(ListResourcesResult {
             resources: Vec::new(),
             next_cursor: None,
@@ -143,8 +143,8 @@ impl ServerHandler for TavilySearch {
         &self,
         ReadResourceRequestParam { uri }: ReadResourceRequestParam,
         _: RequestContext<RoleServer>,
-    ) -> Result<ReadResourceResult, McpError> {
-        Err(McpError::resource_not_found(
+    ) -> Result<ReadResourceResult, ErrorData> {
+        Err(ErrorData::resource_not_found(
             "resource_not_found",
             Some(json!({
                 "uri": uri.as_str()
@@ -156,7 +156,7 @@ impl ServerHandler for TavilySearch {
         &self,
         _request: Option<PaginatedRequestParam>,
         _: RequestContext<RoleServer>,
-    ) -> Result<ListPromptsResult, McpError> {
+    ) -> Result<ListPromptsResult, ErrorData> {
         Ok(ListPromptsResult {
             next_cursor: None,
             prompts: vec![],
@@ -167,15 +167,15 @@ impl ServerHandler for TavilySearch {
         &self,
         GetPromptRequestParam { .. }: GetPromptRequestParam,
         _: RequestContext<RoleServer>,
-    ) -> Result<GetPromptResult, McpError> {
-        Err(McpError::invalid_params("prompt not found", None))
+    ) -> Result<GetPromptResult, ErrorData> {
+        Err(ErrorData::invalid_params("prompt not found", None))
     }
 
     async fn list_resource_templates(
         &self,
         _request: Option<PaginatedRequestParam>,
         _: RequestContext<RoleServer>,
-    ) -> Result<ListResourceTemplatesResult, McpError> {
+    ) -> Result<ListResourceTemplatesResult, ErrorData> {
         Ok(ListResourceTemplatesResult {
             next_cursor: None,
             resource_templates: Vec::new(),
@@ -186,7 +186,7 @@ impl ServerHandler for TavilySearch {
         &self,
         _request: InitializeRequestParam,
         _: RequestContext<RoleServer>,
-    ) -> Result<InitializeResult, McpError> {
+    ) -> Result<InitializeResult, ErrorData> {
         Ok(ServerHandler::get_info(self))
     }
 }
