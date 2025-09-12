@@ -220,7 +220,12 @@ impl GeminiModel {
         let mut content = String::new();
         let mut model_version = String::new();
         let mut response_id = String::new();
+        let mut last_chunk = None;
         while let Some(res) = stream.next().await {
+            last_chunk = Some(res.as_ref().map_or_else(
+                |e| e.to_string(),
+                |r| serde_json::to_string(r).unwrap_or_default(),
+            ));
             match res {
                 Ok(res) => {
                     if let Some(res) = res {
@@ -309,6 +314,8 @@ impl GeminiModel {
 
             return Ok((reason, calls, usage_metadata, Some(response)));
         }
+
+        tracing::error!("No finish reason found in stream. Last chunk: {last_chunk:?}");
 
         unreachable!();
     }
