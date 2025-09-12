@@ -4,6 +4,7 @@ use crate::model::bedrock::bedrock_client;
 use crate::model::error::ModelError;
 use crate::model::types::{LLMFinishEvent, ModelEvent, ModelEventType, ModelFinishReason};
 use crate::types::credentials::BedrockCredentials;
+use crate::types::embed::EmbeddingResult;
 use crate::types::gateway::{CompletionModelUsage, CreateEmbeddingRequest, Input};
 use crate::GatewayResult;
 use async_openai::types::{CreateEmbeddingResponse, Embedding, EmbeddingUsage};
@@ -83,7 +84,7 @@ impl EmbeddingsModelInstance for BedrockEmbeddings {
         request: &CreateEmbeddingRequest,
         outer_tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         _tags: HashMap<String, String>,
-    ) -> GatewayResult<CreateEmbeddingResponse> {
+    ) -> GatewayResult<EmbeddingResult> {
         let builder = self.client.invoke_model();
 
         let provider = match_provider(&request.model);
@@ -106,9 +107,9 @@ impl EmbeddingsModelInstance for BedrockEmbeddings {
                     model_name: request.model.clone(),
                     output: None,
                     usage: Some(CompletionModelUsage {
-                        input_tokens: response.usage.prompt_tokens,
+                        input_tokens: response.usage().prompt_tokens,
                         output_tokens: 0,
-                        total_tokens: response.usage.total_tokens,
+                        total_tokens: response.usage().total_tokens,
                         ..Default::default()
                     }),
                     finish_reason: ModelFinishReason::Stop,
@@ -192,12 +193,12 @@ fn map_response(
     model: &str,
     provider: &BedrockEmbeddingProvider,
     input_tokens: u32,
-) -> Result<CreateEmbeddingResponse, ModelError> {
+) -> Result<EmbeddingResult, ModelError> {
     let bytes = response.into_inner();
     match provider {
         BedrockEmbeddingProvider::Cohere => {
             let response: CohereEmbeddingResponse = serde_json::from_slice(&bytes)?;
-            Ok(CreateEmbeddingResponse {
+            Ok(EmbeddingResult::Float(CreateEmbeddingResponse {
                 data: response
                     .embeddings
                     .into_iter()
@@ -214,11 +215,11 @@ fn map_response(
                     prompt_tokens: input_tokens,
                     total_tokens: input_tokens,
                 },
-            })
+            }))
         }
         BedrockEmbeddingProvider::Other(_) => {
             let response: AmazonTitanEmbeddingResponse = serde_json::from_slice(&bytes)?;
-            Ok(CreateEmbeddingResponse {
+            Ok(EmbeddingResult::Float(CreateEmbeddingResponse {
                 data: vec![Embedding {
                     object: "embedding".to_string(),
                     embedding: response.embedding,
@@ -230,7 +231,7 @@ fn map_response(
                     prompt_tokens: response.input_text_token_count,
                     total_tokens: response.input_text_token_count,
                 },
-            })
+            }))
         }
     }
 }

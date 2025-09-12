@@ -1,6 +1,5 @@
 use std::{collections::HashMap, sync::Arc};
 
-use async_openai::types::CreateEmbeddingResponse;
 use serde::Serialize;
 use serde_json::Value;
 use tracing::info_span;
@@ -18,6 +17,7 @@ use crate::{
         CredentialsIdent,
     },
     types::{
+        embed::EmbeddingResult,
         engine::{EmbeddingsEngineParams, EmbeddingsModelDefinition},
         gateway::{CompletionModelUsage, CostCalculator, CreateEmbeddingRequest, Usage},
     },
@@ -37,7 +37,7 @@ pub trait EmbeddingsModelInstance: Sync + Send {
         request: &CreateEmbeddingRequest,
         outer_tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<CreateEmbeddingResponse>;
+    ) -> GatewayResult<EmbeddingResult>;
 }
 
 pub async fn initialize_embeddings_model_instance(
@@ -175,7 +175,7 @@ impl<Inner: EmbeddingsModelInstance> EmbeddingsModelInstance for TracedEmbedding
         request: &CreateEmbeddingRequest,
         outer_tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<CreateEmbeddingResponse> {
+    ) -> GatewayResult<EmbeddingResult> {
         let traced_model: TracedEmbeddingsModelDefinition = self.definition.clone().into();
         let credentials_ident = traced_model.get_credentials_owner();
         let model = traced_model.sanitize_json()?;
@@ -245,7 +245,7 @@ impl<Inner: EmbeddingsModelInstance> EmbeddingsModelInstance for TracedEmbedding
 
         async {
             let result = self.inner.embed(request, tx, tags).await;
-            let _ = result.as_ref().map(|r| r.data.len()).record();
+            let _ = result.as_ref().map(|r| r.data_len()).record();
 
             result
         }

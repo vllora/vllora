@@ -17,6 +17,7 @@ use crate::{
     },
     types::{
         credentials::ApiKeyCredentials,
+        embed::EmbeddingResult,
         gateway::{CompletionModelUsage, CreateEmbeddingRequest, EncodingFormat, Input},
     },
     GatewayResult,
@@ -71,7 +72,7 @@ impl<C: Config + std::marker::Sync + std::marker::Send> EmbeddingsModelInstance
         request: &CreateEmbeddingRequest,
         outer_tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         _tags: HashMap<String, String>,
-    ) -> GatewayResult<async_openai::types::CreateEmbeddingResponse> {
+    ) -> GatewayResult<EmbeddingResult> {
         let embedding_request = async_openai::types::CreateEmbeddingRequest {
             model: request.model.clone(),
             input: match &request.input {
@@ -86,12 +87,22 @@ impl<C: Config + std::marker::Sync + std::marker::Send> EmbeddingsModelInstance
             }),
         };
 
-        let response = self
-            .client
-            .embeddings()
-            .create(embedding_request)
-            .await
-            .map_err(|e| ModelError::CustomError(e.to_string()))?;
+        let response: EmbeddingResult = match request.encoding_format {
+            EncodingFormat::Float => self
+                .client
+                .embeddings()
+                .create(embedding_request)
+                .await
+                .map(|r| r.into())
+                .map_err(|e| ModelError::CustomError(e.to_string()))?,
+            EncodingFormat::Base64 => self
+                .client
+                .embeddings()
+                .create_base64(embedding_request)
+                .await
+                .map(|r| r.into())
+                .map_err(|e| ModelError::CustomError(e.to_string()))?,
+        };
 
         let span = Span::current();
         let _ = outer_tx
@@ -102,9 +113,9 @@ impl<C: Config + std::marker::Sync + std::marker::Send> EmbeddingsModelInstance
                     model_name: request.model.clone(),
                     output: None,
                     usage: Some(CompletionModelUsage {
-                        input_tokens: response.usage.prompt_tokens,
+                        input_tokens: response.usage().prompt_tokens,
                         output_tokens: 0,
-                        total_tokens: response.usage.total_tokens,
+                        total_tokens: response.usage().total_tokens,
                         ..Default::default()
                     }),
                     finish_reason: ModelFinishReason::Stop,
