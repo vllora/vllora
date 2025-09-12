@@ -115,7 +115,7 @@ pub async fn get_transport(
         } => {
             let reqwest_client = create_reqwest_client_with_headers(headers)?;
             let transport = SseClientTransport::start_with_client(
-                reqwest_client.clone(),
+                reqwest_client,
                 SseClientConfig {
                     sse_endpoint: server_url.clone().into(),
                     ..Default::default()
@@ -136,7 +136,7 @@ pub async fn get_transport(
         } => {
             let reqwest_client = create_reqwest_client_with_headers(headers)?;
             let transport = StreamableHttpClientTransport::with_client(
-                reqwest_client.clone(),
+                reqwest_client,
                 StreamableHttpClientTransportConfig::with_uri(server_url.clone()),
             );
 
