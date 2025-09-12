@@ -81,7 +81,7 @@ rmcp = { version = "0.2.1", default-features = true, features = [
   "server",
   "transport-streamable-http-client",
 ] }
-rmcp-macros = { version = "0.2.1", default-features = true}
+rmcp-macros = { version = "0.6.4", default-features = true}
 parking_lot = "0.12.4"
 rand = "0.9"
 
