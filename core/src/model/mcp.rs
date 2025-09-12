@@ -79,7 +79,7 @@ pub fn stdio() -> (tokio::io::Stdin, tokio::io::Stdout) {
 }
 
 fn create_reqwest_client_with_headers(
-    headers: HashMap<String, String>,
+    headers: &HashMap<String, String>,
 ) -> Result<reqwest::Client, McpServerError> {
     let mut headers_map = HeaderMap::new();
     for (key, value) in headers {
@@ -91,6 +91,7 @@ fn create_reqwest_client_with_headers(
                 headers_map.insert(header_name, header_value);
             }
             _ => {
+                tracing::warn!("Invalid header: {:?}", (key, value));
                 // Skip invalid headers
                 continue;
             }
@@ -112,7 +113,7 @@ pub async fn get_transport(
             headers,
             ..
         } => {
-            let reqwest_client = create_reqwest_client_with_headers(headers.clone())?;
+            let reqwest_client = create_reqwest_client_with_headers(headers)?;
             let transport = SseClientTransport::start_with_client(
                 reqwest_client.clone(),
                 SseClientConfig {
@@ -133,7 +134,7 @@ pub async fn get_transport(
             headers,
             ..
         } => {
-            let reqwest_client = create_reqwest_client_with_headers(headers.clone())?;
+            let reqwest_client = create_reqwest_client_with_headers(headers)?;
             let transport = StreamableHttpClientTransport::with_client(
                 reqwest_client.clone(),
                 StreamableHttpClientTransportConfig::with_uri(server_url.clone()),
