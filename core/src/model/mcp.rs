@@ -1,9 +1,12 @@
 use std::collections::HashMap;
 
 use regex::Regex;
+use reqwest::header::HeaderMap;
 use rmcp::model::{
     CallToolRequest, CallToolRequestMethod, ClientRequest, Extensions, GetMeta, ServerResult,
 };
+use rmcp::transport::sse_client::SseClientConfig;
+use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
 use rmcp::transport::StreamableHttpClientTransport;
 use rmcp::ServiceError;
 use rmcp::{model::CallToolRequestParam, transport::SseClientTransport, RoleClient};
@@ -75,12 +78,50 @@ pub fn stdio() -> (tokio::io::Stdin, tokio::io::Stdout) {
     (tokio::io::stdin(), tokio::io::stdout())
 }
 
+fn create_reqwest_client_with_headers(
+    headers: &HashMap<String, String>,
+) -> Result<reqwest::Client, McpServerError> {
+    let mut headers_map = HeaderMap::new();
+    for (key, value) in headers {
+        match (
+            key.parse::<reqwest::header::HeaderName>(),
+            value.parse::<reqwest::header::HeaderValue>(),
+        ) {
+            (Ok(header_name), Ok(header_value)) => {
+                headers_map.insert(header_name, header_value);
+            }
+            _ => {
+                tracing::warn!("Invalid header: {:?}", (key, value));
+                // Skip invalid headers
+                continue;
+            }
+        }
+    }
+
+    reqwest::Client::builder()
+        .default_headers(headers_map)
+        .build()
+        .map_err(McpServerError::ReqwestError)
+}
+
 pub async fn get_transport(
     definition: &McpDefinition,
 ) -> Result<RunningService<RoleClient, Box<dyn DynService<RoleClient>>>, McpServerError> {
     match &definition.r#type {
-        McpTransportType::Sse { server_url, .. } => {
-            let transport = SseClientTransport::start(server_url.clone()).await?;
+        McpTransportType::Sse {
+            server_url,
+            headers,
+            ..
+        } => {
+            let reqwest_client = create_reqwest_client_with_headers(headers)?;
+            let transport = SseClientTransport::start_with_client(
+                reqwest_client,
+                SseClientConfig {
+                    sse_endpoint: server_url.clone().into(),
+                    ..Default::default()
+                },
+            )
+            .await?;
 
             Ok(()
                 .into_dyn()
@@ -88,8 +129,16 @@ pub async fn get_transport(
                 .await
                 .map_err(|e| McpServerError::ClientStartError(e.to_string()))?)
         }
-        McpTransportType::Http { server_url, .. } => {
-            let transport = StreamableHttpClientTransport::from_uri(server_url.clone());
+        McpTransportType::Http {
+            server_url,
+            headers,
+            ..
+        } => {
+            let reqwest_client = create_reqwest_client_with_headers(headers)?;
+            let transport = StreamableHttpClientTransport::with_client(
+                reqwest_client,
+                StreamableHttpClientTransportConfig::with_uri(server_url.clone()),
+            );
 
             Ok(()
                 .into_dyn()
