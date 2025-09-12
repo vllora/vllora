@@ -3,6 +3,7 @@ use crate::model::types::ModelFinishReason;
 use crate::model::CredentialsIdent;
 use crate::types::cache::ResponseCacheOptions;
 use crate::types::provider::ModelPrice;
+use async_openai::types::Base64EmbeddingVector;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -683,8 +684,27 @@ pub struct CreateEmbeddingResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmbeddingData {
     pub object: String,
-    pub embedding: Vec<f32>,
+    pub embedding: EmbeddingDataValue,
     pub index: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum EmbeddingDataValue {
+    Float(Vec<f32>),
+    Base64(Base64EmbeddingVector),
+}
+
+impl From<Vec<f32>> for EmbeddingDataValue {
+    fn from(value: Vec<f32>) -> Self {
+        EmbeddingDataValue::Float(value)
+    }
+}
+
+impl From<Base64EmbeddingVector> for EmbeddingDataValue {
+    fn from(value: Base64EmbeddingVector) -> Self {
+        EmbeddingDataValue::Base64(value)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

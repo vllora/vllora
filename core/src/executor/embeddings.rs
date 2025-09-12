@@ -8,6 +8,7 @@ use crate::model::embeddings::initialize_embeddings_model_instance;
 use crate::model::types::ModelEvent;
 use crate::model::CredentialsIdent;
 use crate::models::ModelMetadata;
+use crate::types::embed::EmbeddingResult;
 use crate::types::engine::EmbeddingsModelDefinition;
 use crate::types::gateway::CreateEmbeddingRequest;
 use crate::types::provider::InferenceModelProvider;
@@ -21,7 +22,6 @@ use crate::{
     },
 };
 use actix_web::HttpRequest;
-use async_openai::types::CreateEmbeddingResponse;
 use tracing::Span;
 use tracing_futures::Instrument;
 
@@ -36,7 +36,7 @@ pub async fn handle_embeddings(
     cost_calculator: Arc<Box<dyn CostCalculator>>,
     tags: HashMap<String, String>,
     req: HttpRequest,
-) -> Result<CreateEmbeddingResponse, GatewayError> {
+) -> Result<EmbeddingResult, GatewayError> {
     let span = Span::current();
     request.model = llm_model.inference_provider.model_name.clone();
 

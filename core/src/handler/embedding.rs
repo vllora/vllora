@@ -1,5 +1,6 @@
 use crate::executor::embeddings::handle_embeddings;
 use crate::types::credentials::Credentials;
+use crate::types::embed::EmbeddingResult;
 use actix_web::{web, HttpResponse};
 use actix_web::{HttpMessage, HttpRequest};
 use tracing::Span;
@@ -52,15 +53,26 @@ pub async fn embeddings_handler(
     .instrument(span)
     .await?;
 
-    let data = result
-        .data
-        .iter()
-        .map(|v| EmbeddingData {
-            object: v.object.clone(),
-            embedding: v.embedding.clone(),
-            index: v.index,
-        })
-        .collect();
+    let data = match &result {
+        EmbeddingResult::Float(response) => response
+            .data
+            .iter()
+            .map(|v| EmbeddingData {
+                object: v.object.clone(),
+                embedding: v.embedding.clone().into(),
+                index: v.index,
+            })
+            .collect(),
+        EmbeddingResult::Base64(response) => response
+            .data
+            .iter()
+            .map(|v| EmbeddingData {
+                object: v.object.clone(),
+                embedding: v.embedding.clone().into(),
+                index: v.index,
+            })
+            .collect(),
+    };
 
     Ok(HttpResponse::Ok()
         .append_header(("X-Model-Name", llm_model.model.clone()))
@@ -73,8 +85,8 @@ pub async fn embeddings_handler(
             data,
             model: llm_model.model.clone(),
             usage: EmbeddingUsage {
-                prompt_tokens: result.usage.prompt_tokens,
-                total_tokens: result.usage.total_tokens,
+                prompt_tokens: result.usage().prompt_tokens,
+                total_tokens: result.usage().total_tokens,
                 cost: 0.0,
             },
         }))

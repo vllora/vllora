@@ -18,6 +18,7 @@ use crate::{
     },
     types::{
         credentials::ApiKeyCredentials,
+        embed::EmbeddingResult,
         gateway::{CompletionModelUsage, CreateEmbeddingRequest, Input},
     },
     GatewayResult,
@@ -47,7 +48,7 @@ impl EmbeddingsModelInstance for GeminiEmbeddings {
         request: &CreateEmbeddingRequest,
         outer_tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         _tags: HashMap<String, String>,
-    ) -> GatewayResult<async_openai::types::CreateEmbeddingResponse> {
+    ) -> GatewayResult<EmbeddingResult> {
         let contents = match &request.input {
             Input::String(s) => vec![Part::Text(s.clone())],
             Input::Array(vec) => vec.iter().map(|s| Part::Text(s.clone())).collect(),
@@ -103,7 +104,7 @@ impl EmbeddingsModelInstance for GeminiEmbeddings {
             )))
             .await;
 
-        let response = CreateEmbeddingResponse {
+        let response = EmbeddingResult::Float(CreateEmbeddingResponse {
             object: "list".to_string(),
             data: vec![Embedding {
                 object: "embedding".to_string(),
@@ -115,7 +116,7 @@ impl EmbeddingsModelInstance for GeminiEmbeddings {
                 prompt_tokens: tokens_count.total_tokens as u32,
                 total_tokens: tokens_count.total_tokens as u32,
             },
-        };
+        });
 
         Ok(response)
     }
