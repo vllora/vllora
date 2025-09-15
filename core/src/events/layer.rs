@@ -63,3 +63,16 @@ where
         .with_tracer(tracer)
         .with_filter(filter::Targets::new().with_target(target, level))
 }
+
+pub fn layer_with_new_relic<S, T>(level: LevelFilter, tracer: T) -> impl Layer<S>
+where
+    S: Subscriber + for<'lookup> LookupSpan<'lookup>,
+    T: Tracer + PreSampledTracer + 'static,
+{
+    tracing_opentelemetry::layer()
+        .with_location(true)
+        .with_tracked_inactivity(false)
+        .with_threads(false)
+        .with_tracer(tracer)
+        .with_filter(filter::Targets::new().with_default(level))
+}

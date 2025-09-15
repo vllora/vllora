@@ -39,6 +39,7 @@ pub mod routed_executor;
 pub mod stream_executor;
 pub mod stream_wrapper;
 
+#[tracing::instrument(skip(request_with_tools, executor_context, router_span, stream_cache_context, basic_cache_context, project_id))]
 pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
     request_with_tools: &ChatCompletionRequestWithTools<T>,
     executor_context: &ExecutorContext,
@@ -46,6 +47,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
     stream_cache_context: StreamCacheContext,
     basic_cache_context: BasicCacheContext,
     project_id: Option<&uuid::Uuid>,
+    llm_model: &ModelMetadata,
 ) -> Result<
     Either<
         Result<ChatCompletionStream, GatewayApiError>,
@@ -118,14 +120,11 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         cached_instance,
         cache_state,
         project_id,
+        llm_model,
     )
     .await?;
 
     let mut request = request_with_tools.request.clone();
-    let llm_model = executor_context
-        .model_metadata_factory
-        .get_model_metadata(&request.model, false, false, project_id)
-        .await?;
     request.model = llm_model.inference_provider.model_name.clone();
 
     let user: String = request
@@ -258,6 +257,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[tracing::instrument(skip(executor_context, request, tools_map, tools, router_span, extra, initial_messages, cached_model, cache_state, project_id))]
 pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Clone>(
     executor_context: &ExecutorContext,
     request: &ChatCompletionRequestWithTools<T>,
@@ -269,11 +269,8 @@ pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Cl
     cached_model: Option<CachedModel>,
     cache_state: Option<ResponseCacheState>,
     project_id: Option<&uuid::Uuid>,
+    llm_model: &ModelMetadata,
 ) -> Result<ResolvedModelContext, GatewayApiError> {
-    let llm_model = executor_context
-        .model_metadata_factory
-        .get_model_metadata(&request.request.model, false, false, project_id)
-        .await?;
     let (key_credentials, llm_model) = use_langdb_proxy(executor_context, llm_model.clone());
 
     let key = get_key_credentials(
