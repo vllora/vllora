@@ -47,7 +47,7 @@ dotenv = "0.15.0"
 futures-util = "0.3"
 
 ratatui = "0.29.0"
-crossterm = "0.28.1"
+crossterm = "0.29.0"
 open = "5.3.2"
 
 chrono = { workspace = true }
