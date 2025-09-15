@@ -9,6 +9,7 @@ use crate::error::GatewayError;
 use crate::events::JsonValue;
 use crate::events::SPAN_OPENAI;
 use crate::events::{self, RecordResult};
+use crate::model::error::ModelFinishError;
 use crate::model::handler::handle_tool_call;
 use crate::model::types::LLMFirstToken;
 use crate::model::{async_trait, DEFAULT_MAX_RETRIES};
@@ -767,9 +768,9 @@ impl<C: Config> OpenAIModel<C> {
     fn handle_finish_reason(finish_reason: Option<FinishReason>) -> GatewayError {
         match finish_reason {
             Some(FinishReason::ContentFilter) => {
-                ModelError::FinishError("Content filter blocked the completion".to_string()).into()
+                ModelError::FinishError(ModelFinishError::ContentFilter).into()
             }
-            x => ModelError::FinishError(format!("{x:?}")).into(),
+            x => ModelError::FinishError(ModelFinishError::Custom(format!("{x:?}"))).into(),
         }
     }
     fn map_finish_reason(finish_reason: &FinishReason) -> ModelFinishReason {

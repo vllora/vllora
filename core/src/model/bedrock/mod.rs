@@ -5,7 +5,7 @@ use super::types::{
 use super::{CredentialsIdent, ModelInstance};
 use crate::error::GatewayError;
 use crate::events::{self, JsonValue, RecordResult, SPAN_BEDROCK};
-use crate::model::error::BedrockError;
+use crate::model::error::{BedrockError, ModelFinishError};
 use crate::model::handler::handle_tool_call;
 use crate::model::types::LLMFirstToken;
 use crate::model::DEFAULT_MAX_RETRIES;
@@ -552,28 +552,37 @@ impl BedrockModel {
                         "Content Block Not Found".to_string(),
                     ))?;
                     match message {
-                        ContentBlock::Text(content) => {
-                            Ok(InnerExecutionResult::Finish(ChatCompletionMessageWithFinishReason::new(ChatCompletionMessage {
-                                role: "assistant".to_string(),
-                                content: Some(ChatCompletionContent::Text(content.clone())),
-                                ..Default::default()
-                            }, ModelFinishReason::Stop)))
-                        }
-                        ContentBlock::ReasoningContent(ReasoningContentBlock::ReasoningText(content)) => {
-                            Ok(InnerExecutionResult::Finish(ChatCompletionMessageWithFinishReason::new(ChatCompletionMessage {
-                                role: "assistant".to_string(),
-                                content: Some(ChatCompletionContent::Text(content.text().to_string())),
-                                ..Default::default()
-                            }, ModelFinishReason::Stop)))
-                        }
-                        _ => {
-                            Err(ModelError::FinishError(
-                        "Content block is not in a text format. Currently only TEXT format supported".into(),
-                    ).into())
-                        }
+                        ContentBlock::Text(content) => Ok(InnerExecutionResult::Finish(
+                            ChatCompletionMessageWithFinishReason::new(
+                                ChatCompletionMessage {
+                                    role: "assistant".to_string(),
+                                    content: Some(ChatCompletionContent::Text(content.clone())),
+                                    ..Default::default()
+                                },
+                                ModelFinishReason::Stop,
+                            ),
+                        )),
+                        ContentBlock::ReasoningContent(ReasoningContentBlock::ReasoningText(
+                            content,
+                        )) => Ok(InnerExecutionResult::Finish(
+                            ChatCompletionMessageWithFinishReason::new(
+                                ChatCompletionMessage {
+                                    role: "assistant".to_string(),
+                                    content: Some(ChatCompletionContent::Text(
+                                        content.text().to_string(),
+                                    )),
+                                    ..Default::default()
+                                },
+                                ModelFinishReason::Stop,
+                            ),
+                        )),
+                        _ => Err(ModelError::FinishError(
+                            ModelFinishError::ContentBlockNotInTextFormat,
+                        )
+                        .into()),
                     }
                 }
-                _ => Err(ModelError::FinishError("No output provided".into()).into()),
+                _ => Err(ModelError::FinishError(ModelFinishError::NoOutputProvided).into()),
             },
 
             StopReason::ToolUse => {
@@ -600,9 +609,8 @@ impl BedrockModel {
                             let content = if text.is_empty() { None } else { Some(text) };
 
                             let tool = self.tools.get(&tool_uses[0].name).ok_or(
-                                ModelError::FinishError(format!(
-                                    "Tool {} not found",
-                                    tool_uses[0].name
+                                ModelError::FinishError(ModelFinishError::ToolNotFound(
+                                    tool_uses[0].name.clone(),
                                 )),
                             )?;
                             let tool_calls: Vec<ToolCall> = tool_uses
@@ -690,12 +698,13 @@ impl BedrockModel {
                                 Ok(InnerExecutionResult::NextCall(conversation_messages))
                             }
                         }
-                        _ => Err(
-                            ModelError::FinishError("Tool use doesnt have message".into()).into(),
-                        ),
+                        _ => Err(ModelError::FinishError(
+                            ModelFinishError::ToolUseDoesntHaveMessage,
+                        )
+                        .into()),
                     }
                 } else {
-                    Err(ModelError::FinishError("Tool missing content".to_string()).into())
+                    Err(ModelError::FinishError(ModelFinishError::ToolMissingContent).into())
                 }
             }
             x => Err(Self::handle_stop_reason(x).into()),
@@ -1028,15 +1037,13 @@ impl BedrockModel {
     }
 
     pub fn handle_stop_reason(reason: StopReason) -> ModelError {
-        let str = match reason {
-            StopReason::ContentFiltered => "Content filter blocked the completion",
-            StopReason::GuardrailIntervened => "Guardrail intervened and stopped this execution",
-            StopReason::MaxTokens => {
-                "the maximum number of tokens specified in the request was reached"
-            }
-            x => &format!("Unhandled reason : {x:?}"),
+        let error = match reason {
+            StopReason::ContentFiltered => ModelFinishError::ContentFilter,
+            StopReason::GuardrailIntervened => ModelFinishError::GuardrailIntervened,
+            StopReason::MaxTokens => ModelFinishError::MaxTokens,
+            x => ModelFinishError::Custom(format!("Unhandled reason : {x:?}")),
         };
-        ModelError::FinishError(str.to_string())
+        ModelError::FinishError(error)
     }
 }
 
