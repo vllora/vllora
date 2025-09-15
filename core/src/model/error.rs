@@ -8,7 +8,7 @@ pub enum ModelError {
     CredentialsError(String),
 
     #[error("Model stopped with error: {0}")]
-    FinishError(String),
+    FinishError(ModelFinishError),
 
     #[error("OpenAI tool not found: {0}")]
     ToolNotFoundError(String),
@@ -60,6 +60,36 @@ impl From<BedrockError> for ModelError {
     fn from(value: BedrockError) -> Self {
         ModelError::Bedrock(Box::new(value))
     }
+}
+
+#[derive(Error, Debug)]
+pub enum ModelFinishError {
+    #[error("Content filter blocked the completion")]
+    ContentFilter,
+
+    #[error("The maximum number of tokens specified in the request was reached")]
+    MaxTokens,
+
+    #[error("Guardrail intervened and stopped this execution")]
+    GuardrailIntervened,
+
+    #[error("Tool missing content")]
+    ToolMissingContent,
+
+    #[error("Tool use doesnt have message")]
+    ToolUseDoesntHaveMessage,
+
+    #[error("Tool not found: {0}")]
+    ToolNotFound(String),
+
+    #[error("No output provided")]
+    NoOutputProvided,
+
+    #[error("Content block is not in a text format. Currently only TEXT format supported")]
+    ContentBlockNotInTextFormat,
+
+    #[error("{0}")]
+    Custom(String),
 }
 
 #[derive(Error, Debug)]

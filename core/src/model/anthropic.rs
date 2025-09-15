@@ -9,7 +9,7 @@ use crate::error::GatewayError;
 use crate::events::JsonValue;
 use crate::events::SPAN_ANTHROPIC;
 use crate::events::{self, RecordResult};
-use crate::model::error::AnthropicError;
+use crate::model::error::{AnthropicError, ModelFinishError};
 use crate::model::handler::handle_tool_call;
 use crate::model::types::LLMFirstToken;
 use crate::model::{async_trait, DEFAULT_MAX_RETRIES};
@@ -220,10 +220,7 @@ impl AnthropicModel {
     }
 
     fn handle_max_tokens_error() -> GatewayError {
-        ModelError::FinishError(
-            "the maximum number of tokens specified in the request was reached".to_string(),
-        )
-        .into()
+        ModelError::FinishError(ModelFinishError::MaxTokens).into()
     }
 
     fn build_response(

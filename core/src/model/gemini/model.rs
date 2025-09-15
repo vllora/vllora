@@ -14,7 +14,7 @@ use crate::error::GatewayError;
 use crate::events::JsonValue;
 use crate::events::SPAN_GEMINI;
 use crate::events::{self, RecordResult};
-use crate::model::error::AuthorizationError;
+use crate::model::error::{AuthorizationError, ModelFinishError};
 use crate::model::gemini::types::{
     Candidate, FunctionDeclaration, GenerationConfig, PartWithThought, Role, Tools,
 };
@@ -604,11 +604,10 @@ impl GeminiModel {
 
     fn handle_finish_reason(finish_reason: Option<FinishReason>) -> GatewayError {
         match finish_reason {
-            Some(FinishReason::MaxTokens) => ModelError::FinishError(
-                "the maximum number of tokens specified in the request was reached".to_string(),
-            )
-            .into(),
-            x => ModelError::FinishError(format!("{x:?}")).into(),
+            Some(FinishReason::MaxTokens) => {
+                ModelError::FinishError(ModelFinishError::MaxTokens).into()
+            }
+            x => ModelError::FinishError(ModelFinishError::Custom(format!("{x:?}"))).into(),
         }
     }
 
