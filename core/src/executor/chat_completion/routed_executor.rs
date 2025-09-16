@@ -184,7 +184,6 @@ impl RoutedExecutor {
             span.clone(),
             StreamCacheContext::default(),
             BasicCacheContext::default(),
-            project_id,
             &llm_model,
         )
         .instrument(span.clone())

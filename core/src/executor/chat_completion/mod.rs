@@ -39,14 +39,19 @@ pub mod routed_executor;
 pub mod stream_executor;
 pub mod stream_wrapper;
 
-#[tracing::instrument(skip(request_with_tools, executor_context, router_span, stream_cache_context, basic_cache_context, project_id))]
+#[tracing::instrument(skip(
+    request_with_tools,
+    executor_context,
+    router_span,
+    stream_cache_context,
+    basic_cache_context
+))]
 pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
     request_with_tools: &ChatCompletionRequestWithTools<T>,
     executor_context: &ExecutorContext,
     router_span: tracing::Span,
     stream_cache_context: StreamCacheContext,
     basic_cache_context: BasicCacheContext,
-    project_id: Option<&uuid::Uuid>,
     llm_model: &ModelMetadata,
 ) -> Result<
     Either<
@@ -119,7 +124,6 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         request_with_tools.request.messages.clone(),
         cached_instance,
         cache_state,
-        project_id,
         llm_model,
     )
     .await?;
@@ -257,7 +261,17 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
 }
 
 #[allow(clippy::too_many_arguments)]
-#[tracing::instrument(skip(executor_context, request, tools_map, tools, router_span, extra, initial_messages, cached_model, cache_state, project_id))]
+#[tracing::instrument(skip(
+    executor_context,
+    request,
+    tools_map,
+    tools,
+    router_span,
+    extra,
+    initial_messages,
+    cached_model,
+    cache_state
+))]
 pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Clone>(
     executor_context: &ExecutorContext,
     request: &ChatCompletionRequestWithTools<T>,
@@ -268,7 +282,6 @@ pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Cl
     initial_messages: Vec<ChatCompletionMessage>,
     cached_model: Option<CachedModel>,
     cache_state: Option<ResponseCacheState>,
-    project_id: Option<&uuid::Uuid>,
     llm_model: &ModelMetadata,
 ) -> Result<ResolvedModelContext, GatewayApiError> {
     let (key_credentials, llm_model) = use_langdb_proxy(executor_context, llm_model.clone());

@@ -760,8 +760,14 @@ impl DefaultModelMetadataFactory {
 
 #[async_trait]
 impl ModelMetadataFactory for DefaultModelMetadataFactory {
-    #[tracing::instrument(skip(self, model_name, _include_parameters, _include_benchmark, _project_id))]
-    
+    #[tracing::instrument(skip(
+        self,
+        model_name,
+        _include_parameters,
+        _include_benchmark,
+        _project_id
+    ))]
+
     async fn get_model_metadata(
         &self,
         model_name: &str,

@@ -351,7 +351,13 @@ impl<C: Config> OpenAIModel<C> {
         Ok(builder.build().map_err(custom_err)?)
     }
 
-    #[tracing::instrument(skip(first_chunk, tool_call_states, usage, stream_content, finish_reason))]
+    #[tracing::instrument(skip(
+        first_chunk,
+        tool_call_states,
+        usage,
+        stream_content,
+        finish_reason
+    ))]
     fn build_response(
         first_chunk: Option<&CreateChatCompletionStreamResponse>,
         tool_call_states: &[ChatCompletionMessageToolCall],
@@ -480,12 +486,16 @@ impl<C: Config> OpenAIModel<C> {
                     }
 
                     if let Some(content) = &chat_choice.delta.content {
-                        Self::send_event(tx, ModelEvent::new(
-                            &Span::current(),
-                            ModelEventType::LlmContent(LLMContentEvent {
-                                content: content.to_owned(),
-                            }),
-                        )).await?;
+                        Self::send_event(
+                            tx,
+                            ModelEvent::new(
+                                &Span::current(),
+                                ModelEventType::LlmContent(LLMContentEvent {
+                                    content: content.to_owned(),
+                                }),
+                            ),
+                        )
+                        .await?;
                         stream_content.push_str(content);
                     }
 
@@ -522,8 +532,13 @@ impl<C: Config> OpenAIModel<C> {
     }
 
     #[tracing::instrument(skip(tx))]
-    async fn send_event(tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>, event: ModelEvent) -> GatewayResult<()> {
-        tx.send(Some(event)).await.map_err(|e| GatewayError::CustomError(e.to_string()))
+    async fn send_event(
+        tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
+        event: ModelEvent,
+    ) -> GatewayResult<()> {
+        tx.send(Some(event))
+            .await
+            .map_err(|e| GatewayError::CustomError(e.to_string()))
     }
 
     #[tracing::instrument(skip(self, span, messages, tx, tags))]

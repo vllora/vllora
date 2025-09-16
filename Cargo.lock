@@ -362,8 +362,7 @@ checksum = "34ac096ce696dc2fcabef30516bb13c0a68a11d30131d3df6f04711467681b04"
 [[package]]
 name = "async-openai-compat"
 version = "0.29.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14bcf20e26c995e56d6cc02a848abee109c1bf765c8c147f1c20ef3422a27f5c"
+source = "git+https://github.com/langdb/async-openai-compat.git?rev=9a5c36f216e1a44cdf7cdaa93bba237e1a03c8fd#9a5c36f216e1a44cdf7cdaa93bba237e1a03c8fd"
 dependencies = [
  "async-openai-macros",
  "backoff",
@@ -383,13 +382,13 @@ dependencies = [
  "tokio-stream",
  "tokio-util",
  "tracing",
+ "tracing-futures",
 ]
 
 [[package]]
 name = "async-openai-macros"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0289cba6d5143bfe8251d57b4a8cac036adf158525a76533a7082ba65ec76398"
+source = "git+https://github.com/langdb/async-openai-compat.git?rev=9a5c36f216e1a44cdf7cdaa93bba237e1a03c8fd#9a5c36f216e1a44cdf7cdaa93bba237e1a03c8fd"
 dependencies = [
  "proc-macro2",
  "quote",
