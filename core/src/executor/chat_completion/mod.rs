@@ -39,6 +39,11 @@ pub mod routed_executor;
 pub mod stream_executor;
 pub mod stream_wrapper;
 
+pub type ChatCompletionExecutionResult = Either<
+    Result<ChatCompletionStream, GatewayApiError>,
+    Result<ChatCompletionResponse, GatewayApiError>,
+>;
+
 #[tracing::instrument(level = "debug", skip_all)]
 pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
     request_with_tools: &ChatCompletionRequestWithTools<T>,
@@ -47,13 +52,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
     stream_cache_context: StreamCacheContext,
     basic_cache_context: BasicCacheContext,
     llm_model: &ModelMetadata,
-) -> Result<
-    Either<
-        Result<ChatCompletionStream, GatewayApiError>,
-        Result<ChatCompletionResponse, GatewayApiError>,
-    >,
-    GatewayApiError,
-> {
+) -> Result<ChatCompletionExecutionResult, GatewayApiError> {
     let span = Span::current();
 
     let mut request_tools = vec![];
@@ -255,17 +254,20 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
 }
 
 #[allow(clippy::too_many_arguments)]
-#[tracing::instrument(level = "debug", skip(
-    executor_context,
-    request,
-    tools_map,
-    tools,
-    router_span,
-    extra,
-    initial_messages,
-    cached_model,
-    cache_state
-))]
+#[tracing::instrument(
+    level = "debug",
+    skip(
+        executor_context,
+        request,
+        tools_map,
+        tools,
+        router_span,
+        extra,
+        initial_messages,
+        cached_model,
+        cache_state
+    )
+)]
 pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Clone>(
     executor_context: &ExecutorContext,
     request: &ChatCompletionRequestWithTools<T>,

@@ -49,6 +49,13 @@ use tracing::Instrument;
 use tracing::Span;
 use valuable::Valuable;
 
+pub type StreamExecutionResult = (
+    FinishReason,
+    Vec<ChatCompletionMessageToolCall>,
+    Option<async_openai::types::CompletionUsage>,
+    Option<CreateChatCompletionResponse>,
+);
+
 macro_rules! target {
     () => {
         "langdb::user_tracing::models::openai"
@@ -351,13 +358,10 @@ impl<C: Config> OpenAIModel<C> {
         Ok(builder.build().map_err(custom_err)?)
     }
 
-    #[tracing::instrument(level = "debug", skip(
-        first_chunk,
-        tool_call_states,
-        usage,
-        stream_content,
-        finish_reason
-    ))]
+    #[tracing::instrument(
+        level = "debug",
+        skip(first_chunk, tool_call_states, usage, stream_content, finish_reason)
+    )]
     fn build_response(
         first_chunk: Option<&CreateChatCompletionStreamResponse>,
         tool_call_states: &[ChatCompletionMessageToolCall],
@@ -407,12 +411,7 @@ impl<C: Config> OpenAIModel<C> {
         mut stream: impl Stream<Item = Result<CreateChatCompletionStreamResponse, OpenAIError>> + Unpin,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         first_response_received: &mut bool,
-    ) -> GatewayResult<(
-        FinishReason,
-        Vec<ChatCompletionMessageToolCall>,
-        Option<async_openai::types::CompletionUsage>,
-        Option<CreateChatCompletionResponse>,
-    )> {
+    ) -> GatewayResult<StreamExecutionResult> {
         let mut tool_call_states: HashMap<u32, ChatCompletionMessageToolCall> = HashMap::new();
         let mut first_chunk = None;
         let mut stream_content = String::new();
@@ -838,7 +837,10 @@ impl<C: Config> OpenAIModel<C> {
         })
     }
 
-    #[tracing::instrument(level = "debug", skip(self, span, input_messages, tx, tags, first_response_received))]
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, span, input_messages, tx, tags, first_response_received)
+    )]
     async fn execute_stream_inner(
         &self,
         span: Span,
