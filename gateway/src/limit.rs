@@ -54,7 +54,7 @@ impl GatewayLimitChecker {
 
 #[async_trait::async_trait]
 impl LimitCheck for GatewayLimitChecker {
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(level = "debug", skip(self))]
     async fn can_execute_llm(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
         self.get_usage().await.map(|usage| {
             usage.daily < usage.daily_limit.unwrap_or(f64::MAX)

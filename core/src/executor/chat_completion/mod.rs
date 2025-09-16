@@ -39,13 +39,7 @@ pub mod routed_executor;
 pub mod stream_executor;
 pub mod stream_wrapper;
 
-#[tracing::instrument(skip(
-    request_with_tools,
-    executor_context,
-    router_span,
-    stream_cache_context,
-    basic_cache_context
-))]
+#[tracing::instrument(level = "debug", skip_all)]
 pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
     request_with_tools: &ChatCompletionRequestWithTools<T>,
     executor_context: &ExecutorContext,
@@ -261,7 +255,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
 }
 
 #[allow(clippy::too_many_arguments)]
-#[tracing::instrument(skip(
+#[tracing::instrument(level = "debug", skip(
     executor_context,
     request,
     tools_map,
