@@ -254,20 +254,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
 }
 
 #[allow(clippy::too_many_arguments)]
-#[tracing::instrument(
-    level = "debug",
-    skip(
-        executor_context,
-        request,
-        tools_map,
-        tools,
-        router_span,
-        extra,
-        initial_messages,
-        cached_model,
-        cache_state
-    )
-)]
+#[tracing::instrument(level = "debug", skip_all)]
 pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Clone>(
     executor_context: &ExecutorContext,
     request: &ChatCompletionRequestWithTools<T>,

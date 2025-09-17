@@ -5,7 +5,7 @@ use opentelemetry_sdk::trace::SpanProcessor;
 use serde_json::Value;
 use valuable::{Listable, Mappable, Valuable, Visit};
 
-pub use layer::{config, layer, layer_with_new_relic, RecordResult, UuidIdGenerator};
+pub use layer::{config, layer, level_layer, RecordResult, UuidIdGenerator};
 
 mod layer;
 pub mod span;

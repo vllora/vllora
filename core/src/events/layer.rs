@@ -64,7 +64,7 @@ where
         .with_filter(filter::Targets::new().with_target(target, level))
 }
 
-pub fn layer_with_new_relic<S, T>(level: LevelFilter, tracer: T) -> impl Layer<S>
+pub fn level_layer<S, T>(level: LevelFilter, tracer: T) -> impl Layer<S>
 where
     S: Subscriber + for<'lookup> LookupSpan<'lookup>,
     T: Tracer + PreSampledTracer + 'static,
