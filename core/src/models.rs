@@ -172,6 +172,7 @@ impl Display for BedrockMistralCompletionModel {
 #[serde(rename_all = "snake_case")]
 pub enum ModelCapability {
     Tools,
+    Reasoning,
 }
 
 impl FromStr for ModelCapability {
@@ -180,6 +181,7 @@ impl FromStr for ModelCapability {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "tools" => Ok(ModelCapability::Tools),
+            "reasoning" => Ok(ModelCapability::Reasoning),
             _ => Err("Invalid ModelCapability".to_string()),
         }
     }
@@ -189,6 +191,7 @@ impl Display for ModelCapability {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ModelCapability::Tools => write!(f, "tools"),
+            ModelCapability::Reasoning => write!(f, "reasoning"),
         }
     }
 }
