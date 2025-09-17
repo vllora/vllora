@@ -1317,6 +1317,7 @@ impl ModelProviderInstance for BedrockModelProvider {
                     release_date: None,
                     license: None,
                     knowledge_cutoff_date: None,
+                    langdb_release_date: None,
                     is_private: true,
                 };
 
