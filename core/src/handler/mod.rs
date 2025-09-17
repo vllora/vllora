@@ -131,6 +131,7 @@ pub struct LimitCheckWrapper {
 }
 
 impl LimitCheckWrapper {
+    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn can_execute_llm(&self) -> Result<bool, Box<dyn std::error::Error>> {
         for checker in &self.checkers {
             let mut checker = checker.lock().await;
@@ -164,6 +165,7 @@ pub struct DefaultLimitCheck;
 
 #[async_trait::async_trait]
 impl LimitCheck for DefaultLimitCheck {
+    #[tracing::instrument(level = "debug", skip(self))]
     async fn can_execute_llm(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
         Ok(true)
     }

@@ -760,6 +760,8 @@ impl DefaultModelMetadataFactory {
 
 #[async_trait]
 impl ModelMetadataFactory for DefaultModelMetadataFactory {
+    #[tracing::instrument(skip_all)]
+
     async fn get_model_metadata(
         &self,
         model_name: &str,

@@ -52,6 +52,13 @@ impl GuardModelInstanceFactory for GuardModelFactory {
             ..Default::default()
         };
 
+        let llm_model = self
+            .executor_context
+            .model_metadata_factory
+            .get_model_metadata(name, false, false, None)
+            .await
+            .expect("Failed to resolve model");
+
         let resolved = resolve_model_instance(
             &self.executor_context,
             &request,
@@ -62,7 +69,7 @@ impl GuardModelInstanceFactory for GuardModelFactory {
             Vec::new(),
             None,
             None,
-            None,
+            &llm_model,
         )
         .await
         .expect("Failed to resolve model instance");
