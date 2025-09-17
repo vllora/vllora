@@ -15,7 +15,7 @@ pub fn init_callback_handler(
     storage: Arc<Mutex<InMemoryStorage>>,
     calculator: GatewayCostCalculator,
 ) -> CallbackHandlerFn {
-    let (tx, mut rx) = tokio::sync::broadcast::channel(100);
+    let (tx, mut rx) = tokio::sync::broadcast::channel(10000);
     let start_times = Arc::new(Mutex::new(HashMap::<String, DateTime<Utc>>::new()));
     let ttft_times = Arc::new(Mutex::new(HashMap::<String, i64>::new()));
 

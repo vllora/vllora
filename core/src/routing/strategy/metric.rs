@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::routing::ConditionOpType;
 use crate::{
@@ -9,6 +9,7 @@ use crate::{
     },
     usage::{Metrics, ModelMetrics, TimeMetrics},
 };
+use futures::future;
 use rand::seq::IteratorRandom;
 use tracing::Span;
 use valuable::Valuable;
@@ -79,43 +80,49 @@ pub async fn route<M: MetricsRepository + Send + Sync>(
     // Collect all model candidates with their metrics
     let mut candidates = HashMap::new();
 
+    // Prepare parallel fetches
+    let mut providers_with_wildcard: HashSet<String> = HashSet::new();
+    let mut provider_model_pairs: Vec<(String, String)> = Vec::new();
+    let mut models_without_provider: Vec<String> = Vec::new();
+
     for model in models {
         if let Some((provider, model_name)) = model.split_once('/') {
             if model_name == "*" {
-                if let Ok(Some(provider_metrics)) =
-                    metrics_repository.get_provider_metrics(provider).await
-                {
-                    for (model_name, model_metrics) in provider_metrics.models {
-                        let period_metrics = match metrics_duration {
-                            Some(MetricsDuration::Total) | None => &model_metrics.metrics.total,
-                            Some(MetricsDuration::LastHour) => &model_metrics.metrics.last_hour,
-                            Some(MetricsDuration::Last15Minutes) => {
-                                &model_metrics.metrics.last_15_minutes
-                            }
-                        };
-
-                        candidates
-                            .insert(format!("{provider}/{model_name}"), period_metrics.clone());
-                    }
-                }
+                providers_with_wildcard.insert(provider.to_string());
             } else {
-                // Provider specified, fetch metrics for this specific provider/model
-                let model_metrics = if let Ok(Some(metrics)) = metrics_repository
-                    .get_model_metrics(provider, model_name)
-                    .await
-                {
-                    metrics
-                } else {
-                    // Use default metrics (0) when no metrics are available for direct model access
-                    ModelMetrics {
-                        metrics: TimeMetrics {
-                            total: create_default_metrics(),
-                            last_15_minutes: create_default_metrics(),
-                            last_hour: create_default_metrics(),
-                        },
-                    }
-                };
+                provider_model_pairs.push((provider.to_string(), model_name.to_string()));
+            }
+        } else {
+            models_without_provider.push(model.clone());
+        }
+    }
 
+    // Fire provider wildcard fetches in parallel
+    let provider_futures = providers_with_wildcard.iter().map(|provider| async {
+        let res = metrics_repository.get_provider_metrics(provider).await;
+        (provider.clone(), res)
+    });
+
+    // Fire specific provider/model fetches in parallel
+    let model_futures = provider_model_pairs
+        .iter()
+        .map(|(provider, model_name)| async {
+            let res = metrics_repository
+                .get_model_metrics(provider, model_name)
+                .await;
+            ((provider.clone(), model_name.clone()), res)
+        });
+
+    let (provider_results, model_results) = future::join(
+        future::join_all(provider_futures),
+        future::join_all(model_futures),
+    )
+    .await;
+
+    // Process provider wildcard results
+    for (provider, result) in provider_results {
+        if let Ok(Some(provider_metrics)) = result {
+            for (model_name, model_metrics) in provider_metrics.models {
                 let period_metrics = match metrics_duration {
                     Some(MetricsDuration::Total) | None => &model_metrics.metrics.total,
                     Some(MetricsDuration::LastHour) => &model_metrics.metrics.last_hour,
@@ -124,13 +131,40 @@ pub async fn route<M: MetricsRepository + Send + Sync>(
 
                 candidates.insert(format!("{provider}/{model_name}"), period_metrics.clone());
             }
+        }
+    }
+
+    // Process specific provider/model results
+    for ((provider, model_name), result) in model_results {
+        let model_metrics = if let Ok(Some(metrics)) = result {
+            metrics
         } else {
-            // No provider specified, look in all providers for this model
-            // We need to fetch all provider metrics to find this model
-            let mut found_model = false;
-            if let Ok(all_metrics) = metrics_repository.get_metrics().await {
-                for (provider, provider_metrics) in all_metrics {
-                    if let Some(metrics) = provider_metrics.models.get(model) {
+            // Use default metrics (0) when no metrics are available for direct model access
+            ModelMetrics {
+                metrics: TimeMetrics {
+                    total: create_default_metrics(),
+                    last_15_minutes: create_default_metrics(),
+                    last_hour: create_default_metrics(),
+                },
+            }
+        };
+
+        let period_metrics = match metrics_duration {
+            Some(MetricsDuration::Total) | None => &model_metrics.metrics.total,
+            Some(MetricsDuration::LastHour) => &model_metrics.metrics.last_hour,
+            Some(MetricsDuration::Last15Minutes) => &model_metrics.metrics.last_15_minutes,
+        };
+
+        candidates.insert(format!("{provider}/{model_name}"), period_metrics.clone());
+    }
+
+    // Handle models without provider. Single fetch of all metrics if needed.
+    if !models_without_provider.is_empty() {
+        if let Ok(all_metrics) = metrics_repository.get_metrics().await {
+            for model in models_without_provider {
+                let mut found_model = false;
+                for (provider, provider_metrics) in &all_metrics {
+                    if let Some(metrics) = provider_metrics.models.get(&model) {
                         let period_metrics = match metrics_duration {
                             Some(MetricsDuration::Total) | None => &metrics.metrics.total,
                             Some(MetricsDuration::LastHour) => &metrics.metrics.last_hour,
@@ -143,12 +177,18 @@ pub async fn route<M: MetricsRepository + Send + Sync>(
                         found_model = true;
                     }
                 }
-            }
 
-            // If no provider has this model, add it with default metrics for direct model access
-            if !found_model {
+                // If no provider has this model, add it with default metrics for direct model access
+                if !found_model {
+                    let default_metrics = create_default_metrics();
+                    candidates.insert(model, default_metrics);
+                }
+            }
+        } else {
+            // If fetching all metrics failed, fall back to default metrics for each model
+            for model in models_without_provider {
                 let default_metrics = create_default_metrics();
-                candidates.insert(model.clone(), default_metrics);
+                candidates.insert(model, default_metrics);
             }
         }
     }

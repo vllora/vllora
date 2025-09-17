@@ -49,6 +49,13 @@ use tracing::Instrument;
 use tracing::Span;
 use valuable::Valuable;
 
+pub type StreamExecutionResult = (
+    FinishReason,
+    Vec<ChatCompletionMessageToolCall>,
+    Option<async_openai::types::CompletionUsage>,
+    Option<CreateChatCompletionResponse>,
+);
+
 macro_rules! target {
     () => {
         "langdb::user_tracing::models::openai"
@@ -271,6 +278,7 @@ impl<C: Config> OpenAIModel<C> {
             .collect()
     }
 
+    #[tracing::instrument(level = "debug", skip(self))]
     fn build_request(
         &self,
         messages: &[ChatCompletionRequestMessage],
@@ -350,6 +358,7 @@ impl<C: Config> OpenAIModel<C> {
         Ok(builder.build().map_err(custom_err)?)
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     fn build_response(
         first_chunk: Option<&CreateChatCompletionStreamResponse>,
         tool_call_states: &[ChatCompletionMessageToolCall],
@@ -393,17 +402,13 @@ impl<C: Config> OpenAIModel<C> {
         }
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn process_stream(
         &self,
         mut stream: impl Stream<Item = Result<CreateChatCompletionStreamResponse, OpenAIError>> + Unpin,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         first_response_received: &mut bool,
-    ) -> GatewayResult<(
-        FinishReason,
-        Vec<ChatCompletionMessageToolCall>,
-        Option<async_openai::types::CompletionUsage>,
-        Option<CreateChatCompletionResponse>,
-    )> {
+    ) -> GatewayResult<StreamExecutionResult> {
         let mut tool_call_states: HashMap<u32, ChatCompletionMessageToolCall> = HashMap::new();
         let mut first_chunk = None;
         let mut stream_content = String::new();
@@ -477,14 +482,16 @@ impl<C: Config> OpenAIModel<C> {
                     }
 
                     if let Some(content) = &chat_choice.delta.content {
-                        let _ = tx
-                            .send(Some(ModelEvent::new(
+                        Self::send_event(
+                            tx,
+                            ModelEvent::new(
                                 &Span::current(),
                                 ModelEventType::LlmContent(LLMContentEvent {
                                     content: content.to_owned(),
                                 }),
-                            )))
-                            .await;
+                            ),
+                        )
+                        .await?;
                         stream_content.push_str(content);
                     }
 
@@ -520,6 +527,17 @@ impl<C: Config> OpenAIModel<C> {
         }
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
+    async fn send_event(
+        tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
+        event: ModelEvent,
+    ) -> GatewayResult<()> {
+        tx.send(Some(event))
+            .await
+            .map_err(|e| GatewayError::CustomError(e.to_string()))
+    }
+
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn execute_inner(
         &self,
         span: Span,
@@ -722,6 +740,7 @@ impl<C: Config> OpenAIModel<C> {
         }
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn execute(
         &self,
         input_messages: Vec<ChatCompletionRequestMessage>,
@@ -765,6 +784,7 @@ impl<C: Config> OpenAIModel<C> {
         unreachable!();
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     fn handle_finish_reason(finish_reason: Option<FinishReason>) -> GatewayError {
         match finish_reason {
             Some(FinishReason::ContentFilter) => {
@@ -773,6 +793,8 @@ impl<C: Config> OpenAIModel<C> {
             x => ModelError::FinishError(ModelFinishError::Custom(format!("{x:?}"))).into(),
         }
     }
+
+    #[tracing::instrument(level = "debug", skip_all)]
     fn map_finish_reason(finish_reason: &FinishReason) -> ModelFinishReason {
         match finish_reason {
             FinishReason::Stop => ModelFinishReason::Stop,
@@ -782,6 +804,8 @@ impl<C: Config> OpenAIModel<C> {
             FinishReason::FunctionCall => ModelFinishReason::Other("FunctionCall".to_string()),
         }
     }
+
+    #[tracing::instrument(level = "debug", skip_all)]
     fn map_usage(usage: Option<&CompletionUsage>) -> Option<CompletionModelUsage> {
         usage.map(|u| CompletionModelUsage {
             input_tokens: u.prompt_tokens,
@@ -810,6 +834,7 @@ impl<C: Config> OpenAIModel<C> {
         })
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn execute_stream_inner(
         &self,
         span: Span,
@@ -934,6 +959,7 @@ impl<C: Config> OpenAIModel<C> {
         }
     }
 
+    #[tracing::instrument(skip_all)]
     async fn execute_stream(
         &self,
         input_messages: Vec<ChatCompletionRequestMessage>,
