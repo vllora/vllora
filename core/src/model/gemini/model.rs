@@ -627,6 +627,22 @@ impl GeminiModel {
             FinishReason::Safety => ModelFinishReason::ContentFilter,
             FinishReason::Recitation => ModelFinishReason::Other("Recitation".to_string()),
             FinishReason::Other => ModelFinishReason::Other("Other".to_string()),
+            FinishReason::Blocklist => ModelFinishReason::Other("Blocklist".to_string()),
+            FinishReason::ProhibitedContent => {
+                ModelFinishReason::Other("Prohibited Content".to_string())
+            }
+            FinishReason::Spii => ModelFinishReason::Other("Spii".to_string()),
+            FinishReason::MalformedFunctionCall => {
+                ModelFinishReason::Other("Malformed Function Call".to_string())
+            }
+            FinishReason::ImageSafety => ModelFinishReason::Other("Image Safety".to_string()),
+            FinishReason::UnexpectedToolCall => {
+                ModelFinishReason::Other("Unexpected Tool Call".to_string())
+            }
+            FinishReason::TooManyToolCalls => {
+                ModelFinishReason::Other("Too Many Tool Calls".to_string())
+            }
+            FinishReason::Language => ModelFinishReason::Other("Unsupported Language".to_string()),
         }
     }
 
