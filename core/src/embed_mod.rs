@@ -99,7 +99,7 @@ impl OpenAIEmbed {
                 .map(JsonValue)
                 .record();
 
-            let response = result.map_err(|e| ModelError::CustomError(e.to_string()))?;
+            let response = result.map_err(ModelError::OpenAIApi)?;
 
             let span = Span::current();
             let usage = response.usage.clone();
