@@ -85,6 +85,9 @@ pub enum ModelFinishError {
     #[error("No output provided")]
     NoOutputProvided,
 
+    #[error("No choices")]
+    NoChoices,
+
     #[error("Content block is not in a text format. Currently only TEXT format supported")]
     ContentBlockNotInTextFormat,
 

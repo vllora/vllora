@@ -70,10 +70,6 @@ enum InnerExecutionResult {
     NextCall(Vec<ChatCompletionRequestMessage>),
 }
 
-fn custom_err(e: impl ToString) -> ModelError {
-    ModelError::CustomError(e.to_string())
-}
-
 /// Helper function to determine if an endpoint is for Azure OpenAI
 pub fn is_azure_endpoint(endpoint: &str) -> bool {
     endpoint.contains("azure.com")
@@ -306,7 +302,7 @@ impl<C: Config> OpenAIModel<C> {
                         strict: Some(false),
                     })
                     .build()
-                    .map_err(custom_err)?,
+                    .map_err(ModelError::OpenAIApi)?,
             );
         }
 
@@ -355,7 +351,7 @@ impl<C: Config> OpenAIModel<C> {
                 .tool_choice(ChatCompletionToolChoiceOption::Auto);
         }
 
-        Ok(builder.build().map_err(custom_err)?)
+        Ok(builder.build().map_err(ModelError::OpenAIApi)?)
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
@@ -568,7 +564,7 @@ impl<C: Config> OpenAIModel<C> {
                 .as_ref()
                 .map(JsonValue)
                 .record();
-            let response = result.map_err(custom_err)?;
+            let response = result.map_err(ModelError::OpenAIApi)?;
 
             let span = Span::current();
             span.record("output", serde_json::to_string(&response)?);
@@ -590,7 +586,7 @@ impl<C: Config> OpenAIModel<C> {
 
         let choices = response.choices;
         if choices.is_empty() {
-            return Err(custom_err("No Choices").into());
+            return Err(ModelError::FinishError(ModelFinishError::NoChoices).into());
         }
         // always take 1 since we put n = 1 in request
         let first_choice = choices[0].to_owned();
@@ -679,7 +675,7 @@ impl<C: Config> OpenAIModel<C> {
                             ChatCompletionRequestAssistantMessageArgs::default()
                                 .tool_calls(tool_calls.clone())
                                 .build()
-                                .map_err(custom_err)?,
+                                .map_err(ModelError::OpenAIApi)?,
                         )];
                     let result_tool_calls =
                         Self::handle_tool_calls(tool_calls.iter(), &self.tools, tx, tags.clone())
@@ -729,7 +725,7 @@ impl<C: Config> OpenAIModel<C> {
                         ),
                     ))
                 } else {
-                    Err(custom_err("no finish reason").into())
+                    Err(ModelError::FinishError(ModelFinishError::NoOutputProvided).into())
                 }
             }
             _ => {
@@ -937,7 +933,7 @@ impl<C: Config> OpenAIModel<C> {
                             ChatCompletionRequestAssistantMessageArgs::default()
                                 .tool_calls(tool_calls.clone())
                                 .build()
-                                .map_err(custom_err)?,
+                                .map_err(ModelError::OpenAIApi)?,
                         )];
                     let result_tool_calls =
                         Self::handle_tool_calls(tool_calls.iter(), &self.tools, tx, tags.clone())

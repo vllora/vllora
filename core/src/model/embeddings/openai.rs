@@ -94,14 +94,14 @@ impl<C: Config + std::marker::Sync + std::marker::Send> EmbeddingsModelInstance
                 .create(embedding_request)
                 .await
                 .map(|r| r.into())
-                .map_err(|e| ModelError::CustomError(e.to_string()))?,
+                .map_err(ModelError::OpenAIApi)?,
             EncodingFormat::Base64 => self
                 .client
                 .embeddings()
                 .create_base64(embedding_request)
                 .await
                 .map(|r| r.into())
-                .map_err(|e| ModelError::CustomError(e.to_string()))?,
+                .map_err(ModelError::OpenAIApi)?,
         };
 
         let span = Span::current();
