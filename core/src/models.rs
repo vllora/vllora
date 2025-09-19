@@ -298,6 +298,7 @@ pub struct ModelMetadata {
     pub benchmark_info: Option<serde_json::Value>,
     #[serde(default)]
     pub virtual_model_id: Option<String>,
+    #[serde(default)]
     pub min_service_level: i32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub release_date: Option<chrono::NaiveDate>,
@@ -307,6 +308,7 @@ pub struct ModelMetadata {
     pub knowledge_cutoff_date: Option<chrono::NaiveDate>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub langdb_release_date: Option<chrono::NaiveDate>,
+    #[serde(default)]
     pub is_private: bool,
 }
 
