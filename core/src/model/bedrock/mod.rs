@@ -1133,7 +1133,7 @@ impl BedrockModelProvider {
     pub async fn new(credentials: BedrockCredentials) -> Result<Self, GatewayApiError> {
         let config = get_sdk_config(Some(&credentials))
             .await
-            .map_err(|e| GatewayApiError::ModelError(Box::new(e)))?;
+            .map_err(|e| GatewayApiError::GatewayError(GatewayError::ModelError(Box::new(e))))?;
         let client = BedrockClient::new(&config);
         Ok(Self { client })
     }
@@ -1150,10 +1150,9 @@ impl ModelProviderInstance for BedrockModelProvider {
             .await
             .map_err(|e| {
                 tracing::error!("Failed to list Bedrock models: {:?}", e);
-                GatewayApiError::ModelError(Box::new(ModelError::CustomError(format!(
-                    "Failed to list Bedrock models: {}",
-                    e
-                ))))
+                GatewayApiError::GatewayError(GatewayError::ModelError(Box::new(
+                    ModelError::CustomError(format!("Failed to list Bedrock models: {}", e)),
+                )))
             })?;
 
         let mut models = Vec::new();

@@ -50,9 +50,6 @@ pub enum GatewayApiError {
     #[error(transparent)]
     CostCalculatorError(#[from] CostCalculatorError),
 
-    #[error(transparent)]
-    ModelError(#[from] Box<model::error::ModelError>),
-
     #[error("Token usage limit exceeded")]
     TokenUsageLimit,
 
@@ -98,10 +95,6 @@ impl actix_web::error::ResponseError for GatewayApiError {
             GatewayApiError::GatewayError(e) => e.status_code(),
             GatewayApiError::CustomError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             GatewayApiError::CostCalculatorError(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            GatewayApiError::ModelError(error) => match error.as_ref() {
-                model::error::ModelError::ModelNotFound(_) => StatusCode::BAD_REQUEST,
-                _ => StatusCode::INTERNAL_SERVER_ERROR,
-            },
             GatewayApiError::RouteError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             GatewayApiError::RoutedExecutorError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             GatewayApiError::TokenUsageLimit => StatusCode::BAD_REQUEST,
