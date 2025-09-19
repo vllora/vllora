@@ -622,9 +622,6 @@ impl BedrockAdditionalModelFields {
         deserializer: D,
         managed_provider: Option<&BedrockProvider>,
     ) -> Result<Self, D::Error> {
-        #[derive(Deserialize)]
-        #[serde(deny_unknown_fields)]
-        struct Unit;
         let id = match managed_provider {
             Some(provider) => format!("{provider}.{id}"),
             None => id.to_string(),

@@ -109,7 +109,7 @@ pub struct TracedModel<Inner: ModelInstance> {
 #[allow(clippy::too_many_arguments)]
 pub async fn init_completion_model_instance(
     definition: CompletionModelDefinition,
-    tools: HashMap<String, Box<(dyn Tool + 'static)>>,
+    tools: HashMap<String, Box<dyn Tool + 'static>>,
     executor_context: &ExecutorContext,
     endpoint: Option<&str>,
     provider_name: Option<&str>,
@@ -274,7 +274,7 @@ pub async fn initialize_completion(
     extra: Option<&Extra>,
     initial_messages: Vec<ChatCompletionMessage>,
 ) -> Result<Box<dyn ModelInstance>, ModelError> {
-    let tools: HashMap<_, Box<(dyn Tool + 'static)>> = HashMap::new();
+    let tools: HashMap<_, Box<dyn Tool + 'static>> = HashMap::new();
 
     init_completion_model_instance(
         definition,
