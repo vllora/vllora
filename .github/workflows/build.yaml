@@ -1,0 +1,58 @@
+name: Build AI Gateway
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+concurrency:
+  group: main
+  cancel-in-progress: true
+permissions:
+  id-token: write # This is required for requesting the JWT
+  contents: write # This is required for actions/checkout
+
+jobs:
+  build:
+    timeout-minutes: 60
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && \
+          sudo apt-get install -y \
+          build-essential \
+          libssl-dev \
+          pkg-config \
+          libpq5 \
+          libpq-dev \
+          clang \
+          cmake
+       
+      - name: Install stable
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+      
+      - uses: Swatinem/rust-cache@v2
+      
+      - name: Build Gateway project
+        run: |
+          cargo build --release
+          
+      - name: Upload AI Gateway artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-gateway-binary
+          path: target/release/ai-gateway
+          retention-days: 30
+            
