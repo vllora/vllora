@@ -182,7 +182,7 @@ impl FromStr for ModelCapability {
         match s {
             "tools" => Ok(ModelCapability::Tools),
             "reasoning" => Ok(ModelCapability::Reasoning),
-            _ => Err("Invalid ModelCapability".to_string()),
+            _ => Err(format!("Invalid ModelCapability: {s}")),
         }
     }
 }
