@@ -254,6 +254,7 @@ impl ConditionExpr {
         key == "metadata.user.tier"
             || key == "metadata.user.id"
             || key == "metadata.region"
+            || key == "metadata.country"
             || key.starts_with("pre_request.")
             || key.starts_with("metrics.provider.")
             || key.starts_with("metrics.model.")
@@ -465,11 +466,7 @@ impl RouteStrategy for LlmRouter {
                                     .await?
                                 }
                             },
-                            None => {
-                                return Err(RouterError::MetricRouterError(
-                                    "No sort order specified".to_string(),
-                                ))
-                            }
+                            None => any.first().cloned().unwrap_or_default(),
                         };
 
                         vec![HashMap::from([(

@@ -9,7 +9,7 @@
         "conditions": {
           "all": [
             { "metadata.user.tier": { "eq": "premium" } },
-            { "metadata.region": { "eq": "EU" } },
+            { "metadata.region": { "eq": "Europe" } },
             { "pre_request.daily_user_request_limit.passed": { "eq": true } },
             { "metrics.provider.error_rate": { "lt": 0.02 } }
           ]
