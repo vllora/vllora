@@ -25,7 +25,7 @@ serde_json = { workspace = true }
 async-trait = { workspace = true }
 thiserror = { workspace = true }
 futures = "0.3.30"
-actix-cors = "0.7.0"
+actix-cors = "0.7.1"
 
 minijinja = "2.12.0"
 reqwest = { version = "0.12.23", default-features = false, features = [
