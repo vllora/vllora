@@ -156,6 +156,14 @@ impl ImageGenerationModelInstance for OpenAIImageGeneration {
                 ImageStyle::Vivid => async_openai::types::ImageStyle::Vivid,
                 ImageStyle::Natural => async_openai::types::ImageStyle::Natural,
             }),
+            moderation: request.moderation.as_ref().map(|m| match m {
+                crate::types::gateway::ImageModeration::Auto => {
+                    async_openai::types::ImageModeration::Auto
+                }
+                crate::types::gateway::ImageModeration::Low => {
+                    async_openai::types::ImageModeration::Low
+                }
+            }),
         };
 
         let api_base = self.client.config().api_base().to_string();
