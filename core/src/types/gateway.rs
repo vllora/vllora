@@ -739,6 +739,16 @@ pub struct CreateImageRequest {
     pub style: Option<ImageStyle>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub moderation: Option<ImageModeration>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum ImageModeration {
+    #[default]
+    Auto,
+    Low,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
