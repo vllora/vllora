@@ -739,6 +739,12 @@ pub trait ModelMetadataFactory: Send + Sync {
         model_names: &[String],
     ) -> Result<ModelMetadata, GatewayApiError>;
 
+    async fn get_models_by_name(
+        &self,
+        model_name: &str,
+        project_id: Option<&uuid::Uuid>,
+    ) -> Result<Vec<ModelMetadata>, GatewayApiError>;
+
     async fn get_top_by_ranking(
         &self,
         ranking_name: &str,
@@ -784,6 +790,14 @@ impl ModelMetadataFactory for DefaultModelMetadataFactory {
             .collect::<Vec<ModelMetadata>>();
 
         get_cheapest_model_metadata(&models)
+    }
+
+    async fn get_models_by_name(
+        &self,
+        _model_name: &str,
+        _project_id: Option<&uuid::Uuid>,
+    ) -> Result<Vec<ModelMetadata>, GatewayApiError> {
+        unimplemented!()
     }
 
     async fn get_top_by_ranking(
