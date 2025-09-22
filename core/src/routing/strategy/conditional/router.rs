@@ -232,7 +232,7 @@ mod tests {
                 conditions: Some(RouteCondition::Expr(HashMap::from([(
                     "metadata.region".to_string(),
                     ConditionOp {
-                        op: HashMap::from([(ConditionOpType::Eq, serde_json::json!("EU"))]),
+                        op: HashMap::from([(ConditionOpType::Eq, serde_json::json!("Europe"))]),
                     },
                 )]))),
                 targets: Some(TargetSpec::List(vec![HashMap::from([(
@@ -246,7 +246,7 @@ mod tests {
         let router = ConditionalRouter { routing };
         let factory = Box::new(MockFactory { result: true }) as Box<dyn InterceptorFactory>; // result doesn't matter
         let mut metadata = HashMap::new();
-        metadata.insert("region".to_string(), serde_json::json!("EU"));
+        metadata.insert("region".to_string(), serde_json::json!("Europe"));
         let target = router
             .get_target(
                 factory,
@@ -294,7 +294,7 @@ mod tests {
                     conditions: Some(RouteCondition::Expr(HashMap::from([(
                         "metadata.region".to_string(),
                         ConditionOp {
-                            op: HashMap::from([(ConditionOpType::Eq, serde_json::json!("EU"))]),
+                            op: HashMap::from([(ConditionOpType::Eq, serde_json::json!("Europe"))]),
                         },
                     )]))),
                     targets: Some(TargetSpec::List(vec![HashMap::from([(
@@ -309,7 +309,7 @@ mod tests {
         let router = ConditionalRouter { routing };
         let factory = Box::new(MockFactory { result: true }) as Box<dyn InterceptorFactory>;
         let mut metadata = HashMap::new();
-        metadata.insert("region".to_string(), serde_json::json!("EU"));
+        metadata.insert("region".to_string(), serde_json::json!("Europe"));
         let target = router
             .get_target(
                 factory,

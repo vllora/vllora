@@ -109,11 +109,19 @@ async fn evaluate_op(
         get_value(key)
     };
 
+    tracing::error!("value: {:?}", value);
+
     let Some(value) = value else {
         return Ok(false);
     };
 
     for (op_name, op_value) in &op.op {
+        tracing::error!(
+            "op_name: {:?}, op_value: {:?}, value: {:?}",
+            op_name,
+            op_value,
+            value
+        );
         if !compare_values(op_name, op_value, &value) {
             return Ok(false);
         }
