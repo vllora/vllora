@@ -47,7 +47,7 @@ pub async fn execute(
     cache_context: BasicCacheContext,
     model_metadata: Option<Model>,
 ) -> Result<ChatCompletionResponse, GatewayApiError> {
-    let (inner_tx, mut rx) = tokio::sync::mpsc::channel::<Option<ModelEvent>>(100);
+    let (inner_tx, mut rx) = tokio::sync::mpsc::channel::<Option<ModelEvent>>(10000);
     tokio::spawn(async move {
         while let Some(event) = rx.recv().await {
             if let Some(sender) = &cache_context.events_sender {
