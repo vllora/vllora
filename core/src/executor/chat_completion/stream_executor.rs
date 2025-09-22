@@ -53,11 +53,11 @@ pub async fn stream_chunks(
     };
 
     let db_model = model_options.definition.get_db_model();
-    let (outer_tx, rx) = tokio::sync::mpsc::channel(100);
+    let (outer_tx, rx) = tokio::sync::mpsc::channel(10000);
 
     tokio::spawn(
         async move {
-            let (tx, mut rx) = tokio::sync::mpsc::channel::<Option<ModelEvent>>(100);
+            let (tx, mut rx) = tokio::sync::mpsc::channel::<Option<ModelEvent>>(10000);
             let forward_fut = async {
                 let mut assistant_msg = String::new();
                 while let Some(Some(mut msg)) = rx.recv().await {
