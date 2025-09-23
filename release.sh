@@ -99,7 +99,7 @@ npx standard-version --release-as "$NEW_VERSION" --tag-prefix "" --skip.tag true
 echo "Creating PR for version bump..."
 BRANCH_NAME="release/v$NEW_VERSION"
 git checkout -b $BRANCH_NAME
-git add CHANGELOG.md core/Cargo.toml udfs/Cargo.toml gateway/Cargo.toml
+git add CHANGELOG.md core/Cargo.toml udfs/Cargo.toml gateway/Cargo.toml guardrails/Cargo.toml
 git commit -m "chore: release v$NEW_VERSION"
 git push origin $BRANCH_NAME
 

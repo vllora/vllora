@@ -1,6 +1,6 @@
 [package]
 name = "langdb_guardrails"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 authors = ["LangDB Team<api@langdb.ai>"]
 description = "AI gateway Core for LangDB AI Gateway."
@@ -12,7 +12,7 @@ keywords = ["llm", "openai", "anthropic", "gemini", "mcp"]
 categories = ["web-programming", "network-programming"]
 
 [dependencies]
-langdb_core = { path = "../core", version = "0.3.0" }
+langdb_core = { path = "../core", version = "0.3.1" }
 serde_json = { workspace = true }
 serde = { workspace = true }
 serde_yaml = { workspace = true }
