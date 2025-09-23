@@ -48,7 +48,7 @@ Govern, Secure, and Optimize your AI Traffic. LangDB AI Gateway provides unified
 - Priority support and SLA guarantees
 - Custom deployment options
 
-[Contact our team](https://calendly.com/d/cqs2-cfz-gdn/meet-langdb-team) to learn more about enterprise solutions.
+[Contact our team](https://calendly.com/d/cpqt-bhz-gpf/meet-with-langdb-team) to learn more about enterprise solutions.
 
 ## Getting Started
 
