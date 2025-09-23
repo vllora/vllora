@@ -2,12 +2,18 @@ use std::collections::HashMap;
 
 use async_openai::{
     config::{AzureConfig, Config, OpenAIConfig},
+    types::EmbeddingUsage,
     Client,
 };
+use tracing::field;
 use tracing::Span;
+use tracing_futures::Instrument;
+use valuable::Valuable;
 
 use crate::{
-    events::SPAN_OPENAI,
+    create_model_span,
+    error::GatewayError,
+    events::{JsonValue, SPAN_OPENAI},
     model::{
         embeddings::EmbeddingsModelInstance,
         error::{AuthorizationError, ModelError},
@@ -22,6 +28,15 @@ use crate::{
     },
     GatewayResult,
 };
+
+macro_rules! target {
+    () => {
+        "langdb::user_tracing::models::openai"
+    };
+    ($subtgt:literal) => {
+        concat!("langdb::user_tracing::models::openai::", $subtgt)
+    };
+}
 
 pub struct OpenAIEmbeddings<C: Config = OpenAIConfig> {
     client: Client<C>,
@@ -63,31 +78,15 @@ impl OpenAIEmbeddings<AzureConfig> {
     }
 }
 
-#[async_trait::async_trait]
-impl<C: Config + std::marker::Sync + std::marker::Send> EmbeddingsModelInstance
-    for OpenAIEmbeddings<C>
-{
-    async fn embed(
+impl<C: Config> OpenAIEmbeddings<C> {
+    async fn execute(
         &self,
-        request: &CreateEmbeddingRequest,
-        outer_tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
-        _tags: HashMap<String, String>,
+        embedding_request: async_openai::types::CreateEmbeddingRequest,
+        encoding_format: &EncodingFormat,
+        model_name: &str,
+        outer_tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
     ) -> GatewayResult<EmbeddingResult> {
-        let embedding_request = async_openai::types::CreateEmbeddingRequest {
-            model: request.model.clone(),
-            input: match &request.input {
-                Input::String(s) => s.into(),
-                Input::Array(vec) => vec.into(),
-            },
-            user: request.user.clone(),
-            dimensions: request.dimensions.map(|d| d as u32),
-            encoding_format: Some(match request.encoding_format {
-                EncodingFormat::Float => async_openai::types::EncodingFormat::Float,
-                EncodingFormat::Base64 => async_openai::types::EncodingFormat::Base64,
-            }),
-        };
-
-        let response: EmbeddingResult = match request.encoding_format {
+        let response: EmbeddingResult = match encoding_format {
             EncodingFormat::Float => self
                 .client
                 .embeddings()
@@ -105,12 +104,12 @@ impl<C: Config + std::marker::Sync + std::marker::Send> EmbeddingsModelInstance
         };
 
         let span = Span::current();
-        let _ = outer_tx
-            .send(Some(ModelEvent::new(
+        outer_tx
+            .try_send(Some(ModelEvent::new(
                 &span,
                 ModelEventType::LlmStop(LLMFinishEvent {
                     provider_name: SPAN_OPENAI.to_string(),
-                    model_name: request.model.clone(),
+                    model_name: model_name.to_string(),
                     output: None,
                     usage: Some(CompletionModelUsage {
                         input_tokens: response.usage().prompt_tokens,
@@ -123,8 +122,68 @@ impl<C: Config + std::marker::Sync + std::marker::Send> EmbeddingsModelInstance
                     credentials_ident: self.credentials_ident.clone(),
                 }),
             )))
-            .await;
+            .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+
+        span.record(
+            "raw_usage",
+            JsonValue(&serde_json::to_value(response.usage()).unwrap()).as_value(),
+        );
+        span.record(
+            "usage",
+            JsonValue(&serde_json::to_value(Self::map_usage(response.usage())).unwrap()).as_value(),
+        );
 
         Ok(response)
+    }
+
+    fn map_usage(usage: &EmbeddingUsage) -> CompletionModelUsage {
+        CompletionModelUsage {
+            input_tokens: usage.prompt_tokens,
+            total_tokens: usage.total_tokens,
+            ..Default::default()
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl<C: Config + std::marker::Sync + std::marker::Send> EmbeddingsModelInstance
+    for OpenAIEmbeddings<C>
+{
+    async fn embed(
+        &self,
+        request: &CreateEmbeddingRequest,
+        outer_tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
+        tags: HashMap<String, String>,
+    ) -> GatewayResult<EmbeddingResult> {
+        let embedding_request = async_openai::types::CreateEmbeddingRequest {
+            model: request.model.clone(),
+            input: match &request.input {
+                Input::String(s) => s.into(),
+                Input::Array(vec) => vec.into(),
+            },
+            user: request.user.clone(),
+            dimensions: request.dimensions.map(|d| d as u32),
+            encoding_format: Some(match &request.encoding_format {
+                EncodingFormat::Float => async_openai::types::EncodingFormat::Float,
+                EncodingFormat::Base64 => async_openai::types::EncodingFormat::Base64,
+            }),
+        };
+
+        let span = create_model_span!(
+            SPAN_OPENAI,
+            target!("embedding"),
+            tags,
+            0,
+            input = serde_json::to_string(&embedding_request)?
+        );
+
+        self.execute(
+            embedding_request,
+            &request.encoding_format,
+            &request.model,
+            &outer_tx,
+        )
+        .instrument(span.clone())
+        .await
     }
 }

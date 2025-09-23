@@ -1,19 +1,22 @@
 use super::CredentialsIdent;
-use crate::events::SPAN_BEDROCK;
+use crate::events::{JsonValue, SPAN_BEDROCK};
 use crate::model::bedrock::bedrock_client;
 use crate::model::error::ModelError;
 use crate::model::types::{LLMFinishEvent, ModelEvent, ModelEventType, ModelFinishReason};
 use crate::types::credentials::BedrockCredentials;
 use crate::types::embed::EmbeddingResult;
 use crate::types::gateway::{CompletionModelUsage, CreateEmbeddingRequest, Input};
-use crate::GatewayResult;
+use crate::{create_model_span, GatewayResult};
 use async_openai::types::{CreateEmbeddingResponse, Embedding, EmbeddingUsage};
 use aws_sdk_bedrockruntime::Client;
 use aws_smithy_types::Blob;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashMap;
+use tracing::field;
 use tracing::Span;
+use tracing_futures::Instrument;
+use valuable::Valuable;
 
 use super::EmbeddingsModelInstance;
 
@@ -65,6 +68,15 @@ pub struct BedrockEmbeddings {
     pub credentials_ident: CredentialsIdent,
 }
 
+macro_rules! target {
+    () => {
+        "langdb::user_tracing::models::bedrock"
+    };
+    ($subtgt:literal) => {
+        concat!("langdb::user_tracing::models::bedrock::", $subtgt)
+    };
+}
+
 impl BedrockEmbeddings {
     pub async fn new(credentials: Option<&BedrockCredentials>) -> Result<Self, ModelError> {
         let client = bedrock_client(credentials).await?;
@@ -75,20 +87,17 @@ impl BedrockEmbeddings {
                 .unwrap_or(CredentialsIdent::Langdb),
         })
     }
-}
 
-#[async_trait::async_trait]
-impl EmbeddingsModelInstance for BedrockEmbeddings {
-    async fn embed(
+    async fn execute(
         &self,
         request: &CreateEmbeddingRequest,
-        outer_tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
-        _tags: HashMap<String, String>,
+        outer_tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
     ) -> GatewayResult<EmbeddingResult> {
         let builder = self.client.invoke_model();
 
         let provider = match_provider(&request.model);
         let (blob, input_tokens) = generate_invoke_model_input(&request.input, &provider)?;
+
         let invoke = builder
             .model_id(request.model.clone())
             .body(blob)
@@ -119,7 +128,46 @@ impl EmbeddingsModelInstance for BedrockEmbeddings {
             )))
             .await;
 
+        span.record(
+            "raw_usage",
+            JsonValue(&serde_json::to_value(response.usage())?).as_value(),
+        );
+        span.record(
+            "usage",
+            JsonValue(&serde_json::to_value(Self::map_usage(response.usage()))?).as_value(),
+        );
+
         Ok(response)
+    }
+
+    fn map_usage(usage: &EmbeddingUsage) -> CompletionModelUsage {
+        CompletionModelUsage {
+            input_tokens: usage.prompt_tokens,
+            total_tokens: usage.total_tokens,
+            ..Default::default()
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl EmbeddingsModelInstance for BedrockEmbeddings {
+    async fn embed(
+        &self,
+        request: &CreateEmbeddingRequest,
+        outer_tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
+        tags: HashMap<String, String>,
+    ) -> GatewayResult<EmbeddingResult> {
+        let span = create_model_span!(
+            SPAN_BEDROCK,
+            target!("embedding"),
+            tags,
+            0,
+            input = serde_json::to_string(&request)?
+        );
+
+        self.execute(request, &outer_tx)
+            .instrument(span.clone())
+            .await
     }
 }
 
