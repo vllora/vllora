@@ -267,6 +267,7 @@ impl DatabaseTransport for ClickhouseHttp {
         table_name: &str,
         columns: &[&str],
         body: Vec<Vec<Value>>,
+        async_insert: bool,
     ) -> Result<String> {
         let columns_str = columns.join(",");
 
@@ -275,7 +276,7 @@ impl DatabaseTransport for ClickhouseHttp {
             .map(|b| serde_json::to_string(&b).unwrap())
             .collect::<Vec<_>>()
             .join(",");
-        let query = format!("INSERT INTO {table_name}({columns_str}) FORMAT JSONCompactEachRow");
+        let query = format!("INSERT INTO {table_name}({columns_str}) {} FORMAT JSONCompactEachRow", if async_insert { "SETTINGS async_insert=1" } else { "" });
 
         self.do_execute(&query, Some(body)).await
     }

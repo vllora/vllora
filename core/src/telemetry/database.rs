@@ -23,7 +23,7 @@ impl SpanWriterTransport for DatabaseSpanWritter {
         body: Vec<Vec<Value>>,
     ) -> GatewayResult<String> {
         self.transport
-            .insert_values(table_name, columns, body)
+            .insert_values(table_name, columns, body, true)
             .await
             .map_err(|e| GatewayError::CustomError(e.to_string()))
     }

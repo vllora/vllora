@@ -26,6 +26,7 @@ pub trait DatabaseTransport: Send + Sync + DatabaseTransportClone + 'static {
         table_name: &str,
         columns: &[&str],
         body: Vec<Vec<Value>>,
+        async_insert: bool,
     ) -> Result<String>;
     async fn query_stream(
         &self,
