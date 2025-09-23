@@ -6,6 +6,7 @@ use tracing::Span;
 use tracing_futures::Instrument;
 use valuable::Valuable;
 
+use crate::model::types::LLMStartEvent;
 use crate::{
     create_model_span,
     events::{JsonValue, SPAN_GEMINI},
@@ -60,6 +61,16 @@ impl GeminiEmbeddings {
         model_name: &str,
         outer_tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
     ) -> GatewayResult<EmbeddingResult> {
+        let span = Span::current();
+        let _ = outer_tx.try_send(Some(ModelEvent::new(
+            &span,
+            ModelEventType::LlmStart(LLMStartEvent {
+                provider_name: "gemini".to_string(),
+                model_name: model_name.to_string(),
+                input: serde_json::to_string(&embedding_request)?,
+            }),
+        )));
+
         let response = self
             .client
             .embeddings(model_name, embedding_request)
@@ -70,7 +81,6 @@ impl GeminiEmbeddings {
             .count_tokens(model_name, token_count_request)
             .await?;
 
-        let span = Span::current();
         let _ = outer_tx
             .send(Some(ModelEvent::new(
                 &span,

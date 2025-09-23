@@ -2,7 +2,9 @@ use super::CredentialsIdent;
 use crate::events::{JsonValue, SPAN_BEDROCK};
 use crate::model::bedrock::bedrock_client;
 use crate::model::error::ModelError;
-use crate::model::types::{LLMFinishEvent, ModelEvent, ModelEventType, ModelFinishReason};
+use crate::model::types::{
+    LLMFinishEvent, LLMStartEvent, ModelEvent, ModelEventType, ModelFinishReason,
+};
 use crate::types::credentials::BedrockCredentials;
 use crate::types::embed::EmbeddingResult;
 use crate::types::gateway::{CompletionModelUsage, CreateEmbeddingRequest, Input};
@@ -93,6 +95,16 @@ impl BedrockEmbeddings {
         request: &CreateEmbeddingRequest,
         outer_tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
     ) -> GatewayResult<EmbeddingResult> {
+        let span = Span::current();
+        let _ = outer_tx.try_send(Some(ModelEvent::new(
+            &span,
+            ModelEventType::LlmStart(LLMStartEvent {
+                provider_name: "bedrock".to_string(),
+                model_name: request.model.clone(),
+                input: serde_json::to_string(&request)?,
+            }),
+        )));
+
         let builder = self.client.invoke_model();
 
         let provider = match_provider(&request.model);
@@ -107,7 +119,6 @@ impl BedrockEmbeddings {
 
         let response = map_response(invoke.body, &request.model, &provider, input_tokens)?;
 
-        let span = Span::current();
         let _ = outer_tx
             .send(Some(ModelEvent::new(
                 &span,

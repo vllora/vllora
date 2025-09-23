@@ -18,7 +18,7 @@ use crate::{
         embeddings::EmbeddingsModelInstance,
         error::{AuthorizationError, ModelError},
         openai::{azure_openai_client, openai_client},
-        types::{LLMFinishEvent, ModelEvent, ModelEventType, ModelFinishReason},
+        types::{LLMFinishEvent, LLMStartEvent, ModelEvent, ModelEventType, ModelFinishReason},
         CredentialsIdent,
     },
     types::{
@@ -86,6 +86,16 @@ impl<C: Config> OpenAIEmbeddings<C> {
         model_name: &str,
         outer_tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
     ) -> GatewayResult<EmbeddingResult> {
+        let span = Span::current();
+        let _ = outer_tx.try_send(Some(ModelEvent::new(
+            &span,
+            ModelEventType::LlmStart(LLMStartEvent {
+                provider_name: "openai".to_string(),
+                model_name: model_name.to_string(),
+                input: serde_json::to_string(&embedding_request)?,
+            }),
+        )));
+
         let response: EmbeddingResult = match encoding_format {
             EncodingFormat::Float => self
                 .client
@@ -103,7 +113,6 @@ impl<C: Config> OpenAIEmbeddings<C> {
                 .map_err(ModelError::OpenAIApi)?,
         };
 
-        let span = Span::current();
         outer_tx
             .try_send(Some(ModelEvent::new(
                 &span,
