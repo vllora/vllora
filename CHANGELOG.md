@@ -2,6 +2,37 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.1](https://github.com/langdb/langdb-cloud/compare/v0.3.0...v0.3.1) (2025-09-23)
+
+
+### Features
+
+* Add Bedrock embeddings support and enhance error handling ([0838066](https://github.com/langdb/langdb-cloud/commit/08380667b2fc51ce1332dcd0559a1ab7d5251f6b))
+* add LLMStartEvent logging for Bedrock, Gemini, and OpenAI embedding models ([1504eb9](https://github.com/langdb/langdb-cloud/commit/1504eb9c5a367f4ed4767867dfe0bfe070309ad2))
+* Add methods for token pricing in ModelPrice enum ([2f17da4](https://github.com/langdb/langdb-cloud/commit/2f17da412956586c3dc607bdea3fae614bc1fb7d))
+* capture spans for Bedrock, Gemini, and OpenAI embeding models ([5f09b71](https://github.com/langdb/langdb-cloud/commit/5f09b7107d89bb6437a44c2c69062ba068f82eea))
+* **ci:** Add GitHub Actions workflow for building AI Gateway ([1d583c6](https://github.com/langdb/langdb-cloud/commit/1d583c627fd454f61ebe1f6e9f67e6b0181ad3dc))
+* Enhance OpenAI embeddings support with Azure integration and improve error handling ([7ca5472](https://github.com/langdb/langdb-cloud/commit/7ca5472ef069632f3c9bcc164cba117481c75e92))
+* **gemini:** Enhance FinishReason enum with additional reasons ([501fac1](https://github.com/langdb/langdb-cloud/commit/501fac1a5c0d91d00b800a44a24239b89ffb5027))
+* **image-generation:** Add moderation option to CreateImageRequest and update OpenAIImageGeneration ([cd5e587](https://github.com/langdb/langdb-cloud/commit/cd5e587c30f87f585c30e920564d64e3fa8f4dc3))
+* **models:** Add get_models_by_name method to ModelMetadataFactory ([083b24d](https://github.com/langdb/langdb-cloud/commit/083b24d40c17e998e4d819c0f763e9d731198325))
+* **models:** Add langdb_release_date to ModelMetadata and model provider instances ([987edc4](https://github.com/langdb/langdb-cloud/commit/987edc4d70c6292badf74b4093b76d99d1cb08c0))
+* **models:** Add min_service_level and update is_private field in ModelMetadata ([f3d38ce](https://github.com/langdb/langdb-cloud/commit/f3d38ceb199f64909b49924bf2d2e00dd9b35698))
+* **models:** Add Reasoning capability to ModelCapability enum ([b23819f](https://github.com/langdb/langdb-cloud/commit/b23819ffa18e580bf787d6dc945b7dfe7c890206))
+* Replace custom error handling with specific ModelError variants ([a963fca](https://github.com/langdb/langdb-cloud/commit/a963fcab20fe56e2b4d7ad7d7cd7a51e4ba5e6e8))
+* **routing:** Enhance routing conditions and improve error handling ([c317d6c](https://github.com/langdb/langdb-cloud/commit/c317d6ce7cb65442874155e9bd99621416107820))
+* Support base64 encoding in embeddings ([b28c05c](https://github.com/langdb/langdb-cloud/commit/b28c05cfdb2d44c2f2aa52907ed73ee7edabc04b))
+
+
+### Bug Fixes
+
+* Add support for custom headers in transports. Fixes [#135](https://github.com/langdb/langdb-cloud/issues/135) ([#140](https://github.com/langdb/langdb-cloud/issues/140)) ([4cceccf](https://github.com/langdb/langdb-cloud/commit/4cceccf12ab6b39fae1b1b82932b8c269492de17))
+* **docs:** update contact link for enterprise solutions in README ([0778e65](https://github.com/langdb/langdb-cloud/commit/0778e65ad453cb5b792a54229e897bdfe28e2070))
+* **executor:** increase mpsc channel capacity for better event handling ([0508501](https://github.com/langdb/langdb-cloud/commit/0508501338ac57167f47ebbda596e8b905f02e90))
+* **gemini:** log last chunk in stream processing for better error tracking ([47c807e](https://github.com/langdb/langdb-cloud/commit/47c807eadea7d018943ba5ffb447e7e2351af086))
+* Improve error message for invalid ModelCapability ([f725921](https://github.com/langdb/langdb-cloud/commit/f725921dc2dd1c483d5aed2e4a59130301d51367))
+* Update token calculation in OpenAIModel to include reasoning tokens ([2776e77](https://github.com/langdb/langdb-cloud/commit/2776e774947c04f7fc04a840da7eaa0c7d702899))
+
 ## [0.3.0](https://github.com/langdb/langdb-cloud/compare/v0.2.4...v0.3.0) (2025-09-04)
 
 
