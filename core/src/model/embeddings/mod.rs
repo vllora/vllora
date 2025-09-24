@@ -188,6 +188,8 @@ impl<Inner: EmbeddingsModelInstance> EmbeddingsModelInstance for TracedEmbedding
             target: "langdb::user_tracing::models", SPAN_MODEL_CALL,
             input = &request_str,
             model = model_str,
+            model_name = self.definition.name.clone(),
+            inference_model_name = self.definition.db_model.inference_model_name.to_string(),
             provider_name = provider_name,
             output = tracing::field::Empty,
             error = tracing::field::Empty,
