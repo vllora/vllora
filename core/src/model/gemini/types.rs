@@ -29,6 +29,7 @@ pub struct Tools {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Content {
     pub role: Role,
+    #[serde(default)]
     pub parts: Vec<PartWithThought>,
 }
 
@@ -343,4 +344,52 @@ pub struct EmbeddingsValue {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CreateEmbeddingResponse {
     pub embedding: EmbeddingsValue,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_generate_content_request() {
+        let response = r#"
+        {
+            "candidates": [
+                {
+                "content": {
+                    "role": "model"
+                },
+                "finishReason": "MAX_TOKENS",
+                "index": 0
+                }
+            ],
+            "usageMetadata": {
+                "promptTokenCount": 4,
+                "totalTokenCount": 13,
+                "promptTokensDetails": [
+                {
+                    "modality": "TEXT",
+                    "tokenCount": 4
+                }
+                ],
+                "thoughtsTokenCount": 9
+            },
+            "modelVersion": "gemini-2.5-flash",
+            "responseId": "0PLTaLCgI6Ko_uMP-ane4A8"
+            }
+        "#;
+
+        let response = serde_json::from_str::<GenerateContentResponse>(response).unwrap();
+
+        assert_eq!(response.candidates.len(), 1);
+        assert_eq!(response.candidates[0].content.parts.len(), 0);
+        assert_eq!(
+            response.candidates[0]
+                .finish_reason
+                .as_ref()
+                .unwrap()
+                .clone(),
+            FinishReason::MaxTokens
+        );
+    }
 }

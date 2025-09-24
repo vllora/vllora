@@ -509,7 +509,7 @@ impl GeminiModel {
         }
 
         match finish_reason {
-            Some(FinishReason::Stop) => {
+            Some(FinishReason::Stop) | Some(FinishReason::MaxTokens) => {
                 let usage = response
                     .usage_metadata
                     .as_ref()
@@ -520,6 +520,10 @@ impl GeminiModel {
                         ..Default::default()
                     });
 
+                let finish_reason = Self::map_finish_reason(
+                    &finish_reason.expect("Finish reason is already checked"),
+                    false,
+                );
                 tx.send(Some(ModelEvent::new(
                     &span,
                     ModelEventType::LlmStop(LLMFinishEvent {
@@ -532,7 +536,7 @@ impl GeminiModel {
                             .unwrap_or_default(),
                         output: Some(text.clone()),
                         usage,
-                        finish_reason: ModelFinishReason::Stop,
+                        finish_reason: finish_reason.clone(),
                         tool_calls: vec![],
                         credentials_ident: self.credentials_ident.clone(),
                     }),
@@ -547,7 +551,7 @@ impl GeminiModel {
                             content: Some(ChatCompletionContent::Text(text)),
                             ..Default::default()
                         },
-                        ModelFinishReason::Stop,
+                        finish_reason,
                     ),
                 ))
             }
@@ -603,12 +607,7 @@ impl GeminiModel {
     }
 
     fn handle_finish_reason(finish_reason: Option<FinishReason>) -> GatewayError {
-        match finish_reason {
-            Some(FinishReason::MaxTokens) => {
-                ModelError::FinishError(ModelFinishError::MaxTokens).into()
-            }
-            x => ModelError::FinishError(ModelFinishError::Custom(format!("{x:?}"))).into(),
-        }
+        ModelError::FinishError(ModelFinishError::Custom(format!("{finish_reason:?}"))).into()
     }
 
     fn map_finish_reason(finish_reason: &FinishReason, has_tool_calls: bool) -> ModelFinishReason {
@@ -782,12 +781,12 @@ impl GeminiModel {
         }
 
         match finish_reason {
-            FinishReason::Stop => Ok(InnerExecutionResult::Finish(
+            FinishReason::Stop | FinishReason::MaxTokens => Ok(InnerExecutionResult::Finish(
                 ChatCompletionMessageWithFinishReason::new(
                     ChatCompletionMessage {
                         ..Default::default()
                     },
-                    ModelFinishReason::Stop,
+                    Self::map_finish_reason(&finish_reason, !tool_calls.is_empty()),
                 ),
             )),
             other => Err(Self::handle_finish_reason(Some(other))),
