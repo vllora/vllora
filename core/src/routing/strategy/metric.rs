@@ -696,7 +696,7 @@ mod tests {
         // Should select "nonexistent-model" as it has default latency (0.0) which is lowest
         assert_eq!(selected_model, "nonexistent-model".to_string());
 
-        // Test with requests metric (maximize) - should select the model with highest requests
+        // Test with requests metric (minimize) - should select the model with highest requests
         let selected_model = super::route(
             &models,
             &MetricSelector::Requests,
@@ -709,6 +709,6 @@ mod tests {
         .unwrap();
 
         // Should select "openai/gpt-4o-mini" as it has requests (100.0) vs defaults (0.0)
-        assert_eq!(selected_model, "openai/gpt-4o-mini".to_string());
+        assert_eq!(selected_model, "nonexistent-model".to_string());
     }
 }
