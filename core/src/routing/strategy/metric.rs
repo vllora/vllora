@@ -34,7 +34,7 @@ pub enum MetricOptimizationDirection {
 impl MetricSelector {
     fn get_optimization_direction(&self) -> MetricOptimizationDirection {
         match self {
-            MetricSelector::Requests | MetricSelector::Tps => MetricOptimizationDirection::Maximize,
+            MetricSelector::Tps => MetricOptimizationDirection::Maximize,
             _ => MetricOptimizationDirection::Minimize,
         }
     }
