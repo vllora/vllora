@@ -3,7 +3,6 @@ pub mod database;
 
 use crate::types::GatewayTenant;
 use std::collections::HashMap;
-use std::str::FromStr;
 use std::time::Duration;
 use std::{future::Ready, sync::Arc};
 
@@ -88,7 +87,6 @@ impl SpanWriter {
     pub(crate) fn process(&mut self, span: Span) {
         let Span {
             trace_id,
-            parent_trace_id,
             span_id,
             parent_span_id,
             operation_name,
@@ -107,9 +105,6 @@ impl SpanWriter {
         }
         self.buf.push(vec![
             trace_id_uuid(trace_id).to_string().into(),
-            parent_trace_id.map_or(Value::Null, |trace_id| {
-                trace_id_uuid(trace_id).to_string().into()
-            }),
             u64::from_be_bytes(span_id.to_bytes()).into(),
             parent_span_id.map_or(Value::Null, |span_id| {
                 u64::from_be_bytes(span_id.to_bytes()).into()
@@ -149,7 +144,6 @@ impl SpanWriter {
                 "langdb.traces",
                 &[
                     "trace_id",
-                    "parent_trace_id",
                     "span_id",
                     "parent_span_id",
                     "operation_name",
@@ -301,18 +295,6 @@ impl TraceService for TraceServiceImpl {
                         parent_span_id,
                     );
 
-                    let message_ids = span
-                        .attributes
-                        .iter()
-                        .filter(|attr| attr.key == "message_id")
-                        .filter_map(|attr| {
-                            attr.value.as_ref().and_then(|v| match &v.value {
-                                Some(any_value::Value::StringValue(s)) => Some(s.to_owned()),
-                                _ => None,
-                            })
-                        })
-                        .collect::<Vec<String>>();
-
                     let mut attributes: serde_json::Map<String, Value> = span
                         .attributes
                         .into_iter()
@@ -324,12 +306,6 @@ impl TraceService for TraceServiceImpl {
                         })
                         .collect();
 
-                    if !message_ids.is_empty() {
-                        attributes.insert(
-                            "message_id".to_string(),
-                            Value::Array(message_ids.iter().map(|s| s.clone().into()).collect()),
-                        );
-                    }
                     let tenant_id = attributes
                         .remove("langdb.tenant")
                         .and_then(|v| Some(v.as_str()?.to_owned()))
@@ -349,20 +325,13 @@ impl TraceService for TraceServiceImpl {
                         .remove("langdb.project_id")
                         .and_then(|v| Some(v.as_str()?.to_owned()))
                         .or(tenant_from_header.as_ref().map(|v| v.1.clone()));
+
                     let thread_id = attributes
                         .remove("langdb.thread_id")
                         .and_then(|v| Some(v.as_str()?.to_owned()));
-                    let parent_trace_id =
-                        attributes.remove("langdb.parent_trace_id").and_then(|v| {
-                            let u = Uuid::from_str(v.as_str()?).ok()?;
-                            let b = u.into_bytes();
-                            Some(TraceId::from_bytes(b))
-                        });
+
                     let run_id = attributes
                         .remove("langdb.run_id")
-                        .and_then(|v| Some(v.as_str()?.to_owned()));
-                    let langdb_trace_id = attributes
-                        .remove("langdb.trace_id")
                         .and_then(|v| Some(v.as_str()?.to_owned()));
 
                     let label = attributes
@@ -375,14 +344,6 @@ impl TraceService for TraceServiceImpl {
                         }
                     }
 
-                    let trace_id = match langdb_trace_id {
-                        Some(langdb_trace_id) => match Uuid::from_str(&langdb_trace_id) {
-                            Ok(u) => TraceId::from_bytes(u.into_bytes()),
-                            Err(_) => trace_id,
-                        },
-                        None => trace_id,
-                    };
-
                     let tags_value = attributes.remove("tags");
                     let mut tags: serde_json::Map<String, Value> = Default::default();
                     if let Some(Value::String(s)) = tags_value {
@@ -391,7 +352,6 @@ impl TraceService for TraceServiceImpl {
 
                     let span = Span {
                         trace_id,
-                        parent_trace_id,
                         span_id,
                         parent_span_id,
                         operation_name: span.name,
@@ -432,8 +392,6 @@ impl TraceService for TraceServiceImpl {
 pub struct Span {
     #[serde(serialize_with = "serialize_trace_id")]
     pub trace_id: TraceId,
-    #[serde(serialize_with = "serialize_option_trace_id")]
-    pub parent_trace_id: Option<TraceId>,
     #[serde(serialize_with = "serialize_span_id")]
     pub span_id: SpanId,
     #[serde(serialize_with = "serialize_option_span_id")]
@@ -476,18 +434,6 @@ where
     serializer.serialize_str(&trace_id.to_string())
 }
 
-fn serialize_option_trace_id<S>(
-    trace_id: &Option<TraceId>,
-    serializer: S,
-) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    match trace_id {
-        Some(trace_id) => serializer.serialize_str(&trace_id.to_string()),
-        None => serializer.serialize_none(),
-    }
-}
 pub struct TracingContext;
 impl<S, B> Transform<S, ServiceRequest> for TracingContext
 where
@@ -539,27 +485,6 @@ where
                     KeyValue::new("langdb.tenant", tenant_name),
                     KeyValue::new("langdb.project_id", project_slug),
                 ];
-
-                let parent_trace_id = req
-                    .headers()
-                    .get("x-parent-trace-id")
-                    .and_then(|v| v.to_str().ok().map(|v| v.to_string()));
-
-                if let Some(parent_trace_id) = parent_trace_id.as_ref() {
-                    key_values.push(KeyValue::new(
-                        "langdb.parent_trace_id",
-                        parent_trace_id.clone(),
-                    ));
-                }
-
-                let trace_id = req
-                    .headers()
-                    .get("x-trace-id")
-                    .and_then(|v| v.to_str().ok().map(|v| v.to_string()));
-
-                if let Some(trace_id) = trace_id.as_ref() {
-                    key_values.push(KeyValue::new("langdb.trace_id", trace_id.clone()));
-                }
 
                 let run_id = req
                     .headers()
