@@ -29,7 +29,6 @@ pub fn init_tracing() {
         .unwrap();
     let provider = SdkTracerProvider::builder()
         .with_span_processor(BaggageSpanProcessor::new([
-            "langdb.parent_trace_id",
             "langdb.run_id",
             "langdb.label",
         ]))
