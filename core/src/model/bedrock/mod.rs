@@ -715,6 +715,7 @@ impl BedrockModel {
         &self,
         stream: converse_stream::ConverseStreamOutput,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
+        started_at: std::time::Instant,
     ) -> GatewayResult<(
         StopReason,
         Option<(ConversationRole, Vec<ToolUseBlock>)>,
@@ -737,6 +738,7 @@ impl BedrockModel {
                 )))
                 .await
                 .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+                Span::current().record("ttft", started_at.elapsed().as_micros());
             }
             match output {
                 ConverseStreamOutput::ContentBlockDelta(a) => {
@@ -938,9 +940,10 @@ impl BedrockModel {
         .await
         .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
+        let started_at = std::time::Instant::now();
         let response = builder.send().await.map_err(map_converse_stream_error)?;
         let (stop_reason, msg, usage, response_message) = self
-            .process_stream(response, tx)
+            .process_stream(response, tx, started_at)
             .instrument(span.clone())
             .await?;
 

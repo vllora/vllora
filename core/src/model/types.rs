@@ -73,6 +73,8 @@ pub struct ModelEvent {
     pub trace_id: String,
     pub event: ModelEventType,
     pub timestamp: DateTime<Utc>,
+    #[serde(skip)]
+    pub span: Option<Span>,
 }
 
 impl ModelEvent {
@@ -82,6 +84,7 @@ impl ModelEvent {
             timestamp: Utc::now(),
             span_id: span.context().span().span_context().span_id().to_string(),
             trace_id: span.context().span().span_context().trace_id().to_string(),
+            span: Some(span.clone()),
         }
     }
 }
