@@ -403,7 +403,7 @@ impl<C: Config> OpenAIModel<C> {
         &self,
         mut stream: impl Stream<Item = Result<CreateChatCompletionStreamResponse, OpenAIError>> + Unpin,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
-        first_response_received: &mut bool,
+        started_at: std::time::Instant,
     ) -> GatewayResult<StreamExecutionResult> {
         let mut tool_call_states: HashMap<u32, ChatCompletionMessageToolCall> = HashMap::new();
         let mut first_chunk = None;
@@ -411,11 +411,13 @@ impl<C: Config> OpenAIModel<C> {
         let mut finish_reason = None;
         let mut usage = None;
 
+        let mut first_response_received = false;
+
         while let Some(result) = stream.next().await {
             match result {
                 Ok(mut response) => {
-                    if !*first_response_received {
-                        *first_response_received = true;
+                    if !first_response_received {
+                        first_response_received = true;
                         tx.send(Some(ModelEvent::new(
                             &Span::current(),
                             ModelEventType::LlmFirstToken(LLMFirstToken {}),
@@ -423,6 +425,7 @@ impl<C: Config> OpenAIModel<C> {
                         .await
                         .map_err(|e| GatewayError::CustomError(e.to_string()))?;
                         first_chunk = Some(response.clone());
+                        Span::current().record("ttft", started_at.elapsed().as_micros());
                     }
 
                     if response.choices.is_empty() {
@@ -837,7 +840,6 @@ impl<C: Config> OpenAIModel<C> {
         input_messages: Vec<ChatCompletionRequestMessage>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
-        first_response_received: &mut bool,
     ) -> GatewayResult<InnerExecutionResult> {
         tx.send(Some(ModelEvent::new(
             &span,
@@ -853,6 +855,7 @@ impl<C: Config> OpenAIModel<C> {
         let request = self.build_request(&input_messages, true)?;
         span.record("request", serde_json::to_string(&request)?);
 
+        let started_at = std::time::Instant::now();
         let stream = self
             .client
             .chat()
@@ -860,7 +863,7 @@ impl<C: Config> OpenAIModel<C> {
             .await
             .map_err(ModelError::OpenAIApi)?;
         let (finish_reason, tool_calls, usage, response) = self
-            .process_stream(stream, tx, first_response_received)
+            .process_stream(stream, tx, started_at)
             .instrument(span.clone())
             .await?;
 
@@ -977,16 +980,8 @@ impl<C: Config> OpenAIModel<C> {
                 input = input
             );
 
-            let first_response_received = &mut false;
-
             match self
-                .execute_stream_inner(
-                    span.clone(),
-                    input_messages.clone(),
-                    tx,
-                    tags.clone(),
-                    first_response_received,
-                )
+                .execute_stream_inner(span.clone(), input_messages.clone(), tx, tags.clone())
                 .await
             {
                 Ok(InnerExecutionResult::Finish(_)) => {

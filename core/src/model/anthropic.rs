@@ -258,6 +258,7 @@ impl AnthropicModel {
         &self,
         stream: impl Stream<Item = Result<MessageChunk, StreamError>>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
+        started_at: std::time::Instant,
     ) -> GatewayResult<(StopReason, Vec<ToolUse>, Usage, MessagesResponseBody)> {
         let mut tool_call_states: HashMap<u32, ToolUse> = HashMap::new();
         tokio::pin!(stream);
@@ -282,6 +283,7 @@ impl AnthropicModel {
                         ModelEventType::LlmFirstToken(LLMFirstToken {}),
                     )))
                     .await;
+                Span::current().record("ttft", started_at.elapsed().as_micros());
             }
             match r {
                 Ok(Some(result)) => match result {
@@ -859,13 +861,14 @@ impl AnthropicModel {
         .await
         .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
+        let started_at = std::time::Instant::now();
         let stream = self
             .client
             .create_a_message_stream(request)
             .await
             .map_err(custom_err)?;
         let (stop_reason, tool_calls, usage, response) = self
-            .process_stream(stream, tx)
+            .process_stream(stream, tx, started_at)
             .instrument(span.clone())
             .await?;
 

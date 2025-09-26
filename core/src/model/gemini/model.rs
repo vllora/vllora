@@ -207,6 +207,7 @@ impl GeminiModel {
         &self,
         mut stream: impl Stream<Item = Result<Option<GenerateContentResponse>, GatewayError>> + Unpin,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
+        started_at: std::time::Instant,
     ) -> GatewayResult<(
         FinishReason,
         Vec<(String, HashMap<String, Value>)>,
@@ -239,6 +240,7 @@ impl GeminiModel {
                             .map_err(|e| GatewayError::CustomError(e.to_string()))?;
                             model_version = res.model_version;
                             response_id = res.response_id;
+                            Span::current().record("ttft", started_at.elapsed().as_micros());
                         }
                         for candidate in res.candidates {
                             for part in candidate.content.parts {
@@ -671,6 +673,7 @@ impl GeminiModel {
     ) -> GatewayResult<InnerExecutionResult> {
         let model_name = self.params.model.as_ref().unwrap();
         let input_messages = call.contents.clone();
+        let started_at = std::time::Instant::now();
         let stream = self.client.stream(model_name, call).await?;
         tokio::pin!(stream);
         tx.send(Some(ModelEvent::new(
@@ -690,7 +693,7 @@ impl GeminiModel {
         .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
         let (finish_reason, tool_calls, usage, output) = self
-            .process_stream(stream, &tx)
+            .process_stream(stream, &tx, started_at)
             .instrument(call_span.clone())
             .await?;
 

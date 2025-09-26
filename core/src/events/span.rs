@@ -14,6 +14,7 @@ macro_rules! create_model_span {
             usage = field::Empty,
             raw_usage = field::Empty,
             ttft = field::Empty,
+            message_id = field::Empty,
             $($field_name = $field_value,)*
         )
     }};
