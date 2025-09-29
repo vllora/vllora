@@ -15,6 +15,7 @@ macro_rules! create_model_span {
             raw_usage = field::Empty,
             ttft = field::Empty,
             message_id = field::Empty,
+            cost = field::Empty,
             $($field_name = $field_value,)*
         )
     }};
