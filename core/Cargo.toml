@@ -42,7 +42,7 @@ aws-smithy-types = { version = "1.3.2", features = [
 ] }
 aws-credential-types = "1.2.6"
 aws-sdk-bedrock = "1.112.0"
-aws-sdk-bedrockruntime = "1.105.0"
+aws-sdk-bedrockruntime = "1.106.0"
 aws-smithy-runtime-api = "1.9.0"
 aws-config = { version = "1.8.6", features = ["behavior-version-latest"] }
 bytemuck = { version = "1.23", features = ["derive"] }
