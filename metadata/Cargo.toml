@@ -1,0 +1,29 @@
+[package]
+name = "langdb_metadata"
+version = "0.3.1"
+edition = "2021"
+authors = ["LangDB Team<api@langdb.ai>"]
+description = "AI gateway metadata for LangDB AI Gateway."
+license = "Apache-2.0"
+repository = "https://github.com/langdb/ai-gateway"
+documentation = "https://docs.langdb.ai"
+readme = "../README.md"
+keywords = ["llm", "openai", "anthropic", "gemini", "mcp"]
+categories = ["web-programming", "network-programming"]
+
+[dependencies]
+diesel = { version = "2.3.1", features = [
+  "chrono",
+  "sqlite",
+  "postgres",
+  "serde_json",
+  "r2d2",
+  "uuid",
+  "numeric",
+] }
+r2d2 = "0.8.10"
+
+[features]
+default = []
+postgres = []
+sqlite = []

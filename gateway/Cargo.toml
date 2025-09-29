@@ -18,6 +18,7 @@ path = "src/main.rs"
 [dependencies]
 langdb_core = { path = "../core", version = "0.3.2" }
 langdb_guardrails = { path = "../guardrails", version = "0.3.2" }
+langdb_metadata = { path = "../metadata", version = "0.3.2", features = ["sqlite"] }
 
 tokio = { workspace = true }
 serde = { workspace = true }

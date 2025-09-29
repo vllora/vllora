@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["gateway", "core", "udfs", "guardrails"]
+members = ["gateway", "core", "udfs", "guardrails", "metadata"]
 default-members = ["gateway", "udfs"]
 
 [workspace.dependencies]
