@@ -42,6 +42,24 @@ pub struct Message {
     pub tool_calls: Option<Vec<ToolCall>>,
 }
 
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct MessageWithId {
+    pub id: String,
+    #[serde(flatten)]
+    pub message: Message,
+}
+
+impl Message {
+    pub fn is_content_identical(&self, other: &Message) -> bool {
+        self.content == other.content
+            && self.content_array == other.content_array
+            && self.content_type == other.content_type
+            && self.r#type == other.r#type
+            && self.tool_call_id == other.tool_call_id
+            && self.tool_calls == other.tool_calls
+    }
+}
+
 impl<'de> Deserialize<'de> for Message {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -100,7 +118,7 @@ impl From<Message> for InnerMessage {
     }
 }
 
-#[derive(Serialize_tuple, Debug, Clone)]
+#[derive(Serialize_tuple, Debug, Clone, PartialEq)]
 pub struct MessageContentPart {
     pub r#type: MessageContentType,
     pub value: String,
