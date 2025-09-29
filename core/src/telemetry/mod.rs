@@ -369,10 +369,7 @@ impl TraceService for TraceServiceImpl {
                     if let Some(project_id) = project_id.as_ref() {
                         if let Some(sender) = self.project_trace_senders.get(project_id).as_deref()
                         {
-                            match sender.send(span.clone()) {
-                                Ok(_) => {}
-                                Err(e) => tracing::error!("Traces send error: {}", e.to_string()),
-                            }
+                            let _result = sender.send(span.clone());
                         }
                     }
                     self.writer_sender.send(span).await.unwrap();
