@@ -357,9 +357,12 @@ impl GeminiModel {
             span.record("output", serde_json::to_string(&response)?);
             if let Some(ref usage) = response.usage_metadata {
                 span.record(
-                    "usage",
-                    JsonValue(&serde_json::to_value(usage).unwrap()).as_value(),
+                    "raw_usage",
+                    JsonValue(&serde_json::to_value(usage)?).as_value(),
                 );
+                if let Some(usage) = Self::map_usage(Some(&usage.clone())) {
+                    span.record("usage", JsonValue(&serde_json::to_value(usage)?).as_value());
+                }
             }
             Ok::<_, GatewayError>(response)
         }
@@ -698,10 +701,16 @@ impl GeminiModel {
             .await?;
 
         let trace_finish_reason = Self::map_finish_reason(&finish_reason, !tool_calls.is_empty());
+        call_span.record(
+            "raw_usage",
+            JsonValue(&serde_json::to_value(usage.clone())?).as_value(),
+        );
+
         let usage = Self::map_usage(usage.as_ref());
         if let Some(usage) = &usage {
             call_span.record("usage", JsonValue(&serde_json::to_value(usage)?).as_value());
         }
+
         tx.send(Some(ModelEvent::new(
             &call_span,
             ModelEventType::LlmStop(LLMFinishEvent {
