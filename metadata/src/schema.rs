@@ -2,20 +2,16 @@
 
 diesel::table! {
     projects (id) {
-        id -> Uuid,
-        name -> Varchar,
+        id -> Text,
+        name -> Text,
         description -> Nullable<Text>,
-        created_at -> Timestamp,
-        updated_at -> Timestamp,
-        company_id -> Uuid,
-        db_type -> Text,
-        connection_id -> Nullable<Uuid>,
+        created_at -> Text,
+        updated_at -> Text,
         slug -> Text,
-        project_type -> Text,
-        settings -> Nullable<Jsonb>,
-        is_default -> Bool,
-        archived_at -> Nullable<Timestamptz>,
-        allowed_user_ids -> Nullable<Array<Text>>,
-        private_model_prices -> Nullable<Jsonb>,
+        settings -> Nullable<Text>,
+        is_default -> Integer,
+        archived_at -> Nullable<Text>,
+        allowed_user_ids -> Nullable<Text>,
+        private_model_prices -> Nullable<Text>,
     }
 }

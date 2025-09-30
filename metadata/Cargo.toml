@@ -1,6 +1,6 @@
 [package]
 name = "langdb_metadata"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2021"
 authors = ["LangDB Team<api@langdb.ai>"]
 description = "AI gateway metadata for LangDB AI Gateway."
@@ -12,6 +12,7 @@ keywords = ["llm", "openai", "anthropic", "gemini", "mcp"]
 categories = ["web-programming", "network-programming"]
 
 [dependencies]
+langdb_core = { path = "../core", version = "0.3.2" }
 diesel = { version = "2.3.1", features = [
   "chrono",
   "sqlite",
@@ -21,7 +22,13 @@ diesel = { version = "2.3.1", features = [
   "uuid",
   "numeric",
 ] }
+diesel_migrations = { version = "2.3.0", features = ["sqlite"] }
 r2d2 = "0.8.10"
+uuid = "1.18.1"
+serde_json = "1.0"
+serde = { version = "1.0.225", features = ["derive"] }
+chrono = { version = "0.4", features = ["serde"] }
+tracing = { workspace = true }
 
 [features]
 default = []

@@ -7,6 +7,10 @@ use langdb_core::{error::GatewayError, usage::InMemoryStorage};
 use run::models::{load_models, ModelsLoadError};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use std::error::Error;
+use langdb_metadata::DB;
+use langdb_metadata::pool::DbPool;
+use ::tracing::info;
 
 mod callback_handler;
 mod cli;
@@ -69,6 +73,10 @@ async fn main() -> Result<(), CliError> {
     std::env::set_var("RUST_BACKTRACE", "1");
 
     let cli = cli::Cli::parse();
+
+    let db_pool = langdb_metadata::pool::establish_connection("langdb.sqlite".to_string(), 10);
+
+    langdb_metadata::utils::init_db(&db_pool);
 
     match cli
         .command
