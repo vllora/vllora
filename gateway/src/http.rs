@@ -23,9 +23,7 @@ use langdb_core::handler::chat::create_chat_completion;
 use langdb_core::handler::embedding::embeddings_handler;
 use langdb_core::handler::image::create_image;
 use langdb_core::handler::middleware::rate_limit::{RateLimitMiddleware, RateLimiting};
-use langdb_core::handler::models::list_gateway_models;
-use langdb_core::handler::{AvailableModels, CallbackHandlerFn, LimitCheckWrapper};
-use langdb_core::models::ModelMetadata;
+use langdb_core::handler::{CallbackHandlerFn, LimitCheckWrapper};
 use langdb_core::telemetry::database::DatabaseSpanWritter;
 use langdb_core::telemetry::DummyTraceTenantResolver;
 use langdb_core::telemetry::ProjectTraceMap;
@@ -111,8 +109,8 @@ impl ApiServer {
     }
     pub async fn start(
         self,
-        models: Vec<ModelMetadata>,
         storage: Option<Arc<Mutex<InMemoryStorage>>>,
+        model_service: Arc<Box<dyn langdb_metadata::services::model::ModelService + Send + Sync>>,
     ) -> Result<impl Future<Output = Result<(), ServerError>>, ServerError> {
         let cost_calculator = GatewayCostCalculator::new();
         let callback = if let Some(storage) = &storage {
@@ -144,14 +142,14 @@ impl ApiServer {
             Self::create_app_entry(
                 cors,
                 storage.clone(),
-                models.clone(),
                 server_config.config.guards.clone(),
                 callback.clone(),
                 cost_calculator.clone(),
                 limit_checker.clone(),
                 server_config.config.rate_limit.clone(),
                 providers_config,
-                server_config_for_closure.clone(),
+                model_service.clone(),
+                server_config_for_closure.db_pool.clone(),
             )
         })
         .bind((self.config.http.host.as_str(), self.config.http.port))?
@@ -189,14 +187,14 @@ impl ApiServer {
     fn create_app_entry(
         cors: Cors,
         in_memory_storage: Option<Arc<Mutex<InMemoryStorage>>>,
-        models: Vec<ModelMetadata>,
         guards: Option<HashMap<String, Guard>>,
         callback: CallbackHandlerFn,
         cost_calculator: GatewayCostCalculator,
         limit_checker: Option<LimitCheckWrapper>,
         rate_limit: Option<RateLimiting>,
         providers: Option<ProvidersConfig>,
-        server_config: ApiServer,
+        model_service: Arc<Box<dyn langdb_metadata::services::model::ModelService + Send + Sync>>,
+        db_pool: Arc<DbPool>,
     ) -> App<
         impl ServiceFactory<
             ServiceRequest,
@@ -206,7 +204,8 @@ impl ApiServer {
             Error = actix_web::Error,
         >,
     > {
-        let app = App::new().app_data(web::Data::new(server_config.db_pool.clone()));
+        let app = App::new()
+            .app_data(web::Data::new(db_pool.clone()));
 
         let mut service = Self::attach_gateway_routes(web::scope("/v1"));
         if let Some(in_memory_storage) = in_memory_storage {
@@ -219,13 +218,16 @@ impl ApiServer {
 
         let guardrails_service = Box::new(GuardrailsService::new(guards.unwrap_or_default()))
             as Box<dyn GuardrailsEvaluator>;
+
+        // Add model_service to app_data
+        let service = service.app_data(Data::new(model_service));
+
         app.wrap(TraceLogger)
             .wrap(ProjectMiddleware::new())
             .service(
                 service
                     .app_data(limit_checker)
                     .app_data(Data::new(callback))
-                    .app_data(Data::new(AvailableModels(models)))
                     .app_data(Data::new(
                         Box::new(cost_calculator) as Box<dyn CostCalculator>
                     ))
@@ -261,7 +263,7 @@ impl ApiServer {
     fn attach_gateway_routes(scope: ActixScope) -> ActixScope {
         scope
             .route("/chat/completions", web::post().to(create_chat_completion))
-            .route("/models", web::get().to(list_gateway_models))
+            .route("/models", web::get().to(crate::handlers::list_models_from_db))
             .route("/embeddings", web::post().to(embeddings_handler))
             .route("/images/generations", web::post().to(create_image))
     }

@@ -4,8 +4,7 @@
 
 Notes:
 - Returns supported model identifiers and metadata.
-- Auth and project context required.
-- Schemas TBD.
+- Removed min service level
 
 ### Schema
 
@@ -35,10 +34,9 @@ Common fields:
 - benchmark_info (object, nullable)
 - cached_input_token_price (number, nullable)
 - cached_input_write_token_price (number, nullable)
-- min_service_level (number)
 - release_date, langdb_release_date, knowledge_cutoff_date (date string, nullable)
 - license (string, nullable)
-- project_id (string, UUID, nullable)
+- project_id (strubg, uuid, nullable)
 
 Example (truncated):
 ```json

@@ -1,6 +1,40 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
+    models (id) {
+        id -> Nullable<Text>,
+        model_name -> Text,
+        description -> Nullable<Text>,
+        provider_info_id -> Text,
+        model_type -> Text,
+        input_token_price -> Nullable<Float>,
+        output_token_price -> Nullable<Float>,
+        context_size -> Nullable<Integer>,
+        capabilities -> Nullable<Text>,
+        input_types -> Nullable<Text>,
+        output_types -> Nullable<Text>,
+        tags -> Nullable<Text>,
+        type_prices -> Nullable<Text>,
+        mp_price -> Nullable<Float>,
+        model_name_in_provider -> Nullable<Text>,
+        owner_name -> Text,
+        priority -> Integer,
+        parameters -> Nullable<Text>,
+        created_at -> Text,
+        updated_at -> Text,
+        deleted_at -> Nullable<Text>,
+        benchmark_info -> Nullable<Text>,
+        cached_input_token_price -> Nullable<Float>,
+        cached_input_write_token_price -> Nullable<Float>,
+        release_date -> Nullable<Text>,
+        langdb_release_date -> Nullable<Text>,
+        knowledge_cutoff_date -> Nullable<Text>,
+        license -> Nullable<Text>,
+        project_id -> Nullable<Text>,
+    }
+}
+
+diesel::table! {
     projects (id) {
         id -> Text,
         name -> Text,
@@ -15,3 +49,5 @@ diesel::table! {
         private_model_prices -> Nullable<Text>,
     }
 }
+
+diesel::allow_tables_to_appear_in_same_query!(models, projects,);

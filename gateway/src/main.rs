@@ -5,14 +5,15 @@ use clap::Parser;
 use config::{Config, ConfigError};
 use http::ApiServer;
 use langdb_core::{error::GatewayError, usage::InMemoryStorage};
-use langdb_metadata::error::DatabaseError;
-use langdb_metadata::models::project::NewProjectDTO;
-use langdb_metadata::pool::DbPool;
-use langdb_metadata::services::project::{ProjectService, ProjectServiceImpl};
-use run::models::{load_models, ModelsLoadError};
+use uuid::Uuid;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use uuid::Uuid;
+use langdb_metadata::pool::DbPool;
+use langdb_metadata::services::project::{ProjectService, ProjectServiceImpl};
+use langdb_metadata::services::model::ModelServiceImpl;
+use langdb_metadata::error::DatabaseError;
+use langdb_metadata::models::project::NewProjectDTO;
+
 
 mod callback_handler;
 mod cli;
@@ -46,8 +47,6 @@ pub enum CliError {
     ServerError(#[from] http::ServerError),
     #[error(transparent)]
     ConfigError(#[from] ConfigError),
-    #[error(transparent)]
-    ModelsError(#[from] ModelsLoadError),
     #[error(transparent)]
     DatabaseError(#[from] DatabaseError),
 }
@@ -124,18 +123,23 @@ async fn main() -> Result<(), CliError> {
         .unwrap_or(cli::Commands::Serve(cli::ServeArgs::default()))
     {
         cli::Commands::Login => session::login().await,
-        cli::Commands::Update { force } => {
+        cli::Commands::Update { force: _ } => {
             tracing::init_tracing();
-            println!("Updating models{}...", if force { " (forced)" } else { "" });
-            let models = load_models(true).await?;
-            println!("{} Models updated successfully!", models.len());
+            println!("Model update command is deprecated. Models are now managed in SQLite database.");
+            println!("Use database migrations to update models.");
             Ok(())
         }
         cli::Commands::List => {
             tracing::init_tracing();
             println!("Available models:");
-            let models = load_models(false).await?;
-            run::table::pretty_print_models(models);
+            // Query models from database
+            use langdb_metadata::services::model::ModelService;
+            let model_service = ModelServiceImpl::new(db_pool.clone());
+            let models = model_service.list(None)?;
+            println!("Found {} models in database", models.len());
+            for model in models {
+                println!("  - {} ({})", model.model_name, model.owner_name);
+            }
             Ok(())
         }
         cli::Commands::Serve(serve_args) => {
@@ -154,9 +158,10 @@ async fn main() -> Result<(), CliError> {
                 let config = Config::load(&cli.config)?;
                 let config = config.apply_cli_overrides(&cli::Commands::Serve(serve_args));
                 let api_server = ApiServer::new(config, Arc::new(db_pool.clone()));
-                let models = load_models(false).await?;
+                let model_service = Arc::new(Box::new(ModelServiceImpl::new(db_pool.clone()))
+                    as Box<dyn langdb_metadata::services::model::ModelService + Send + Sync>);
                 let server_handle = tokio::spawn(async move {
-                    match api_server.start(models, Some(storage_clone)).await {
+                    match api_server.start(Some(storage_clone), model_service).await {
                         Ok(server) => server.await,
                         Err(e) => Err(e),
                     }
@@ -200,10 +205,11 @@ async fn main() -> Result<(), CliError> {
                 let config = Config::load(&cli.config)?;
                 let config = config.apply_cli_overrides(&cli::Commands::Serve(serve_args));
                 let api_server = ApiServer::new(config, Arc::new(db_pool.clone()));
-                let models = load_models(false).await?;
+                let model_service = Arc::new(Box::new(ModelServiceImpl::new(db_pool.clone()))
+                    as Box<dyn langdb_metadata::services::model::ModelService + Send + Sync>);
                 let server_handle = tokio::spawn(async move {
                     let storage = Arc::new(Mutex::new(InMemoryStorage::new()));
-                    match api_server.start(models, Some(storage)).await {
+                    match api_server.start(Some(storage), model_service).await {
                         Ok(server) => server.await,
                         Err(e) => Err(e),
                     }
