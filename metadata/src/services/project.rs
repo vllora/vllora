@@ -1,13 +1,13 @@
 use crate::error::DatabaseError;
-use crate::models::project::{DbProject, DbNewProject, NewProjectDTO};
+use crate::models::project::{DbNewProject, DbProject, NewProjectDTO, UpdateProjectDTO};
 use crate::pool::DbPool;
-use langdb_core::types::metadata::project::Project;
-use uuid::Uuid;
 use diesel::dsl::count;
 use diesel::ExpressionMethods;
-use diesel::{QueryDsl, RunQueryDsl};
 use diesel::OptionalExtension;
+use diesel::{QueryDsl, RunQueryDsl};
+use langdb_core::types::metadata::project::Project;
 use std::sync::Arc;
+use uuid::Uuid;
 
 pub trait ProjectService {
     fn get_by_id(&self, id: Uuid, owner_id: Uuid) -> Result<Project, DatabaseError>;
@@ -15,6 +15,13 @@ pub trait ProjectService {
     fn count(&self, owner_id: Uuid) -> Result<u64, DatabaseError>;
     fn list(&self, owner_id: Uuid) -> Result<Vec<Project>, DatabaseError>;
     fn delete(&self, id: Uuid, owner_id: Uuid) -> Result<(), DatabaseError>;
+    fn update(
+        &self,
+        id: Uuid,
+        owner_id: Uuid,
+        proj: UpdateProjectDTO,
+    ) -> Result<Project, DatabaseError>;
+    fn set_default(&self, id: Uuid, owner_id: Uuid) -> Result<Project, DatabaseError>;
 }
 
 pub struct ProjectServiceImpl {
@@ -25,7 +32,7 @@ impl ProjectServiceImpl {
     pub fn new(db_pool: Arc<DbPool>) -> Self {
         Self { db_pool }
     }
-    
+
     fn slugify(name: &str) -> String {
         name.to_lowercase()
             .chars()
@@ -55,9 +62,11 @@ impl ProjectService for ProjectServiceImpl {
 
     fn create(&self, proj: NewProjectDTO, _owner_id: Uuid) -> Result<Project, DatabaseError> {
         let mut conn = self.db_pool.get()?;
-        
-        let settings_json = proj.settings.as_ref()
-            .map(|s| serde_json::to_string(s))
+
+        let settings_json = proj
+            .settings
+            .as_ref()
+            .map(serde_json::to_string)
             .transpose()?;
 
         let slug = Self::slugify(&proj.name);
@@ -93,7 +102,7 @@ impl ProjectService for ProjectServiceImpl {
             .select(count(crate::schema::projects::id))
             .first(&mut conn)
             .map_err(DatabaseError::QueryError)?;
-            
+
         Ok(count_result as u64)
     }
 
@@ -102,38 +111,177 @@ impl ProjectService for ProjectServiceImpl {
         let db_projects = DbProject::not_archived()
             .load::<DbProject>(&mut conn)
             .map_err(DatabaseError::QueryError)?;
-            
+
         let projects = db_projects
             .into_iter()
             .map(|db_project| db_project.into())
             .collect();
-            
+
         Ok(projects)
     }
 
     fn delete(&self, id: Uuid, _owner_id: Uuid) -> Result<(), DatabaseError> {
         let mut conn = self.db_pool.get()?;
-        
+
         // Check if the project exists and is not archived
         let project_exists = DbProject::not_archived()
             .filter(crate::schema::projects::id.eq(id.to_string()))
             .first::<DbProject>(&mut conn)
             .optional()
             .map_err(DatabaseError::QueryError)?;
-            
+
         if project_exists.is_none() {
             return Err(DatabaseError::QueryError(diesel::result::Error::NotFound));
         }
-        
+
         // Soft delete by setting archived_at timestamp
         let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
-        
+
         diesel::update(crate::schema::projects::table)
             .filter(crate::schema::projects::id.eq(id.to_string()))
             .set(crate::schema::projects::archived_at.eq(Some(now)))
             .execute(&mut conn)?;
-            
+
         Ok(())
+    }
+
+    fn update(
+        &self,
+        id: Uuid,
+        _owner_id: Uuid,
+        update_data: UpdateProjectDTO,
+    ) -> Result<Project, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+
+        // Check if the project exists and is not archived
+        let existing_project = DbProject::not_archived()
+            .filter(crate::schema::projects::id.eq(id.to_string()))
+            .first::<DbProject>(&mut conn)
+            .optional()
+            .map_err(DatabaseError::QueryError)?;
+
+        let existing_project = match existing_project {
+            Some(project) => project,
+            None => return Err(DatabaseError::QueryError(diesel::result::Error::NotFound)),
+        };
+
+        // Check if there are any fields to update
+        let has_updates = update_data.name.is_some()
+            || update_data.description.is_some()
+            || update_data.settings.is_some()
+            || update_data.is_default.is_some();
+
+        if !has_updates {
+            return Ok(existing_project.into());
+        }
+
+        // Prepare the update data
+        let mut name = existing_project.name.clone();
+        let mut description = existing_project.description.clone();
+        let mut settings = existing_project.settings.clone();
+        let mut is_default = existing_project.is_default;
+        let mut slug = existing_project.slug.clone();
+
+        // Update name and slug if provided
+        if let Some(new_name) = update_data.name {
+            name = new_name.clone();
+            if new_name != existing_project.name {
+                slug = Self::slugify(&new_name);
+            }
+        }
+
+        // Update description if provided
+        if let Some(new_description) = update_data.description {
+            description = Some(new_description);
+        }
+
+        // Update settings if provided
+        if let Some(new_settings) = update_data.settings {
+            let settings_json = serde_json::to_string(&new_settings).map_err(|e| {
+                DatabaseError::QueryError(diesel::result::Error::DeserializationError(Box::new(e)))
+            })?;
+            settings = Some(settings_json);
+        }
+
+        // Update is_default if provided
+        if let Some(new_is_default) = update_data.is_default {
+            if new_is_default {
+                // If setting this project as default, first set all other projects to non-default
+                diesel::update(crate::schema::projects::table)
+                    .filter(crate::schema::projects::id.ne(id.to_string()))
+                    .filter(crate::schema::projects::archived_at.is_null())
+                    .set(crate::schema::projects::is_default.eq(0))
+                    .execute(&mut conn)?;
+            }
+            is_default = if new_is_default { 1 } else { 0 };
+        }
+
+        // Update updated_at timestamp
+        let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+
+        // Perform the update using individual field updates
+        diesel::update(crate::schema::projects::table)
+            .filter(crate::schema::projects::id.eq(id.to_string()))
+            .set((
+                crate::schema::projects::name.eq(name),
+                crate::schema::projects::slug.eq(slug),
+                crate::schema::projects::description.eq(description),
+                crate::schema::projects::settings.eq(settings),
+                crate::schema::projects::is_default.eq(is_default),
+                crate::schema::projects::updated_at.eq(now),
+            ))
+            .execute(&mut conn)?;
+
+        // Retrieve the updated project
+        let updated_project = DbProject::not_archived()
+            .filter(crate::schema::projects::id.eq(id.to_string()))
+            .first::<DbProject>(&mut conn)
+            .map_err(DatabaseError::QueryError)?;
+
+        Ok(updated_project.into())
+    }
+
+    fn set_default(&self, id: Uuid, _owner_id: Uuid) -> Result<Project, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+
+        // Check if the project exists and is not archived
+        let existing_project = DbProject::not_archived()
+            .filter(crate::schema::projects::id.eq(id.to_string()))
+            .first::<DbProject>(&mut conn)
+            .optional()
+            .map_err(DatabaseError::QueryError)?;
+
+        match existing_project {
+            Some(_project) => {
+                // Project exists, we can proceed
+            }
+            None => return Err(DatabaseError::QueryError(diesel::result::Error::NotFound)),
+        };
+
+        // First set all other projects to non-default
+        diesel::update(crate::schema::projects::table)
+            .filter(crate::schema::projects::id.ne(id.to_string()))
+            .filter(crate::schema::projects::archived_at.is_null())
+            .set(crate::schema::projects::is_default.eq(0))
+            .execute(&mut conn)?;
+
+        // Then set the specified project as default
+        let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+        diesel::update(crate::schema::projects::table)
+            .filter(crate::schema::projects::id.eq(id.to_string()))
+            .set((
+                crate::schema::projects::is_default.eq(1),
+                crate::schema::projects::updated_at.eq(now),
+            ))
+            .execute(&mut conn)?;
+
+        // Retrieve the updated project
+        let updated_project = DbProject::not_archived()
+            .filter(crate::schema::projects::id.eq(id.to_string()))
+            .first::<DbProject>(&mut conn)
+            .map_err(DatabaseError::QueryError)?;
+
+        Ok(updated_project.into())
     }
 }
 
@@ -142,14 +290,25 @@ mod tests {
     use super::*;
     use std::sync::Arc;
 
-
     #[test]
     fn test_slugify_function() {
         assert_eq!(ProjectServiceImpl::slugify("Hello World"), "hello-world");
-        assert_eq!(ProjectServiceImpl::slugify("Test Project 123"), "test-project-123");
-        assert_eq!(ProjectServiceImpl::slugify("Special@Chars!#"), "special-chars");
-        assert_eq!(ProjectServiceImpl::slugify("Multiple---Dashes"), "multiple-dashes");
-        assert_eq!(ProjectServiceImpl::slugify("  Leading and Trailing  "), "leading-and-trailing");
+        assert_eq!(
+            ProjectServiceImpl::slugify("Test Project 123"),
+            "test-project-123"
+        );
+        assert_eq!(
+            ProjectServiceImpl::slugify("Special@Chars!#"),
+            "special-chars"
+        );
+        assert_eq!(
+            ProjectServiceImpl::slugify("Multiple---Dashes"),
+            "multiple-dashes"
+        );
+        assert_eq!(
+            ProjectServiceImpl::slugify("  Leading and Trailing  "),
+            "leading-and-trailing"
+        );
         assert_eq!(ProjectServiceImpl::slugify("UPPERCASE"), "uppercase");
         assert_eq!(ProjectServiceImpl::slugify("mixedCASE123"), "mixedcase123");
     }
@@ -237,7 +396,10 @@ mod tests {
         let retrieved_project = result.unwrap();
         assert_eq!(retrieved_project.id, project_id);
         assert_eq!(retrieved_project.name, "Get Test Project");
-        assert_eq!(retrieved_project.description, Some("Project for get test".to_string()));
+        assert_eq!(
+            retrieved_project.description,
+            Some("Project for get test".to_string())
+        );
 
         crate::test_utils::cleanup_test_database();
     }
@@ -388,8 +550,13 @@ mod tests {
 
             let project = service.create(new_project, owner_id).unwrap();
             // For unique names, we expect the slug to be based on the original name
-            let expected_unique_slug = format!("{}-{}", expected_slug.replace("-", " "), i).replace(" ", "-");
-            assert_eq!(project.slug, expected_unique_slug, "Failed for name: {}", name);
+            let expected_unique_slug =
+                format!("{}-{}", expected_slug.replace("-", " "), i).replace(" ", "-");
+            assert_eq!(
+                project.slug, expected_unique_slug,
+                "Failed for name: {}",
+                name
+            );
         }
 
         crate::test_utils::cleanup_test_database();
@@ -548,6 +715,336 @@ mod tests {
                 // This is expected for already archived projects
             }
             _ => panic!("Expected QueryError with NotFound for already archived project"),
+        }
+
+        crate::test_utils::cleanup_test_database();
+    }
+
+    #[test]
+    fn test_update_project() {
+        let db_pool = Arc::new(crate::test_utils::setup_test_database());
+        let service = ProjectServiceImpl::new(db_pool);
+        let owner_id = Uuid::nil();
+
+        // First create a project
+        let new_project = NewProjectDTO {
+            name: "Original Project".to_string(),
+            description: Some("Original description".to_string()),
+            settings: Some(serde_json::json!({"feature": "original"})),
+            private_model_prices: None,
+            usage_limit: None,
+        };
+
+        let created_project = service.create(new_project, owner_id).unwrap();
+        let project_id = created_project.id;
+
+        // Update the project
+        let update_data = UpdateProjectDTO {
+            name: Some("Updated Project".to_string()),
+            description: Some("Updated description".to_string()),
+            settings: Some(serde_json::json!({"feature": "updated"})),
+            is_default: Some(true),
+        };
+
+        let updated_project = service.update(project_id, owner_id, update_data).unwrap();
+
+        // Verify the updates
+        assert_eq!(updated_project.name, "Updated Project");
+        assert_eq!(
+            updated_project.description,
+            Some("Updated description".to_string())
+        );
+        assert_eq!(
+            updated_project.settings,
+            Some(serde_json::json!({"feature": "updated"}))
+        );
+        assert_eq!(updated_project.is_default, true);
+        assert_eq!(updated_project.slug, "updated-project"); // Should be updated based on new name
+
+        crate::test_utils::cleanup_test_database();
+    }
+
+    #[test]
+    fn test_update_project_partial() {
+        let db_pool = Arc::new(crate::test_utils::setup_test_database());
+        let service = ProjectServiceImpl::new(db_pool);
+        let owner_id = Uuid::nil();
+
+        // Create a project
+        let new_project = NewProjectDTO {
+            name: "Test Project".to_string(),
+            description: Some("Original description".to_string()),
+            settings: Some(serde_json::json!({"feature": "original"})),
+            private_model_prices: None,
+            usage_limit: None,
+        };
+
+        let created_project = service.create(new_project, owner_id).unwrap();
+        let project_id = created_project.id;
+
+        // Update only the description
+        let update_data = UpdateProjectDTO {
+            name: None,
+            description: Some("Updated description only".to_string()),
+            settings: None,
+            is_default: None,
+        };
+
+        let updated_project = service.update(project_id, owner_id, update_data).unwrap();
+
+        // Verify only description was updated
+        assert_eq!(updated_project.name, "Test Project"); // Should remain unchanged
+        assert_eq!(
+            updated_project.description,
+            Some("Updated description only".to_string())
+        );
+        assert_eq!(
+            updated_project.settings,
+            Some(serde_json::json!({"feature": "original"}))
+        ); // Should remain unchanged
+        assert_eq!(updated_project.is_default, false); // Should remain unchanged
+        assert_eq!(updated_project.slug, "test-project"); // Should remain unchanged
+
+        crate::test_utils::cleanup_test_database();
+    }
+
+    #[test]
+    fn test_update_project_not_found() {
+        let db_pool = Arc::new(crate::test_utils::setup_test_database());
+        let service = ProjectServiceImpl::new(db_pool);
+        let owner_id = Uuid::nil();
+
+        // Try to update a project that doesn't exist
+        let fake_uuid = Uuid::new_v4();
+        let update_data = UpdateProjectDTO {
+            name: Some("Updated Name".to_string()),
+            description: None,
+            settings: None,
+            is_default: None,
+        };
+
+        let result = service.update(fake_uuid, owner_id, update_data);
+        assert!(result.is_err());
+
+        // Check that it's a QueryError with NotFound
+        match result.unwrap_err() {
+            DatabaseError::QueryError(diesel::result::Error::NotFound) => {
+                // This is expected for not found cases
+            }
+            _ => panic!("Expected QueryError with NotFound for non-existent project"),
+        }
+
+        crate::test_utils::cleanup_test_database();
+    }
+
+    #[test]
+    fn test_update_project_empty_update() {
+        let db_pool = Arc::new(crate::test_utils::setup_test_database());
+        let service = ProjectServiceImpl::new(db_pool);
+        let owner_id = Uuid::nil();
+
+        // Create a project
+        let new_project = NewProjectDTO {
+            name: "Test Project".to_string(),
+            description: Some("Test description".to_string()),
+            settings: None,
+            private_model_prices: None,
+            usage_limit: None,
+        };
+
+        let created_project = service.create(new_project, owner_id).unwrap();
+        let project_id = created_project.id;
+
+        // Update with no fields (empty update)
+        let update_data = UpdateProjectDTO {
+            name: None,
+            description: None,
+            settings: None,
+            is_default: None,
+        };
+
+        let updated_project = service.update(project_id, owner_id, update_data).unwrap();
+
+        // Verify the project remains unchanged
+        assert_eq!(updated_project.name, "Test Project");
+        assert_eq!(
+            updated_project.description,
+            Some("Test description".to_string())
+        );
+        assert_eq!(updated_project.slug, "test-project");
+
+        crate::test_utils::cleanup_test_database();
+    }
+
+    #[test]
+    fn test_update_project_name_slug_generation() {
+        let db_pool = Arc::new(crate::test_utils::setup_test_database());
+        let service = ProjectServiceImpl::new(db_pool);
+        let owner_id = Uuid::nil();
+
+        // Create a project
+        let new_project = NewProjectDTO {
+            name: "Original Project Name".to_string(),
+            description: None,
+            settings: None,
+            private_model_prices: None,
+            usage_limit: None,
+        };
+
+        let created_project = service.create(new_project, owner_id).unwrap();
+        let project_id = created_project.id;
+        assert_eq!(created_project.slug, "original-project-name");
+
+        // Update the name
+        let update_data = UpdateProjectDTO {
+            name: Some("New Project Name!".to_string()),
+            description: None,
+            settings: None,
+            is_default: None,
+        };
+
+        let updated_project = service.update(project_id, owner_id, update_data).unwrap();
+
+        // Verify the slug was updated based on the new name
+        assert_eq!(updated_project.name, "New Project Name!");
+        assert_eq!(updated_project.slug, "new-project-name");
+
+        crate::test_utils::cleanup_test_database();
+    }
+
+    #[test]
+    fn test_set_default_project() {
+        let db_pool = Arc::new(crate::test_utils::setup_test_database());
+        let service = ProjectServiceImpl::new(db_pool);
+        let owner_id = Uuid::nil();
+
+        // Create two projects
+        let project1 = NewProjectDTO {
+            name: "Project 1".to_string(),
+            description: Some("First project".to_string()),
+            settings: None,
+            private_model_prices: None,
+            usage_limit: None,
+        };
+
+        let project2 = NewProjectDTO {
+            name: "Project 2".to_string(),
+            description: Some("Second project".to_string()),
+            settings: None,
+            private_model_prices: None,
+            usage_limit: None,
+        };
+
+        let created_project1 = service.create(project1, owner_id).unwrap();
+        let created_project2 = service.create(project2, owner_id).unwrap();
+
+        // Initially, both projects should be non-default
+        assert!(!created_project1.is_default);
+        assert!(!created_project2.is_default);
+
+        // Set project 1 as default
+        let updated_project1 = service.set_default(created_project1.id, owner_id).unwrap();
+        assert!(updated_project1.is_default);
+
+        // Verify project 2 is still non-default
+        let retrieved_project2 = service.get_by_id(created_project2.id, owner_id).unwrap();
+        assert!(!retrieved_project2.is_default);
+
+        // Now set project 2 as default
+        let updated_project2 = service.set_default(created_project2.id, owner_id).unwrap();
+        assert!(updated_project2.is_default);
+
+        // Verify project 1 is now non-default
+        let retrieved_project1 = service.get_by_id(created_project1.id, owner_id).unwrap();
+        assert!(!retrieved_project1.is_default);
+
+        crate::test_utils::cleanup_test_database();
+    }
+
+    #[test]
+    fn test_update_project_set_default() {
+        let db_pool = Arc::new(crate::test_utils::setup_test_database());
+        let service = ProjectServiceImpl::new(db_pool);
+        let owner_id = Uuid::nil();
+
+        // Create two projects
+        let project1 = NewProjectDTO {
+            name: "Project 1".to_string(),
+            description: Some("First project".to_string()),
+            settings: None,
+            private_model_prices: None,
+            usage_limit: None,
+        };
+
+        let project2 = NewProjectDTO {
+            name: "Project 2".to_string(),
+            description: Some("Second project".to_string()),
+            settings: None,
+            private_model_prices: None,
+            usage_limit: None,
+        };
+
+        let created_project1 = service.create(project1, owner_id).unwrap();
+        let created_project2 = service.create(project2, owner_id).unwrap();
+
+        // Initially, both projects should be non-default
+        assert!(!created_project1.is_default);
+        assert!(!created_project2.is_default);
+
+        // Update project 1 to set it as default
+        let update_data = UpdateProjectDTO {
+            name: None,
+            description: None,
+            settings: None,
+            is_default: Some(true),
+        };
+
+        let updated_project1 = service
+            .update(created_project1.id, owner_id, update_data)
+            .unwrap();
+        assert!(updated_project1.is_default);
+
+        // Verify project 2 is still non-default
+        let retrieved_project2 = service.get_by_id(created_project2.id, owner_id).unwrap();
+        assert!(!retrieved_project2.is_default);
+
+        // Now update project 2 to set it as default
+        let update_data2 = UpdateProjectDTO {
+            name: None,
+            description: None,
+            settings: None,
+            is_default: Some(true),
+        };
+
+        let updated_project2 = service
+            .update(created_project2.id, owner_id, update_data2)
+            .unwrap();
+        assert!(updated_project2.is_default);
+
+        // Verify project 1 is now non-default
+        let retrieved_project1 = service.get_by_id(created_project1.id, owner_id).unwrap();
+        assert!(!retrieved_project1.is_default);
+
+        crate::test_utils::cleanup_test_database();
+    }
+
+    #[test]
+    fn test_set_default_project_not_found() {
+        let db_pool = Arc::new(crate::test_utils::setup_test_database());
+        let service = ProjectServiceImpl::new(db_pool);
+        let owner_id = Uuid::nil();
+
+        // Try to set a non-existent project as default
+        let fake_uuid = Uuid::new_v4();
+        let result = service.set_default(fake_uuid, owner_id);
+        assert!(result.is_err());
+
+        // Check that it's a QueryError with NotFound
+        match result.unwrap_err() {
+            DatabaseError::QueryError(diesel::result::Error::NotFound) => {
+                // This is expected for not found cases
+            }
+            _ => panic!("Expected QueryError with NotFound for non-existent project"),
         }
 
         crate::test_utils::cleanup_test_database();

@@ -1,9 +1,9 @@
+pub mod error;
+pub mod models;
 pub mod pool;
 pub mod schema;
-pub mod models;
-pub mod utils;
 pub mod services;
-pub mod error;
+pub mod utils;
 
 #[cfg(test)]
 pub mod test_utils;

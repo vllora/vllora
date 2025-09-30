@@ -1,10 +1,10 @@
 use diesel::r2d2::ConnectionManager;
-use r2d2::{Pool};
+use r2d2::Pool;
 
-#[cfg(feature = "sqlite")]
-use diesel::sqlite::SqliteConnection as Connection;
 #[cfg(feature = "postgres")]
 use diesel::pg::PgConnection as Connection;
+#[cfg(feature = "sqlite")]
+use diesel::sqlite::SqliteConnection as Connection;
 
 pub type DbPool = Pool<ConnectionManager<Connection>>;
 

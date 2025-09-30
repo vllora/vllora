@@ -1,8 +1,8 @@
 use actix_web::body::EitherBody;
 use actix_web::dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform};
 use actix_web::{web, Error, HttpMessage, HttpResponse};
-use langdb_metadata::services::project::{ProjectService, ProjectServiceImpl};
 use langdb_metadata::pool::DbPool;
+use langdb_metadata::services::project::{ProjectService, ProjectServiceImpl};
 use std::future::{ready, Future, Ready};
 use std::pin::Pin;
 use std::rc::Rc;
@@ -79,7 +79,7 @@ where
             };
 
             let project_service = ProjectServiceImpl::new(database_pool.get_ref().clone());
-            
+
             let project = match &project_id_in_header {
                 Some(project_id) => {
                     let Ok(project_uuid) = project_id.parse::<Uuid>() else {
@@ -94,7 +94,9 @@ where
                         ));
                     };
 
-                    project_service.get_by_id(project_uuid, Uuid::nil()).map(Some)
+                    project_service
+                        .get_by_id(project_uuid, Uuid::nil())
+                        .map(Some)
                 }
                 None => {
                     // No project header, try to get the default project

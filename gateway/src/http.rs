@@ -4,8 +4,8 @@ use crate::cost::GatewayCostCalculator;
 use crate::guardrails::GuardrailsService;
 use crate::handlers::projects;
 use crate::limit::GatewayLimitChecker;
-use crate::middleware::trace_logger::TraceLogger;
 use crate::middleware::project::ProjectMiddleware;
+use crate::middleware::trace_logger::TraceLogger;
 use crate::otel::DummyTraceWritterTransport;
 use actix_cors::Cors;
 use actix_web::Scope as ActixScope;
@@ -35,13 +35,13 @@ use langdb_core::types::gateway::CostCalculator;
 use langdb_core::types::guardrails::service::GuardrailsEvaluator;
 use langdb_core::types::guardrails::Guard;
 use langdb_core::usage::InMemoryStorage;
+use langdb_metadata::pool::DbPool;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::signal;
 use tokio::sync::Mutex;
-use langdb_metadata::pool::DbPool;
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 #[serde(crate = "serde")]
@@ -206,8 +206,7 @@ impl ApiServer {
             Error = actix_web::Error,
         >,
     > {
-        let app = App::new()
-            .app_data(web::Data::new(server_config.db_pool.clone()));
+        let app = App::new().app_data(web::Data::new(server_config.db_pool.clone()));
 
         let mut service = Self::attach_gateway_routes(web::scope("/v1"));
         if let Some(in_memory_storage) = in_memory_storage {
@@ -241,6 +240,10 @@ impl ApiServer {
                     .route("/{id}", web::get().to(projects::get_project))
                     .route("/{id}", web::delete().to(projects::delete_project))
                     .route("/{id}", web::put().to(projects::update_project))
+                    .route(
+                        "/{id}/default",
+                        web::post().to(projects::set_default_project),
+                    ),
             )
             .wrap(cors)
     }

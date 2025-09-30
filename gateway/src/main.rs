@@ -1,18 +1,18 @@
 use std::sync::{Arc, RwLock};
 
+use ::tracing::info;
 use clap::Parser;
 use config::{Config, ConfigError};
 use http::ApiServer;
 use langdb_core::{error::GatewayError, usage::InMemoryStorage};
-use uuid::Uuid;
+use langdb_metadata::error::DatabaseError;
+use langdb_metadata::models::project::NewProjectDTO;
+use langdb_metadata::pool::DbPool;
+use langdb_metadata::services::project::{ProjectService, ProjectServiceImpl};
 use run::models::{load_models, ModelsLoadError};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use langdb_metadata::pool::DbPool;
-use langdb_metadata::services::project::{ProjectService, ProjectServiceImpl};
-use langdb_metadata::error::DatabaseError;
-use langdb_metadata::models::project::NewProjectDTO;
-use ::tracing::info;
+use uuid::Uuid;
 
 mod callback_handler;
 mod cli;
@@ -26,7 +26,6 @@ mod middleware;
 mod otel;
 mod run;
 mod session;
-mod test_utils;
 mod tracing;
 mod tui;
 mod usage;
@@ -75,16 +74,16 @@ pub const LOGO: &str = r#"
 /// Seeds the database with a default project if no projects exist
 fn seed_database(db_pool: &DbPool) -> Result<(), CliError> {
     let project_service = ProjectServiceImpl::new(Arc::new(db_pool.clone()));
-    
+
     // Use a dummy owner_id for seeding (you might want to change this)
     let dummy_owner_id = Uuid::nil();
-    
+
     // Check if any projects exist
     let project_count = project_service.count(dummy_owner_id)?;
-    
+
     if project_count == 0 {
         info!("No projects found in database. Creating default project...");
-        
+
         let default_project = NewProjectDTO {
             name: "Default Project".to_string(),
             description: Some("Default project created during database seeding".to_string()),
@@ -92,13 +91,16 @@ fn seed_database(db_pool: &DbPool) -> Result<(), CliError> {
             private_model_prices: None,
             usage_limit: None,
         };
-        
+
         let created_project = project_service.create(default_project, dummy_owner_id)?;
-        info!("Created default project: {} (ID: {})", created_project.name, created_project.id);
+        info!(
+            "Created default project: {} (ID: {})",
+            created_project.name, created_project.id
+        );
     } else {
         info!("Found {} existing projects in database", project_count);
     }
-    
+
     Ok(())
 }
 
@@ -113,7 +115,7 @@ async fn main() -> Result<(), CliError> {
     let db_pool = langdb_metadata::pool::establish_connection("langdb.sqlite".to_string(), 10);
 
     langdb_metadata::utils::init_db(&db_pool);
-    
+
     // Seed the database with a default project if none exist
     seed_database(&db_pool)?;
 

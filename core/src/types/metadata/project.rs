@@ -1,9 +1,9 @@
-use chrono::NaiveDateTime;
-use serde_json::Value;
-use uuid::Uuid;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use crate::types::provider::ModelPrice;
+use chrono::NaiveDateTime;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::HashMap;
+use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Project {

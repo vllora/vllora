@@ -5,24 +5,24 @@ use std::sync::Arc;
 pub fn setup_test_database() -> DbPool {
     // Use an in-memory database for tests to avoid file I/O issues
     let test_db_path = format!(":memory:");
-    
+
     // Create new database pool
     let db_pool = crate::pool::establish_connection(test_db_path, 5);
-    
+
     // Initialize the database schema
     crate::utils::init_db(&db_pool);
-    
+
     db_pool
 }
 
 /// Seeds the test database with sample data
 pub fn seed_test_database(db_pool: &DbPool) {
-    use crate::services::project::{ProjectService, ProjectServiceImpl};
     use crate::models::project::NewProjectDTO;
-    
+    use crate::services::project::{ProjectService, ProjectServiceImpl};
+
     let project_service = ProjectServiceImpl::new(Arc::new(db_pool.clone()));
     let dummy_owner_id = uuid::Uuid::nil();
-    
+
     // Create a default test project
     let default_project = NewProjectDTO {
         name: "Test Project".to_string(),
@@ -35,10 +35,11 @@ pub fn seed_test_database(db_pool: &DbPool) {
         private_model_prices: None,
         usage_limit: None,
     };
-    
-    project_service.create(default_project, dummy_owner_id)
+
+    project_service
+        .create(default_project, dummy_owner_id)
         .expect("Failed to create test project");
-    
+
     // Create another test project
     let second_project = NewProjectDTO {
         name: "Second Test Project".to_string(),
@@ -47,8 +48,9 @@ pub fn seed_test_database(db_pool: &DbPool) {
         private_model_prices: None,
         usage_limit: None,
     };
-    
-    project_service.create(second_project, dummy_owner_id)
+
+    project_service
+        .create(second_project, dummy_owner_id)
         .expect("Failed to create second test project");
 }
 

@@ -2,24 +2,22 @@ use crate::schema::projects;
 use chrono::{DateTime, NaiveDateTime};
 use diesel::helper_types::AsSelect;
 use diesel::helper_types::Select;
-#[cfg(feature = "sqlite")]
-use diesel::sqlite::Sqlite;
 #[cfg(feature = "postgres")]
 use diesel::pg::Pg;
+#[cfg(feature = "sqlite")]
+use diesel::sqlite::Sqlite;
 use diesel::ExpressionMethods;
 use diesel::QueryDsl;
 use diesel::SelectableHelper;
-use diesel::{
-    Identifiable, Queryable,
-};
 use diesel::{AsChangeset, Insertable, QueryableByName, Selectable};
-use langdb_core::types::provider::ModelPrice;
-use langdb_core::types::project_settings::ProjectSettings;
+use diesel::{Identifiable, Queryable};
 use langdb_core::types::metadata::project::Project;
-use uuid::Uuid;
+use langdb_core::types::project_settings::ProjectSettings;
+use langdb_core::types::provider::ModelPrice;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+use uuid::Uuid;
 
 #[derive(
     QueryableByName,
@@ -69,7 +67,9 @@ impl DbProject {
 
     pub fn parse_settings(&self) -> Option<ProjectSettings> {
         self.settings.as_ref().and_then(|settings_str| {
-            serde_json::from_str::<Value>(settings_str).ok().and_then(|v| serde_json::from_value(v).ok())
+            serde_json::from_str::<Value>(settings_str)
+                .ok()
+                .and_then(|v| serde_json::from_value(v).ok())
         })
     }
 
@@ -84,35 +84,35 @@ impl DbProject {
     }
 }
 
-impl Into<Project> for DbProject {
-    fn into(self) -> Project {
-        let id = Uuid::parse_str(&self.id).unwrap_or_else(|_| Uuid::nil());
-        let created_at = parse_naive_datetime(&self.created_at);
-        let updated_at = parse_naive_datetime(&self.updated_at);
-        let archived_at = self.archived_at.as_deref().map(parse_naive_datetime);
-        let settings = self
+impl From<DbProject> for Project {
+    fn from(val: DbProject) -> Self {
+        let id = Uuid::parse_str(&val.id).unwrap_or_else(|_| Uuid::nil());
+        let created_at = parse_naive_datetime(&val.created_at);
+        let updated_at = parse_naive_datetime(&val.updated_at);
+        let archived_at = val.archived_at.as_deref().map(parse_naive_datetime);
+        let settings = val
             .settings
             .as_deref()
             .and_then(|s| serde_json::from_str::<Value>(s).ok());
-        let private_model_prices = self
+        let private_model_prices = val
             .private_model_prices
             .as_deref()
             .and_then(|s| serde_json::from_str::<Value>(s).ok());
-        let allowed_user_ids = self
+        let allowed_user_ids = val
             .allowed_user_ids
             .as_deref()
             .and_then(|s| serde_json::from_str::<Vec<String>>(s).ok());
 
         Project {
             id,
-            name: self.name,
-            description: self.description,
+            name: val.name,
+            description: val.description,
             created_at,
             updated_at,
             company_id: Uuid::nil(),
-            slug: self.slug,
+            slug: val.slug,
             settings,
-            is_default: self.is_default != 0,
+            is_default: val.is_default != 0,
             archived_at,
             allowed_user_ids,
             private_model_prices,
@@ -127,11 +127,8 @@ fn parse_naive_datetime(value: &str) -> NaiveDateTime {
     if let Ok(dt) = NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S") {
         return dt;
     }
-    DateTime::from_timestamp(0, 0)
-        .unwrap()
-        .naive_utc()
+    DateTime::from_timestamp(0, 0).unwrap().naive_utc()
 }
-
 
 #[derive(Insertable, AsChangeset, PartialEq, Debug, Serialize, Deserialize)]
 #[serde(crate = "serde")]
@@ -152,6 +149,7 @@ pub struct DbUpdateProject {
     pub name: String,
     pub description: Option<String>,
     pub settings: Option<String>,
+    pub is_default: Option<i32>,
 }
 
 #[derive(AsChangeset, PartialEq, Debug, Serialize, Deserialize)]
@@ -169,6 +167,14 @@ pub struct NewProjectDTO {
     pub settings: Option<Value>,
     pub private_model_prices: Option<HashMap<String, ModelPrice>>,
     pub usage_limit: Option<Value>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct UpdateProjectDTO {
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub settings: Option<Value>,
+    pub is_default: Option<bool>,
 }
 
 #[cfg(test)]
@@ -216,4 +222,3 @@ mod tests {
         assert!(project.is_user_allowed("anyone"));
     }
 }
-
