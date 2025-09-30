@@ -6,6 +6,7 @@
 - [Messages](./messages.md)
 - [Traces](./traces.md)
 - [Runs](./runs.md)
+- [Events](./events.md)
 
 This is a placeholder for the main documentation entrypoint.
 
