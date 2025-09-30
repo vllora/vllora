@@ -14,27 +14,12 @@ pub struct CreateProjectRequest {
     pub settings: Option<serde_json::Value>,
 }
 
-#[derive(Serialize)]
-pub struct CreateProjectResponse {
-    pub project: Project,
-}
-
 #[derive(Deserialize)]
 pub struct UpdateProjectRequest {
     pub name: Option<String>,
     pub description: Option<String>,
     pub settings: Option<serde_json::Value>,
     pub is_default: Option<bool>,
-}
-
-#[derive(Serialize)]
-pub struct UpdateProjectResponse {
-    pub project: Project,
-}
-
-#[derive(Serialize)]
-pub struct ListProjectsResponse {
-    pub projects: Vec<Project>,
 }
 
 #[derive(Serialize)]
@@ -52,10 +37,7 @@ pub async fn list_projects(
     let owner_id = Uuid::nil();
 
     match project_service.list(owner_id) {
-        Ok(projects) => {
-            let response = ListProjectsResponse { projects };
-            Ok(HttpResponse::Ok().json(response))
-        }
+        Ok(projects) => Ok(HttpResponse::Ok().json(projects)),
         Err(e) => {
             tracing::error!("Failed to list projects: {:?}", e);
             Ok(HttpResponse::InternalServerError().json(serde_json::json!({
@@ -84,10 +66,7 @@ pub async fn create_project(
     };
 
     match project_service.create(new_project, owner_id) {
-        Ok(project) => {
-            let response = CreateProjectResponse { project };
-            Ok(HttpResponse::Created().json(response))
-        }
+        Ok(project) => Ok(HttpResponse::Created().json(project)),
         Err(e) => {
             tracing::error!("Failed to create project: {:?}", e);
             Ok(HttpResponse::InternalServerError().json(serde_json::json!({
@@ -197,13 +176,7 @@ pub async fn update_project(
     };
 
     match project_service.update(project_id, owner_id, update_data) {
-        Ok(updated_project) => {
-            tracing::info!("Successfully updated project: {}", project_id);
-            let response = UpdateProjectResponse {
-                project: updated_project,
-            };
-            Ok(HttpResponse::Ok().json(response))
-        }
+        Ok(updated_project) => Ok(HttpResponse::Ok().json(updated_project)),
         Err(e) => {
             tracing::error!("Failed to update project {}: {:?}", project_id, e);
             Ok(HttpResponse::NotFound()
@@ -235,13 +208,7 @@ pub async fn set_default_project(
     let owner_id = Uuid::nil();
 
     match project_service.set_default(project_id, owner_id) {
-        Ok(updated_project) => {
-            tracing::info!("Successfully set project as default: {}", project_id);
-            let response = UpdateProjectResponse {
-                project: updated_project,
-            };
-            Ok(HttpResponse::Ok().json(response))
-        }
+        Ok(updated_project) => Ok(HttpResponse::Ok().json(updated_project)),
         Err(e) => {
             tracing::error!("Failed to set project as default {}: {:?}", project_id, e);
             Ok(HttpResponse::NotFound().json(serde_json::json!({

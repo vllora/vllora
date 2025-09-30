@@ -204,8 +204,7 @@ impl ApiServer {
             Error = actix_web::Error,
         >,
     > {
-        let app = App::new()
-            .app_data(web::Data::new(db_pool.clone()));
+        let app = App::new().app_data(web::Data::new(db_pool.clone()));
 
         let mut service = Self::attach_gateway_routes(web::scope("/v1"));
         if let Some(in_memory_storage) = in_memory_storage {
@@ -263,7 +262,10 @@ impl ApiServer {
     fn attach_gateway_routes(scope: ActixScope) -> ActixScope {
         scope
             .route("/chat/completions", web::post().to(create_chat_completion))
-            .route("/models", web::get().to(crate::handlers::list_models_from_db))
+            .route(
+                "/models",
+                web::get().to(crate::handlers::list_models_from_db),
+            )
             .route("/embeddings", web::post().to(embeddings_handler))
             .route("/images/generations", web::post().to(create_image))
     }

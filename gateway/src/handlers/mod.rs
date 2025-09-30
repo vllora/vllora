@@ -21,10 +21,7 @@ pub async fn list_models_from_db(
         .map_err(|e| GatewayApiError::CustomError(format!("Failed to fetch models: {}", e)))?;
 
     // Convert DbModel to ModelMetadata
-    let models: Vec<ModelMetadata> = db_models
-        .into_iter()
-        .map(|m| m.into())
-        .collect();
+    let models: Vec<ModelMetadata> = db_models.into_iter().map(|m| m.into()).collect();
 
     // Return in the same format as list_gateway_models
     let response = ChatModelsResponse {

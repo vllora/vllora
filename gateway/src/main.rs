@@ -5,15 +5,14 @@ use clap::Parser;
 use config::{Config, ConfigError};
 use http::ApiServer;
 use langdb_core::{error::GatewayError, usage::InMemoryStorage};
-use uuid::Uuid;
-use serde::{Deserialize, Serialize};
-use thiserror::Error;
-use langdb_metadata::pool::DbPool;
-use langdb_metadata::services::project::{ProjectService, ProjectServiceImpl};
-use langdb_metadata::services::model::ModelServiceImpl;
 use langdb_metadata::error::DatabaseError;
 use langdb_metadata::models::project::NewProjectDTO;
-
+use langdb_metadata::pool::DbPool;
+use langdb_metadata::services::model::ModelServiceImpl;
+use langdb_metadata::services::project::{ProjectService, ProjectServiceImpl};
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+use uuid::Uuid;
 
 mod callback_handler;
 mod cli;
@@ -125,7 +124,9 @@ async fn main() -> Result<(), CliError> {
         cli::Commands::Login => session::login().await,
         cli::Commands::Update { force: _ } => {
             tracing::init_tracing();
-            println!("Model update command is deprecated. Models are now managed in SQLite database.");
+            println!(
+                "Model update command is deprecated. Models are now managed in SQLite database."
+            );
             println!("Use database migrations to update models.");
             Ok(())
         }
