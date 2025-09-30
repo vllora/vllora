@@ -52,3 +52,4 @@ crossterm = "0.29.0"
 open = "5.3.2"
 
 chrono = { workspace = true }
+uuid = { version = "1.18.1", features = ["serde", "v4"] }

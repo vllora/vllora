@@ -1,8 +1,11 @@
 use crate::schema::projects;
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, NaiveDateTime};
 use diesel::helper_types::AsSelect;
 use diesel::helper_types::Select;
+#[cfg(feature = "sqlite")]
 use diesel::sqlite::Sqlite;
+#[cfg(feature = "postgres")]
+use diesel::pg::Pg;
 use diesel::ExpressionMethods;
 use diesel::QueryDsl;
 use diesel::SelectableHelper;
@@ -48,7 +51,10 @@ pub struct DbProject {
     pub private_model_prices: Option<String>,
 }
 
+#[cfg(feature = "sqlite")]
 type All = Select<projects::table, AsSelect<DbProject, Sqlite>>;
+#[cfg(feature = "postgres")]
+type All = Select<projects::table, AsSelect<DbProject, Pg>>;
 
 impl DbProject {
     pub fn all() -> All {
@@ -131,9 +137,12 @@ fn parse_naive_datetime(value: &str) -> NaiveDateTime {
 #[serde(crate = "serde")]
 #[diesel(table_name = projects)]
 pub struct DbNewProject {
+    pub id: Option<String>,
     pub name: String,
     pub description: Option<String>,
+    pub slug: String,
     pub settings: Option<String>,
+    pub is_default: Option<i32>,
 }
 
 #[derive(AsChangeset, PartialEq, Debug, Serialize, Deserialize)]
