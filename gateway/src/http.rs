@@ -2,8 +2,10 @@ use crate::callback_handler::init_callback_handler;
 use crate::config::{load_langdb_proxy_config, Config};
 use crate::cost::GatewayCostCalculator;
 use crate::guardrails::GuardrailsService;
+use crate::handlers::projects;
 use crate::limit::GatewayLimitChecker;
 use crate::middleware::trace_logger::TraceLogger;
+use crate::middleware::project::ProjectMiddleware;
 use crate::otel::DummyTraceWritterTransport;
 use actix_cors::Cors;
 use actix_web::Scope as ActixScope;
@@ -39,6 +41,7 @@ use std::sync::Arc;
 use thiserror::Error;
 use tokio::signal;
 use tokio::sync::Mutex;
+use langdb_metadata::pool::DbPool;
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 #[serde(crate = "serde")]
@@ -60,11 +63,12 @@ pub enum ServerError {
 #[derive(Clone, Debug)]
 pub struct ApiServer {
     config: Config,
+    db_pool: Arc<DbPool>,
 }
 
 impl ApiServer {
-    pub fn new(config: Config) -> Self {
-        Self { config }
+    pub fn new(config: Config, db_pool: Arc<DbPool>) -> Self {
+        Self { config, db_pool }
     }
 
     pub fn print_useful_info(&self) {
@@ -110,8 +114,6 @@ impl ApiServer {
         models: Vec<ModelMetadata>,
         storage: Option<Arc<Mutex<InMemoryStorage>>>,
     ) -> Result<impl Future<Output = Result<(), ServerError>>, ServerError> {
-        let server_config = self.clone();
-
         let cost_calculator = GatewayCostCalculator::new();
         let callback = if let Some(storage) = &storage {
             init_callback_handler(storage.clone(), cost_calculator.clone())
@@ -119,9 +121,11 @@ impl ApiServer {
             CallbackHandlerFn(None)
         };
 
+        let server_config = self.clone();
+        let server_config_for_closure = server_config.clone();
         let server = HttpServer::new(move || {
             let limit_checker = if let Some(storage) = storage.clone() {
-                match &server_config.config.cost_control {
+                match &server_config_for_closure.config.cost_control {
                     Some(cc) => {
                         let checker = GatewayLimitChecker::new(storage, cc.clone());
                         Some(LimitCheckWrapper {
@@ -147,6 +151,7 @@ impl ApiServer {
                 limit_checker.clone(),
                 server_config.config.rate_limit.clone(),
                 providers_config,
+                server_config_for_closure.clone(),
             )
         })
         .bind((self.config.http.host.as_str(), self.config.http.port))?
@@ -191,6 +196,7 @@ impl ApiServer {
         limit_checker: Option<LimitCheckWrapper>,
         rate_limit: Option<RateLimiting>,
         providers: Option<ProvidersConfig>,
+        server_config: ApiServer,
     ) -> App<
         impl ServiceFactory<
             ServiceRequest,
@@ -200,7 +206,8 @@ impl ApiServer {
             Error = actix_web::Error,
         >,
     > {
-        let app = App::new();
+        let app = App::new()
+            .app_data(web::Data::new(server_config.db_pool.clone()));
 
         let mut service = Self::attach_gateway_routes(web::scope("/v1"));
         if let Some(in_memory_storage) = in_memory_storage {
@@ -214,6 +221,7 @@ impl ApiServer {
         let guardrails_service = Box::new(GuardrailsService::new(guards.unwrap_or_default()))
             as Box<dyn GuardrailsEvaluator>;
         app.wrap(TraceLogger)
+            .wrap(ProjectMiddleware::new())
             .service(
                 service
                     .app_data(limit_checker)
@@ -225,6 +233,14 @@ impl ApiServer {
                     .app_data(rate_limit)
                     .app_data(Data::new(guardrails_service))
                     .wrap(RateLimitMiddleware),
+            )
+            .service(
+                web::scope("/projects")
+                    .route("", web::get().to(projects::list_projects))
+                    .route("", web::post().to(projects::create_project))
+                    .route("/{id}", web::get().to(projects::get_project))
+                    .route("/{id}", web::delete().to(projects::delete_project))
+                    .route("/{id}", web::put().to(projects::update_project))
             )
             .wrap(cors)
     }

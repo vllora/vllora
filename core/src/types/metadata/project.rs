@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use crate::types::provider::ModelPrice;
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Project {
     pub id: Uuid,
     pub name: String,

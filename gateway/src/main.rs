@@ -19,12 +19,14 @@ mod cli;
 mod config;
 mod cost;
 mod guardrails;
+mod handlers;
 mod http;
 mod limit;
 mod middleware;
 mod otel;
 mod run;
 mod session;
+mod test_utils;
 mod tracing;
 mod tui;
 mod usage;
@@ -72,7 +74,7 @@ pub const LOGO: &str = r#"
 
 /// Seeds the database with a default project if no projects exist
 fn seed_database(db_pool: &DbPool) -> Result<(), CliError> {
-    let project_service = ProjectServiceImpl::new(db_pool.clone());
+    let project_service = ProjectServiceImpl::new(Arc::new(db_pool.clone()));
     
     // Use a dummy owner_id for seeding (you might want to change this)
     let dummy_owner_id = Uuid::nil();
@@ -149,7 +151,7 @@ async fn main() -> Result<(), CliError> {
 
                 let config = Config::load(&cli.config)?;
                 let config = config.apply_cli_overrides(&cli::Commands::Serve(serve_args));
-                let api_server = ApiServer::new(config);
+                let api_server = ApiServer::new(config, Arc::new(db_pool.clone()));
                 let models = load_models(false).await?;
                 let server_handle = tokio::spawn(async move {
                     match api_server.start(models, Some(storage_clone)).await {
@@ -195,7 +197,7 @@ async fn main() -> Result<(), CliError> {
 
                 let config = Config::load(&cli.config)?;
                 let config = config.apply_cli_overrides(&cli::Commands::Serve(serve_args));
-                let api_server = ApiServer::new(config);
+                let api_server = ApiServer::new(config, Arc::new(db_pool.clone()));
                 let models = load_models(false).await?;
                 let server_handle = tokio::spawn(async move {
                     let storage = Arc::new(Mutex::new(InMemoryStorage::new()));

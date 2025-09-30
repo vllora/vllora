@@ -8,3 +8,8 @@
 - [Runs](./runs.md)
 
 This is a placeholder for the main documentation entrypoint.
+
+# Request handling
+
+Requests are handled with actix
+- Project middleware, reads X-Project-Id header. If header is not present, default project is read. Project is pushed to extensions
