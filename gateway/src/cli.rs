@@ -61,12 +61,8 @@ pub struct ServeArgs {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Update the available models cache
-    Update {
-        /// Force update even if cache is fresh
-        #[arg(short, long)]
-        force: bool,
-    },
+    /// Sync models from API to database
+    Sync,
     /// List all available models
     List,
     /// Start the API server (default if no command specified)

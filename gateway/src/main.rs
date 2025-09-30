@@ -48,6 +48,8 @@ pub enum CliError {
     ConfigError(#[from] ConfigError),
     #[error(transparent)]
     DatabaseError(#[from] DatabaseError),
+    #[error(transparent)]
+    ModelsLoadError(#[from] run::models::ModelsLoadError),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -122,25 +124,29 @@ async fn main() -> Result<(), CliError> {
         .unwrap_or(cli::Commands::Serve(cli::ServeArgs::default()))
     {
         cli::Commands::Login => session::login().await,
-        cli::Commands::Update { force: _ } => {
+        cli::Commands::Sync => {
             tracing::init_tracing();
-            println!(
-                "Model update command is deprecated. Models are now managed in SQLite database."
-            );
-            println!("Use database migrations to update models.");
+            println!("Syncing models from API to database...");
+            let models = run::models::fetch_and_store_models(db_pool.clone()).await?;
+            println!("Successfully synced {} models to database", models.len());
             Ok(())
         }
         cli::Commands::List => {
             tracing::init_tracing();
-            println!("Available models:");
             // Query models from database
             use langdb_metadata::services::model::ModelService;
             let model_service = ModelServiceImpl::new(db_pool.clone());
-            let models = model_service.list(None)?;
-            println!("Found {} models in database", models.len());
-            for model in models {
-                println!("  - {} ({})", model.model_name, model.owner_name);
-            }
+            let db_models = model_service.list(None)?;
+
+            println!("Found {} models in database\n", db_models.len());
+
+            // Convert DbModel to ModelMetadata and display as table
+            let models: Vec<langdb_core::models::ModelMetadata> = db_models
+                .into_iter()
+                .map(|m| m.into())
+                .collect();
+
+            run::table::pretty_print_models(models);
             Ok(())
         }
         cli::Commands::Serve(serve_args) => {

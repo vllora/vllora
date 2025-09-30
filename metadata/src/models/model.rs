@@ -224,4 +224,95 @@ pub struct DbNewModel {
     pub knowledge_cutoff_date: Option<String>,
     pub license: Option<String>,
     pub project_id: Option<String>,
+    pub deleted_at: Option<String>,
+}
+impl From<ModelMetadata> for DbNewModel {
+    fn from(metadata: ModelMetadata) -> Self {
+        // Serialize arrays/objects to JSON strings
+        let capabilities = if !metadata.capabilities.is_empty() {
+            Some(serde_json::to_string(&metadata.capabilities).unwrap_or_default())
+        } else {
+            None
+        };
+
+        let input_types = if !metadata.input_formats.is_empty() {
+            Some(serde_json::to_string(&metadata.input_formats).unwrap_or_default())
+        } else {
+            None
+        };
+
+        let output_types = if !metadata.output_formats.is_empty() {
+            Some(serde_json::to_string(&metadata.output_formats).unwrap_or_default())
+        } else {
+            None
+        };
+
+        let parameters = metadata
+            .parameters
+            .map(|p| serde_json::to_string(&p).unwrap_or_default());
+
+        let benchmark_info = metadata
+            .benchmark_info
+            .map(|b| serde_json::to_string(&b).unwrap_or_default());
+
+        // Extract pricing information
+        let (
+            input_token_price,
+            output_token_price,
+            cached_input_token_price,
+            cached_input_write_token_price,
+        ) = match metadata.price {
+            ModelPrice::Completion(price) => (
+                Some(price.per_input_token as f32),
+                Some(price.per_output_token as f32),
+                price.per_cached_input_token.map(|p| p as f32),
+                price.per_cached_input_write_token.map(|p| p as f32),
+            ),
+            ModelPrice::Embedding(_) => (None, None, None, None),
+            ModelPrice::ImageGeneration(_) => (None, None, None, None),
+        };
+
+        // Format dates
+        let release_date = metadata
+            .release_date
+            .map(|d| d.format("%Y-%m-%d").to_string());
+
+        let langdb_release_date = metadata
+            .langdb_release_date
+            .map(|d| d.format("%Y-%m-%d").to_string());
+
+        let knowledge_cutoff_date = metadata
+            .knowledge_cutoff_date
+            .map(|d| d.format("%Y-%m-%d").to_string());
+
+        DbNewModel {
+            id: metadata.virtual_model_id,
+            model_name: metadata.model.clone(),
+            description: Some(metadata.description),
+            provider_info_id: metadata.inference_provider.provider.to_string(),
+            model_type: metadata.r#type.to_string(),
+            input_token_price,
+            output_token_price,
+            context_size: Some(metadata.limits.max_context_size as i32),
+            capabilities,
+            input_types,
+            output_types,
+            tags: None,
+            type_prices: None,
+            mp_price: None,
+            model_name_in_provider: Some(metadata.inference_provider.model_name),
+            owner_name: metadata.model_provider,
+            priority: metadata.min_service_level,
+            parameters,
+            benchmark_info,
+            cached_input_token_price,
+            cached_input_write_token_price,
+            release_date,
+            langdb_release_date,
+            knowledge_cutoff_date,
+            license: metadata.license,
+            project_id: None, // API models are global
+            deleted_at: None, // Clear deleted_at if model comes back from API
+        }
+    }
 }

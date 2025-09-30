@@ -1,64 +1,65 @@
-use directories::BaseDirs;
 use langdb_core::models::ModelMetadata;
+use langdb_metadata::error::DatabaseError;
+use langdb_metadata::models::model::DbNewModel;
+use langdb_metadata::pool::DbPool;
+use langdb_metadata::services::model::{ModelService, ModelServiceImpl};
 use reqwest;
-use serde_yaml;
-use std::fs;
+use std::collections::HashSet;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ModelsLoadError {
     #[error("Failed to fetch models: {0}")]
     FetchError(#[from] reqwest::Error),
-    #[error("Failed to store models: {0}")]
-    StoreError(#[from] std::io::Error),
-    #[error("Failed to parse models config: {0}")]
-    ParseError(#[from] serde_yaml::Error),
-    #[error("Could not determine home directory")]
-    NoHomeDir,
+    #[error("Database error: {0}")]
+    DatabaseError(#[from] DatabaseError),
 }
 
-/// Load models configuration from the filesystem, fetching it first if it doesn't exist
-pub async fn load_models(force_update: bool) -> Result<Vec<ModelMetadata>, ModelsLoadError> {
-    let models_yaml = if force_update {
-        // Force fetch and store new models
-        fetch_and_store_models().await?
-    } else {
-        get_models_path()?
-    };
-    let models: Vec<ModelMetadata> = serde_yaml::from_str(&models_yaml)?;
-    Ok(models)
-}
-
-pub async fn fetch_and_store_models() -> Result<String, ModelsLoadError> {
-    // Create .langdb directory in home folder
-    let base_dirs = BaseDirs::new().ok_or(ModelsLoadError::NoHomeDir)?;
-    let langdb_dir = base_dirs.home_dir().join(".langdb");
-    fs::create_dir_all(&langdb_dir)?;
-
+pub async fn fetch_and_store_models(
+    db_pool: DbPool,
+) -> Result<Vec<ModelMetadata>, ModelsLoadError> {
     // Fetch models from API
     let client = reqwest::Client::new();
-    let response = client
-        .get("https://api.us-east-1.langdb.ai/pricing")
+    let models: Vec<ModelMetadata> = client
+        .get("https://api.us-east-1.langdb.ai/pricing?include_parameters=true")
         .send()
         .await?
-        .json::<serde_json::Value>()
+        .json()
         .await?;
 
-    // Convert to YAML
-    let yaml = serde_yaml::to_string(&response)?;
+    // Convert ModelMetadata to DbNewModel
+    let db_models: Vec<DbNewModel> = models.iter().map(|m| DbNewModel::from(m.clone())).collect();
 
-    // Store in models.yaml
-    let models_path = langdb_dir.join("models.yaml");
-    fs::write(&models_path, &yaml)?;
+    // Store in database using ModelService
+    let model_service = ModelServiceImpl::new(db_pool);
+    model_service.insert_many(db_models)?;
 
-    Ok(yaml)
-}
+    // Build set of identifiers from API response
+    // Use (model_name, provider_info_id) as unique identifier
+    let synced_model_identifiers: HashSet<(String, String)> = models
+        .iter()
+        .map(|m| (m.model.clone(), m.inference_provider.provider.to_string()))
+        .collect();
 
-pub fn get_models_path() -> Result<String, std::io::Error> {
-    if let Some(base_dirs) = BaseDirs::new() {
-        let user_models = base_dirs.home_dir().join(".langdb").join("models.yaml");
-        if user_models.exists() {
-            return std::fs::read_to_string(user_models);
-        }
+    // Get all non-deleted global models from database
+    let db_models = model_service.list(None)?;
+
+    // Find models in DB but not in API response (these should be soft-deleted)
+    let models_to_delete: Vec<String> = db_models
+        .iter()
+        .filter(|db_model| {
+            let identifier = (
+                db_model.model_name.clone(),
+                db_model.provider_info_id.clone(),
+            );
+            !synced_model_identifiers.contains(&identifier)
+        })
+        .filter_map(|db_model| db_model.id.clone())
+        .collect();
+
+    // Soft delete obsolete models
+    if !models_to_delete.is_empty() {
+        model_service.mark_models_as_deleted(models_to_delete)?;
     }
-    Ok(include_str!("../../models.yaml").to_string())
+
+    Ok(models)
 }
