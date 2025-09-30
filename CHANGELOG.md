@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.2](https://github.com/langdb/langdb-cloud/compare/v0.3.1...v0.3.2) (2025-09-30)
+
+
+### Features
+
+* add cost field to span model for enhanced tracking capabilities ([92aab27](https://github.com/langdb/langdb-cloud/commit/92aab274721b6e0b62c23816df3f77869c8412aa))
+* add message_id field to span model and track elapsed time for processing streams across models ([8bf9287](https://github.com/langdb/langdb-cloud/commit/8bf92878fae8951bcd73c5bb8efd3f3bdc00ce6b))
+* add model and inference model names to tracing fields in TracedEmbedding ([3bbc088](https://github.com/langdb/langdb-cloud/commit/3bbc0882be5547714efeee4ec4df513f3f9cfcba))
+* **database:** add async_insert parameter to insert_values method for Clickhouse integration ([1796f16](https://github.com/langdb/langdb-cloud/commit/1796f169dbc6ea9ac84eac079cdee147178b6878))
+* Support claude sonnet 4.5 ([ba3d60c](https://github.com/langdb/langdb-cloud/commit/ba3d60c22c90788f6e90c8a41ea49846be1b7269))
+
+
+### Bug Fixes
+
+* enhance usage tracking by adding raw_usage field and implementing content comparison in Message struct ([64816c3](https://github.com/langdb/langdb-cloud/commit/64816c36fc4a5ad2b8b794cced8dc244b617e3fc))
+* **gemini:** enhance finish reason handling to include MaxTokens and update related tests ([2d0b7ce](https://github.com/langdb/langdb-cloud/commit/2d0b7ce568631915c6db7f44fd1c1235903e5b01))
+* **metric:** adjust optimization direction for Tps in MetricSelector ([718e74f](https://github.com/langdb/langdb-cloud/commit/718e74f4e5f68e352e96391ab949bc7c7bbe44c3))
+* **tests:** correct comments and expected output for requests metric test in MetricSelector ([915c706](https://github.com/langdb/langdb-cloud/commit/915c7066934f38f04df706ad44636cec8f7f8f5a))
+
 ### [0.3.1](https://github.com/langdb/langdb-cloud/compare/v0.3.0...v0.3.1) (2025-09-23)
 
 
