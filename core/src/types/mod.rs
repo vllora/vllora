@@ -13,6 +13,7 @@ pub mod message;
 pub mod provider;
 pub mod threads;
 pub mod project_settings;
+pub mod metadata;
 
 pub const LANGDB_API_URL: &str = "https://api.us-east-1.langdb.ai/v1";
 pub const LANGDB_UI_URL: &str = "https://app.langdb.ai";
