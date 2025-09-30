@@ -2,6 +2,7 @@ use directories::BaseDirs;
 use langdb_core::models::ModelMetadata;
 use reqwest;
 use serde_yaml;
+use std::collections::HashSet;
 use std::fs;
 
 #[derive(Debug, thiserror::Error)]
@@ -28,6 +29,63 @@ pub async fn load_models(force_update: bool) -> Result<Vec<ModelMetadata>, Model
     Ok(models)
 }
 
+pub async fn load_models_filtered(
+    force_update: bool,
+    configured_providers: Option<&HashSet<String>>,
+) -> Result<Vec<ModelMetadata>, ModelsLoadError> {
+    let mut models = load_models(force_update).await?;
+    
+    if let Some(providers) = configured_providers {
+        models = filter_models_by_providers(models, providers);
+    }
+    
+    Ok(models)
+}
+
+pub fn filter_models_by_providers(
+    models: Vec<ModelMetadata>,
+    configured_providers: &HashSet<String>,
+) -> Vec<ModelMetadata> {
+    models
+        .into_iter()
+        .filter(|model| {
+            // Use the actual provider name from the model's inference_provider
+            let provider_name = model.inference_provider.provider.to_string();
+            configured_providers.contains(&provider_name)
+        })
+        .collect()
+}
+
+pub fn get_configured_providers(config_path: &str) -> Result<HashSet<String>, ModelsLoadError> {
+    let config_content = std::fs::read_to_string(config_path)
+        .map_err(|_| ModelsLoadError::StoreError(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Config file not found: {}", config_path)
+        )))?;
+    
+    let config: serde_yaml::Value = serde_yaml::from_str(&config_content)?;
+    
+    let mut providers = HashSet::new();
+    
+    if let Some(providers_config) = config.get("providers") {
+        if let Some(providers_map) = providers_config.as_mapping() {
+            for (provider_name, provider_config) in providers_map {
+                if let Some(provider_name_str) = provider_name.as_str() {
+                    if let Some(api_key) = provider_config.get("api_key") {
+                        if let Some(api_key_str) = api_key.as_str() {
+                            if !api_key_str.is_empty() && !api_key_str.starts_with("{{") {
+                                providers.insert(provider_name_str.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    Ok(providers)
+}
+
 pub async fn fetch_and_store_models() -> Result<String, ModelsLoadError> {
     // Create .langdb directory in home folder
     let base_dirs = BaseDirs::new().ok_or(ModelsLoadError::NoHomeDir)?;
@@ -37,7 +95,7 @@ pub async fn fetch_and_store_models() -> Result<String, ModelsLoadError> {
     // Fetch models from API
     let client = reqwest::Client::new();
     let response = client
-        .get("https://api.us-east-1.langdb.ai/pricing")
+        .get("https://api.us-east-1.langdb.ai/pricing?include_parameters=true")
         .send()
         .await?
         .json::<serde_json::Value>()

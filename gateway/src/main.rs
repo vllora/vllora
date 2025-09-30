@@ -4,7 +4,7 @@ use clap::Parser;
 use config::{Config, ConfigError};
 use http::ApiServer;
 use langdb_core::{error::GatewayError, usage::InMemoryStorage};
-use run::models::{load_models, ModelsLoadError};
+use run::models::{load_models, load_models_filtered, get_configured_providers, ModelsLoadError};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -85,7 +85,16 @@ async fn main() -> Result<(), CliError> {
         cli::Commands::List => {
             tracing::init_tracing();
             println!("Available models:");
-            let models = load_models(false).await?;
+            
+            let configured_providers = get_configured_providers(&cli.config).ok();
+            let models = if let Some(providers) = &configured_providers {
+                println!("Filtering models for configured providers: {:?}", providers);
+                load_models_filtered(false, Some(providers)).await?
+            } else {
+                println!("No config file found or no providers configured, showing all models");
+                load_models(false).await?
+            };
+            
             run::table::pretty_print_models(models);
             Ok(())
         }
@@ -105,7 +114,13 @@ async fn main() -> Result<(), CliError> {
                 let config = Config::load(&cli.config)?;
                 let config = config.apply_cli_overrides(&cli::Commands::Serve(serve_args));
                 let api_server = ApiServer::new(config);
-                let models = load_models(false).await?;
+                
+                let configured_providers = get_configured_providers(&cli.config).ok();
+                let models = if let Some(providers) = &configured_providers {
+                    load_models_filtered(false, Some(providers)).await?
+                } else {
+                    load_models(false).await?
+                };
                 let server_handle = tokio::spawn(async move {
                     match api_server.start(models, Some(storage_clone)).await {
                         Ok(server) => server.await,
@@ -151,7 +166,13 @@ async fn main() -> Result<(), CliError> {
                 let config = Config::load(&cli.config)?;
                 let config = config.apply_cli_overrides(&cli::Commands::Serve(serve_args));
                 let api_server = ApiServer::new(config);
-                let models = load_models(false).await?;
+                
+                let configured_providers = get_configured_providers(&cli.config).ok();
+                let models = if let Some(providers) = &configured_providers {
+                    load_models_filtered(false, Some(providers)).await?
+                } else {
+                    load_models(false).await?
+                };
                 let server_handle = tokio::spawn(async move {
                     let storage = Arc::new(Mutex::new(InMemoryStorage::new()));
                     match api_server.start(models, Some(storage)).await {
