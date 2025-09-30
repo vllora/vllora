@@ -1,6 +1,6 @@
 [package]
 name = "ai-gateway"
-version = "0.3.1"
+version = "0.3.2"
 authors = ["LangDB Team<api@langdb.ai>"]
 description = "AI gateway for managing and routing LLM requests - Govern, Secure, and Optimize your AI Traffic."
 license = "Apache-2.0"
@@ -16,8 +16,8 @@ name = "ai-gateway"
 path = "src/main.rs"
 
 [dependencies]
-langdb_core = { path = "../core", version = "0.3.1" }
-langdb_guardrails = { path = "../guardrails", version = "0.3.1" }
+langdb_core = { path = "../core", version = "0.3.2" }
+langdb_guardrails = { path = "../guardrails", version = "0.3.2" }
 
 tokio = { workspace = true }
 serde = { workspace = true }
