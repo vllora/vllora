@@ -17,6 +17,7 @@ pub struct DbTrace {
     pub finish_time_us: i64,
     pub attribute: String,        // JSON stored as text
     pub run_id: Option<String>,
+    pub project_id: Option<String>,
 }
 
 impl DbTrace {
@@ -38,6 +39,7 @@ pub struct DbNewTrace {
     pub finish_time_us: i64,
     pub attribute: String,
     pub run_id: Option<String>,
+    pub project_id: Option<String>,
 }
 
 impl DbNewTrace {
@@ -51,6 +53,7 @@ impl DbNewTrace {
         finish_time_us: i64,
         attribute: HashMap<String, Value>,
         run_id: Option<String>,
+        project_id: Option<String>,
     ) -> Result<Self, serde_json::Error> {
         Ok(Self {
             trace_id,
@@ -62,6 +65,7 @@ impl DbNewTrace {
             finish_time_us,
             attribute: serde_json::to_string(&attribute)?,
             run_id,
+            project_id,
         })
     }
 }

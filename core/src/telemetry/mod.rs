@@ -321,13 +321,9 @@ impl TraceService for TraceServiceImpl {
                         .remove("langdb.thread_id")
                         .and_then(|v| Some(v.as_str()?.to_owned()));
 
-                    tracing::debug!("Extracted thread_id from span '{}': {:?}", span.name, thread_id);
-
                     let run_id = attributes
                         .remove("langdb.run_id")
                         .and_then(|v| Some(v.as_str()?.to_owned()));
-
-                    tracing::debug!("Extracted run_id from span '{}': {:?}", span.name, run_id);
 
                     let label = attributes
                         .remove("langdb.label")
@@ -477,6 +473,17 @@ where
 
             key_values.push(KeyValue::new("langdb.tenant", tenant_name));
             key_values.push(KeyValue::new("langdb.project_id", project_slug));
+        }
+
+        // Extract project from ProjectMiddleware (overrides tenant project_id if present)
+        #[cfg(feature = "database")]
+        {
+            use crate::types::GatewayProject;
+            if let Some(project) = req.extensions().get::<GatewayProject>() {
+                // Remove any existing project_id from tenant and add the one from ProjectMiddleware
+                key_values.retain(|kv| kv.key.as_str() != "langdb.project_id");
+                key_values.push(KeyValue::new("langdb.project_id", project.id.clone()));
+            }
         }
 
         // Extract headers regardless of tenant presence

@@ -1,4 +1,5 @@
-use actix_web::{web, HttpResponse, Result};
+use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Result};
+use langdb_metadata::models::project::DbProject;
 use langdb_metadata::pool::DbPool;
 use langdb_metadata::services::trace::{ListTracesQuery, TraceService, TraceServiceImpl};
 use serde::{Deserialize, Serialize};
@@ -48,10 +49,14 @@ pub struct Pagination {
 }
 
 pub async fn list_traces(
+    req: HttpRequest,
     query: web::Query<ListTracesQueryParams>,
     db_pool: web::Data<Arc<DbPool>>,
 ) -> Result<HttpResponse> {
     let trace_service = TraceServiceImpl::new(db_pool.get_ref().clone());
+
+    // Extract project_id from extensions (set by ProjectMiddleware)
+    let project_id = req.extensions().get::<DbProject>().map(|p| p.id.clone());
 
     let thread_ids = query
         .thread_ids
@@ -59,6 +64,7 @@ pub async fn list_traces(
         .map(|s| s.split(',').map(String::from).collect());
 
     let list_query = ListTracesQuery {
+        project_id: project_id.clone(),
         run_id: query.run_id.clone(),
         thread_ids,
         start_time_min: query.start_time_min,
@@ -73,7 +79,7 @@ pub async fn list_traces(
             let trace_ids: Vec<String> = traces.iter().map(|t| t.trace_id.clone()).collect();
             let span_ids: Vec<String> = traces.iter().map(|t| t.span_id.clone()).collect();
 
-            let child_attrs = trace_service.get_child_attributes(&trace_ids, &span_ids)
+            let child_attrs = trace_service.get_child_attributes(&trace_ids, &span_ids, project_id.as_deref())
                 .unwrap_or_default();
 
             let spans: Vec<LangdbSpan> = traces
@@ -131,22 +137,26 @@ pub struct GetSpansByRunQuery {
 }
 
 pub async fn get_spans_by_run(
+    req: HttpRequest,
     run_id: web::Path<String>,
     query: web::Query<GetSpansByRunQuery>,
     db_pool: web::Data<Arc<DbPool>>,
 ) -> Result<HttpResponse> {
     let trace_service = TraceServiceImpl::new(db_pool.get_ref().clone());
 
+    // Extract project_id from extensions (set by ProjectMiddleware)
+    let project_id = req.extensions().get::<DbProject>().map(|p| p.id.clone());
+
     let limit = query.limit.unwrap_or(100);
     let offset = query.offset.unwrap_or(0);
 
-    match trace_service.get_by_run_id(&run_id, limit, offset) {
+    match trace_service.get_by_run_id(&run_id, project_id.as_deref(), limit, offset) {
         Ok(traces) => {
             // Get child attributes for all traces
             let trace_ids: Vec<String> = traces.iter().map(|t| t.trace_id.clone()).collect();
             let span_ids: Vec<String> = traces.iter().map(|t| t.span_id.clone()).collect();
 
-            let child_attrs = trace_service.get_child_attributes(&trace_ids, &span_ids)
+            let child_attrs = trace_service.get_child_attributes(&trace_ids, &span_ids, project_id.as_deref())
                 .unwrap_or_default();
 
             let spans: Vec<LangdbSpan> = traces
@@ -176,6 +186,7 @@ pub async fn get_spans_by_run(
 
             // Get total count for this run_id
             let count_query = ListTracesQuery {
+                project_id: project_id.clone(),
                 run_id: Some(run_id.into_inner()),
                 thread_ids: None,
                 start_time_min: None,

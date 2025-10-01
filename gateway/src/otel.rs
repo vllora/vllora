@@ -63,7 +63,12 @@ impl SqliteTraceWriterTransport {
         };
 
         // row[9] is tenant_id (not used in SQLite schema)
-        // row[10] is project_id (not used in SQLite schema)
+
+        let project_id = if row[10].is_null() {
+            None
+        } else {
+            Some(row[10].as_str().ok_or("project_id not a string")?.to_string())
+        };
 
         let thread_id = if row[11].is_null() {
             None
@@ -93,6 +98,7 @@ impl SqliteTraceWriterTransport {
             finish_time_us,
             attribute,
             run_id,
+            project_id,
         )
         .map_err(|e| format!("Failed to create DbNewTrace: {}", e))
     }

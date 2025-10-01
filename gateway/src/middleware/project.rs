@@ -48,7 +48,6 @@ type LocalBoxFuture<T> = Pin<Box<dyn Future<Output = T> + 'static>>;
 impl<S, B> Service<ServiceRequest> for ProjectMiddlewareService<S>
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
-    S::Future: 'static,
     B: 'static,
 {
     type Response = ServiceResponse<EitherBody<B>>;
@@ -120,7 +119,12 @@ where
             match project {
                 Ok(Some(p)) => {
                     tracing::debug!("Project resolved: {}", p.name);
-                    req.extensions_mut().insert(p);
+                    // Store full DbProject for handlers
+                    req.extensions_mut().insert(p.clone());
+                    // Store lightweight GatewayProject for telemetry (core crate)
+                    req.extensions_mut().insert(langdb_core::types::GatewayProject {
+                        id: p.id.to_string(),
+                    });
                 }
                 Ok(None) => {
                     error!("No project found");

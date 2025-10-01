@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct ListTracesQuery {
+    pub project_id: Option<String>,
     pub run_id: Option<String>,
     pub thread_ids: Option<Vec<String>>,
     pub start_time_min: Option<i64>,
@@ -19,9 +20,9 @@ pub struct ListTracesQuery {
 
 pub trait TraceService {
     fn list(&self, query: ListTracesQuery) -> Result<Vec<DbTrace>, DatabaseError>;
-    fn get_by_run_id(&self, run_id: &str, limit: i64, offset: i64) -> Result<Vec<DbTrace>, DatabaseError>;
+    fn get_by_run_id(&self, run_id: &str, project_id: Option<&str>, limit: i64, offset: i64) -> Result<Vec<DbTrace>, DatabaseError>;
     fn count(&self, query: ListTracesQuery) -> Result<i64, DatabaseError>;
-    fn get_child_attributes(&self, trace_ids: &[String], span_ids: &[String]) -> Result<HashMap<String, Option<String>>, DatabaseError>;
+    fn get_child_attributes(&self, trace_ids: &[String], span_ids: &[String], project_id: Option<&str>) -> Result<HashMap<String, Option<String>>, DatabaseError>;
 }
 
 pub struct TraceServiceImpl {
@@ -39,6 +40,11 @@ impl TraceService for TraceServiceImpl {
         let mut conn = self.db_pool.get()?;
 
         let mut db_query = traces::table.into_boxed();
+
+        // Apply project_id filter
+        if let Some(project_id) = &query.project_id {
+            db_query = db_query.filter(traces::project_id.eq(project_id));
+        }
 
         // Apply run_id filter
         if let Some(run_id) = &query.run_id {
@@ -72,11 +78,19 @@ impl TraceService for TraceServiceImpl {
         Ok(results)
     }
 
-    fn get_by_run_id(&self, run_id: &str, limit: i64, offset: i64) -> Result<Vec<DbTrace>, DatabaseError> {
+    fn get_by_run_id(&self, run_id: &str, project_id: Option<&str>, limit: i64, offset: i64) -> Result<Vec<DbTrace>, DatabaseError> {
         let mut conn = self.db_pool.get()?;
 
-        let results = traces::table
+        let mut query = traces::table
             .filter(traces::run_id.eq(run_id))
+            .into_boxed();
+
+        // Apply project_id filter if provided
+        if let Some(project_id) = project_id {
+            query = query.filter(traces::project_id.eq(project_id));
+        }
+
+        let results = query
             .order(traces::start_time_us.asc())
             .limit(limit)
             .offset(offset)
@@ -90,6 +104,11 @@ impl TraceService for TraceServiceImpl {
         let mut conn = self.db_pool.get()?;
 
         let mut db_query = traces::table.into_boxed();
+
+        // Apply project_id filter
+        if let Some(project_id) = &query.project_id {
+            db_query = db_query.filter(traces::project_id.eq(project_id));
+        }
 
         // Apply run_id filter
         if let Some(run_id) = &query.run_id {
@@ -120,7 +139,7 @@ impl TraceService for TraceServiceImpl {
         Ok(count)
     }
 
-    fn get_child_attributes(&self, trace_ids: &[String], span_ids: &[String]) -> Result<HashMap<String, Option<String>>, DatabaseError> {
+    fn get_child_attributes(&self, trace_ids: &[String], span_ids: &[String], project_id: Option<&str>) -> Result<HashMap<String, Option<String>>, DatabaseError> {
         if trace_ids.is_empty() || span_ids.is_empty() {
             return Ok(HashMap::new());
         }
@@ -147,6 +166,12 @@ impl TraceService for TraceServiceImpl {
             .collect::<Vec<_>>()
             .join(",");
 
+        let project_filter = if let Some(pid) = project_id {
+            format!(" AND project_id = '{}'", pid)
+        } else {
+            String::new()
+        };
+
         let query = format!(
             "SELECT parent_span_id, attribute as child_attribute
              FROM (
@@ -155,10 +180,10 @@ impl TraceService for TraceServiceImpl {
                  FROM traces
                  WHERE trace_id IN ({})
                    AND parent_span_id IN ({})
-                   AND operation_name = 'model_call'
+                   AND operation_name = 'model_call'{}
              )
              WHERE rn = 1",
-            trace_ids_str, span_ids_str
+            trace_ids_str, span_ids_str, project_filter
         );
 
         let results = diesel::sql_query(query)

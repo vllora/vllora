@@ -62,6 +62,7 @@ diesel::table! {
         finish_time_us -> BigInt,
         attribute -> Text,
         run_id -> Nullable<Text>,
+        project_id -> Nullable<Text>,
     }
 }
 
