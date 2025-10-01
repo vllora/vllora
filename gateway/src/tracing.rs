@@ -28,7 +28,7 @@ pub fn init_tracing() {
         .build()
         .unwrap();
     let provider = SdkTracerProvider::builder()
-        .with_span_processor(BaggageSpanProcessor::new(["langdb.run_id", "langdb.label"]))
+        .with_span_processor(BaggageSpanProcessor::new(["langdb.run_id", "langdb.thread_id", "langdb.label"]))
         .with_batch_exporter(otlp_exporter)
         .with_id_generator(events::UuidIdGenerator::default())
         .build();

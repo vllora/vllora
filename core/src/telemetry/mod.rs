@@ -312,16 +312,6 @@ impl TraceService for TraceServiceImpl {
                         .and_then(|v| Some(v.as_str()?.to_owned()))
                         .or(tenant_from_header.as_ref().map(|v| v.0.clone()));
 
-                    if tenant_id.is_none() {
-                        tracing::debug!(
-                            target: "otel",
-                            "No tenant id found in span {} with attributes: {:#?}",
-                            span.name,
-                            attributes
-                        );
-                        continue;
-                    }
-
                     let project_id = attributes
                         .remove("langdb.project_id")
                         .and_then(|v| Some(v.as_str()?.to_owned()))
@@ -331,9 +321,13 @@ impl TraceService for TraceServiceImpl {
                         .remove("langdb.thread_id")
                         .and_then(|v| Some(v.as_str()?.to_owned()));
 
+                    tracing::debug!("Extracted thread_id from span '{}': {:?}", span.name, thread_id);
+
                     let run_id = attributes
                         .remove("langdb.run_id")
                         .and_then(|v| Some(v.as_str()?.to_owned()));
+
+                    tracing::debug!("Extracted run_id from span '{}': {:?}", span.name, run_id);
 
                     let label = attributes
                         .remove("langdb.label")
@@ -474,54 +468,66 @@ where
             propagator.extract_with_context(&Context::new(), &HeaderExtractor(req.headers()));
         let tenant = req.extensions().get::<GatewayTenant>().cloned();
 
-        match tenant {
-            Some(tenant) => {
-                let tenant_name = tenant.name.clone();
-                let project_slug = tenant.project_slug.clone();
+        let mut key_values = vec![];
 
-                let mut key_values = vec![
-                    KeyValue::new("langdb.tenant", tenant_name),
-                    KeyValue::new("langdb.project_id", project_slug),
-                ];
+        // Add tenant info if available
+        if let Some(tenant) = tenant {
+            let tenant_name = tenant.name.clone();
+            let project_slug = tenant.project_slug.clone();
 
-                let run_id = req
-                    .headers()
-                    .get("x-run-id")
-                    .and_then(|v| v.to_str().ok().map(|v| v.to_string()));
+            key_values.push(KeyValue::new("langdb.tenant", tenant_name));
+            key_values.push(KeyValue::new("langdb.project_id", project_slug));
+        }
 
-                if let Some(run_id) = run_id.as_ref() {
-                    key_values.push(KeyValue::new("langdb.run_id", run_id.clone()));
-                } else {
-                    key_values.push(KeyValue::new("langdb.run_id", Uuid::new_v4().to_string()));
-                }
+        // Extract headers regardless of tenant presence
+        let thread_id = req
+            .headers()
+            .get("x-thread-id")
+            .and_then(|v| v.to_str().ok().map(|v| v.to_string()));
 
-                let label = req
-                    .headers()
-                    .get("x-label")
-                    .and_then(|v| v.to_str().ok().map(|v| v.to_string()));
+        if let Some(thread_id) = thread_id.as_ref() {
+            tracing::debug!("Extracted x-thread-id header: {}", thread_id);
+            key_values.push(KeyValue::new("langdb.thread_id", thread_id.clone()));
+        } else {
+            let generated_thread_id = Uuid::new_v4().to_string();
+            tracing::debug!("Generated thread_id: {}", generated_thread_id);
+            key_values.push(KeyValue::new("langdb.thread_id", generated_thread_id));
+        }
 
-                if let Some(label) = label.as_ref() {
-                    key_values.push(KeyValue::new("langdb.label", label.clone()));
-                }
+        let run_id = req
+            .headers()
+            .get("x-run-id")
+            .and_then(|v| v.to_str().ok().map(|v| v.to_string()));
 
-                let additional_context = req.extensions().get::<AdditionalContext>().cloned();
-                if let Some(additional_context) = additional_context.as_ref() {
-                    for (key, value) in additional_context.0.iter() {
-                        key_values.push(KeyValue::new(key.clone(), value.clone()));
-                    }
-                }
+        if let Some(run_id) = run_id.as_ref() {
+            tracing::debug!("Extracted x-run-id header: {}", run_id);
+            key_values.push(KeyValue::new("langdb.run_id", run_id.clone()));
+        } else {
+            let generated_run_id = Uuid::new_v4().to_string();
+            tracing::debug!("Generated run_id: {}", generated_run_id);
+            key_values.push(KeyValue::new("langdb.run_id", generated_run_id));
+        }
 
-                let context = context.with_baggage(key_values);
+        let label = req
+            .headers()
+            .get("x-label")
+            .and_then(|v| v.to_str().ok().map(|v| v.to_string()));
 
-                let fut = self.service.call(req).with_context(context);
-                Box::pin(fut)
-            }
-            None => {
-                tracing::warn!("tenant not found");
-                let fut = self.service.call(req);
-                Box::pin(fut)
+        if let Some(label) = label.as_ref() {
+            key_values.push(KeyValue::new("langdb.label", label.clone()));
+        }
+
+        let additional_context = req.extensions().get::<AdditionalContext>().cloned();
+        if let Some(additional_context) = additional_context.as_ref() {
+            for (key, value) in additional_context.0.iter() {
+                key_values.push(KeyValue::new(key.clone(), value.clone()));
             }
         }
+
+        let context = context.with_baggage(key_values);
+
+        let fut = self.service.call(req).with_context(context);
+        Box::pin(fut)
     }
 }
 

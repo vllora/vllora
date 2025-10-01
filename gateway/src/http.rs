@@ -2,11 +2,11 @@ use crate::callback_handler::init_callback_handler;
 use crate::config::{load_langdb_proxy_config, Config};
 use crate::cost::GatewayCostCalculator;
 use crate::guardrails::GuardrailsService;
-use crate::handlers::projects;
+use crate::handlers::{projects, traces};
 use crate::limit::GatewayLimitChecker;
 use crate::middleware::project::ProjectMiddleware;
 use crate::middleware::trace_logger::TraceLogger;
-use crate::otel::DummyTraceWritterTransport;
+use crate::otel::SqliteTraceWriterTransport;
 use actix_cors::Cors;
 use actix_web::Scope as ActixScope;
 use actix_web::{
@@ -28,7 +28,7 @@ use langdb_core::telemetry::database::DatabaseSpanWritter;
 use langdb_core::telemetry::DummyTraceTenantResolver;
 use langdb_core::telemetry::ProjectTraceMap;
 use langdb_core::telemetry::SpanWriterTransport;
-use langdb_core::telemetry::{TraceServiceImpl, TraceServiceServer};
+use langdb_core::telemetry::{TraceServiceImpl, TraceServiceServer, TracingContext};
 use langdb_core::types::gateway::CostCalculator;
 use langdb_core::types::guardrails::service::GuardrailsEvaluator;
 use langdb_core::types::guardrails::Guard;
@@ -161,7 +161,7 @@ impl ApiServer {
                 let client = ClickhouseHttp::root().with_url(&c.url).clone_box();
                 Box::new(DatabaseSpanWritter::new(client)) as Box<dyn SpanWriterTransport>
             }
-            None => Box::new(DummyTraceWritterTransport {}) as Box<dyn SpanWriterTransport>,
+            None => Box::new(SqliteTraceWriterTransport::new(server_config.db_pool.clone())) as Box<dyn SpanWriterTransport>,
         };
 
         let trace_service = TraceServiceServer::new(TraceServiceImpl::new(
@@ -230,6 +230,7 @@ impl ApiServer {
             .app_data(Data::new(available_models));
 
         app.wrap(TraceLogger)
+            .wrap(TracingContext)
             .wrap(ProjectMiddleware::new())
             .service(
                 service
@@ -253,6 +254,11 @@ impl ApiServer {
                         "/{id}/default",
                         web::post().to(projects::set_default_project),
                     ),
+            )
+            .service(
+                web::scope("/traces")
+                    .route("", web::get().to(traces::list_traces))
+                    .route("/run/{run_id}", web::get().to(traces::get_spans_by_run)),
             )
             .wrap(cors)
     }

@@ -1,0 +1,207 @@
+use actix_web::{web, HttpResponse, Result};
+use langdb_metadata::pool::DbPool;
+use langdb_metadata::services::trace::{ListTracesQuery, TraceService, TraceServiceImpl};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::HashMap;
+use std::sync::Arc;
+
+#[derive(Deserialize)]
+pub struct ListTracesQueryParams {
+    #[serde(alias = "runId")]
+    run_id: Option<String>,
+    #[serde(alias = "threadIds")]
+    thread_ids: Option<String>, // comma-separated
+    #[serde(alias = "startTimeMin")]
+    start_time_min: Option<i64>,
+    #[serde(alias = "startTimeMax")]
+    start_time_max: Option<i64>,
+    limit: Option<i64>,
+    offset: Option<i64>,
+}
+
+#[derive(Serialize)]
+pub struct LangdbSpan {
+    pub trace_id: String,
+    pub span_id: String,
+    pub thread_id: Option<String>,
+    pub parent_span_id: Option<String>,
+    pub operation_name: String,
+    pub start_time_us: i64,
+    pub finish_time_us: i64,
+    pub attribute: HashMap<String, Value>,
+    pub child_attribute: Option<HashMap<String, Value>>,
+    pub run_id: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct PaginatedResult<T> {
+    pub pagination: Pagination,
+    pub data: Vec<T>,
+}
+
+#[derive(Serialize)]
+pub struct Pagination {
+    pub offset: i64,
+    pub limit: i64,
+    pub total: i64,
+}
+
+pub async fn list_traces(
+    query: web::Query<ListTracesQueryParams>,
+    db_pool: web::Data<Arc<DbPool>>,
+) -> Result<HttpResponse> {
+    let trace_service = TraceServiceImpl::new(db_pool.get_ref().clone());
+
+    let thread_ids = query
+        .thread_ids
+        .as_ref()
+        .map(|s| s.split(',').map(String::from).collect());
+
+    let list_query = ListTracesQuery {
+        run_id: query.run_id.clone(),
+        thread_ids,
+        start_time_min: query.start_time_min,
+        start_time_max: query.start_time_max,
+        limit: query.limit.unwrap_or(100),
+        offset: query.offset.unwrap_or(0),
+    };
+
+    match trace_service.list(list_query.clone()) {
+        Ok(traces) => {
+            // Get child attributes for all traces
+            let trace_ids: Vec<String> = traces.iter().map(|t| t.trace_id.clone()).collect();
+            let span_ids: Vec<String> = traces.iter().map(|t| t.span_id.clone()).collect();
+
+            let child_attrs = trace_service.get_child_attributes(&trace_ids, &span_ids)
+                .unwrap_or_default();
+
+            let spans: Vec<LangdbSpan> = traces
+                .into_iter()
+                .map(|trace| {
+                    let attribute = trace.parse_attribute().unwrap_or_default();
+
+                    // Get child_attribute from the map
+                    let child_attribute = child_attrs.get(&trace.span_id)
+                        .and_then(|opt| opt.as_ref())
+                        .and_then(|json_str| serde_json::from_str(json_str).ok());
+
+                    LangdbSpan {
+                        trace_id: trace.trace_id,
+                        span_id: trace.span_id,
+                        thread_id: trace.thread_id,
+                        parent_span_id: trace.parent_span_id,
+                        operation_name: trace.operation_name,
+                        start_time_us: trace.start_time_us,
+                        finish_time_us: trace.finish_time_us,
+                        attribute,
+                        child_attribute,
+                        run_id: trace.run_id,
+                    }
+                })
+                .collect();
+
+            let total = trace_service.count(list_query).unwrap_or(0);
+
+            let result = PaginatedResult {
+                pagination: Pagination {
+                    offset: query.offset.unwrap_or(0),
+                    limit: query.limit.unwrap_or(100),
+                    total,
+                },
+                data: spans,
+            };
+
+            Ok(HttpResponse::Ok().json(result))
+        }
+        Err(e) => {
+            tracing::error!("Failed to list traces: {:?}", e);
+            Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "Failed to list traces",
+                "message": e.to_string()
+            })))
+        }
+    }
+}
+
+#[derive(Deserialize)]
+pub struct GetSpansByRunQuery {
+    limit: Option<i64>,
+    offset: Option<i64>,
+}
+
+pub async fn get_spans_by_run(
+    run_id: web::Path<String>,
+    query: web::Query<GetSpansByRunQuery>,
+    db_pool: web::Data<Arc<DbPool>>,
+) -> Result<HttpResponse> {
+    let trace_service = TraceServiceImpl::new(db_pool.get_ref().clone());
+
+    let limit = query.limit.unwrap_or(100);
+    let offset = query.offset.unwrap_or(0);
+
+    match trace_service.get_by_run_id(&run_id, limit, offset) {
+        Ok(traces) => {
+            // Get child attributes for all traces
+            let trace_ids: Vec<String> = traces.iter().map(|t| t.trace_id.clone()).collect();
+            let span_ids: Vec<String> = traces.iter().map(|t| t.span_id.clone()).collect();
+
+            let child_attrs = trace_service.get_child_attributes(&trace_ids, &span_ids)
+                .unwrap_or_default();
+
+            let spans: Vec<LangdbSpan> = traces
+                .into_iter()
+                .map(|trace| {
+                    let attribute = trace.parse_attribute().unwrap_or_default();
+
+                    // Get child_attribute from the map
+                    let child_attribute = child_attrs.get(&trace.span_id)
+                        .and_then(|opt| opt.as_ref())
+                        .and_then(|json_str| serde_json::from_str(json_str).ok());
+
+                    LangdbSpan {
+                        trace_id: trace.trace_id,
+                        span_id: trace.span_id,
+                        thread_id: trace.thread_id,
+                        parent_span_id: trace.parent_span_id,
+                        operation_name: trace.operation_name,
+                        start_time_us: trace.start_time_us,
+                        finish_time_us: trace.finish_time_us,
+                        attribute,
+                        child_attribute,
+                        run_id: trace.run_id,
+                    }
+                })
+                .collect();
+
+            // Get total count for this run_id
+            let count_query = ListTracesQuery {
+                run_id: Some(run_id.into_inner()),
+                thread_ids: None,
+                start_time_min: None,
+                start_time_max: None,
+                limit: 1,
+                offset: 0,
+            };
+            let total = trace_service.count(count_query).unwrap_or(0);
+
+            let result = PaginatedResult {
+                pagination: Pagination {
+                    offset,
+                    limit,
+                    total,
+                },
+                data: spans,
+            };
+
+            Ok(HttpResponse::Ok().json(result))
+        }
+        Err(e) => {
+            tracing::error!("Failed to get spans by run: {:?}", e);
+            Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "Failed to get spans by run",
+                "message": e.to_string()
+            })))
+        }
+    }
+}

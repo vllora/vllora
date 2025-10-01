@@ -51,4 +51,18 @@ diesel::table! {
     }
 }
 
-diesel::allow_tables_to_appear_in_same_query!(models, projects,);
+diesel::table! {
+    traces (trace_id, span_id) {
+        trace_id -> Text,
+        span_id -> Text,
+        thread_id -> Nullable<Text>,
+        parent_span_id -> Nullable<Text>,
+        operation_name -> Text,
+        start_time_us -> BigInt,
+        finish_time_us -> BigInt,
+        attribute -> Text,
+        run_id -> Nullable<Text>,
+    }
+}
+
+diesel::allow_tables_to_appear_in_same_query!(models, projects, traces,);
