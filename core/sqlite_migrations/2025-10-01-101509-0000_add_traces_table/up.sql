@@ -5,8 +5,8 @@ CREATE TABLE traces (
     thread_id TEXT,
     parent_span_id TEXT,
     operation_name TEXT NOT NULL,
-    start_time_us INTEGER NOT NULL,
-    finish_time_us INTEGER NOT NULL,
+    start_time_us BIGINT NOT NULL,
+    finish_time_us BIGINT NOT NULL,
     attribute TEXT NOT NULL, -- JSON stored as text
     run_id TEXT,
     project_id TEXT,

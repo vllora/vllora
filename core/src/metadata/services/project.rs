@@ -1,12 +1,11 @@
-use crate::error::DatabaseError;
-use crate::models::project::{DbNewProject, DbProject, NewProjectDTO, UpdateProjectDTO};
-use crate::pool::DbPool;
+use crate::metadata::error::DatabaseError;
+use crate::metadata::models::project::{DbNewProject, DbProject, NewProjectDTO, UpdateProjectDTO};
+use crate::metadata::pool::DbPool;
+use crate::types::metadata::project::Project;
 use diesel::dsl::count;
 use diesel::ExpressionMethods;
 use diesel::OptionalExtension;
 use diesel::{QueryDsl, RunQueryDsl};
-use langdb_core::types::metadata::project::Project;
-use std::sync::Arc;
 use uuid::Uuid;
 
 pub trait ProjectService {
@@ -25,11 +24,11 @@ pub trait ProjectService {
 }
 
 pub struct ProjectServiceImpl {
-    db_pool: Arc<DbPool>,
+    db_pool: DbPool,
 }
 
 impl ProjectServiceImpl {
-    pub fn new(db_pool: Arc<DbPool>) -> Self {
+    pub fn new(db_pool: DbPool) -> Self {
         Self { db_pool }
     }
 
@@ -54,7 +53,7 @@ impl ProjectService for ProjectServiceImpl {
     fn get_by_id(&self, id: Uuid, _owner_id: Uuid) -> Result<Project, DatabaseError> {
         let mut conn = self.db_pool.get()?;
         DbProject::not_archived()
-            .filter(crate::schema::projects::id.eq(id.to_string()))
+            .filter(crate::metadata::schema::projects::id.eq(id.to_string()))
             .first(&mut conn)
             .map_err(DatabaseError::QueryError)
             .map(|db_project| db_project.into())
@@ -81,15 +80,15 @@ impl ProjectService for ProjectServiceImpl {
             is_default: Some(0),
         };
 
-        diesel::insert_into(crate::schema::projects::table)
+        diesel::insert_into(crate::metadata::schema::projects::table)
             .values(&db_new_project)
             .execute(&mut conn)?;
 
         // For SQLite, we need to query the inserted record separately
         // We'll use the name as a unique identifier to find the inserted record
         let inserted_project = DbProject::not_archived()
-            .filter(crate::schema::projects::name.eq(proj.name))
-            .order(crate::schema::projects::created_at.desc())
+            .filter(crate::metadata::schema::projects::name.eq(proj.name))
+            .order(crate::metadata::schema::projects::created_at.desc())
             .first(&mut conn)
             .map_err(DatabaseError::QueryError)?;
 
@@ -99,7 +98,7 @@ impl ProjectService for ProjectServiceImpl {
     fn count(&self, _owner_id: Uuid) -> Result<u64, DatabaseError> {
         let mut conn = self.db_pool.get()?;
         let count_result: i64 = DbProject::not_archived()
-            .select(count(crate::schema::projects::id))
+            .select(count(crate::metadata::schema::projects::id))
             .first(&mut conn)
             .map_err(DatabaseError::QueryError)?;
 
@@ -125,7 +124,7 @@ impl ProjectService for ProjectServiceImpl {
 
         // Check if the project exists and is not archived
         let project_exists = DbProject::not_archived()
-            .filter(crate::schema::projects::id.eq(id.to_string()))
+            .filter(crate::metadata::schema::projects::id.eq(id.to_string()))
             .first::<DbProject>(&mut conn)
             .optional()
             .map_err(DatabaseError::QueryError)?;
@@ -137,9 +136,9 @@ impl ProjectService for ProjectServiceImpl {
         // Soft delete by setting archived_at timestamp
         let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
 
-        diesel::update(crate::schema::projects::table)
-            .filter(crate::schema::projects::id.eq(id.to_string()))
-            .set(crate::schema::projects::archived_at.eq(Some(now)))
+        diesel::update(crate::metadata::schema::projects::table)
+            .filter(crate::metadata::schema::projects::id.eq(id.to_string()))
+            .set(crate::metadata::schema::projects::archived_at.eq(Some(now)))
             .execute(&mut conn)?;
 
         Ok(())
@@ -155,7 +154,7 @@ impl ProjectService for ProjectServiceImpl {
 
         // Check if the project exists and is not archived
         let existing_project = DbProject::not_archived()
-            .filter(crate::schema::projects::id.eq(id.to_string()))
+            .filter(crate::metadata::schema::projects::id.eq(id.to_string()))
             .first::<DbProject>(&mut conn)
             .optional()
             .map_err(DatabaseError::QueryError)?;
@@ -207,10 +206,10 @@ impl ProjectService for ProjectServiceImpl {
         if let Some(new_is_default) = update_data.is_default {
             if new_is_default {
                 // If setting this project as default, first set all other projects to non-default
-                diesel::update(crate::schema::projects::table)
-                    .filter(crate::schema::projects::id.ne(id.to_string()))
-                    .filter(crate::schema::projects::archived_at.is_null())
-                    .set(crate::schema::projects::is_default.eq(0))
+                diesel::update(crate::metadata::schema::projects::table)
+                    .filter(crate::metadata::schema::projects::id.ne(id.to_string()))
+                    .filter(crate::metadata::schema::projects::archived_at.is_null())
+                    .set(crate::metadata::schema::projects::is_default.eq(0))
                     .execute(&mut conn)?;
             }
             is_default = if new_is_default { 1 } else { 0 };
@@ -220,21 +219,21 @@ impl ProjectService for ProjectServiceImpl {
         let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
 
         // Perform the update using individual field updates
-        diesel::update(crate::schema::projects::table)
-            .filter(crate::schema::projects::id.eq(id.to_string()))
+        diesel::update(crate::metadata::schema::projects::table)
+            .filter(crate::metadata::schema::projects::id.eq(id.to_string()))
             .set((
-                crate::schema::projects::name.eq(name),
-                crate::schema::projects::slug.eq(slug),
-                crate::schema::projects::description.eq(description),
-                crate::schema::projects::settings.eq(settings),
-                crate::schema::projects::is_default.eq(is_default),
-                crate::schema::projects::updated_at.eq(now),
+                crate::metadata::schema::projects::name.eq(name),
+                crate::metadata::schema::projects::slug.eq(slug),
+                crate::metadata::schema::projects::description.eq(description),
+                crate::metadata::schema::projects::settings.eq(settings),
+                crate::metadata::schema::projects::is_default.eq(is_default),
+                crate::metadata::schema::projects::updated_at.eq(now),
             ))
             .execute(&mut conn)?;
 
         // Retrieve the updated project
         let updated_project = DbProject::not_archived()
-            .filter(crate::schema::projects::id.eq(id.to_string()))
+            .filter(crate::metadata::schema::projects::id.eq(id.to_string()))
             .first::<DbProject>(&mut conn)
             .map_err(DatabaseError::QueryError)?;
 
@@ -246,7 +245,7 @@ impl ProjectService for ProjectServiceImpl {
 
         // Check if the project exists and is not archived
         let existing_project = DbProject::not_archived()
-            .filter(crate::schema::projects::id.eq(id.to_string()))
+            .filter(crate::metadata::schema::projects::id.eq(id.to_string()))
             .first::<DbProject>(&mut conn)
             .optional()
             .map_err(DatabaseError::QueryError)?;
@@ -259,25 +258,25 @@ impl ProjectService for ProjectServiceImpl {
         };
 
         // First set all other projects to non-default
-        diesel::update(crate::schema::projects::table)
-            .filter(crate::schema::projects::id.ne(id.to_string()))
-            .filter(crate::schema::projects::archived_at.is_null())
-            .set(crate::schema::projects::is_default.eq(0))
+        diesel::update(crate::metadata::schema::projects::table)
+            .filter(crate::metadata::schema::projects::id.ne(id.to_string()))
+            .filter(crate::metadata::schema::projects::archived_at.is_null())
+            .set(crate::metadata::schema::projects::is_default.eq(0))
             .execute(&mut conn)?;
 
         // Then set the specified project as default
         let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
-        diesel::update(crate::schema::projects::table)
-            .filter(crate::schema::projects::id.eq(id.to_string()))
+        diesel::update(crate::metadata::schema::projects::table)
+            .filter(crate::metadata::schema::projects::id.eq(id.to_string()))
             .set((
-                crate::schema::projects::is_default.eq(1),
-                crate::schema::projects::updated_at.eq(now),
+                crate::metadata::schema::projects::is_default.eq(1),
+                crate::metadata::schema::projects::updated_at.eq(now),
             ))
             .execute(&mut conn)?;
 
         // Retrieve the updated project
         let updated_project = DbProject::not_archived()
-            .filter(crate::schema::projects::id.eq(id.to_string()))
+            .filter(crate::metadata::schema::projects::id.eq(id.to_string()))
             .first::<DbProject>(&mut conn)
             .map_err(DatabaseError::QueryError)?;
 

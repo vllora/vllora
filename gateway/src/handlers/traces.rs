@@ -1,7 +1,7 @@
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Result};
-use langdb_metadata::models::project::DbProject;
-use langdb_metadata::pool::DbPool;
-use langdb_metadata::services::trace::{ListTracesQuery, TraceService, TraceServiceImpl};
+use langdb_core::metadata::models::project::DbProject;
+use langdb_core::metadata::pool::DbPool;
+use langdb_core::metadata::services::trace::{ListTracesQuery, TraceService, TraceServiceImpl};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -51,9 +51,9 @@ pub struct Pagination {
 pub async fn list_traces(
     req: HttpRequest,
     query: web::Query<ListTracesQueryParams>,
-    db_pool: web::Data<Arc<DbPool>>,
+    db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
-    let trace_service = TraceServiceImpl::new(db_pool.get_ref().clone());
+    let trace_service = TraceServiceImpl::new(Arc::new(db_pool.get_ref().clone()));
 
     // Extract project_id from extensions (set by ProjectMiddleware)
     let project_id = req.extensions().get::<DbProject>().map(|p| p.id.clone());
@@ -140,9 +140,9 @@ pub async fn get_spans_by_run(
     req: HttpRequest,
     run_id: web::Path<String>,
     query: web::Query<GetSpansByRunQuery>,
-    db_pool: web::Data<Arc<DbPool>>,
+    db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
-    let trace_service = TraceServiceImpl::new(db_pool.get_ref().clone());
+    let trace_service = TraceServiceImpl::new(Arc::new(db_pool.get_ref().clone()));
 
     // Extract project_id from extensions (set by ProjectMiddleware)
     let project_id = req.extensions().get::<DbProject>().map(|p| p.id.clone());

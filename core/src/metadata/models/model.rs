@@ -1,4 +1,8 @@
-use crate::schema::models;
+use crate::metadata::schema::models;
+use crate::models::{
+    InferenceProvider, Limits, ModelCapability, ModelIOFormats, ModelMetadata, ModelType,
+};
+use crate::types::provider::{CompletionModelPrice, InferenceModelProvider, ModelPrice};
 use chrono::NaiveDate;
 use diesel::helper_types::AsSelect;
 use diesel::helper_types::Select;
@@ -11,10 +15,6 @@ use diesel::SelectableHelper;
 use diesel::{AsChangeset, Insertable, QueryableByName, Selectable};
 use diesel::{BoolExpressionMethods, ExpressionMethods};
 use diesel::{Identifiable, Queryable};
-use langdb_core::models::{
-    InferenceProvider, Limits, ModelCapability, ModelIOFormats, ModelMetadata, ModelType,
-};
-use langdb_core::types::provider::{CompletionModelPrice, InferenceModelProvider, ModelPrice};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 

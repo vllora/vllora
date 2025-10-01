@@ -1,6 +1,6 @@
-use crate::error::DatabaseError;
-use crate::models::run::RunUsageInformation;
-use crate::pool::DbPool;
+use crate::metadata::error::DatabaseError;
+use crate::metadata::models::run::RunUsageInformation;
+use crate::metadata::pool::DbPool;
 use diesel::prelude::*;
 use std::sync::Arc;
 
@@ -102,10 +102,10 @@ impl RunService for RunServiceImpl {
               COALESCE(json_group_array(DISTINCT trace_id), '[]') as trace_ids_json,
               COALESCE(json_group_array(DISTINCT request_model) FILTER (WHERE request_model IS NOT NULL), '[]') as request_models_json,
               COALESCE(json_group_array(DISTINCT used_model) FILTER (WHERE used_model IS NOT NULL), '[]') as used_models_json,
-              SUM(CASE WHEN operation_name = 'model_call' THEN 1 ELSE 0 END) as llm_calls,
+              CAST(SUM(CASE WHEN operation_name = 'model_call' THEN 1 ELSE 0 END) AS BIGINT) as llm_calls,
               SUM(COALESCE(CAST(json_extract(attribute, '$.cost.cost') AS REAL), 0)) as cost,
-              SUM(COALESCE(CAST(json_extract(attribute, '$.usage.input_tokens') AS INTEGER), 0)) as input_tokens,
-              SUM(COALESCE(CAST(json_extract(attribute, '$.usage.output_tokens') AS INTEGER), 0)) as output_tokens,
+              CAST(SUM(COALESCE(CAST(json_extract(attribute, '$.usage.input_tokens') AS INTEGER), 0)) AS BIGINT) as input_tokens,
+              CAST(SUM(COALESCE(CAST(json_extract(attribute, '$.usage.output_tokens') AS INTEGER), 0)) AS BIGINT) as output_tokens,
               MIN(start_time_us) as start_time_us,
               MAX(finish_time_us) as finish_time_us,
               COALESCE(json_group_array(DISTINCT error_msg) FILTER (WHERE error_msg IS NOT NULL), '[]') as errors_json,

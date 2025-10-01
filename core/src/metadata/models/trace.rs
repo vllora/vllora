@@ -1,4 +1,4 @@
-use crate::schema::traces;
+use crate::metadata::schema::traces;
 use diesel::{AsChangeset, Insertable, Queryable, Selectable};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

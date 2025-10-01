@@ -1,8 +1,8 @@
+use langdb_core::metadata::error::DatabaseError;
+use langdb_core::metadata::models::model::DbNewModel;
+use langdb_core::metadata::pool::DbPool;
+use langdb_core::metadata::services::model::{ModelService, ModelServiceImpl};
 use langdb_core::models::ModelMetadata;
-use langdb_metadata::error::DatabaseError;
-use langdb_metadata::models::model::DbNewModel;
-use langdb_metadata::pool::DbPool;
-use langdb_metadata::services::model::{ModelService, ModelServiceImpl};
 use reqwest;
 use std::collections::HashSet;
 

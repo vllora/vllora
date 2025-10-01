@@ -1,7 +1,7 @@
-use crate::error::DatabaseError;
-use crate::models::trace::DbTrace;
-use crate::pool::DbPool;
-use crate::schema::traces;
+use crate::metadata::error::DatabaseError;
+use crate::metadata::models::trace::DbTrace;
+use crate::metadata::pool::DbPool;
+use crate::metadata::schema::traces;
 use diesel::prelude::*;
 use diesel::sql_types::{Text, Nullable};
 use std::collections::HashMap;

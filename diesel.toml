@@ -2,8 +2,8 @@
 # see https://diesel.rs/guides/configuring-diesel-cli
 
 [print_schema]
-file = "metadata/src/schema.rs"
+file = "core/src/metadata/schema.rs"
 custom_type_derives = ["diesel::query_builder::QueryId"]
 
 [migrations_directory]
-dir = "metadata/sqlite_migrations"
+dir = "core/sqlite_migrations"

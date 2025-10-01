@@ -1,6 +1,6 @@
-use crate::error::DatabaseError;
-use crate::models::model::{DbModel, DbNewModel};
-use crate::pool::DbPool;
+use crate::metadata::error::DatabaseError;
+use crate::metadata::models::model::{DbModel, DbNewModel};
+use crate::metadata::pool::DbPool;
 use chrono::Utc;
 use diesel::{ExpressionMethods, OptionalExtension};
 use diesel::{QueryDsl, RunQueryDsl};
@@ -49,7 +49,7 @@ impl ModelService for ModelServiceImpl {
         let mut conn = self.db_pool.get()?;
 
         DbModel::not_deleted()
-            .filter(crate::schema::models::id.eq(id))
+            .filter(crate::metadata::schema::models::id.eq(id))
             .first(&mut conn)
             .map_err(DatabaseError::QueryError)
     }
@@ -65,11 +65,11 @@ impl ModelService for ModelServiceImpl {
             Some(pid) => {
                 let project_id_str = pid.to_string();
                 DbModel::for_project(project_id_str)
-                    .filter(crate::schema::models::model_name.eq(model_name))
+                    .filter(crate::metadata::schema::models::model_name.eq(model_name))
                     .first(&mut conn)?
             }
             None => DbModel::global_only()
-                .filter(crate::schema::models::model_name.eq(model_name))
+                .filter(crate::metadata::schema::models::model_name.eq(model_name))
                 .first(&mut conn)?,
         };
 
@@ -89,24 +89,21 @@ impl ModelService for ModelServiceImpl {
 
         // Try to find existing model by model_name and provider_info_id
         let existing = DbModel::not_deleted()
-            .filter(crate::schema::models::model_name.eq(&model.model_name))
-            .filter(crate::schema::models::provider_info_id.eq(&model.provider_info_id))
+            .filter(crate::metadata::schema::models::model_name.eq(&model.model_name))
+            .filter(crate::metadata::schema::models::provider_info_id.eq(&model.provider_info_id))
             .first::<DbModel>(&mut conn)
             .optional()?;
 
         if let Some(existing_model) = existing {
             // Update existing model with current timestamp
             let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
-            diesel::update(crate::schema::models::table)
-                .filter(crate::schema::models::id.eq(existing_model.id))
-                .set((
-                    &model,
-                    crate::schema::models::updated_at.eq(now),
-                ))
+            diesel::update(crate::metadata::schema::models::table)
+                .filter(crate::metadata::schema::models::id.eq(existing_model.id))
+                .set((&model, crate::metadata::schema::models::updated_at.eq(now)))
                 .execute(&mut conn)?;
         } else {
             // Insert new model
-            diesel::insert_into(crate::schema::models::table)
+            diesel::insert_into(crate::metadata::schema::models::table)
                 .values(&model)
                 .execute(&mut conn)?;
         }
@@ -118,9 +115,9 @@ impl ModelService for ModelServiceImpl {
         let mut conn = self.db_pool.get()?;
         let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
-        diesel::update(crate::schema::models::table)
-            .filter(crate::schema::models::id.eq(model_id))
-            .set(crate::schema::models::deleted_at.eq(now))
+        diesel::update(crate::metadata::schema::models::table)
+            .filter(crate::metadata::schema::models::id.eq(model_id))
+            .set(crate::metadata::schema::models::deleted_at.eq(now))
             .execute(&mut conn)?;
 
         Ok(())
@@ -134,9 +131,9 @@ impl ModelService for ModelServiceImpl {
         let mut conn = self.db_pool.get()?;
         let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
-        diesel::update(crate::schema::models::table)
-            .filter(crate::schema::models::id.eq_any(model_ids))
-            .set(crate::schema::models::deleted_at.eq(now))
+        diesel::update(crate::metadata::schema::models::table)
+            .filter(crate::metadata::schema::models::id.eq_any(model_ids))
+            .set(crate::metadata::schema::models::deleted_at.eq(now))
             .execute(&mut conn)?;
 
         Ok(())

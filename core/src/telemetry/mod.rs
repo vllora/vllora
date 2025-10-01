@@ -57,16 +57,6 @@ pub trait TraceTenantResolver: Send + Sync + std::fmt::Debug {
     async fn get_tenant_id(&self, metadata: &MetadataMap) -> Option<(String, String)>;
 }
 
-#[derive(Debug)]
-pub struct DummyTraceTenantResolver;
-
-#[async_trait::async_trait]
-impl TraceTenantResolver for DummyTraceTenantResolver {
-    async fn get_tenant_id(&self, _metadata: &MetadataMap) -> Option<(String, String)> {
-        None
-    }
-}
-
 #[async_trait::async_trait]
 pub trait SpanWriterTransport: Send + Sync {
     async fn insert_values(

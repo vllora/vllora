@@ -1,8 +1,8 @@
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Result};
-use langdb_metadata::models::project::DbProject;
-use langdb_metadata::models::run::RunUsageResponse;
-use langdb_metadata::pool::DbPool;
-use langdb_metadata::services::run::{ListRunsQuery, RunService, RunServiceImpl};
+use langdb_core::metadata::models::project::DbProject;
+use langdb_core::metadata::models::run::RunUsageResponse;
+use langdb_core::metadata::pool::DbPool;
+use langdb_core::metadata::services::run::{ListRunsQuery, RunService, RunServiceImpl};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -34,9 +34,9 @@ pub struct Pagination {
 pub async fn list_runs(
     req: HttpRequest,
     query: web::Query<ListRunsQueryParams>,
-    db_pool: web::Data<Arc<DbPool>>,
+    db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
-    let run_service = RunServiceImpl::new(db_pool.get_ref().clone());
+    let run_service = RunServiceImpl::new(Arc::new(db_pool.get_ref().clone()));
 
     // Extract project_id from extensions (set by ProjectMiddleware)
     let project_id = req.extensions().get::<DbProject>().map(|p| p.id.clone());

@@ -1,6 +1,7 @@
 use langdb_core::{telemetry::SpanWriterTransport, GatewayResult, error::GatewayError};
-use langdb_metadata::models::trace::DbNewTrace;
-use langdb_metadata::pool::DbPool;
+use langdb_core::metadata::models::trace::DbNewTrace;
+use langdb_core::metadata::pool::DbPool;
+use langdb_core::metadata::schema::traces;
 use diesel::prelude::*;
 use serde_json::Value;
 use std::sync::Arc;
@@ -115,8 +116,6 @@ impl SpanWriterTransport for SqliteTraceWriterTransport {
         if body.is_empty() {
             return Ok("0".to_string());
         }
-
-        use langdb_metadata::schema::traces;
 
         let mut conn = self
             .db_pool

@@ -1,3 +1,4 @@
+use crate::types::project_settings::ProjectSettings;
 use crate::types::provider::ModelPrice;
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
@@ -14,7 +15,7 @@ pub struct Project {
     pub updated_at: NaiveDateTime,
     pub company_id: Uuid,
     pub slug: String,
-    pub settings: Option<Value>,
+    pub settings: Option<ProjectSettings>,
     pub is_default: bool,
     pub archived_at: Option<NaiveDateTime>,
     pub allowed_user_ids: Option<Vec<String>>,

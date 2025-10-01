@@ -85,6 +85,20 @@ rmcp-macros = { version = "0.6.4", default-features = true}
 parking_lot = "0.12.4"
 rand = "0.9"
 
+diesel = { version = "2.3.1", features = [
+  "chrono",
+  "sqlite",
+  "postgres",
+  "serde_json",
+  "r2d2",
+  "uuid",
+  "numeric",
+] }
+diesel_migrations = { version = "2.3.0", features = ["sqlite"] }
+r2d2 = "0.8.10"
+
 [features]
 default = ["database"]
 database = ["dep:openssh", "dep:clickhouse", "dep:tokio-util"]
+postgres = []
+sqlite = []

@@ -4,12 +4,12 @@ use ::tracing::info;
 use clap::Parser;
 use config::{Config, ConfigError};
 use http::ApiServer;
+use langdb_core::metadata::error::DatabaseError;
+use langdb_core::metadata::models::project::NewProjectDTO;
+use langdb_core::metadata::pool::DbPool;
+use langdb_core::metadata::services::model::ModelServiceImpl;
+use langdb_core::metadata::services::project::{ProjectService, ProjectServiceImpl};
 use langdb_core::{error::GatewayError, usage::InMemoryStorage};
-use langdb_metadata::error::DatabaseError;
-use langdb_metadata::models::project::NewProjectDTO;
-use langdb_metadata::pool::DbPool;
-use langdb_metadata::services::model::ModelServiceImpl;
-use langdb_metadata::services::project::{ProjectService, ProjectServiceImpl};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
@@ -73,7 +73,7 @@ pub const LOGO: &str = r#"
 
 /// Seeds the database with a default project if no projects exist
 fn seed_database(db_pool: &DbPool) -> Result<(), CliError> {
-    let project_service = ProjectServiceImpl::new(Arc::new(db_pool.clone()));
+    let project_service = ProjectServiceImpl::new(db_pool.clone());
 
     // Use a dummy owner_id for seeding (you might want to change this)
     let dummy_owner_id = Uuid::nil();
@@ -112,9 +112,10 @@ async fn main() -> Result<(), CliError> {
 
     let cli = cli::Cli::parse();
 
-    let db_pool = langdb_metadata::pool::establish_connection("langdb.sqlite".to_string(), 10);
+    let db_pool =
+        langdb_core::metadata::pool::establish_connection("langdb.sqlite".to_string(), 10);
 
-    langdb_metadata::utils::init_db(&db_pool);
+    langdb_core::metadata::utils::init_db(&db_pool);
 
     // Seed the database with a default project if none exist
     seed_database(&db_pool)?;
@@ -134,7 +135,7 @@ async fn main() -> Result<(), CliError> {
         cli::Commands::List => {
             tracing::init_tracing();
             // Query models from database
-            use langdb_metadata::services::model::ModelService;
+            use langdb_core::metadata::services::model::ModelService;
             let model_service = ModelServiceImpl::new(db_pool.clone());
             let db_models = model_service.list(None)?;
 
@@ -150,15 +151,18 @@ async fn main() -> Result<(), CliError> {
         cli::Commands::Serve(serve_args) => {
             // Check if models table is empty and sync if needed
             {
-                use langdb_metadata::services::model::ModelService;
+                use langdb_core::metadata::services::model::ModelService;
                 let model_service = ModelServiceImpl::new(db_pool.clone());
                 let models = model_service.list(None)?;
-                
+
                 if models.is_empty() {
                     println!("Models table is empty. Syncing models from API...");
                     match run::models::fetch_and_store_models(db_pool.clone()).await {
                         Ok(synced_models) => {
-                            println!("✓ Successfully synced {} models to database", synced_models.len());
+                            println!(
+                                "✓ Successfully synced {} models to database",
+                                synced_models.len()
+                            );
                         }
                         Err(e) => {
                             eprintln!("⚠ Warning: Failed to sync models: {}", e);
@@ -182,9 +186,9 @@ async fn main() -> Result<(), CliError> {
 
                 let config = Config::load(&cli.config)?;
                 let config = config.apply_cli_overrides(&cli::Commands::Serve(serve_args));
-                let api_server = ApiServer::new(config, Arc::new(db_pool.clone()));
+                let api_server = ApiServer::new(config, db_pool.clone());
                 let model_service = Arc::new(Box::new(ModelServiceImpl::new(db_pool.clone()))
-                    as Box<dyn langdb_metadata::services::model::ModelService + Send + Sync>);
+                    as Box<dyn langdb_core::metadata::services::model::ModelService + Send + Sync>);
                 let server_handle = tokio::spawn(async move {
                     match api_server.start(Some(storage_clone), model_service).await {
                         Ok(server) => server.await,
@@ -229,9 +233,9 @@ async fn main() -> Result<(), CliError> {
 
                 let config = Config::load(&cli.config)?;
                 let config = config.apply_cli_overrides(&cli::Commands::Serve(serve_args));
-                let api_server = ApiServer::new(config, Arc::new(db_pool.clone()));
+                let api_server = ApiServer::new(config, db_pool.clone());
                 let model_service = Arc::new(Box::new(ModelServiceImpl::new(db_pool.clone()))
-                    as Box<dyn langdb_metadata::services::model::ModelService + Send + Sync>);
+                    as Box<dyn langdb_core::metadata::services::model::ModelService + Send + Sync>);
                 let server_handle = tokio::spawn(async move {
                     let storage = Arc::new(Mutex::new(InMemoryStorage::new()));
                     match api_server.start(Some(storage), model_service).await {
