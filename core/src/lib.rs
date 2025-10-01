@@ -2,6 +2,7 @@
 pub mod database;
 pub mod embed_mod;
 pub mod error;
+pub mod events;
 pub mod executor;
 pub mod handler;
 pub mod http;

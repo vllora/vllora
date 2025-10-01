@@ -265,6 +265,51 @@ pub fn default_include_history() -> bool {
     true
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct MessageThreadWithTitle {
+    pub id: String,    // UUID
+    pub title: String, // Corresponding LangDB model
+    pub created_at: String,
+    pub updated_at: String,
+    #[serde(alias = "used_models")]
+    pub input_models: Vec<String>,
+    pub mcp_template_definition_ids: Vec<String>,
+    pub cost: f64,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub description: Option<String>,
+    pub keywords: Option<Vec<String>>,
+    pub is_public: bool,
+    pub project_id: String,
+    pub errors: Option<Vec<String>>,
+    pub tags_info: Option<Vec<String>>,
+    #[serde(alias = "model_name")]
+    pub request_model_name: String,
+}
+
+impl From<MessageThread> for MessageThreadWithTitle {
+    fn from(thread: MessageThread) -> Self {
+        Self {
+            id: thread.id,
+            title: thread.title.unwrap_or_default(),
+            created_at: chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+            updated_at: chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+            input_models: vec![],
+            mcp_template_definition_ids: vec![],
+            cost: 0.0,
+            input_tokens: 0,
+            output_tokens: 0,
+            description: thread.description,
+            keywords: thread.keywords,
+            is_public: thread.is_public,
+            project_id: thread.project_id,
+            errors: None,
+            tags_info: None,
+            request_model_name: thread.model_name,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
