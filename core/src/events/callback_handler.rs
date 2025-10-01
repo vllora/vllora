@@ -92,12 +92,12 @@ impl From<CloudMessageEvent> for GatewayEvent {
 }
 
 #[derive(Clone, Default)]
-pub struct CloudCallbackHandlerFn {
+pub struct GatewayCallbackHandlerFn {
     senders: Vec<tokio::sync::broadcast::Sender<GatewayEvent>>,
     ui_broadcaster: Option<EventsUIBroadcaster>,
 }
 
-impl CloudCallbackHandlerFn {
+impl GatewayCallbackHandlerFn {
     pub fn new(
         senders: Vec<tokio::sync::broadcast::Sender<GatewayEvent>>,
         ui_broadcaster: Option<EventsUIBroadcaster>,

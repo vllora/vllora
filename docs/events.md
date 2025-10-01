@@ -1,9 +1,8 @@
 ### Events API (Server-Sent Events)
 
-- **GET** `/projects/{project_id}/events`
+- **GET** `/events`
   - Streams project events as Server-Sent Events (SSE)
   - Content-Type: `text/event-stream`
-  - Requires auth scope: `ProjectRead`
 
 #### Auth and headers
 - **Authorization**: `Bearer <access_token>`

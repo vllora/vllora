@@ -244,6 +244,7 @@ name = "ai-gateway"
 version = "0.3.2"
 dependencies = [
  "actix-cors",
+ "actix-http",
  "actix-web",
  "async-trait",
  "chrono",
@@ -255,7 +256,6 @@ dependencies = [
  "futures-util",
  "langdb_core",
  "langdb_guardrails",
- "langdb_metadata",
  "minijinja",
  "open",
  "opentelemetry",
@@ -269,6 +269,7 @@ dependencies = [
  "serde_yaml",
  "thiserror 2.0.16",
  "tokio",
+ "tokio-stream",
  "tonic",
  "tracing",
  "tracing-subscriber",
@@ -2752,6 +2753,8 @@ dependencies = [
  "bytes",
  "chrono",
  "dashmap",
+ "diesel",
+ "diesel_migrations",
  "either",
  "futures",
  "indexmap 2.11.4",
@@ -2764,6 +2767,7 @@ dependencies = [
  "opentelemetry-proto",
  "opentelemetry_sdk",
  "parking_lot",
+ "r2d2",
  "rand 0.9.2",
  "regex",
  "reqwest",
@@ -2808,22 +2812,6 @@ dependencies = [
  "tracing-futures",
  "tracing-subscriber",
  "valuable",
-]
-
-[[package]]
-name = "langdb_metadata"
-version = "0.3.2"
-dependencies = [
- "chrono",
- "diesel",
- "diesel_migrations",
- "langdb_core",
- "r2d2",
- "serde",
- "serde_json",
- "thiserror 2.0.16",
- "tracing",
- "uuid",
 ]
 
 [[package]]

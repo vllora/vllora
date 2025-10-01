@@ -2,10 +2,10 @@ pub mod projects;
 
 use actix_web::{web, HttpResponse};
 use langdb_core::handler::models::ChatModelsResponse;
+use langdb_core::metadata::services::model::ModelService;
 use langdb_core::models::ModelMetadata;
 use langdb_core::types::gateway::ChatModel;
 use langdb_core::GatewayApiError;
-use langdb_metadata::services::model::ModelService;
 use std::sync::Arc;
 
 /// Handler to list models from SQLite database

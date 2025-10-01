@@ -51,4 +51,38 @@ diesel::table! {
     }
 }
 
-diesel::allow_tables_to_appear_in_same_query!(models, projects,);
+diesel::table! {
+    threads (id) {
+        id -> Text,
+        user_id -> Nullable<Text>,
+        model_name -> Nullable<Text>,
+        created_at -> Text,
+        tenant_id -> Nullable<Text>,
+        project_id -> Nullable<Text>,
+        is_public -> Integer,
+        description -> Nullable<Text>,
+        keywords -> Text,
+    }
+}
+
+diesel::table! {
+    messages (id) {
+        id -> Text,
+        model_name -> Nullable<Text>,
+        r#type -> Nullable<Text>,
+        thread_id -> Nullable<Text>,
+        user_id -> Nullable<Text>,
+        content_type -> Nullable<Text>,
+        content -> Nullable<Text>,
+        content_array -> Text,
+        tool_call_id -> Nullable<Text>,
+        tool_calls -> Nullable<Text>,
+        tenant_id -> Nullable<Text>,
+        project_id -> Nullable<Text>,
+        created_at -> Text,
+    }
+}
+
+diesel::joinable!(messages -> threads (thread_id));
+
+diesel::allow_tables_to_appear_in_same_query!(models, projects, threads, messages,);

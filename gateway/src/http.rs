@@ -5,7 +5,10 @@ use crate::guardrails::GuardrailsService;
 use crate::handlers::projects;
 use crate::limit::GatewayLimitChecker;
 use crate::middleware::project::ProjectMiddleware;
+use crate::middleware::run_id::RunId;
+use crate::middleware::thread_id::ThreadId;
 use crate::middleware::trace_logger::TraceLogger;
+use crate::middleware::tracing_context::TracingContext;
 use crate::otel::DummyTraceWritterTransport;
 use actix_cors::Cors;
 use actix_web::Scope as ActixScope;
@@ -18,22 +21,28 @@ use actix_web::{
 use futures::{future::try_join, Future, TryFutureExt};
 use langdb_core::database::clickhouse::ClickhouseHttp;
 use langdb_core::database::DatabaseTransportClone;
+use langdb_core::events::broadcast_channel_manager::BroadcastChannelManager;
+use langdb_core::events::callback_handler::GatewayCallbackHandlerFn;
+use langdb_core::events::ui_broadcaster::EventsSendersContainer;
+use langdb_core::events::ui_broadcaster::EventsUIBroadcaster;
 use langdb_core::executor::ProvidersConfig;
 use langdb_core::handler::chat::create_chat_completion;
 use langdb_core::handler::embedding::embeddings_handler;
 use langdb_core::handler::image::create_image;
 use langdb_core::handler::middleware::rate_limit::{RateLimitMiddleware, RateLimiting};
 use langdb_core::handler::{CallbackHandlerFn, LimitCheckWrapper};
+use langdb_core::history::thread_entity::ThreadEntityImpl;
+use langdb_core::metadata::pool::DbPool;
+use langdb_core::metadata::project_trace::ProjectTraceTenantResolver;
+use langdb_core::metadata::services::project::ProjectServiceImpl;
 use langdb_core::telemetry::database::DatabaseSpanWritter;
-use langdb_core::telemetry::DummyTraceTenantResolver;
-use langdb_core::telemetry::ProjectTraceMap;
 use langdb_core::telemetry::SpanWriterTransport;
 use langdb_core::telemetry::{TraceServiceImpl, TraceServiceServer};
 use langdb_core::types::gateway::CostCalculator;
 use langdb_core::types::guardrails::service::GuardrailsEvaluator;
 use langdb_core::types::guardrails::Guard;
+use langdb_core::types::threads::ThreadEntity;
 use langdb_core::usage::InMemoryStorage;
-use langdb_metadata::pool::DbPool;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -61,11 +70,11 @@ pub enum ServerError {
 #[derive(Clone, Debug)]
 pub struct ApiServer {
     config: Config,
-    db_pool: Arc<DbPool>,
+    db_pool: DbPool,
 }
 
 impl ApiServer {
-    pub fn new(config: Config, db_pool: Arc<DbPool>) -> Self {
+    pub fn new(config: Config, db_pool: DbPool) -> Self {
         Self { config, db_pool }
     }
 
@@ -110,7 +119,9 @@ impl ApiServer {
     pub async fn start(
         self,
         storage: Option<Arc<Mutex<InMemoryStorage>>>,
-        model_service: Arc<Box<dyn langdb_metadata::services::model::ModelService + Send + Sync>>,
+        model_service: Arc<
+            Box<dyn langdb_core::metadata::services::model::ModelService + Send + Sync>,
+        >,
     ) -> Result<impl Future<Output = Result<(), ServerError>>, ServerError> {
         let cost_calculator = GatewayCostCalculator::new();
         let callback = if let Some(storage) = &storage {
@@ -121,6 +132,18 @@ impl ApiServer {
 
         let server_config = self.clone();
         let server_config_for_closure = server_config.clone();
+
+        let events_senders = Arc::new(Mutex::new(HashMap::new()));
+        let events_senders_container = Arc::new(EventsSendersContainer::new(events_senders));
+
+        let project_trace_senders = Arc::new(BroadcastChannelManager::new(Default::default()));
+
+        let project_trace_senders_cleanup = Arc::clone(&project_trace_senders);
+        langdb_core::events::broadcast_channel_manager::start_cleanup_task(
+            (*project_trace_senders_cleanup).clone(),
+        );
+        let project_traces_senders = project_trace_senders.clone();
+
         let server = HttpServer::new(move || {
             let limit_checker = if let Some(storage) = storage.clone() {
                 match &server_config_for_closure.config.cost_control {
@@ -150,6 +173,8 @@ impl ApiServer {
                 providers_config,
                 model_service.clone(),
                 server_config_for_closure.db_pool.clone(),
+                events_senders_container.clone(),
+                project_traces_senders.clone(),
             )
         })
         .bind((self.config.http.host.as_str(), self.config.http.port))?
@@ -164,10 +189,11 @@ impl ApiServer {
             None => Box::new(DummyTraceWritterTransport {}) as Box<dyn SpanWriterTransport>,
         };
 
+        let project_service = ProjectServiceImpl::new(server_config.db_pool.clone());
         let trace_service = TraceServiceServer::new(TraceServiceImpl::new(
-            Arc::new(ProjectTraceMap::new()),
+            project_trace_senders.inner().clone(),
             writer,
-            Box::new(DummyTraceTenantResolver),
+            Box::new(ProjectTraceTenantResolver::new(project_service)),
         ));
         let tonic_server = tonic::transport::Server::builder()
             .add_service(trace_service)
@@ -193,8 +219,12 @@ impl ApiServer {
         limit_checker: Option<LimitCheckWrapper>,
         rate_limit: Option<RateLimiting>,
         providers: Option<ProvidersConfig>,
-        model_service: Arc<Box<dyn langdb_metadata::services::model::ModelService + Send + Sync>>,
-        db_pool: Arc<DbPool>,
+        model_service: Arc<
+            Box<dyn langdb_core::metadata::services::model::ModelService + Send + Sync>,
+        >,
+        db_pool: DbPool,
+        events_senders_container: Arc<EventsSendersContainer>,
+        project_trace_senders: Arc<BroadcastChannelManager>,
     ) -> App<
         impl ServiceFactory<
             ServiceRequest,
@@ -224,6 +254,12 @@ impl ApiServer {
             db_models.into_iter().map(|m| m.into()).collect();
         let available_models = langdb_core::handler::AvailableModels(models);
 
+        let broadcaster = EventsUIBroadcaster::new(events_senders_container.clone());
+        let thread_entity =
+            Box::new(ThreadEntityImpl::new(db_pool.clone())) as Box<dyn ThreadEntity>;
+
+        let callback_handler = GatewayCallbackHandlerFn::new(vec![], Some(broadcaster.clone()));
+
         // Add model_service and available_models to app_data
         let service = service
             .app_data(Data::new(model_service))
@@ -231,8 +267,15 @@ impl ApiServer {
 
         app.wrap(TraceLogger)
             .wrap(ProjectMiddleware::new())
+            .app_data(Data::new(broadcaster))
+            .app_data(web::Data::from(project_trace_senders))
+            .app_data(Data::new(thread_entity))
+            .app_data(Data::new(callback_handler))
             .service(
                 service
+                    .wrap(TracingContext)
+                    .wrap(ThreadId)
+                    .wrap(RunId)
                     .app_data(limit_checker)
                     .app_data(Data::new(callback))
                     .app_data(Data::new(
@@ -253,6 +296,10 @@ impl ApiServer {
                         "/{id}/default",
                         web::post().to(projects::set_default_project),
                     ),
+            )
+            .route(
+                "/events",
+                web::get().to(langdb_core::handler::events::stream_events),
             )
             .wrap(cors)
     }

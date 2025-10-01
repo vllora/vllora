@@ -1,4 +1,7 @@
-use crate::schema::projects;
+use crate::metadata::schema::projects;
+use crate::types::metadata::project::Project;
+use crate::types::project_settings::ProjectSettings;
+use crate::types::provider::ModelPrice;
 use chrono::{DateTime, NaiveDateTime};
 use diesel::helper_types::AsSelect;
 use diesel::helper_types::Select;
@@ -11,9 +14,6 @@ use diesel::QueryDsl;
 use diesel::SelectableHelper;
 use diesel::{AsChangeset, Insertable, QueryableByName, Selectable};
 use diesel::{Identifiable, Queryable};
-use langdb_core::types::metadata::project::Project;
-use langdb_core::types::project_settings::ProjectSettings;
-use langdb_core::types::provider::ModelPrice;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -93,7 +93,7 @@ impl From<DbProject> for Project {
         let settings = val
             .settings
             .as_deref()
-            .and_then(|s| serde_json::from_str::<Value>(s).ok());
+            .and_then(|s| serde_json::from_str::<ProjectSettings>(s).ok());
         let private_model_prices = val
             .private_model_prices
             .as_deref()

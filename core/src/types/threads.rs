@@ -7,7 +7,37 @@ use serde_tuple::Serialize_tuple;
 use serde_with::serde_as;
 
 use super::{gateway::ToolCall, message::MessageType};
+use crate::metadata::error::DatabaseError;
 use crate::types::gateway::CacheControl;
+use crate::types::gateway::CompletionModelUsage;
+use crate::types::project_settings::ProjectSettings;
+use async_trait::async_trait;
+
+#[derive(Clone, Debug)]
+pub struct CompletionsRunId(String);
+
+impl CompletionsRunId {
+    pub fn new(value: String) -> Self {
+        Self(value)
+    }
+
+    pub fn value(&self) -> String {
+        self.0.clone()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct CompletionsThreadId(String);
+
+impl CompletionsThreadId {
+    pub fn new(value: String) -> Self {
+        Self(value)
+    }
+
+    pub fn value(&self) -> String {
+        self.0.clone()
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MessageThread {
@@ -308,6 +338,155 @@ impl From<MessageThread> for MessageThreadWithTitle {
             request_model_name: thread.model_name,
         }
     }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct MessageWithMetrics {
+    #[serde(flatten)]
+    pub message: Message,
+    pub created_at: String,
+    pub id: String,
+    #[serde(flatten)]
+    pub metrics: MessageMetrics,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct MessageWithAllMetrics {
+    #[serde(flatten)]
+    pub message: Message,
+    pub created_at: String,
+    pub id: String,
+    pub metrics: Vec<MessageMetrics>,
+}
+
+#[derive(Serialize, Debug, Clone)]
+pub struct MessageMetrics {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ttft: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub usage: Option<CompletionModelUsage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trace_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub span_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_time_us: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cost: Option<f64>,
+}
+
+impl<'de> serde::Deserialize<'de> for MessageMetrics {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        struct Helper {
+            #[serde(default)]
+            ttft: Option<u64>,
+            #[serde(default)]
+            usage: Option<serde_json::Value>,
+            #[serde(default)]
+            duration: Option<u64>,
+            #[serde(default)]
+            run_id: Option<String>,
+            #[serde(default)]
+            trace_id: Option<String>,
+            #[serde(default)]
+            span_id: Option<String>,
+            #[serde(default)]
+            start_time_us: Option<u64>,
+            #[serde(default)]
+            cost: Option<f64>,
+        }
+
+        let helper = Helper::deserialize(deserializer)?;
+
+        // Handle `usage` being either a JSON object or a JSON string containing JSON
+        let usage: Option<CompletionModelUsage> = match helper.usage {
+            Some(serde_json::Value::String(s)) if s.is_empty() => None,
+            Some(serde_json::Value::String(s)) => {
+                // Example: "{\"input_tokens\": 28, ...}"
+                serde_json::from_str::<CompletionModelUsage>(&s)
+                    .map(Some)
+                    .map_err(serde::de::Error::custom)?
+            }
+            Some(other) => serde_json::from_value::<CompletionModelUsage>(other)
+                .map(Some)
+                .map_err(serde::de::Error::custom)?,
+            None => None,
+        };
+
+        Ok(MessageMetrics {
+            ttft: helper.ttft,
+            usage,
+            duration: helper.duration,
+            run_id: helper.run_id,
+            trace_id: helper.trace_id,
+            span_id: helper.span_id,
+            start_time_us: helper.start_time_us,
+            cost: helper.cost,
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct InsertMessageResult {
+    pub message_id: String,
+    pub thread_id: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PageOptions {
+    pub order_by: Vec<(String, PageOrderType)>,
+    pub limit: Option<usize>,
+    pub offset: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PageOrderType {
+    Asc,
+    Desc,
+}
+
+#[async_trait]
+pub trait ThreadEntity: Send + Sync {
+    fn get_tenant_name(&self) -> String;
+
+    async fn get_thread_by_id(&self, thread_id: String) -> Result<MessageThread, DatabaseError>;
+
+    async fn create_thread(&self, thread: MessageThread) -> Result<(), DatabaseError>;
+
+    async fn get_messages_by_thread_id(
+        &self,
+        thread_id: String,
+        page_options: PageOptions,
+    ) -> Result<Vec<MessageWithId>, DatabaseError>;
+
+    async fn get_messages_with_metrics_by_thread_id(
+        &self,
+        thread_id: String,
+        page_options: PageOptions,
+    ) -> Result<Vec<MessageWithMetrics>, DatabaseError>;
+
+    async fn insert_messages_bulk(
+        &self,
+        messages: Vec<Message>,
+        project_id: String,
+        project_settings: Option<ProjectSettings>,
+    ) -> Result<Vec<InsertMessageResult>, DatabaseError>;
+
+    async fn insert_message(
+        &self,
+        message: Message,
+        project_id: String,
+        project_settings: Option<ProjectSettings>,
+        message_id: Option<String>,
+    ) -> Result<Option<InsertMessageResult>, DatabaseError>;
 }
 
 #[cfg(test)]

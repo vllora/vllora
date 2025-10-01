@@ -1,12 +1,11 @@
 use actix_web::body::EitherBody;
 use actix_web::dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform};
 use actix_web::{web, Error, HttpMessage, HttpResponse};
-use langdb_metadata::pool::DbPool;
-use langdb_metadata::services::project::{ProjectService, ProjectServiceImpl};
+use langdb_core::metadata::pool::DbPool;
+use langdb_core::metadata::services::project::{ProjectService, ProjectServiceImpl};
 use std::future::{ready, Future, Ready};
 use std::pin::Pin;
 use std::rc::Rc;
-use std::sync::Arc;
 use tracing::error;
 use uuid::Uuid;
 
@@ -67,7 +66,7 @@ where
         let srv = self.service.clone();
 
         Box::pin(async move {
-            let database_pool: Option<&web::Data<Arc<DbPool>>> = req.app_data();
+            let database_pool: Option<&web::Data<DbPool>> = req.app_data();
 
             let Some(database_pool) = database_pool else {
                 error!("Database pool is not found");

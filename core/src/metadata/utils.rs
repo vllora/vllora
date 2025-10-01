@@ -1,5 +1,5 @@
-use crate::pool::DbPool;
-use crate::DB;
+use crate::metadata::pool::DbPool;
+use crate::metadata::DB;
 use ::tracing::info;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use std::error::Error;

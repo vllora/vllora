@@ -1,10 +1,9 @@
 use actix_web::{web, HttpRequest, HttpResponse, Result};
+use langdb_core::metadata::models::project::NewProjectDTO;
+use langdb_core::metadata::pool::DbPool;
+use langdb_core::metadata::services::project::{ProjectService, ProjectServiceImpl};
 use langdb_core::types::metadata::project::Project;
-use langdb_metadata::models::project::NewProjectDTO;
-use langdb_metadata::pool::DbPool;
-use langdb_metadata::services::project::{ProjectService, ProjectServiceImpl};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use uuid::Uuid;
 
 #[derive(Deserialize)]
@@ -27,10 +26,7 @@ pub struct GetProjectResponse {
     pub project: Project,
 }
 
-pub async fn list_projects(
-    _req: HttpRequest,
-    db_pool: web::Data<Arc<DbPool>>,
-) -> Result<HttpResponse> {
+pub async fn list_projects(_req: HttpRequest, db_pool: web::Data<DbPool>) -> Result<HttpResponse> {
     let project_service = ProjectServiceImpl::new(db_pool.get_ref().clone());
 
     // Use a dummy owner_id for now (you might want to get this from auth context)
@@ -50,7 +46,7 @@ pub async fn list_projects(
 
 pub async fn create_project(
     req: web::Json<CreateProjectRequest>,
-    db_pool: web::Data<Arc<DbPool>>,
+    db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
     let project_service = ProjectServiceImpl::new(db_pool.get_ref().clone());
 
@@ -79,7 +75,7 @@ pub async fn create_project(
 
 pub async fn get_project(
     path: web::Path<String>,
-    db_pool: web::Data<Arc<DbPool>>,
+    db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
     let project_id = match path.parse::<Uuid>() {
         Ok(id) => id,
@@ -113,7 +109,7 @@ pub async fn get_project(
 
 pub async fn delete_project(
     path: web::Path<String>,
-    db_pool: web::Data<Arc<DbPool>>,
+    db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
     let project_id = match path.parse::<Uuid>() {
         Ok(id) => id,
@@ -150,7 +146,7 @@ pub async fn delete_project(
 pub async fn update_project(
     path: web::Path<String>,
     req: web::Json<UpdateProjectRequest>,
-    db_pool: web::Data<Arc<DbPool>>,
+    db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
     let project_id = match path.parse::<Uuid>() {
         Ok(id) => id,
@@ -168,7 +164,7 @@ pub async fn update_project(
     let owner_id = Uuid::nil();
 
     // Convert UpdateProjectRequest to UpdateProjectDTO
-    let update_data = langdb_metadata::models::project::UpdateProjectDTO {
+    let update_data = langdb_core::metadata::models::project::UpdateProjectDTO {
         name: req.name.clone(),
         description: req.description.clone(),
         settings: req.settings.clone(),
@@ -190,7 +186,7 @@ pub async fn update_project(
 
 pub async fn set_default_project(
     path: web::Path<String>,
-    db_pool: web::Data<Arc<DbPool>>,
+    db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
     let project_id = match path.parse::<Uuid>() {
         Ok(id) => id,

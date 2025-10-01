@@ -13,4 +13,7 @@ pub enum DatabaseError {
 
     #[error("Unique violation: {0}")]
     UniqueViolation(String),
+
+    #[error("Invalid argument: {0}")]
+    InvalidArgument(String),
 }
