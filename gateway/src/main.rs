@@ -148,6 +148,26 @@ async fn main() -> Result<(), CliError> {
             Ok(())
         }
         cli::Commands::Serve(serve_args) => {
+            // Check if models table is empty and sync if needed
+            {
+                use langdb_metadata::services::model::ModelService;
+                let model_service = ModelServiceImpl::new(db_pool.clone());
+                let models = model_service.list(None)?;
+                
+                if models.is_empty() {
+                    println!("Models table is empty. Syncing models from API...");
+                    match run::models::fetch_and_store_models(db_pool.clone()).await {
+                        Ok(synced_models) => {
+                            println!("✓ Successfully synced {} models to database", synced_models.len());
+                        }
+                        Err(e) => {
+                            eprintln!("⚠ Warning: Failed to sync models: {}", e);
+                            eprintln!("  Continuing with empty models table. You can manually sync with: langdb sync");
+                        }
+                    }
+                }
+            }
+
             if serve_args.interactive {
                 let storage = Arc::new(Mutex::new(InMemoryStorage::new()));
                 let storage_clone = storage.clone();
