@@ -48,6 +48,7 @@ type LocalBoxFuture<T> = Pin<Box<dyn Future<Output = T> + 'static>>;
 impl<S, B> Service<ServiceRequest> for ProjectMiddlewareService<S>
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
+    S::Future: 'static,
     B: 'static,
 {
     type Response = ServiceResponse<EitherBody<B>>;
