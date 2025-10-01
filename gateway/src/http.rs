@@ -219,12 +219,9 @@ impl ApiServer {
             as Box<dyn GuardrailsEvaluator>;
 
         // Load models from database and create AvailableModels
-        use langdb_metadata::services::model::ModelService;
         let db_models = model_service.list(None).unwrap_or_default();
-        let models: Vec<langdb_core::models::ModelMetadata> = db_models
-            .into_iter()
-            .map(|m| m.into())
-            .collect();
+        let models: Vec<langdb_core::models::ModelMetadata> =
+            db_models.into_iter().map(|m| m.into()).collect();
         let available_models = langdb_core::handler::AvailableModels(models);
 
         // Add model_service and available_models to app_data
