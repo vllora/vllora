@@ -62,6 +62,7 @@ pub struct DbModel {
     pub knowledge_cutoff_date: Option<String>,
     pub license: Option<String>,
     pub project_id: Option<String>,
+    pub endpoint: Option<String>,
 }
 
 impl From<DbModel> for ModelMetadata {
@@ -122,7 +123,7 @@ impl From<DbModel> for ModelMetadata {
                 .model_name_in_provider
                 .clone()
                 .unwrap_or_else(|| val.model_name.clone()),
-            endpoint: None,
+            endpoint: val.endpoint,
         };
 
         // Build price
@@ -225,6 +226,7 @@ pub struct DbNewModel {
     pub license: Option<String>,
     pub project_id: Option<String>,
     pub deleted_at: Option<String>,
+    pub endpoint: Option<String>,
 }
 impl From<ModelMetadata> for DbNewModel {
     fn from(metadata: ModelMetadata) -> Self {
@@ -313,6 +315,7 @@ impl From<ModelMetadata> for DbNewModel {
             license: metadata.license,
             project_id: None, // API models are global
             deleted_at: None, // Clear deleted_at if model comes back from API
+            endpoint: metadata.inference_provider.endpoint,
         }
     }
 }

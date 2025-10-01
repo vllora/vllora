@@ -95,10 +95,14 @@ impl ModelService for ModelServiceImpl {
             .optional()?;
 
         if let Some(existing_model) = existing {
-            // Update existing model
+            // Update existing model with current timestamp
+            let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
             diesel::update(crate::schema::models::table)
                 .filter(crate::schema::models::id.eq(existing_model.id))
-                .set(&model)
+                .set((
+                    &model,
+                    crate::schema::models::updated_at.eq(now),
+                ))
                 .execute(&mut conn)?;
         } else {
             // Insert new model

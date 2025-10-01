@@ -36,7 +36,8 @@ Common fields:
 - cached_input_write_token_price (number, nullable)
 - release_date, langdb_release_date, knowledge_cutoff_date (date string, nullable)
 - license (string, nullable)
-- project_id (strubg, uuid, nullable)
+- project_id (string, uuid, nullable)
+- endpoint (string, nullable) - Base URL for dynamic providers using OpenAI spec
 
 Example (truncated):
 ```json

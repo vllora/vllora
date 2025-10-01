@@ -31,6 +31,7 @@ diesel::table! {
         knowledge_cutoff_date -> Nullable<Text>,
         license -> Nullable<Text>,
         project_id -> Nullable<Text>,
+        endpoint -> Nullable<Text>,
     }
 }
 
