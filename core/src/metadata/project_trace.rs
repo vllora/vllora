@@ -60,8 +60,8 @@ impl TraceTenantResolver for ProjectTraceTenantResolver {
 
             let project = self.project_service.get_by_id(project_id, Uuid::new_v4());
             if let Ok(project) = project {
-                cache.save(&project_id.to_string(), project.id.to_string());
-                Some(("default".to_string(), project.id.to_string()))
+                cache.save(&project_id.to_string(), project.slug.clone());
+                Some(("default".to_string(), project.slug.clone()))
             } else {
                 None
             }
