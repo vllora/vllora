@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
-use crate::events::JsonValue;
 use crate::executor::context::ExecutorContext;
 use crate::model::DefaultModelMetadataFactory;
 use crate::routing::interceptor::rate_limiter::InMemoryRateLimiterService;
 use crate::routing::RoutingStrategy;
+use crate::telemetry::events::JsonValue;
 use crate::types::gateway::ChatCompletionRequestWithTools;
 use crate::types::gateway::CompletionModelUsage;
 use crate::types::gateway::Extra;

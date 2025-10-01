@@ -1,4 +1,3 @@
-use crate::events::{JsonValue, RecordResult, SPAN_OPENAI};
 use crate::model::error::ModelError;
 use crate::model::openai::openai_client;
 use crate::model::types::LLMFinishEvent;
@@ -6,6 +5,7 @@ use crate::model::types::ModelEvent;
 use crate::model::types::ModelEventType;
 use crate::model::types::ModelFinishReason;
 use crate::model::CredentialsIdent;
+use crate::telemetry::events::{JsonValue, RecordResult, SPAN_OPENAI};
 use crate::types::credentials::ApiKeyCredentials;
 use crate::types::embed::OpenAiEmbeddingParams;
 use crate::types::gateway::CompletionModelUsage;

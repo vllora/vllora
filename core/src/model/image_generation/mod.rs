@@ -10,8 +10,8 @@ use tracing::info_span;
 use tracing_futures::Instrument;
 use valuable::Valuable;
 
-use crate::events::{JsonValue, RecordResult, SPAN_MODEL_CALL};
 use crate::model::types::ModelEventType;
+use crate::telemetry::events::{JsonValue, RecordResult, SPAN_MODEL_CALL};
 use crate::types::engine::{ImageGenerationEngineParams, ImageGenerationModelDefinition};
 use crate::types::gateway::{CostCalculator, CreateImageRequest, ImageGenerationModelUsage, Usage};
 use crate::types::image::ImagesResponse;

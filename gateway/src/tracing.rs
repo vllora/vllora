@@ -1,4 +1,4 @@
-use langdb_core::events::{self, BaggageSpanProcessor};
+use langdb_core::telemetry::events::{self, BaggageSpanProcessor};
 use opentelemetry::trace::TracerProvider as _;
 use opentelemetry_sdk::trace::SdkTracerProvider;
 use tokio::sync::mpsc::Sender;

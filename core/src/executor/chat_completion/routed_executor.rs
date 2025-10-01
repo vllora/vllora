@@ -32,8 +32,8 @@ use crate::routing::LlmRouter;
 use crate::telemetry::trace_id_uuid;
 use crate::GatewayApiError;
 
-use crate::events::JsonValue;
-use crate::events::SPAN_REQUEST_ROUTING;
+use crate::telemetry::events::JsonValue;
+use crate::telemetry::events::SPAN_REQUEST_ROUTING;
 use tracing::field;
 use valuable::Valuable;
 

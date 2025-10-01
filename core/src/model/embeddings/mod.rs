@@ -7,7 +7,6 @@ use tracing_futures::Instrument;
 use valuable::Valuable;
 
 use crate::{
-    events::{JsonValue, RecordResult, SPAN_MODEL_CALL},
     model::{
         embeddings::{
             bedrock::BedrockEmbeddings, gemini::GeminiEmbeddings, openai::OpenAIEmbeddings,
@@ -16,6 +15,7 @@ use crate::{
         types::{ModelEvent, ModelEventType},
         CredentialsIdent,
     },
+    telemetry::events::{JsonValue, RecordResult, SPAN_MODEL_CALL},
     types::{
         embed::EmbeddingResult,
         engine::{EmbeddingsEngineParams, EmbeddingsModelDefinition},

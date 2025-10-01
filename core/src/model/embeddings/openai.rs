@@ -13,7 +13,6 @@ use valuable::Valuable;
 use crate::{
     create_model_span,
     error::GatewayError,
-    events::{JsonValue, SPAN_OPENAI},
     model::{
         embeddings::EmbeddingsModelInstance,
         error::{AuthorizationError, ModelError},
@@ -21,6 +20,7 @@ use crate::{
         types::{LLMFinishEvent, LLMStartEvent, ModelEvent, ModelEventType, ModelFinishReason},
         CredentialsIdent,
     },
+    telemetry::events::{JsonValue, SPAN_OPENAI},
     types::{
         credentials::ApiKeyCredentials,
         embed::EmbeddingResult,

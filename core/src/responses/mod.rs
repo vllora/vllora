@@ -1,8 +1,8 @@
-use crate::events::SPAN_OPENAI;
 use crate::model::error::ModelError;
 use crate::model::openai::openai_client;
 use crate::model::types::ModelEvent;
 use crate::model::CredentialsIdent;
+use crate::telemetry::events::SPAN_OPENAI;
 use crate::types::credentials::ApiKeyCredentials;
 use crate::GatewayResult;
 use async_openai::config::OpenAIConfig;

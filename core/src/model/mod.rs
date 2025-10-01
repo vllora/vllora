@@ -1,8 +1,8 @@
-use crate::events::{JsonValue, RecordResult, SPAN_MODEL_CALL};
 use crate::executor::context::ExecutorContext;
 use crate::model::bedrock::BedrockModel;
 use crate::model::cached::CachedModel;
 use crate::model::error::ModelError;
+use crate::telemetry::events::{JsonValue, RecordResult, SPAN_MODEL_CALL};
 use crate::types::engine::{CompletionEngineParams, CompletionModelParams};
 use crate::types::engine::{CompletionModelDefinition, ModelTools, ModelType};
 use crate::types::gateway::{

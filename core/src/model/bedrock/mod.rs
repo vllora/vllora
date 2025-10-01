@@ -4,7 +4,6 @@ use super::types::{
 };
 use super::{CredentialsIdent, ModelInstance};
 use crate::error::GatewayError;
-use crate::events::{self, JsonValue, RecordResult, SPAN_BEDROCK};
 use crate::model::error::{BedrockError, ModelFinishError};
 use crate::model::handler::handle_tool_call;
 use crate::model::types::LLMFirstToken;
@@ -13,6 +12,7 @@ use crate::model::{ModelProviderInstance, Tool as LangdbTool};
 use crate::models::{
     InferenceProvider, Limits, ModelCapability, ModelIOFormats, ModelMetadata, ModelType,
 };
+use crate::telemetry::events::{self, JsonValue, RecordResult, SPAN_BEDROCK};
 use crate::types::aws::{get_shared_config, get_user_shared_config};
 use crate::types::credentials::BedrockCredentials;
 use crate::types::engine::{BedrockModelParams, ExecutionOptions, Prompt};

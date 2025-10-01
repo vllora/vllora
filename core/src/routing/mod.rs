@@ -1,6 +1,6 @@
-use crate::events::JsonValue;
 use crate::model::ModelMetadataFactory;
 use crate::routing::metrics::MetricsRepository;
+use crate::telemetry::events::JsonValue;
 // use crate::routing::strategy::script::ScriptError;
 // use crate::routing::strategy::script::ScriptStrategy;
 use crate::routing::strategy::conditional::ConditionalRouter;

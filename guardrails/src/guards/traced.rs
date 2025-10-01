@@ -1,5 +1,5 @@
-use langdb_core::events::JsonValue;
-use langdb_core::events::SPAN_GUARD_EVAULATION;
+use langdb_core::telemetry::events::JsonValue;
+use langdb_core::telemetry::events::SPAN_GUARD_EVAULATION;
 use langdb_core::types::gateway::ChatCompletionMessage;
 use langdb_core::types::guardrails::evaluator::Evaluator;
 use langdb_core::types::guardrails::Guard;

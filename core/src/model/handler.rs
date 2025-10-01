@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     error::GatewayError,
-    events::{JsonValue, RecordResult},
+    telemetry::events::{JsonValue, RecordResult},
     GatewayResult,
 };
 

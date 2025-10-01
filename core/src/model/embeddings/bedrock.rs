@@ -1,10 +1,10 @@
 use super::CredentialsIdent;
-use crate::events::{JsonValue, SPAN_BEDROCK};
 use crate::model::bedrock::bedrock_client;
 use crate::model::error::ModelError;
 use crate::model::types::{
     LLMFinishEvent, LLMStartEvent, ModelEvent, ModelEventType, ModelFinishReason,
 };
+use crate::telemetry::events::{JsonValue, SPAN_BEDROCK};
 use crate::types::credentials::BedrockCredentials;
 use crate::types::embed::EmbeddingResult;
 use crate::types::gateway::{CompletionModelUsage, CreateEmbeddingRequest, Input};

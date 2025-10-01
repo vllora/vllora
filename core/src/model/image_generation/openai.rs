@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use crate::events::SPAN_OPENAI;
 use crate::model::error::ModelError;
+use crate::telemetry::events::SPAN_OPENAI;
 use async_openai::config::Config;
 use async_openai::{config::OpenAIConfig, Client};
 
