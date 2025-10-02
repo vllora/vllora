@@ -1,5 +1,5 @@
 use crate::metadata::error::DatabaseError;
-use crate::metadata::models::trace::DbTrace;
+use crate::metadata::models::trace::{DbTrace, DbNewTrace};
 use crate::metadata::pool::DbPool;
 use crate::metadata::schema::traces;
 use diesel::prelude::*;
@@ -196,5 +196,25 @@ impl TraceService for TraceServiceImpl {
         }
 
         Ok(map)
+    }
+}
+
+impl TraceServiceImpl {
+    pub fn insert_many(&self, trace_list: Vec<DbNewTrace>) -> Result<usize, DatabaseError> {
+        if trace_list.is_empty() {
+            return Ok(0);
+        }
+
+        let mut conn = self.db_pool.get()?;
+        let mut inserted_count = 0;
+
+        for trace in &trace_list {
+            diesel::insert_into(traces::table)
+                .values(trace)
+                .execute(&mut conn)?;
+            inserted_count += 1;
+        }
+
+        Ok(inserted_count)
     }
 }

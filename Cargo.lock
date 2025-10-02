@@ -250,7 +250,6 @@ dependencies = [
  "chrono",
  "clap",
  "crossterm 0.29.0",
- "diesel",
  "directories",
  "dotenv",
  "futures",

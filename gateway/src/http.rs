@@ -9,7 +9,7 @@ use crate::middleware::run_id::RunId;
 use crate::middleware::thread_id::ThreadId;
 use crate::middleware::trace_logger::TraceLogger;
 use crate::middleware::tracing_context::TracingContext;
-use crate::otel::SqliteTraceWriterTransport;
+use langdb_core::telemetry::database::SqliteTraceWriterTransport;
 use actix_cors::Cors;
 use actix_web::Scope as ActixScope;
 use actix_web::{
