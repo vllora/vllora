@@ -124,6 +124,7 @@ mod tests {
     fn test_thread() -> DbThread {
         DbThread {
             id: String::from("00000000-0000-0000-0000-000000000000"),
+            title: Some(String::from("Test thread")),
             user_id: Some(String::from("user123")),
             model_name: Some(String::from("gpt-4")),
             created_at: String::from("1970-01-01T00:00:00Z"),

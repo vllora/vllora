@@ -36,7 +36,7 @@ pub struct DbModel {
     pub id: Option<String>,
     pub model_name: String,
     pub description: Option<String>,
-    pub provider_info_id: String,
+    pub provider_name: String,
     pub model_type: String,
     pub input_token_price: Option<f32>,
     pub output_token_price: Option<f32>,
@@ -118,7 +118,7 @@ impl From<DbModel> for ModelMetadata {
         // Determine inference provider from provider_info_id
         // For now, we'll use the owner_name as provider
         let inference_provider = InferenceProvider {
-            provider: InferenceModelProvider::from(val.owner_name.clone()),
+            provider: InferenceModelProvider::from(val.provider_name.clone()),
             model_name: val
                 .model_name_in_provider
                 .clone()
@@ -137,7 +137,7 @@ impl From<DbModel> for ModelMetadata {
 
         ModelMetadata {
             model: val.model_name.clone(),
-            model_provider: val.owner_name.clone(),
+            model_provider: val.provider_name.clone(),
             inference_provider,
             price,
             input_formats,
@@ -202,7 +202,7 @@ pub struct DbNewModel {
     pub id: Option<String>,
     pub model_name: String,
     pub description: Option<String>,
-    pub provider_info_id: String,
+    pub provider_name: String,
     pub model_type: String,
     pub input_token_price: Option<f32>,
     pub output_token_price: Option<f32>,
@@ -291,7 +291,7 @@ impl From<ModelMetadata> for DbNewModel {
             id: metadata.virtual_model_id,
             model_name: metadata.model.clone(),
             description: Some(metadata.description),
-            provider_info_id: metadata.inference_provider.provider.to_string(),
+            provider_name: metadata.inference_provider.provider.to_string(),
             model_type: metadata.r#type.to_string(),
             input_token_price,
             output_token_price,

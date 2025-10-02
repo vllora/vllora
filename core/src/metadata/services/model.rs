@@ -90,7 +90,7 @@ impl ModelService for ModelServiceImpl {
         // Try to find existing model by model_name and provider_info_id
         let existing = DbModel::not_deleted()
             .filter(crate::metadata::schema::models::model_name.eq(&model.model_name))
-            .filter(crate::metadata::schema::models::provider_info_id.eq(&model.provider_info_id))
+            .filter(crate::metadata::schema::models::provider_name.eq(&model.provider_name))
             .first::<DbModel>(&mut conn)
             .optional()?;
 

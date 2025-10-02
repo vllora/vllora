@@ -23,7 +23,7 @@ diesel::table! {
         id -> Nullable<Text>,
         model_name -> Text,
         description -> Nullable<Text>,
-        provider_info_id -> Text,
+        provider_name -> Text,
         model_type -> Text,
         input_token_price -> Nullable<Float>,
         output_token_price -> Nullable<Float>,

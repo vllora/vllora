@@ -1,5 +1,4 @@
-use crate::pool::DbPool;
-use std::sync::Arc;
+use crate::metadata::pool::DbPool;
 
 /// Creates a fresh test database by dropping and recreating it
 pub fn setup_test_database() -> DbPool {
@@ -7,20 +6,20 @@ pub fn setup_test_database() -> DbPool {
     let test_db_path = format!(":memory:");
 
     // Create new database pool
-    let db_pool = crate::pool::establish_connection(test_db_path, 5);
+    let db_pool = crate::metadata::pool::establish_connection(test_db_path, 5);
 
     // Initialize the database schema
-    crate::utils::init_db(&db_pool);
+    crate::metadata::utils::init_db(&db_pool);
 
     db_pool
 }
 
 /// Seeds the test database with sample data
 pub fn seed_test_database(db_pool: &DbPool) {
-    use crate::models::project::NewProjectDTO;
-    use crate::services::project::{ProjectService, ProjectServiceImpl};
+    use crate::metadata::models::project::NewProjectDTO;
+    use crate::metadata::services::project::{ProjectService, ProjectServiceImpl};
 
-    let project_service = ProjectServiceImpl::new(Arc::new(db_pool.clone()));
+    let project_service = ProjectServiceImpl::new(db_pool.clone());
     let dummy_owner_id = uuid::Uuid::nil();
 
     // Create a default test project
@@ -28,9 +27,7 @@ pub fn seed_test_database(db_pool: &DbPool) {
         name: "Test Project".to_string(),
         description: Some("A test project for unit testing".to_string()),
         settings: Some(serde_json::json!({
-            "feature_flags": {
-                "chat_tracing": true
-            }
+            "enabled_chat_tracing": true
         })),
         private_model_prices: None,
         usage_limit: None,

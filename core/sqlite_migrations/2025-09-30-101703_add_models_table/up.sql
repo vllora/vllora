@@ -3,7 +3,7 @@ CREATE TABLE models (
     id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
     model_name TEXT NOT NULL,
     description TEXT,
-    provider_info_id TEXT NOT NULL,
+    provider_name TEXT NOT NULL,
     model_type TEXT NOT NULL,
     input_token_price REAL,
     output_token_price REAL,
@@ -33,7 +33,7 @@ CREATE TABLE models (
 
 -- Create indexes for common queries
 CREATE INDEX idx_models_model_name ON models(model_name);
-CREATE INDEX idx_models_provider_info_id ON models(provider_info_id);
+CREATE INDEX idx_models_provider_info_id ON models(provider_name);
 CREATE INDEX idx_models_model_type ON models(model_type);
 CREATE INDEX idx_models_owner_name ON models(owner_name);
 CREATE INDEX idx_models_deleted_at ON models(deleted_at);

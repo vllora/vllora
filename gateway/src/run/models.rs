@@ -47,10 +47,7 @@ pub async fn fetch_and_store_models(
     let models_to_delete: Vec<String> = db_models
         .iter()
         .filter(|db_model| {
-            let identifier = (
-                db_model.model_name.clone(),
-                db_model.provider_info_id.clone(),
-            );
+            let identifier = (db_model.model_name.clone(), db_model.provider_name.clone());
             !synced_model_identifiers.contains(&identifier)
         })
         .filter_map(|db_model| db_model.id.clone())

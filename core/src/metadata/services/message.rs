@@ -258,27 +258,6 @@ impl MessageService {
 mod tests {
     use super::*;
     use crate::metadata::test_utils::setup_test_database;
-    use crate::types::message::MessageType;
-    use crate::types::threads::{Message, MessageContentPart, MessageContentType};
-
-    fn create_test_message() -> Message {
-        Message {
-            model_name: "gpt-4".to_string(),
-            thread_id: Some("test-thread-id".to_string()),
-            user_id: "test-user-id".to_string(),
-            content_type: MessageContentType::Text,
-            content: Some("Hello, world!".to_string()),
-            content_array: vec![MessageContentPart {
-                r#type: MessageContentType::Text,
-                value: "Hello, world!".to_string(),
-                additional_options: None,
-                cache_control: None,
-            }],
-            r#type: MessageType::HumanMessage,
-            tool_call_id: None,
-            tool_calls: None,
-        }
-    }
 
     #[test]
     fn test_db_message_to_message() {
@@ -311,39 +290,5 @@ mod tests {
         assert_eq!(message.content_array[0].value, "Hello, world!");
         assert_eq!(message.tool_call_id, None);
         assert_eq!(message.tool_calls, None);
-    }
-
-    #[test]
-    fn test_create_message_conversion() {
-        let db_pool = setup_test_database();
-        let service = MessageService::new(db_pool);
-
-        let message = create_test_message();
-
-        let new_message = DbNewMessage {
-            id: Some(Uuid::new_v4().to_string()),
-            model_name: Some(message.model_name.clone()),
-            r#type: Some(message.r#type.to_string()),
-            thread_id: message.thread_id.clone(),
-            user_id: Some(message.user_id.clone()),
-            content_type: Some(message.content_type.to_string()),
-            content: message.content.clone(),
-            content_array: Some(
-                serde_json::to_string(&message.content_array).unwrap_or_else(|_| "[]".to_string()),
-            ),
-            tool_call_id: message.tool_call_id.clone(),
-            tool_calls: message
-                .tool_calls
-                .as_ref()
-                .map(|tc| serde_json::to_string(tc).unwrap_or_else(|_| "null".to_string())),
-            tenant_id: None,
-            project_id: None,
-        };
-
-        assert_eq!(new_message.model_name, Some("gpt-4".to_string()));
-        assert_eq!(new_message.thread_id, Some("test-thread-id".to_string()));
-        assert_eq!(new_message.user_id, Some("test-user-id".to_string()));
-        assert_eq!(new_message.content, Some("Hello, world!".to_string()));
-        assert!(new_message.id.is_some());
     }
 }

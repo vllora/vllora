@@ -287,7 +287,7 @@ impl ProjectService for ProjectServiceImpl {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
+    use crate::types::project_settings::ProjectSettings;
 
     #[test]
     fn test_slugify_function() {
@@ -314,7 +314,7 @@ mod tests {
 
     #[test]
     fn test_create_project() {
-        let db_pool = Arc::new(crate::test_utils::setup_test_database());
+        let db_pool = crate::metadata::test_utils::setup_test_database();
         let service = ProjectServiceImpl::new(db_pool);
         let owner_id = Uuid::nil();
 
@@ -340,12 +340,12 @@ mod tests {
         assert!(project.id != Uuid::nil());
         assert!(!project.is_default); // Should be false since we set is_default to Some(0)
 
-        crate::test_utils::cleanup_test_database();
+        crate::metadata::test_utils::cleanup_test_database();
     }
 
     #[test]
     fn test_create_project_minimal() {
-        let db_pool = Arc::new(crate::test_utils::setup_test_database());
+        let db_pool = crate::metadata::test_utils::setup_test_database();
         let service = ProjectServiceImpl::new(db_pool);
         let owner_id = Uuid::nil();
 
@@ -367,12 +367,12 @@ mod tests {
         assert!(project.settings.is_some());
         assert_eq!(project.slug, "minimal-project");
 
-        crate::test_utils::cleanup_test_database();
+        crate::metadata::test_utils::cleanup_test_database();
     }
 
     #[test]
     fn test_get_by_id() {
-        let db_pool = Arc::new(crate::test_utils::setup_test_database());
+        let db_pool = crate::metadata::test_utils::setup_test_database();
         let service = ProjectServiceImpl::new(db_pool);
         let owner_id = Uuid::nil();
 
@@ -400,12 +400,12 @@ mod tests {
             Some("Project for get test".to_string())
         );
 
-        crate::test_utils::cleanup_test_database();
+        crate::metadata::test_utils::cleanup_test_database();
     }
 
     #[test]
     fn test_get_by_id_not_found() {
-        let db_pool = Arc::new(crate::test_utils::setup_test_database());
+        let db_pool = crate::metadata::test_utils::setup_test_database();
         let service = ProjectServiceImpl::new(db_pool);
         let owner_id = Uuid::nil();
 
@@ -422,12 +422,12 @@ mod tests {
             _ => panic!("Expected QueryError for not found case"),
         }
 
-        crate::test_utils::cleanup_test_database();
+        crate::metadata::test_utils::cleanup_test_database();
     }
 
     #[test]
     fn test_list_projects_empty() {
-        let db_pool = Arc::new(crate::test_utils::setup_test_database());
+        let db_pool = crate::metadata::test_utils::setup_test_database();
         let service = ProjectServiceImpl::new(db_pool);
         let owner_id = Uuid::nil();
 
@@ -437,12 +437,12 @@ mod tests {
         let projects = result.unwrap();
         assert_eq!(projects.len(), 0);
 
-        crate::test_utils::cleanup_test_database();
+        crate::metadata::test_utils::cleanup_test_database();
     }
 
     #[test]
     fn test_list_projects_with_data() {
-        let db_pool = Arc::new(crate::test_utils::setup_test_database());
+        let db_pool = crate::metadata::test_utils::setup_test_database();
         let service = ProjectServiceImpl::new(db_pool);
         let owner_id = Uuid::nil();
 
@@ -477,12 +477,12 @@ mod tests {
         assert!(project_names.contains(&&"Project 1".to_string()));
         assert!(project_names.contains(&&"Project 2".to_string()));
 
-        crate::test_utils::cleanup_test_database();
+        crate::metadata::test_utils::cleanup_test_database();
     }
 
     #[test]
     fn test_count_projects() {
-        let db_pool = Arc::new(crate::test_utils::setup_test_database());
+        let db_pool = crate::metadata::test_utils::setup_test_database();
         let service = ProjectServiceImpl::new(db_pool);
         let owner_id = Uuid::nil();
 
@@ -520,12 +520,12 @@ mod tests {
         let count = service.count(owner_id).unwrap();
         assert_eq!(count, 2);
 
-        crate::test_utils::cleanup_test_database();
+        crate::metadata::test_utils::cleanup_test_database();
     }
 
     #[test]
     fn test_project_slug_generation() {
-        let db_pool = Arc::new(crate::test_utils::setup_test_database());
+        let db_pool = crate::metadata::test_utils::setup_test_database();
         let service = ProjectServiceImpl::new(db_pool);
         let owner_id = Uuid::nil();
 
@@ -558,28 +558,23 @@ mod tests {
             );
         }
 
-        crate::test_utils::cleanup_test_database();
+        crate::metadata::test_utils::cleanup_test_database();
     }
 
     #[test]
     fn test_project_settings_json() {
-        let db_pool = Arc::new(crate::test_utils::setup_test_database());
+        let db_pool = crate::metadata::test_utils::setup_test_database();
         let service = ProjectServiceImpl::new(db_pool);
         let owner_id = Uuid::nil();
 
-        let settings = serde_json::json!({
-            "feature_flags": {
-                "chat_tracing": true,
-                "debug_mode": false
-            },
-            "max_requests": 1000,
-            "allowed_origins": ["localhost", "example.com"]
-        });
+        let settings = ProjectSettings {
+            enabled_chat_tracing: true,
+        };
 
         let new_project = NewProjectDTO {
             name: "Settings Test Project".to_string(),
             description: None,
-            settings: Some(settings.clone()),
+            settings: Some(serde_json::to_value(&settings).unwrap()),
             private_model_prices: None,
             usage_limit: None,
         };
@@ -587,12 +582,12 @@ mod tests {
         let project = service.create(new_project, owner_id).unwrap();
         assert_eq!(project.settings, Some(settings));
 
-        crate::test_utils::cleanup_test_database();
+        crate::metadata::test_utils::cleanup_test_database();
     }
 
     #[test]
     fn test_project_uuid_generation() {
-        let db_pool = Arc::new(crate::test_utils::setup_test_database());
+        let db_pool = crate::metadata::test_utils::setup_test_database();
         let service = ProjectServiceImpl::new(db_pool);
         let owner_id = Uuid::nil();
 
@@ -620,12 +615,12 @@ mod tests {
         assert_ne!(project1.id, Uuid::nil());
         assert_ne!(project2.id, Uuid::nil());
 
-        crate::test_utils::cleanup_test_database();
+        crate::metadata::test_utils::cleanup_test_database();
     }
 
     #[test]
     fn test_delete_project() {
-        let db_pool = Arc::new(crate::test_utils::setup_test_database());
+        let db_pool = crate::metadata::test_utils::setup_test_database();
         let service = ProjectServiceImpl::new(db_pool);
         let owner_id = Uuid::nil();
 
@@ -657,12 +652,12 @@ mod tests {
         let projects = service.list(owner_id).unwrap();
         assert_eq!(projects.len(), 0);
 
-        crate::test_utils::cleanup_test_database();
+        crate::metadata::test_utils::cleanup_test_database();
     }
 
     #[test]
     fn test_delete_project_not_found() {
-        let db_pool = Arc::new(crate::test_utils::setup_test_database());
+        let db_pool = crate::metadata::test_utils::setup_test_database();
         let service = ProjectServiceImpl::new(db_pool);
         let owner_id = Uuid::nil();
 
@@ -679,12 +674,12 @@ mod tests {
             _ => panic!("Expected QueryError with NotFound for non-existent project"),
         }
 
-        crate::test_utils::cleanup_test_database();
+        crate::metadata::test_utils::cleanup_test_database();
     }
 
     #[test]
     fn test_delete_already_archived_project() {
-        let db_pool = Arc::new(crate::test_utils::setup_test_database());
+        let db_pool = crate::metadata::test_utils::setup_test_database();
         let service = ProjectServiceImpl::new(db_pool);
         let owner_id = Uuid::nil();
 
@@ -716,12 +711,12 @@ mod tests {
             _ => panic!("Expected QueryError with NotFound for already archived project"),
         }
 
-        crate::test_utils::cleanup_test_database();
+        crate::metadata::test_utils::cleanup_test_database();
     }
 
     #[test]
     fn test_update_project() {
-        let db_pool = Arc::new(crate::test_utils::setup_test_database());
+        let db_pool = crate::metadata::test_utils::setup_test_database();
         let service = ProjectServiceImpl::new(db_pool);
         let owner_id = Uuid::nil();
 
@@ -755,17 +750,19 @@ mod tests {
         );
         assert_eq!(
             updated_project.settings,
-            Some(serde_json::json!({"feature": "updated"}))
+            Some(ProjectSettings {
+                enabled_chat_tracing: true,
+            })
         );
         assert_eq!(updated_project.is_default, true);
         assert_eq!(updated_project.slug, "updated-project"); // Should be updated based on new name
 
-        crate::test_utils::cleanup_test_database();
+        crate::metadata::test_utils::cleanup_test_database();
     }
 
     #[test]
     fn test_update_project_partial() {
-        let db_pool = Arc::new(crate::test_utils::setup_test_database());
+        let db_pool = crate::metadata::test_utils::setup_test_database();
         let service = ProjectServiceImpl::new(db_pool);
         let owner_id = Uuid::nil();
 
@@ -799,17 +796,19 @@ mod tests {
         );
         assert_eq!(
             updated_project.settings,
-            Some(serde_json::json!({"feature": "original"}))
+            Some(ProjectSettings {
+                enabled_chat_tracing: true,
+            })
         ); // Should remain unchanged
         assert_eq!(updated_project.is_default, false); // Should remain unchanged
         assert_eq!(updated_project.slug, "test-project"); // Should remain unchanged
 
-        crate::test_utils::cleanup_test_database();
+        crate::metadata::test_utils::cleanup_test_database();
     }
 
     #[test]
     fn test_update_project_not_found() {
-        let db_pool = Arc::new(crate::test_utils::setup_test_database());
+        let db_pool = crate::metadata::test_utils::setup_test_database();
         let service = ProjectServiceImpl::new(db_pool);
         let owner_id = Uuid::nil();
 
@@ -833,12 +832,12 @@ mod tests {
             _ => panic!("Expected QueryError with NotFound for non-existent project"),
         }
 
-        crate::test_utils::cleanup_test_database();
+        crate::metadata::test_utils::cleanup_test_database();
     }
 
     #[test]
     fn test_update_project_empty_update() {
-        let db_pool = Arc::new(crate::test_utils::setup_test_database());
+        let db_pool = crate::metadata::test_utils::setup_test_database();
         let service = ProjectServiceImpl::new(db_pool);
         let owner_id = Uuid::nil();
 
@@ -872,12 +871,12 @@ mod tests {
         );
         assert_eq!(updated_project.slug, "test-project");
 
-        crate::test_utils::cleanup_test_database();
+        crate::metadata::test_utils::cleanup_test_database();
     }
 
     #[test]
     fn test_update_project_name_slug_generation() {
-        let db_pool = Arc::new(crate::test_utils::setup_test_database());
+        let db_pool = crate::metadata::test_utils::setup_test_database();
         let service = ProjectServiceImpl::new(db_pool);
         let owner_id = Uuid::nil();
 
@@ -908,12 +907,12 @@ mod tests {
         assert_eq!(updated_project.name, "New Project Name!");
         assert_eq!(updated_project.slug, "new-project-name");
 
-        crate::test_utils::cleanup_test_database();
+        crate::metadata::test_utils::cleanup_test_database();
     }
 
     #[test]
     fn test_set_default_project() {
-        let db_pool = Arc::new(crate::test_utils::setup_test_database());
+        let db_pool = crate::metadata::test_utils::setup_test_database();
         let service = ProjectServiceImpl::new(db_pool);
         let owner_id = Uuid::nil();
 
@@ -957,12 +956,12 @@ mod tests {
         let retrieved_project1 = service.get_by_id(created_project1.id, owner_id).unwrap();
         assert!(!retrieved_project1.is_default);
 
-        crate::test_utils::cleanup_test_database();
+        crate::metadata::test_utils::cleanup_test_database();
     }
 
     #[test]
     fn test_update_project_set_default() {
-        let db_pool = Arc::new(crate::test_utils::setup_test_database());
+        let db_pool = crate::metadata::test_utils::setup_test_database();
         let service = ProjectServiceImpl::new(db_pool);
         let owner_id = Uuid::nil();
 
@@ -1024,12 +1023,12 @@ mod tests {
         let retrieved_project1 = service.get_by_id(created_project1.id, owner_id).unwrap();
         assert!(!retrieved_project1.is_default);
 
-        crate::test_utils::cleanup_test_database();
+        crate::metadata::test_utils::cleanup_test_database();
     }
 
     #[test]
     fn test_set_default_project_not_found() {
-        let db_pool = Arc::new(crate::test_utils::setup_test_database());
+        let db_pool = crate::metadata::test_utils::setup_test_database();
         let service = ProjectServiceImpl::new(db_pool);
         let owner_id = Uuid::nil();
 
@@ -1046,6 +1045,6 @@ mod tests {
             _ => panic!("Expected QueryError with NotFound for non-existent project"),
         }
 
-        crate::test_utils::cleanup_test_database();
+        crate::metadata::test_utils::cleanup_test_database();
     }
 }

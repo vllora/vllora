@@ -273,7 +273,9 @@ mod tests {
     fn create_mock_db_pool() -> DbPool {
         // Create an in-memory database for testing
         let test_db_path = ":memory:";
-        crate::metadata::pool::establish_connection(test_db_path.to_string(), 5)
+        let db_pool = crate::metadata::pool::establish_connection(test_db_path.to_string(), 5);
+        crate::metadata::utils::init_db(&db_pool);
+        db_pool
     }
 
     #[test]
@@ -313,9 +315,6 @@ mod tests {
 
     #[test]
     fn test_create_thread() {
-        let db_pool = create_mock_db_pool();
-        let service = ThreadService::new(db_pool);
-
         let thread = create_test_thread();
 
         // This would require a real database connection to test
