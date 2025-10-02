@@ -216,7 +216,7 @@ impl ThreadService {
 
         MessageThreadWithTitle {
             id: thread_info.id,
-            title: thread_info.title.unwrap_or("Untitled Thread".to_string()),
+            title: thread_info.title.unwrap_or("Untitled".to_string()),
             created_at: thread_info.created_at.clone(),
             updated_at: thread_info
                 .last_message_at
@@ -364,7 +364,7 @@ mod tests {
         let result = service.thread_with_message_info_to_message_thread_with_title(thread_info);
 
         assert_eq!(result.id, "test-thread");
-        assert_eq!(result.title, "Untitled Thread");
+        assert_eq!(result.title, "Untitled");
         assert_eq!(result.created_at, "2023-01-01T00:00:00Z");
         assert_eq!(result.updated_at, "2023-01-02T00:00:00Z");
         assert_eq!(result.input_models, vec!["gpt-4", "claude-3"]);
