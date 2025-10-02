@@ -74,6 +74,7 @@ pub struct DbNewThread {
     pub id: Option<String>,
     pub user_id: Option<String>,
     pub model_name: Option<String>,
+    pub title: Option<String>,
     pub tenant_id: Option<String>,
     pub project_id: Option<String>,
     pub is_public: Option<i32>,

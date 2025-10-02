@@ -65,6 +65,7 @@ impl ThreadService {
             id: Some(thread.id.clone()),
             user_id: Some(thread.user_id),
             model_name: Some(thread.model_name),
+            title: thread.title,
             tenant_id: None,
             project_id: Some(thread.project_id),
             is_public: Some(if thread.is_public { 1 } else { 0 }),
