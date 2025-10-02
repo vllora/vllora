@@ -130,16 +130,14 @@ impl ThreadService {
         let offset = page_options.offset.unwrap_or(0);
 
         // Use a single efficient raw SQL query with LEFT JOIN and aggregations
-        let sql_query_str = format!(
-            "SELECT t.*,
+        let sql_query_str = "SELECT t.*,
                     max(m.created_at) as last_message_at,
                     group_concat(CASE WHEN m.type = 'human' THEN m.model_name END) as human_model_names
              FROM threads t LEFT JOIN messages m on t.id = m.thread_id
              WHERE t.project_id = ?
              GROUP BY t.id
              ORDER BY last_message_at DESC NULLS LAST, t.created_at DESC
-             LIMIT ? OFFSET ?"
-        );
+             LIMIT ? OFFSET ?".to_string();
 
         let query = sql_query(&sql_query_str);
         let results: Vec<ThreadWithMessageInfo> = query

@@ -23,7 +23,6 @@ mod handlers;
 mod http;
 mod limit;
 mod middleware;
-mod otel;
 mod run;
 mod session;
 mod tracing;

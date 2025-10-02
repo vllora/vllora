@@ -3,7 +3,10 @@ use std::collections::HashMap;
 use crate::events::callback_handler::GatewayCallbackHandlerFn;
 use crate::events::callback_handler::GatewayModelEventWithDetails;
 use crate::executor::context::ExecutorContext;
+use crate::handler::ModelEventWithDetails;
 use crate::history::ThreadHistoryManager;
+use crate::model::types::CustomEvent;
+use crate::model::types::ModelEvent;
 use crate::model::types::ModelEventType;
 use crate::model::DefaultModelMetadataFactory;
 use crate::routing::interceptor::rate_limiter::InMemoryRateLimiterService;
@@ -12,6 +15,7 @@ use crate::telemetry::events::JsonValue;
 use crate::types::gateway::ChatCompletionRequestWithTools;
 use crate::types::gateway::CompletionModelUsage;
 use crate::types::gateway::Extra;
+use crate::types::gateway::Usage;
 use crate::types::guardrails::service::GuardrailsEvaluator;
 use crate::types::threads::ThreadEntity;
 use crate::usage::InMemoryStorage;
@@ -47,7 +51,10 @@ pub type SSOChatEvent = (
 );
 
 #[allow(clippy::too_many_arguments)]
-#[tracing::instrument(level = "debug", skip(cloud_callback_handler, history_manager))]
+#[tracing::instrument(
+    level = "debug",
+    skip(cloud_callback_handler, history_manager, span, cost_calculator)
+)]
 pub(crate) async fn prepare_request(
     cloud_callback_handler: &GatewayCallbackHandlerFn,
     tenant_name: &str,
@@ -58,6 +65,8 @@ pub(crate) async fn prepare_request(
     history_manager: Option<ThreadHistoryManager>,
     history_context: HistoryContext,
     predefined_message_id: Option<String>,
+    span: Span,
+    cost_calculator: Arc<Box<dyn CostCalculator>>,
 ) -> Result<(JoinHandle<()>, CallbackHandlerFn), GatewayApiError> {
     let (tx, mut rx) = tokio::sync::broadcast::channel(10000);
     let callback_handler = CallbackHandlerFn(Some(tx));
@@ -67,6 +76,8 @@ pub(crate) async fn prepare_request(
     let identifiers = identifiers.clone();
     let cloud_callback_handler = cloud_callback_handler.clone();
 
+    let span = span.clone();
+    let cost_calculator = cost_calculator.clone();
     let handle = tokio::spawn(async move {
         let mut content = String::new();
         while let Ok(model_event) = rx.recv().await {
@@ -77,6 +88,73 @@ pub(crate) async fn prepare_request(
                 ModelEventType::LlmStop(e) => {
                     if let Some(output) = e.output.clone() {
                         content.push_str(&output);
+                    }
+
+                    if let Some(model) = &model_event.model {
+                        let (cost, usage) = match &e.usage {
+                            Some(usage) => {
+                                tracing::info!("Usage: {:?}", usage);
+                                let cost = cost_calculator
+                                    .as_ref()
+                                    .calculate_cost(
+                                        &model.price,
+                                        &Usage::CompletionModelUsage(usage.clone()),
+                                        &model.credentials_ident,
+                                    )
+                                    .await
+                                    .map(|c| (c.cost, Some(usage.clone())))
+                                    .unwrap_or((0.0, Some(usage.clone())));
+
+                                if cost.0 == 0.0 {
+                                    tracing::error!(
+                                        "Cost is 0 for event {e:?}. Event: {event:?}",
+                                        event = model_event.event
+                                    );
+                                }
+
+                                cost
+                            }
+                            None => {
+                                tracing::info!(
+                                    "Usage is none for event {:?}. Event: {:?}",
+                                    e,
+                                    model_event.event
+                                );
+                                tracing::error!(
+                                    "Usage is none for event {e:?}. Event: {event:?}",
+                                    event = model_event.event
+                                );
+                                (0.0, None)
+                            }
+                        };
+
+                        cloud_callback_handler
+                            .on_message(
+                                GatewayModelEventWithDetails {
+                                    event: ModelEventWithDetails::new(
+                                        ModelEvent::new(
+                                            &span,
+                                            ModelEventType::Custom(CustomEvent::new(
+                                                "cost".to_string(),
+                                                serde_json::json!({"cost": cost, "usage": usage}),
+                                            )),
+                                        ),
+                                        model_event.model.clone(),
+                                    ),
+                                    tenant_name: tenant_name.clone(),
+                                    project_id: project_id.clone(),
+                                    usage_identifiers: identifiers.clone(),
+                                    run_id: run_id.clone(),
+                                    thread_id: thread_id.clone(),
+                                }
+                                .into(),
+                            )
+                            .await;
+
+                        if let Some(span) = &model_event.event.span {
+                            span.record("cost", serde_json::to_string(&cost).unwrap());
+                        }
+                        span.record("cost", serde_json::to_string(&cost).unwrap());
                     }
 
                     if let Some(history_manager) = &history_manager {
@@ -234,6 +312,7 @@ pub async fn create_chat_completion(
 
     let predefined_message_id = Uuid::new_v4().to_string();
 
+    let cost_calculator = cost_calculator.into_inner();
     let (_handle, callback_handler_fn) = prepare_request(
         &callback_handler.get_ref().clone(),
         "langdb",
@@ -243,13 +322,15 @@ pub async fn create_chat_completion(
         Some(thread_id.clone()),
         Some(history_manager),
         history_context,
-        Some(predefined_message_id.clone()),
+        Some(predefined_message_id),
+        span.clone(),
+        cost_calculator.clone(),
     )
     .await?;
 
     let executor_context = ExecutorContext::new(
         callback_handler_fn,
-        cost_calculator.into_inner(),
+        cost_calculator,
         Arc::new(
             Box::new(DefaultModelMetadataFactory::new(&provided_models.0))
                 as Box<dyn ModelMetadataFactory>,

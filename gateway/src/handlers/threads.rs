@@ -192,7 +192,7 @@ pub async fn get_thread_messages(
     // First, verify the thread exists and belongs to the project
     match thread_service.get_thread_by_id(&thread_id) {
         Ok(thread) => {
-            if thread.project_id != project.slug.to_string() {
+            if thread.project_id != project.slug {
                 return Ok(HttpResponse::NotFound().json(serde_json::json!({
                     "error": "Thread not found",
                     "message": "Thread does not belong to this project"

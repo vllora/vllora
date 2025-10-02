@@ -29,6 +29,7 @@ use langdb_core::executor::ProvidersConfig;
 use langdb_core::handler::chat::create_chat_completion;
 use langdb_core::handler::embedding::embeddings_handler;
 use langdb_core::handler::image::create_image;
+use langdb_core::handler::middleware::actix_otel::ActixOtelMiddleware;
 use langdb_core::handler::middleware::rate_limit::{RateLimitMiddleware, RateLimiting};
 use langdb_core::handler::{CallbackHandlerFn, LimitCheckWrapper};
 use langdb_core::history::thread_entity::ThreadEntityImpl;
@@ -269,7 +270,10 @@ impl ApiServer {
             .app_data(Data::new(available_models));
 
         app.wrap(TraceLogger)
+            .wrap(ActixOtelMiddleware)
             .wrap(TracingContext)
+            .wrap(ThreadId)
+            .wrap(RunId)
             .wrap(ProjectMiddleware::new())
             .app_data(Data::new(broadcaster))
             .app_data(web::Data::from(project_trace_senders))
@@ -277,9 +281,6 @@ impl ApiServer {
             .app_data(Data::new(callback_handler))
             .service(
                 service
-                    .wrap(TracingContext)
-                    .wrap(ThreadId)
-                    .wrap(RunId)
                     .app_data(limit_checker)
                     .app_data(Data::new(callback))
                     .app_data(Data::new(

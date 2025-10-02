@@ -172,7 +172,7 @@ impl MessageService {
         thread_id: &str,
         page_options: PageOptions,
     ) -> Result<Vec<MessageWithId>, DatabaseError> {
-        let messages = self.get_messages_by_thread_id(&thread_id, page_options)?;
+        let messages = self.get_messages_by_thread_id(thread_id, page_options)?;
         let messages_with_id = messages
             .into_iter()
             .map(|message| MessageWithId {

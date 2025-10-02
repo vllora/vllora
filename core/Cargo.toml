@@ -96,6 +96,7 @@ diesel = { version = "2.3.1", features = [
 ] }
 diesel_migrations = { version = "2.3.0", features = ["sqlite"] }
 r2d2 = "0.8.10"
+opentelemetry-semantic-conventions = "0.30.0"
 
 [features]
 default = ["database"]
