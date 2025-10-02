@@ -5,8 +5,8 @@ use crate::metadata::schema::threads;
 use crate::types::threads::{MessageThread, MessageThreadWithTitle, PageOptions};
 use diesel::ExpressionMethods;
 use diesel::OptionalExtension;
-use diesel::{QueryDsl, RunQueryDsl, sql_query};
 use diesel::QueryableByName;
+use diesel::{sql_query, QueryDsl, RunQueryDsl};
 
 // For the efficient query approach, we'll use a struct that matches the SQL result
 #[derive(QueryableByName, Debug, Clone)]
@@ -150,13 +150,17 @@ impl ThreadService {
 
         Ok(results
             .into_iter()
-            .map(|thread_info| self.thread_with_message_info_to_message_thread_with_title(thread_info))
+            .map(|thread_info| {
+                self.thread_with_message_info_to_message_thread_with_title(thread_info)
+            })
             .collect())
     }
 
     pub fn count_threads_by_project(&self, project_id: &str) -> Result<i64, DatabaseError> {
         let mut conn = self.db_pool.get()?;
-        Ok(DbThread::by_project_id(project_id).count().get_result::<i64>(&mut conn)?)
+        Ok(DbThread::by_project_id(project_id)
+            .count()
+            .get_result::<i64>(&mut conn)?)
     }
 
     pub fn list_threads_by_user(&self, user_id: &str) -> Result<Vec<MessageThread>, DatabaseError> {
@@ -199,11 +203,15 @@ impl ThreadService {
         }
     }
 
-    fn thread_with_message_info_to_message_thread_with_title(&self, thread_info: ThreadWithMessageInfo) -> MessageThreadWithTitle {
+    fn thread_with_message_info_to_message_thread_with_title(
+        &self,
+        thread_info: ThreadWithMessageInfo,
+    ) -> MessageThreadWithTitle {
         let keywords = serde_json::from_str(&thread_info.keywords).unwrap_or_default();
-        
+
         // Parse human model names into input_models
-        let input_models = thread_info.human_model_names
+        let input_models = thread_info
+            .human_model_names
             .map(|names| names.split(',').map(|s| s.trim().to_string()).collect())
             .unwrap_or_default();
 
@@ -211,7 +219,9 @@ impl ThreadService {
             id: thread_info.id,
             title: "Untitled Thread".to_string(), // Default title since not stored in DB
             created_at: thread_info.created_at.clone(),
-            updated_at: thread_info.last_message_at.unwrap_or(thread_info.created_at),
+            updated_at: thread_info
+                .last_message_at
+                .unwrap_or(thread_info.created_at),
             input_models,
             mcp_template_definition_ids: vec![],
             cost: 0.0,
@@ -231,8 +241,8 @@ impl ThreadService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::threads::MessageThread;
     use crate::metadata::pool::DbPool;
+    use crate::types::threads::MessageThread;
 
     fn create_test_thread() -> MessageThread {
         MessageThread {
@@ -360,7 +370,10 @@ mod tests {
         assert_eq!(result.updated_at, "2023-01-02T00:00:00Z");
         assert_eq!(result.input_models, vec!["gpt-4", "claude-3"]);
         assert_eq!(result.description, Some("Test description".to_string()));
-        assert_eq!(result.keywords, Some(vec!["keyword1".to_string(), "keyword2".to_string()]));
+        assert_eq!(
+            result.keywords,
+            Some(vec!["keyword1".to_string(), "keyword2".to_string()])
+        );
         assert_eq!(result.is_public, true);
         assert_eq!(result.project_id, "project-1");
         assert_eq!(result.request_model_name, "gpt-4");
@@ -423,7 +436,14 @@ mod tests {
 
         let result = service.thread_with_message_info_to_message_thread_with_title(thread_info);
 
-        assert_eq!(result.keywords, Some(vec!["tag1".to_string(), "tag2".to_string(), "tag3".to_string()]));
+        assert_eq!(
+            result.keywords,
+            Some(vec![
+                "tag1".to_string(),
+                "tag2".to_string(),
+                "tag3".to_string()
+            ])
+        );
     }
 
     #[test]
@@ -449,6 +469,9 @@ mod tests {
 
         let result = service.thread_with_message_info_to_message_thread_with_title(thread_info);
 
-        assert_eq!(result.input_models, vec!["gpt-4", "claude-3", "gpt-3.5-turbo"]);
+        assert_eq!(
+            result.input_models,
+            vec!["gpt-4", "claude-3", "gpt-3.5-turbo"]
+        );
     }
 }

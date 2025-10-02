@@ -1,9 +1,11 @@
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Result};
-use langdb_core::types::metadata::project::Project;
 use langdb_core::metadata::pool::DbPool;
-use langdb_core::metadata::services::thread::ThreadService;
 use langdb_core::metadata::services::message::MessageService;
-use langdb_core::types::threads::{MessageThread, MessageThreadWithTitle, PageOptions, PageOrderType};
+use langdb_core::metadata::services::thread::ThreadService;
+use langdb_core::types::metadata::project::Project;
+use langdb_core::types::threads::{
+    MessageThread, MessageThreadWithTitle, PageOptions, PageOrderType,
+};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -35,7 +37,6 @@ pub struct ThreadMessagesQuery {
     pub page_options: Option<PageOptions>,
 }
 
-
 #[derive(Serialize)]
 pub struct Pagination {
     pub offset: usize,
@@ -50,11 +51,14 @@ pub async fn list_threads(
     body: web::Json<ListThreadsRequest>,
     project: web::ReqData<Project>,
 ) -> Result<HttpResponse> {
-    let page_options = body.page_options.clone().unwrap_or(query.page_options.clone().unwrap_or(PageOptions {
-        order_by: vec![("created_at".to_string(), PageOrderType::Desc)],
-        limit: Some(50),
-        offset: None,
-    }));
+    let page_options = body
+        .page_options
+        .clone()
+        .unwrap_or(query.page_options.clone().unwrap_or(PageOptions {
+            order_by: vec![("created_at".to_string(), PageOrderType::Desc)],
+            limit: Some(50),
+            offset: None,
+        }));
 
     // Get project from middleware
     let project = project.into_inner();
@@ -66,7 +70,11 @@ pub async fn list_threads(
             let total = match thread_service.count_threads_by_project(&project.slug.to_string()) {
                 Ok(total) => total,
                 Err(e) => {
-                    tracing::error!("Failed to count threads for project {}: {:?}", project.slug, e);
+                    tracing::error!(
+                        "Failed to count threads for project {}: {:?}",
+                        project.slug,
+                        e
+                    );
                     return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
                         "error": "Failed to count threads",
                         "message": e.to_string()
@@ -103,7 +111,7 @@ pub async fn update_thread(
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
     let thread_id = path.into_inner();
-    
+
     // Validate thread ID format
     if Uuid::parse_str(&thread_id).is_err() {
         return Ok(HttpResponse::BadRequest().json(serde_json::json!({
@@ -116,9 +124,7 @@ pub async fn update_thread(
     let project = _http_req
         .extensions()
         .get::<Project>()
-        .ok_or_else(|| {
-            actix_web::error::ErrorBadRequest("Project context not found")
-        })?
+        .ok_or_else(|| actix_web::error::ErrorBadRequest("Project context not found"))?
         .clone();
 
     let thread_service = ThreadService::new(db_pool.get_ref().clone());
@@ -163,12 +169,10 @@ pub async fn update_thread(
                 }
             }
         }
-        Err(_) => {
-            Ok(HttpResponse::NotFound().json(serde_json::json!({
-                "error": "Thread not found",
-                "message": format!("Thread with ID {} not found", thread_id)
-            })))
-        }
+        Err(_) => Ok(HttpResponse::NotFound().json(serde_json::json!({
+            "error": "Thread not found",
+            "message": format!("Thread with ID {} not found", thread_id)
+        }))),
     }
 }
 
@@ -196,15 +200,16 @@ pub async fn get_thread_messages(
             }
 
             let message_service = MessageService::new(db_pool.get_ref().clone());
-            
-            match message_service.get_by_thread_id(&thread_id, page_options.unwrap_or(PageOptions {
-                order_by: vec![("created_at".to_string(), PageOrderType::Asc)],
-                limit: Some(50),
-                offset: None,
-            })) {
-                Ok(messages) => {
-                    Ok(HttpResponse::Ok().json(messages))
-                }
+
+            match message_service.get_by_thread_id(
+                &thread_id,
+                page_options.unwrap_or(PageOptions {
+                    order_by: vec![("created_at".to_string(), PageOrderType::Asc)],
+                    limit: Some(50),
+                    offset: None,
+                }),
+            ) {
+                Ok(messages) => Ok(HttpResponse::Ok().json(messages)),
                 Err(e) => {
                     tracing::error!("Failed to get messages for thread {}: {:?}", thread_id, e);
                     Ok(HttpResponse::InternalServerError().json(serde_json::json!({
@@ -214,11 +219,9 @@ pub async fn get_thread_messages(
                 }
             }
         }
-        Err(_) => {
-            Ok(HttpResponse::NotFound().json(serde_json::json!({
-                "error": "Thread not found",
-                "message": format!("Thread with ID {} not found", thread_id)
-            })))
-        }
+        Err(_) => Ok(HttpResponse::NotFound().json(serde_json::json!({
+            "error": "Thread not found",
+            "message": format!("Thread with ID {} not found", thread_id)
+        }))),
     }
 }

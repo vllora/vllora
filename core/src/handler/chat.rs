@@ -87,7 +87,12 @@ pub(crate) async fn prepare_request(
                             None => e.model_name.clone(),
                         };
 
-                        let tool_calls = e.tool_calls.iter().enumerate().map(|(index, tc)| tc.into_tool_call_with_index(index)).collect();
+                        let tool_calls = e
+                            .tool_calls
+                            .iter()
+                            .enumerate()
+                            .map(|(index, tc)| tc.into_tool_call_with_index(index))
+                            .collect();
 
                         let assistant_result = history_manager
                             .insert_assistant_message(
@@ -238,7 +243,7 @@ pub async fn create_chat_completion(
         Some(thread_id.clone()),
         Some(history_manager),
         history_context,
-        Some(predefined_message_id),
+        Some(predefined_message_id.clone()),
     )
     .await?;
 
@@ -257,7 +262,12 @@ pub async fn create_chat_completion(
 
     let executor = RoutedExecutor::new(request.clone());
     executor
-        .execute(&executor_context, memory_storage, None)
+        .execute(
+            &executor_context,
+            memory_storage,
+            None,
+            Some(&predefined_message_id),
+        )
         .instrument(span.clone())
         .await
 }

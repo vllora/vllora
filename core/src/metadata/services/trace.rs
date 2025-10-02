@@ -1,9 +1,9 @@
 use crate::metadata::error::DatabaseError;
-use crate::metadata::models::trace::{DbTrace, DbNewTrace};
+use crate::metadata::models::trace::{DbNewTrace, DbTrace};
 use crate::metadata::pool::DbPool;
 use crate::metadata::schema::traces;
 use diesel::prelude::*;
-use diesel::sql_types::{Text, Nullable};
+use diesel::sql_types::{Nullable, Text};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -20,9 +20,20 @@ pub struct ListTracesQuery {
 
 pub trait TraceService {
     fn list(&self, query: ListTracesQuery) -> Result<Vec<DbTrace>, DatabaseError>;
-    fn get_by_run_id(&self, run_id: &str, project_id: Option<&str>, limit: i64, offset: i64) -> Result<Vec<DbTrace>, DatabaseError>;
+    fn get_by_run_id(
+        &self,
+        run_id: &str,
+        project_id: Option<&str>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<DbTrace>, DatabaseError>;
     fn count(&self, query: ListTracesQuery) -> Result<i64, DatabaseError>;
-    fn get_child_attributes(&self, trace_ids: &[String], span_ids: &[String], project_id: Option<&str>) -> Result<HashMap<String, Option<String>>, DatabaseError>;
+    fn get_child_attributes(
+        &self,
+        trace_ids: &[String],
+        span_ids: &[String],
+        project_id: Option<&str>,
+    ) -> Result<HashMap<String, Option<String>>, DatabaseError>;
 }
 
 pub struct TraceServiceImpl {
@@ -78,12 +89,16 @@ impl TraceService for TraceServiceImpl {
         Ok(results)
     }
 
-    fn get_by_run_id(&self, run_id: &str, project_id: Option<&str>, limit: i64, offset: i64) -> Result<Vec<DbTrace>, DatabaseError> {
+    fn get_by_run_id(
+        &self,
+        run_id: &str,
+        project_id: Option<&str>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<DbTrace>, DatabaseError> {
         let mut conn = self.db_pool.get()?;
 
-        let mut query = traces::table
-            .filter(traces::run_id.eq(run_id))
-            .into_boxed();
+        let mut query = traces::table.filter(traces::run_id.eq(run_id)).into_boxed();
 
         // Apply project_id filter if provided
         if let Some(project_id) = project_id {
@@ -139,7 +154,12 @@ impl TraceService for TraceServiceImpl {
         Ok(count)
     }
 
-    fn get_child_attributes(&self, trace_ids: &[String], span_ids: &[String], project_id: Option<&str>) -> Result<HashMap<String, Option<String>>, DatabaseError> {
+    fn get_child_attributes(
+        &self,
+        trace_ids: &[String],
+        span_ids: &[String],
+        project_id: Option<&str>,
+    ) -> Result<HashMap<String, Option<String>>, DatabaseError> {
         if trace_ids.is_empty() || span_ids.is_empty() {
             return Ok(HashMap::new());
         }
@@ -156,12 +176,14 @@ impl TraceService for TraceServiceImpl {
             child_attribute: Option<String>,
         }
 
-        let trace_ids_str = trace_ids.iter()
+        let trace_ids_str = trace_ids
+            .iter()
             .map(|id| format!("'{}'", id))
             .collect::<Vec<_>>()
             .join(",");
 
-        let span_ids_str = span_ids.iter()
+        let span_ids_str = span_ids
+            .iter()
             .map(|id| format!("'{}'", id))
             .collect::<Vec<_>>()
             .join(",");

@@ -351,7 +351,7 @@ impl ThreadHistoryManager {
     pub async fn insert_assistant_message(
         &self,
         content: String,
-        tool_calls:Vec<ToolCall>,
+        tool_calls: Vec<ToolCall>,
         model_name: String,
         thread_id: Option<String>,
         user_id: String,

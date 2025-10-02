@@ -122,10 +122,11 @@ where
                     // Store full DbProject for handlers
                     req.extensions_mut().insert(p.clone());
                     // Store lightweight GatewayTenant for telemetry (core crate)
-                    req.extensions_mut().insert(langdb_core::types::GatewayTenant {
-                        name: "default".to_string(),
-                        project_slug: p.slug.clone(),
-                    });
+                    req.extensions_mut()
+                        .insert(langdb_core::types::GatewayTenant {
+                            name: "default".to_string(),
+                            project_slug: p.slug.clone(),
+                        });
                 }
                 Ok(None) => {
                     error!("No project found");

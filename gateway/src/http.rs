@@ -2,15 +2,14 @@ use crate::callback_handler::init_callback_handler;
 use crate::config::{load_langdb_proxy_config, Config};
 use crate::cost::GatewayCostCalculator;
 use crate::guardrails::GuardrailsService;
-use crate::handlers::{projects, runs, traces};
 use crate::handlers::threads;
+use crate::handlers::{projects, runs, traces};
 use crate::limit::GatewayLimitChecker;
 use crate::middleware::project::ProjectMiddleware;
 use crate::middleware::run_id::RunId;
 use crate::middleware::thread_id::ThreadId;
 use crate::middleware::trace_logger::TraceLogger;
 use crate::middleware::tracing_context::TracingContext;
-use langdb_core::telemetry::database::SqliteTraceWriterTransport;
 use actix_cors::Cors;
 use actix_web::Scope as ActixScope;
 use actix_web::{
@@ -37,6 +36,7 @@ use langdb_core::metadata::pool::DbPool;
 use langdb_core::metadata::project_trace::ProjectTraceTenantResolver;
 use langdb_core::metadata::services::project::ProjectServiceImpl;
 use langdb_core::telemetry::database::DatabaseSpanWritter;
+use langdb_core::telemetry::database::SqliteTraceWriterTransport;
 use langdb_core::telemetry::SpanWriterTransport;
 use langdb_core::telemetry::{TraceServiceImpl, TraceServiceServer};
 use langdb_core::types::gateway::CostCalculator;
@@ -187,7 +187,9 @@ impl ApiServer {
                 let client = ClickhouseHttp::root().with_url(&c.url).clone_box();
                 Box::new(DatabaseSpanWritter::new(client)) as Box<dyn SpanWriterTransport>
             }
-            None => Box::new(SqliteTraceWriterTransport::new(Arc::new(server_config.db_pool.clone()))) as Box<dyn SpanWriterTransport>,
+            None => Box::new(SqliteTraceWriterTransport::new(Arc::new(
+                server_config.db_pool.clone(),
+            ))) as Box<dyn SpanWriterTransport>,
         };
 
         let project_service = ProjectServiceImpl::new(server_config.db_pool.clone());
@@ -304,16 +306,16 @@ impl ApiServer {
                     .route("", web::get().to(threads::list_threads))
                     .route("", web::post().to(threads::list_threads))
                     .route("/{id}", web::put().to(threads::update_thread))
-                    .route("/{id}/messages", web::get().to(threads::get_thread_messages)),
+                    .route(
+                        "/{id}/messages",
+                        web::get().to(threads::get_thread_messages),
+                    ),
             )
             .route(
                 "/events",
                 web::get().to(langdb_core::handler::events::stream_events),
             )
-            .service(
-                web::scope("/traces")
-                    .route("", web::get().to(traces::list_traces)),
-            )
+            .service(web::scope("/traces").route("", web::get().to(traces::list_traces)))
             .service(
                 web::scope("/runs")
                     .route("", web::get().to(runs::list_runs))

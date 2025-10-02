@@ -15,7 +15,7 @@ pub struct DbTrace {
     pub operation_name: String,
     pub start_time_us: i64,
     pub finish_time_us: i64,
-    pub attribute: String,        // JSON stored as text
+    pub attribute: String, // JSON stored as text
     pub run_id: Option<String>,
     pub project_id: Option<String>,
 }

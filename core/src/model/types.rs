@@ -1,10 +1,10 @@
 use crate::types::gateway::{CompletionModelUsage, ImageSize};
+use crate::types::gateway::{FunctionCall, ToolCall};
 use chrono::{DateTime, Utc};
 use opentelemetry::trace::TraceContextExt;
 use serde::{Deserialize, Serialize};
 use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
-use crate::types::gateway::{FunctionCall, ToolCall};
 
 use super::CredentialsIdent;
 

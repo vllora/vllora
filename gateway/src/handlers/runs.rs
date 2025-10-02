@@ -8,11 +8,11 @@ use std::sync::Arc;
 
 #[derive(Deserialize)]
 pub struct ListRunsQueryParams {
-    pub run_ids: Option<String>,        // Comma-separated
+    pub run_ids: Option<String>, // Comma-separated
     #[serde(alias = "threadIds")]
-    pub thread_ids: Option<String>,     // Comma-separated
+    pub thread_ids: Option<String>, // Comma-separated
     #[serde(alias = "traceIds")]
-    pub trace_ids: Option<String>,      // Comma-separated
+    pub trace_ids: Option<String>, // Comma-separated
     #[serde(alias = "modelName")]
     pub model_name: Option<String>,
     #[serde(alias = "typeFilter")]
@@ -76,10 +76,8 @@ pub async fn list_runs(
             let total = run_service.count(list_query).unwrap_or(0);
 
             // Convert to RunUsageResponse for JSON serialization
-            let runs_response: Vec<RunUsageResponse> = runs
-                .into_iter()
-                .map(|run| run.into())
-                .collect();
+            let runs_response: Vec<RunUsageResponse> =
+                runs.into_iter().map(|run| run.into()).collect();
 
             let result = PaginatedResult {
                 pagination: Pagination {

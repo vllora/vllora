@@ -9,8 +9,8 @@ use crate::types::threads::{
     InsertMessageResult, Message, MessageContentPart, MessageContentType, MessageWithId,
 };
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
-use uuid::Uuid;
 use std::str::FromStr;
+use uuid::Uuid;
 
 pub struct MessageService {
     db_pool: DbPool,

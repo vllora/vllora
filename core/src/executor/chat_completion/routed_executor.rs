@@ -62,6 +62,7 @@ impl RoutedExecutor {
         executor_context: &ExecutorContext,
         memory_storage: Option<Arc<Mutex<InMemoryStorage>>>,
         project_id: Option<&uuid::Uuid>,
+        predefined_message_id: Option<&String>,
     ) -> Result<HttpResponse, GatewayApiError> {
         let span = Span::current();
 
@@ -142,7 +143,13 @@ impl RoutedExecutor {
                     }
                 }
             } else {
-                let result = Self::execute_request(&request, executor_context, project_id).await;
+                let result = Self::execute_request(
+                    &request,
+                    executor_context,
+                    project_id,
+                    predefined_message_id,
+                )
+                .await;
 
                 match result {
                     Ok(response) => return Ok(response),
@@ -167,6 +174,7 @@ impl RoutedExecutor {
         request: &ChatCompletionRequestWithTools<RoutingStrategy>,
         executor_context: &ExecutorContext,
         project_id: Option<&uuid::Uuid>,
+        predefined_message_id: Option<&String>,
     ) -> Result<HttpResponse, GatewayApiError> {
         let span = tracing::Span::current();
         span.record("request", &serde_json::to_string(&request)?);
@@ -197,6 +205,10 @@ impl RoutedExecutor {
                 "X-Provider-Name",
                 llm_model.inference_provider.provider.to_string(),
             ));
+
+        if let Some(predefined_message_id) = predefined_message_id {
+            builder.insert_header(("X-Message-Id", predefined_message_id.to_string()));
+        }
 
         match response {
             Left(result_stream) => {

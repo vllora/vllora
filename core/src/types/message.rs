@@ -1,5 +1,5 @@
-use std::{collections::HashSet, fmt::Display};
 use std::str::FromStr;
+use std::{collections::HashSet, fmt::Display};
 
 use serde::{Deserialize, Serialize};
 
@@ -31,7 +31,7 @@ impl FromStr for MessageType {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "system" => Ok(MessageType::SystemMessage),
-            "ai"| "assistant" => Ok(MessageType::AIMessage),
+            "ai" | "assistant" => Ok(MessageType::AIMessage),
             "human" => Ok(MessageType::HumanMessage),
             "tool" => Ok(MessageType::ToolResult),
             _ => Err(format!("Invalid message type: {}", s)),

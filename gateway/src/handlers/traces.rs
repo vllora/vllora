@@ -79,7 +79,8 @@ pub async fn list_traces(
             let trace_ids: Vec<String> = traces.iter().map(|t| t.trace_id.clone()).collect();
             let span_ids: Vec<String> = traces.iter().map(|t| t.span_id.clone()).collect();
 
-            let child_attrs = trace_service.get_child_attributes(&trace_ids, &span_ids, project_id.as_deref())
+            let child_attrs = trace_service
+                .get_child_attributes(&trace_ids, &span_ids, project_id.as_deref())
                 .unwrap_or_default();
 
             let spans: Vec<LangdbSpan> = traces
@@ -88,7 +89,8 @@ pub async fn list_traces(
                     let attribute = trace.parse_attribute().unwrap_or_default();
 
                     // Get child_attribute from the map
-                    let child_attribute = child_attrs.get(&trace.span_id)
+                    let child_attribute = child_attrs
+                        .get(&trace.span_id)
                         .and_then(|opt| opt.as_ref())
                         .and_then(|json_str| serde_json::from_str(json_str).ok());
 
@@ -156,7 +158,8 @@ pub async fn get_spans_by_run(
             let trace_ids: Vec<String> = traces.iter().map(|t| t.trace_id.clone()).collect();
             let span_ids: Vec<String> = traces.iter().map(|t| t.span_id.clone()).collect();
 
-            let child_attrs = trace_service.get_child_attributes(&trace_ids, &span_ids, project_id.as_deref())
+            let child_attrs = trace_service
+                .get_child_attributes(&trace_ids, &span_ids, project_id.as_deref())
                 .unwrap_or_default();
 
             let spans: Vec<LangdbSpan> = traces
@@ -165,7 +168,8 @@ pub async fn get_spans_by_run(
                     let attribute = trace.parse_attribute().unwrap_or_default();
 
                     // Get child_attribute from the map
-                    let child_attribute = child_attrs.get(&trace.span_id)
+                    let child_attribute = child_attrs
+                        .get(&trace.span_id)
                         .and_then(|opt| opt.as_ref())
                         .and_then(|json_str| serde_json::from_str(json_str).ok());
 

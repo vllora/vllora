@@ -1,10 +1,10 @@
 use crate::database::DatabaseTransport;
-use crate::telemetry::SpanWriterTransport;
-use crate::GatewayError;
-use crate::GatewayResult;
 use crate::metadata::models::trace::DbNewTrace;
 use crate::metadata::pool::DbPool;
 use crate::metadata::services::trace::TraceServiceImpl;
+use crate::telemetry::SpanWriterTransport;
+use crate::GatewayError;
+use crate::GatewayResult;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -60,17 +60,27 @@ impl SqliteTraceWriterTransport {
         let parent_span_id = if row[2].is_null() {
             None
         } else {
-            Some(row[2].as_u64().ok_or("parent_span_id not a number")?.to_string())
+            Some(
+                row[2]
+                    .as_u64()
+                    .ok_or("parent_span_id not a number")?
+                    .to_string(),
+            )
         };
 
-        let operation_name = row[3].as_str().ok_or("operation_name not a string")?.to_string();
+        let operation_name = row[3]
+            .as_str()
+            .ok_or("operation_name not a string")?
+            .to_string();
         let start_time_us = row[4].as_i64().ok_or("start_time_us not a number")?;
         let finish_time_us = row[5].as_i64().ok_or("finish_time_us not a number")?;
         // row[6] is finish_date (not used in SQLite schema)
         // row[7] is kind (not used in SQLite schema)
 
         let attribute = if row[8].is_object() {
-            row[8].as_object().ok_or("attribute not an object")?
+            row[8]
+                .as_object()
+                .ok_or("attribute not an object")?
                 .iter()
                 .map(|(k, v)| (k.clone(), v.clone()))
                 .collect::<HashMap<String, Value>>()
@@ -83,16 +93,30 @@ impl SqliteTraceWriterTransport {
         let project_id = if row[10].is_null() {
             None
         } else {
-            Some(row[10].as_str().ok_or("project_id not a string")?.to_string())
+            Some(
+                row[10]
+                    .as_str()
+                    .ok_or("project_id not a string")?
+                    .to_string(),
+            )
         };
 
         let thread_id = if row[11].is_null() {
             None
         } else {
-            Some(row[11].as_str().ok_or("thread_id not a string")?.to_string())
+            Some(
+                row[11]
+                    .as_str()
+                    .ok_or("thread_id not a string")?
+                    .to_string(),
+            )
         };
 
-        tracing::debug!("Converting row for trace {}: thread_id={:?}", trace_id, thread_id);
+        tracing::debug!(
+            "Converting row for trace {}: thread_id={:?}",
+            trace_id,
+            thread_id
+        );
 
         // row[12] is tags (not used in SQLite schema)
 
@@ -137,16 +161,13 @@ impl SpanWriterTransport for SqliteTraceWriterTransport {
             .map(|row| self.convert_row_to_trace(row))
             .collect();
 
-        let traces = traces.map_err(|e| {
-            GatewayError::CustomError(format!("Failed to convert traces: {}", e))
-        })?;
+        let traces = traces
+            .map_err(|e| GatewayError::CustomError(format!("Failed to convert traces: {}", e)))?;
 
-        let inserted_count = self.trace_service
-            .insert_many(traces)
-            .map_err(|e| {
-                tracing::error!("Failed to insert traces: {}", e);
-                GatewayError::CustomError(format!("Failed to insert traces: {}", e))
-            })?;
+        let inserted_count = self.trace_service.insert_many(traces).map_err(|e| {
+            tracing::error!("Failed to insert traces: {}", e);
+            GatewayError::CustomError(format!("Failed to insert traces: {}", e))
+        })?;
 
         Ok(inserted_count.to_string())
     }

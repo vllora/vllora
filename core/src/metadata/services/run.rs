@@ -50,7 +50,8 @@ impl RunServiceImpl {
         }
 
         if let Some(run_ids) = &query.run_ids {
-            let values = run_ids.iter()
+            let values = run_ids
+                .iter()
                 .map(|id| format!("'{}'", id.replace("'", "''")))
                 .collect::<Vec<_>>()
                 .join(",");
@@ -58,7 +59,8 @@ impl RunServiceImpl {
         }
 
         if let Some(thread_ids) = &query.thread_ids {
-            let values = thread_ids.iter()
+            let values = thread_ids
+                .iter()
                 .map(|id| format!("'{}'", id.replace("'", "''")))
                 .collect::<Vec<_>>()
                 .join(",");
@@ -66,7 +68,8 @@ impl RunServiceImpl {
         }
 
         if let Some(trace_ids) = &query.trace_ids {
-            let values = trace_ids.iter()
+            let values = trace_ids
+                .iter()
                 .map(|id| format!("'{}'", id.replace("'", "''")))
                 .collect::<Vec<_>>()
                 .join(",");
