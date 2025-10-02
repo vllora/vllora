@@ -44,7 +44,7 @@ impl ThreadEntity for ThreadEntityImpl {
         page_options: PageOptions,
     ) -> Result<Vec<MessageWithId>, DatabaseError> {
         let message_service = MessageService::new(self.db_pool.clone());
-        Ok(message_service.get_by_thread_id(thread_id, page_options)?)
+        Ok(message_service.get_by_thread_id(&thread_id, page_options)?)
     }
 
     async fn get_messages_with_metrics_by_thread_id(

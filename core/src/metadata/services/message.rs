@@ -10,6 +10,7 @@ use crate::types::threads::{
 };
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
 use uuid::Uuid;
+use std::str::FromStr;
 
 pub struct MessageService {
     db_pool: DbPool,
@@ -168,7 +169,7 @@ impl MessageService {
     // Required methods for ThreadEntity interface
     pub fn get_by_thread_id(
         &self,
-        thread_id: String,
+        thread_id: &str,
         page_options: PageOptions,
     ) -> Result<Vec<MessageWithId>, DatabaseError> {
         let messages = self.get_messages_by_thread_id(&thread_id, page_options)?;
@@ -218,7 +219,7 @@ impl MessageService {
         let message_type = db_message
             .r#type
             .as_deref()
-            .and_then(|t| serde_json::from_str::<MessageType>(t).ok())
+            .and_then(|t| MessageType::from_str(t).ok())
             .unwrap_or(MessageType::HumanMessage);
 
         let content_array: Vec<MessageContentPart> = db_message

@@ -351,7 +351,7 @@ impl ThreadHistoryManager {
     pub async fn insert_assistant_message(
         &self,
         content: String,
-        tool_calls: Option<Vec<ToolCall>>,
+        tool_calls:Vec<ToolCall>,
         model_name: String,
         thread_id: Option<String>,
         user_id: String,
@@ -383,7 +383,11 @@ impl ThreadHistoryManager {
             content_array: vec![],
             content_type: MessageContentType::Text,
             r#type: MessageType::AIMessage,
-            tool_calls,
+            tool_calls: if tool_calls.is_empty() {
+                None
+            } else {
+                Some(tool_calls)
+            },
             tool_call_id: None,
         };
 

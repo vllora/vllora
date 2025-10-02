@@ -27,8 +27,6 @@ use crate::handler::AvailableModels;
 use crate::handler::CallbackHandlerFn;
 use crate::history::HistoryContext;
 use crate::model::ModelMetadataFactory;
-use crate::types::gateway::FunctionCall;
-use crate::types::gateway::ToolCall;
 use crate::types::gateway::{
     ChatCompletionChunk, ChatCompletionChunkChoice, ChatCompletionDelta, ChatCompletionUsage,
     CostCalculator,
@@ -89,25 +87,7 @@ pub(crate) async fn prepare_request(
                             None => e.model_name.clone(),
                         };
 
-                        let tool_calls = if e.tool_calls.is_empty() {
-                            None
-                        } else {
-                            Some(
-                                e.tool_calls
-                                    .iter()
-                                    .enumerate()
-                                    .map(|(index, tc)| ToolCall {
-                                        index: Some(index),
-                                        id: tc.tool_id.clone(),
-                                        r#type: "function".into(),
-                                        function: FunctionCall {
-                                            name: tc.tool_name.clone(),
-                                            arguments: tc.input.clone(),
-                                        },
-                                    })
-                                    .collect(),
-                            )
-                        };
+                        let tool_calls = e.tool_calls.iter().enumerate().map(|(index, tc)| tc.into_tool_call_with_index(index)).collect();
 
                         let assistant_result = history_manager
                             .insert_assistant_message(

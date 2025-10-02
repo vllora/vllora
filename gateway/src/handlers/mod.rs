@@ -1,6 +1,8 @@
 pub mod projects;
 pub mod runs;
 pub mod traces;
+pub mod threads;
+
 use actix_web::{web, HttpResponse};
 use langdb_core::handler::models::ChatModelsResponse;
 use langdb_core::metadata::services::model::ModelService;

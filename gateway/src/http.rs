@@ -3,6 +3,7 @@ use crate::config::{load_langdb_proxy_config, Config};
 use crate::cost::GatewayCostCalculator;
 use crate::guardrails::GuardrailsService;
 use crate::handlers::{projects, runs, traces};
+use crate::handlers::threads;
 use crate::limit::GatewayLimitChecker;
 use crate::middleware::project::ProjectMiddleware;
 use crate::middleware::run_id::RunId;
@@ -297,6 +298,13 @@ impl ApiServer {
                         "/{id}/default",
                         web::post().to(projects::set_default_project),
                     ),
+            )
+            .service(
+                web::scope("/threads")
+                    .route("", web::get().to(threads::list_threads))
+                    .route("", web::post().to(threads::list_threads))
+                    .route("/{id}", web::put().to(threads::update_thread))
+                    .route("/{id}/messages", web::get().to(threads::get_thread_messages)),
             )
             .route(
                 "/events",

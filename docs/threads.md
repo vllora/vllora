@@ -2,16 +2,21 @@
 
 - GET /threads: list threads for a single project ordered by last_message_date
   - Query params: limit, offset (optional)
+  - Returns: List of threads for the current project
 - PUT /threads/{id}: update thread title
+  - Body: { "title": "New Title" }
+  - Returns: Updated thread object
 
 ### Thread Messages
 
 - GET /threads/messages: get messages for a thread
   - Query params: threadId (required), limit, offset (optional)
+  - Returns: List of messages for the specified thread
 
 Notes:
-- Auth and project context required.
-- Schemas TBD.
+- Auth and project context required (via X-Project-Id header or default project).
+- All endpoints require valid project context from middleware.
+- Thread IDs must be valid UUIDs.
 
 ### Schema
 

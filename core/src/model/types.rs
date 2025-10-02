@@ -4,6 +4,7 @@ use opentelemetry::trace::TraceContextExt;
 use serde::{Deserialize, Serialize};
 use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
+use crate::types::gateway::{FunctionCall, ToolCall};
 
 use super::CredentialsIdent;
 
@@ -124,6 +125,21 @@ pub struct ModelToolCall {
     pub tool_name: String,
     pub input: String,
 }
+
+impl ModelToolCall {
+    pub fn into_tool_call_with_index(&self, index: usize) -> ToolCall {
+        ToolCall {
+            index: Some(index),
+            id: self.tool_id.clone(),
+            r#type: "function".into(),
+            function: FunctionCall {
+                name: self.tool_name.clone(),
+                arguments: self.input.clone(),
+            },
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ModelFinishReason {
