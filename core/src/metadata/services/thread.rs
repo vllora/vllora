@@ -17,6 +17,8 @@ pub struct ThreadWithMessageInfo {
     pub user_id: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
     pub model_name: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+    pub title: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Text)]
     pub created_at: String,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
@@ -90,10 +92,9 @@ impl ThreadService {
         let db_update = DbUpdateThread {
             user_id: update.user_id,
             model_name: update.model_name,
-            tenant_id: update.tenant_id,
-            project_id: update.project_id,
             is_public: update.is_public.map(|b| if b { 1 } else { 0 }),
             description: update.description,
+            title: update.title,
             keywords: update
                 .keywords
                 .map(|k| serde_json::to_string(&k).unwrap_or_else(|_| "[]".to_string())),
@@ -215,7 +216,7 @@ impl ThreadService {
 
         MessageThreadWithTitle {
             id: thread_info.id,
-            title: "Untitled Thread".to_string(), // Default title since not stored in DB
+            title: thread_info.title.unwrap_or("Untitled Thread".to_string()),
             created_at: thread_info.created_at.clone(),
             updated_at: thread_info
                 .last_message_at

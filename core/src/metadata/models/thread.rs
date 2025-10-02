@@ -33,6 +33,7 @@ pub struct DbThread {
     pub id: String,
     pub user_id: Option<String>,
     pub model_name: Option<String>,
+    pub title: Option<String>,
     pub created_at: String,
     pub tenant_id: Option<String>,
     pub project_id: Option<String>,
@@ -86,11 +87,10 @@ pub struct DbNewThread {
 pub struct DbUpdateThread {
     pub user_id: Option<String>,
     pub model_name: Option<String>,
-    pub tenant_id: Option<String>,
-    pub project_id: Option<String>,
     pub is_public: Option<i32>,
     pub description: Option<String>,
     pub keywords: Option<String>,
+    pub title: Option<String>,
 }
 
 #[derive(PartialEq, Debug, Serialize, Deserialize, Default, Clone)]
@@ -103,17 +103,17 @@ pub struct NewThreadDTO {
     pub is_public: Option<bool>,
     pub description: Option<String>,
     pub keywords: Option<Vec<String>>,
+    pub title: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UpdateThreadDTO {
     pub user_id: Option<String>,
     pub model_name: Option<String>,
-    pub tenant_id: Option<String>,
-    pub project_id: Option<String>,
     pub is_public: Option<bool>,
     pub description: Option<String>,
     pub keywords: Option<Vec<String>>,
+    pub title: Option<String>,
 }
 
 #[cfg(test)]

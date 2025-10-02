@@ -1,4 +1,4 @@
-use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Result};
+use actix_web::{web, HttpResponse, Result};
 use langdb_core::metadata::pool::DbPool;
 use langdb_core::metadata::services::message::MessageService;
 use langdb_core::metadata::services::thread::ThreadService;
@@ -7,7 +7,6 @@ use langdb_core::types::threads::{
     MessageThread, MessageThreadWithTitle, PageOptions, PageOrderType,
 };
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 #[derive(Deserialize)]
 pub struct ListThreadsRequest {
@@ -105,52 +104,32 @@ pub async fn list_threads(
 
 /// PUT /threads/{id} - Update thread title
 pub async fn update_thread(
-    path: web::Path<String>,
+    path: web::Path<uuid::Uuid>,
+    project: web::ReqData<Project>,
     req: web::Json<UpdateThreadRequest>,
-    _http_req: HttpRequest,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
-    let thread_id = path.into_inner();
-
-    // Validate thread ID format
-    if Uuid::parse_str(&thread_id).is_err() {
-        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
-            "error": "Invalid thread ID",
-            "message": "Thread ID must be a valid UUID"
-        })));
-    }
-
-    // Get project from middleware
-    let project = _http_req
-        .extensions()
-        .get::<Project>()
-        .ok_or_else(|| actix_web::error::ErrorBadRequest("Project context not found"))?
-        .clone();
+    let thread_id = path.into_inner().to_string();
 
     let thread_service = ThreadService::new(db_pool.get_ref().clone());
 
     // First, verify the thread exists and belongs to the project
     match thread_service.get_thread_by_id(&thread_id) {
         Ok(thread) => {
-            if thread.project_id != project.id.to_string() {
+            if thread.project_id != project.slug {
                 return Ok(HttpResponse::NotFound().json(serde_json::json!({
                     "error": "Thread not found",
                     "message": "Thread does not belong to this project"
                 })));
             }
 
-            // Update the thread - for now we only support updating title
-            // Note: The current MessageThread struct doesn't have title field in DB
-            // This is a limitation mentioned in the docs that title is nullable
-            // We'll create a new thread with updated data for now
             let update_data = langdb_core::metadata::models::thread::UpdateThreadDTO {
                 user_id: None,
                 model_name: None,
-                tenant_id: None,
-                project_id: None,
                 is_public: None,
-                description: req.title.clone(), // Using description field for title for now
+                description: None,
                 keywords: None,
+                title: req.title.clone(),
             };
 
             match thread_service.update_thread(&thread_id, update_data) {

@@ -73,6 +73,7 @@ diesel::table! {
     threads (id) {
         id -> Text,
         user_id -> Nullable<Text>,
+        title -> Nullable<Text>,
         model_name -> Nullable<Text>,
         created_at -> Text,
         tenant_id -> Nullable<Text>,

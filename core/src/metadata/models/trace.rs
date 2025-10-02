@@ -43,6 +43,7 @@ pub struct DbNewTrace {
 }
 
 impl DbNewTrace {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         trace_id: String,
         span_id: String,

@@ -21,6 +21,7 @@ create table threads
     id                   text     default (lower(hex(randomblob(16)))) not null
         primary key,
     user_id              text,
+    title                text,
     model_name           text,
     created_at           text     default (datetime('now'))             not null,
     tenant_id            text,
