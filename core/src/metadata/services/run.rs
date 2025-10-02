@@ -11,6 +11,7 @@ pub struct ListRunsQuery {
     pub thread_ids: Option<Vec<String>>,
     pub trace_ids: Option<Vec<String>>,
     pub model_name: Option<String>,
+    pub type_filter: Option<String>,
     pub start_time_min: Option<i64>,
     pub start_time_max: Option<i64>,
     pub limit: i64,
@@ -70,6 +71,22 @@ impl RunServiceImpl {
                  OR (operation_name = 'api_invoke' AND json_extract(json_extract(attribute, '$.request'), '$.model') = '{}')",
                 escaped_model, escaped_model
             ));
+        }
+
+        if let Some(type_filter) = &query.type_filter {
+            match type_filter.as_str() {
+                "model" => {
+                    conditions.push("operation_name = 'model_call'".to_string());
+                }
+                "api" => {
+                    conditions.push("operation_name = 'api_invoke'".to_string());
+                }
+                _ => {
+                    // For other types, filter by operation_name if it matches
+                    let escaped_type = type_filter.replace("'", "''");
+                    conditions.push(format!("operation_name = '{}'", escaped_type));
+                }
+            }
         }
 
         if let Some(start_min) = query.start_time_min {

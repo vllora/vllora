@@ -9,13 +9,17 @@ use std::sync::Arc;
 #[derive(Deserialize)]
 pub struct ListRunsQueryParams {
     pub run_ids: Option<String>,        // Comma-separated
+    #[serde(alias = "threadIds")]
     pub thread_ids: Option<String>,     // Comma-separated
     pub trace_ids: Option<String>,      // Comma-separated
     pub model_name: Option<String>,
+    #[serde(alias = "typeFilter")]
+    pub type_filter: Option<String>,
     pub start_time_min: Option<i64>,
     pub start_time_max: Option<i64>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
+    pub include_mcp_templates: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -56,6 +60,7 @@ pub async fn list_runs(
             .as_ref()
             .map(|s| s.split(',').map(String::from).collect()),
         model_name: query.model_name.clone(),
+        type_filter: query.type_filter.clone(),
         start_time_min: query.start_time_min,
         start_time_max: query.start_time_max,
         limit: query.limit.unwrap_or(100),
