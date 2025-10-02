@@ -92,7 +92,7 @@ impl MessageService {
         let new_message = DbNewMessage {
             id: message_id.unwrap_or_else(|| Uuid::new_v4().to_string()),
             model_name: Some(message.model_name),
-            type_: Some(message.r#type.to_string()),
+            r#type: Some(message.r#type.to_string()),
             thread_id,
             user_id: Some(message.user_id),
             content_type: Some(message.content_type.to_string()),
@@ -135,7 +135,7 @@ impl MessageService {
             let new_message = DbNewMessage {
                 id: Uuid::new_v4().to_string(),
                 model_name: Some(message.model_name),
-                type_: Some(message.r#type.to_string()),
+                r#type: Some(message.r#type.to_string()),
                 thread_id,
                 user_id: Some(message.user_id),
                 content_type: Some(message.content_type.to_string()),
@@ -216,7 +216,7 @@ impl MessageService {
             .unwrap_or(MessageContentType::Text);
 
         let message_type = db_message
-            .type_
+            .r#type
             .as_deref()
             .and_then(|t| serde_json::from_str::<MessageType>(t).ok())
             .unwrap_or(MessageType::HumanMessage);

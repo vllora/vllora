@@ -465,17 +465,6 @@ where
             key_values.push(KeyValue::new("langdb.project_id", project_slug));
         }
 
-        // Extract project from ProjectMiddleware (overrides tenant project_id if present)
-        #[cfg(feature = "database")]
-        {
-            use crate::types::GatewayProject;
-            if let Some(project) = req.extensions().get::<GatewayProject>() {
-                // Remove any existing project_id from tenant and add the one from ProjectMiddleware
-                key_values.retain(|kv| kv.key.as_str() != "langdb.project_id");
-                key_values.push(KeyValue::new("langdb.project_id", project.id.clone()));
-            }
-        }
-
         // Extract headers regardless of tenant presence
         let thread_id = req
             .headers()

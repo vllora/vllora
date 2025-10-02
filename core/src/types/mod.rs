@@ -23,8 +23,3 @@ pub struct GatewayTenant {
     pub name: String,
     pub project_slug: String,
 }
-
-#[derive(Clone, Debug)]
-pub struct GatewayProject {
-    pub id: String,
-}

@@ -4,8 +4,7 @@ diesel::table! {
     messages (id) {
         id -> Text,
         model_name -> Nullable<Text>,
-        #[sql_name = "type"]
-        type_ -> Nullable<Text>,
+        r#type -> Nullable<Text>,
         thread_id -> Nullable<Text>,
         user_id -> Nullable<Text>,
         content_type -> Nullable<Text>,

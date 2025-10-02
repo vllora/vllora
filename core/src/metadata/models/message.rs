@@ -29,12 +29,10 @@ use serde_json::Value;
 )]
 #[serde(crate = "serde")]
 #[diesel(table_name = messages)]
-#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct DbMessage {
     pub id: String,
     pub model_name: Option<String>,
-    #[serde(rename = "type")]
-    pub type_: Option<String>,
+    pub r#type: Option<String>,
     pub thread_id: Option<String>,
     pub user_id: Option<String>,
     pub content_type: Option<String>,
@@ -78,7 +76,7 @@ impl DbMessage {
     #[diesel::dsl::auto_type(no_type_alias)]
     pub fn by_type(message_type: &str) -> _ {
         let all: All = Self::all();
-        all.filter(messages::type_.eq(message_type))
+        all.filter(messages::r#type.eq(message_type))
     }
 
     pub fn parse_content_array(&self) -> Vec<(String, String, Option<String>)> {
@@ -107,8 +105,7 @@ impl DbMessage {
 pub struct DbNewMessage {
     pub id: String,
     pub model_name: Option<String>,
-    #[serde(rename = "type")]
-    pub type_: Option<String>,
+    pub r#type: Option<String>,
     pub thread_id: String,
     pub user_id: Option<String>,
     pub content_type: Option<String>,
@@ -125,8 +122,7 @@ pub struct DbNewMessage {
 #[diesel(table_name = messages)]
 pub struct DbUpdateMessage {
     pub model_name: Option<String>,
-    #[serde(rename = "type")]
-    pub type_: Option<String>,
+    pub r#type: Option<String>,
     pub thread_id: Option<String>,
     pub user_id: Option<String>,
     pub content_type: Option<String>,
@@ -177,7 +173,7 @@ mod tests {
         DbMessage {
             id: String::from("00000000-0000-0000-0000-000000000000"),
             model_name: Some(String::from("gpt-4")),
-            type_: Some(String::from("user")),
+            r#type: Some(String::from("user")),
             thread_id: Some(String::from("thread123")),
             user_id: Some(String::from("user123")),
             content_type: Some(String::from("text")),

@@ -56,7 +56,7 @@ pub async fn list_traces(
     let trace_service = TraceServiceImpl::new(Arc::new(db_pool.get_ref().clone()));
 
     // Extract project_id from extensions (set by ProjectMiddleware)
-    let project_id = req.extensions().get::<DbProject>().map(|p| p.id.clone());
+    let project_id = req.extensions().get::<DbProject>().map(|p| p.slug.clone());
 
     let thread_ids = query
         .thread_ids
@@ -145,7 +145,7 @@ pub async fn get_spans_by_run(
     let trace_service = TraceServiceImpl::new(Arc::new(db_pool.get_ref().clone()));
 
     // Extract project_id from extensions (set by ProjectMiddleware)
-    let project_id = req.extensions().get::<DbProject>().map(|p| p.id.clone());
+    let project_id = req.extensions().get::<DbProject>().map(|p| p.slug.clone());
 
     let limit = query.limit.unwrap_or(100);
     let offset = query.offset.unwrap_or(0);

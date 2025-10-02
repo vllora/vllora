@@ -121,9 +121,10 @@ where
                     tracing::debug!("Project resolved: {}", p.name);
                     // Store full DbProject for handlers
                     req.extensions_mut().insert(p.clone());
-                    // Store lightweight GatewayProject for telemetry (core crate)
-                    req.extensions_mut().insert(langdb_core::types::GatewayProject {
-                        id: p.id.to_string(),
+                    // Store lightweight GatewayTenant for telemetry (core crate)
+                    req.extensions_mut().insert(langdb_core::types::GatewayTenant {
+                        name: "default".to_string(),
+                        project_slug: p.slug.clone(),
                     });
                 }
                 Ok(None) => {

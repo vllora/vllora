@@ -5,6 +5,7 @@ use actix_web::{
 use futures::future::LocalBoxFuture;
 use langdb_core::telemetry::AdditionalContext;
 use langdb_core::telemetry::HeaderExtractor;
+use langdb_core::types::metadata::project::Project;
 use opentelemetry::{
     baggage::BaggageExt, propagation::TextMapPropagator, trace::FutureExt, Context, KeyValue,
 };
@@ -50,15 +51,15 @@ where
         let context =
             propagator.extract_with_context(&Context::new(), &HeaderExtractor(req.headers()));
 
-        let mut project_id = None;
+        let mut project_slug = None;
 
-        if let Some(project) = &req.extensions().get::<langdb_core::types::GatewayProject>().cloned() {
-            project_id = Some(project.id.clone());
+        if let Some(project) = &req.extensions().get::<Project>().cloned() {
+            project_slug = Some(project.slug.clone());
         }
 
         let mut key_values = vec![
             KeyValue::new("langdb.tenant", "default".to_string()),
-            KeyValue::new("langdb.project_id", project_id.unwrap_or_default()),
+            KeyValue::new("langdb.project_id", project_slug.unwrap_or_default()),
         ];
 
         let label = req

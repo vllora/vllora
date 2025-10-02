@@ -27,7 +27,7 @@ create table threads
     project_id           text,
     is_public            integer  default 0                             not null,
     description          text,
-    keywords             text     default '[]'                          not null
+    keywords             text     default '[]'
 );
 
 create table messages
@@ -40,7 +40,7 @@ create table messages
     user_id              text,
     content_type         text,
     content              text,
-    content_array        text     default '[]'                          not null,
+    content_array        text     default '[]',
     tool_call_id         text,
     tool_calls           text,
     tenant_id            text,

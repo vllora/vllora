@@ -39,7 +39,7 @@ pub async fn list_runs(
     let run_service = RunServiceImpl::new(Arc::new(db_pool.get_ref().clone()));
 
     // Extract project_id from extensions (set by ProjectMiddleware)
-    let project_id = req.extensions().get::<DbProject>().map(|p| p.id.clone());
+    let project_id = req.extensions().get::<DbProject>().map(|p| p.slug.clone());
 
     let list_query = ListRunsQuery {
         project_id,
