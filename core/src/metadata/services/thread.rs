@@ -7,6 +7,7 @@ use diesel::ExpressionMethods;
 use diesel::OptionalExtension;
 use diesel::QueryableByName;
 use diesel::{sql_query, QueryDsl, RunQueryDsl};
+use std::collections::HashSet;
 
 // For the efficient query approach, we'll use a struct that matches the SQL result
 #[derive(QueryableByName, Debug, Clone)]
@@ -34,7 +35,7 @@ pub struct ThreadWithMessageInfo {
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
     pub last_message_at: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
-    pub human_model_names: Option<String>,
+    pub model_names: Option<String>,
 }
 
 pub struct ThreadService {
@@ -134,8 +135,10 @@ impl ThreadService {
         // Use a single efficient raw SQL query with LEFT JOIN and aggregations
         let sql_query_str = "SELECT t.*,
                     max(m.created_at) as last_message_at,
-                    group_concat(CASE WHEN m.type = 'human' THEN m.model_name END) as human_model_names
-             FROM threads t LEFT JOIN messages m on t.id = m.thread_id
+                    group_concat(CASE WHEN tr.operation_name = 'model_call' THEN json_extract(tr.attribute, '$.model_name') END) as model_names
+             FROM threads t 
+             LEFT JOIN messages m on t.id = m.thread_id
+             LEFT JOIN traces tr on t.id = tr.thread_id
              WHERE t.project_id = ?
              GROUP BY t.id
              ORDER BY last_message_at DESC NULLS LAST, t.created_at DESC
@@ -209,11 +212,20 @@ impl ThreadService {
     ) -> MessageThreadWithTitle {
         let keywords = serde_json::from_str(&thread_info.keywords).unwrap_or_default();
 
-        // Parse human model names into input_models
-        let input_models = thread_info
-            .human_model_names
-            .map(|names| names.split(',').map(|s| s.trim().to_string()).collect())
-            .unwrap_or_default();
+        // Parse and deduplicate model names into input_models
+        let input_models = if let Some(names) = thread_info.model_names.clone() {
+            let mut seen = HashSet::new();
+            let mut models: Vec<String> = Vec::new();
+            for name in names.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()) {
+                let candidate = name.to_string();
+                if seen.insert(candidate.clone()) {
+                    models.push(candidate);
+                }
+            }
+            models
+        } else {
+            Vec::new()
+        };
 
         MessageThreadWithTitle {
             id: thread_info.id,
@@ -273,6 +285,7 @@ mod tests {
             id: "test-id".to_string(),
             user_id: Some("user123".to_string()),
             model_name: Some("gpt-4".to_string()),
+            title: Some("Test title".to_string()),
             created_at: "2023-01-01T00:00:00Z".to_string(),
             tenant_id: Some("tenant123".to_string()),
             project_id: Some("project123".to_string()),
@@ -311,6 +324,7 @@ mod tests {
             id: Some(thread.id.clone()),
             user_id: Some(thread.user_id),
             model_name: Some(thread.model_name),
+            title: thread.title,
             tenant_id: None,
             project_id: Some(thread.project_id),
             is_public: Some(if thread.is_public { 1 } else { 0 }),
@@ -352,6 +366,7 @@ mod tests {
             id: "test-thread".to_string(),
             user_id: Some("user-1".to_string()),
             model_name: Some("gpt-4".to_string()),
+            title: Some("Untitled".to_string()),
             created_at: "2023-01-01T00:00:00Z".to_string(),
             tenant_id: Some("tenant-1".to_string()),
             project_id: Some("project-1".to_string()),
@@ -359,7 +374,7 @@ mod tests {
             description: Some("Test description".to_string()),
             keywords: r#"["keyword1", "keyword2"]"#.to_string(),
             last_message_at: Some("2023-01-02T00:00:00Z".to_string()),
-            human_model_names: Some("gpt-4,claude-3".to_string()),
+            model_names: Some("gpt-4,claude-3".to_string()),
         };
 
         let result = service.thread_with_message_info_to_message_thread_with_title(thread_info);
@@ -396,6 +411,7 @@ mod tests {
             id: "test-thread".to_string(),
             user_id: Some("user-1".to_string()),
             model_name: Some("gpt-4".to_string()),
+            title: Some("Untitled".to_string()),
             created_at: "2023-01-01T00:00:00Z".to_string(),
             tenant_id: Some("tenant-1".to_string()),
             project_id: Some("project-1".to_string()),
@@ -403,7 +419,7 @@ mod tests {
             description: Some("Test description".to_string()),
             keywords: r#"[]"#.to_string(),
             last_message_at: None,
-            human_model_names: None,
+            model_names: None,
         };
 
         let result = service.thread_with_message_info_to_message_thread_with_title(thread_info);
@@ -424,6 +440,7 @@ mod tests {
             id: "test-thread".to_string(),
             user_id: Some("user-1".to_string()),
             model_name: Some("gpt-4".to_string()),
+            title: Some("Untitled".to_string()),
             created_at: "2023-01-01T00:00:00Z".to_string(),
             tenant_id: Some("tenant-1".to_string()),
             project_id: Some("project-1".to_string()),
@@ -431,7 +448,7 @@ mod tests {
             description: Some("Test description".to_string()),
             keywords: r#"["tag1", "tag2", "tag3"]"#.to_string(),
             last_message_at: None,
-            human_model_names: None,
+            model_names: None,
         };
 
         let result = service.thread_with_message_info_to_message_thread_with_title(thread_info);
@@ -457,6 +474,7 @@ mod tests {
             id: "test-thread".to_string(),
             user_id: Some("user-1".to_string()),
             model_name: Some("gpt-4".to_string()),
+            title: Some("Untitled".to_string()),
             created_at: "2023-01-01T00:00:00Z".to_string(),
             tenant_id: Some("tenant-1".to_string()),
             project_id: Some("project-1".to_string()),
@@ -464,7 +482,7 @@ mod tests {
             description: Some("Test description".to_string()),
             keywords: r#"[]"#.to_string(),
             last_message_at: None,
-            human_model_names: Some("gpt-4,claude-3,gpt-3.5-turbo".to_string()),
+            model_names: Some("gpt-4,claude-3,gpt-3.5-turbo".to_string()),
         };
 
         let result = service.thread_with_message_info_to_message_thread_with_title(thread_info);
