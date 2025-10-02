@@ -36,6 +36,12 @@ pub struct ThreadWithMessageInfo {
     pub last_message_at: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
     pub model_names: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    pub cost: String,
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    pub input_tokens: String,
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    pub output_tokens: String,
 }
 
 pub struct ThreadService {
@@ -135,7 +141,10 @@ impl ThreadService {
         // Use a single efficient raw SQL query with LEFT JOIN and aggregations
         let sql_query_str = "SELECT t.*,
                     max(m.created_at) as last_message_at,
-                    group_concat(CASE WHEN tr.operation_name = 'model_call' THEN json_extract(tr.attribute, '$.model_name') END) as model_names
+                    group_concat(CASE WHEN tr.operation_name = 'model_call' THEN json_extract(tr.attribute, '$.model_name') END) as model_names,
+                    SUM(CAST(json_extract(attribute, '$.cost') as float)) as cost,
+                    SUM(CASE WHEN operation_name != 'model_call' THEN json_extract(json_extract(attribute, '$.usage'), '$.input_tokens') END) as input_tokens,
+                    SUM(CASE WHEN operation_name != 'model_call' THEN json_extract(json_extract(attribute, '$.usage'), '$.output_tokens') END) as output_tokens
              FROM threads t 
              LEFT JOIN messages m on t.id = m.thread_id
              LEFT JOIN traces tr on t.id = tr.thread_id
@@ -236,9 +245,9 @@ impl ThreadService {
                 .unwrap_or(thread_info.created_at),
             input_models,
             mcp_template_definition_ids: vec![],
-            cost: 0.0,
-            input_tokens: 0,
-            output_tokens: 0,
+            cost: thread_info.cost.parse::<f64>().unwrap_or(0.0),
+            input_tokens: thread_info.input_tokens.parse::<u64>().unwrap_or(0),
+            output_tokens: thread_info.output_tokens.parse::<u64>().unwrap_or(0),
             description: thread_info.description,
             keywords: Some(keywords),
             is_public: thread_info.is_public != 0,
@@ -374,6 +383,9 @@ mod tests {
             keywords: r#"["keyword1", "keyword2"]"#.to_string(),
             last_message_at: Some("2023-01-02T00:00:00Z".to_string()),
             model_names: Some("gpt-4,claude-3".to_string()),
+            cost: "0.0".to_string(),
+            input_tokens: "0".to_string(),
+            output_tokens: "0".to_string(),
         };
 
         let result = service.thread_with_message_info_to_message_thread_with_title(thread_info);
@@ -419,6 +431,9 @@ mod tests {
             keywords: r#"[]"#.to_string(),
             last_message_at: None,
             model_names: None,
+            cost: "0.0".to_string(),
+            input_tokens: "0".to_string(),
+            output_tokens: "0".to_string(),
         };
 
         let result = service.thread_with_message_info_to_message_thread_with_title(thread_info);
@@ -448,6 +463,9 @@ mod tests {
             keywords: r#"["tag1", "tag2", "tag3"]"#.to_string(),
             last_message_at: None,
             model_names: None,
+            cost: "0.0".to_string(),
+            input_tokens: "0".to_string(),
+            output_tokens: "0".to_string(),
         };
 
         let result = service.thread_with_message_info_to_message_thread_with_title(thread_info);
@@ -482,6 +500,9 @@ mod tests {
             keywords: r#"[]"#.to_string(),
             last_message_at: None,
             model_names: Some("gpt-4,claude-3,gpt-3.5-turbo".to_string()),
+            cost: "0.0".to_string(),
+            input_tokens: "0".to_string(),
+            output_tokens: "0".to_string(),
         };
 
         let result = service.thread_with_message_info_to_message_thread_with_title(thread_info);
