@@ -1,6 +1,24 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
+    messages (id) {
+        id -> Text,
+        model_name -> Nullable<Text>,
+        r#type -> Nullable<Text>,
+        thread_id -> Nullable<Text>,
+        user_id -> Nullable<Text>,
+        content_type -> Nullable<Text>,
+        content -> Nullable<Text>,
+        content_array -> Text,
+        tool_call_id -> Nullable<Text>,
+        tool_calls -> Nullable<Text>,
+        tenant_id -> Nullable<Text>,
+        project_id -> Nullable<Text>,
+        created_at -> Text,
+    }
+}
+
+diesel::table! {
     models (id) {
         id -> Nullable<Text>,
         model_name -> Text,
@@ -66,23 +84,20 @@ diesel::table! {
 }
 
 diesel::table! {
-    messages (id) {
-        id -> Text,
-        model_name -> Nullable<Text>,
-        r#type -> Nullable<Text>,
+    traces (trace_id, span_id) {
+        trace_id -> Text,
+        span_id -> Text,
         thread_id -> Nullable<Text>,
-        user_id -> Nullable<Text>,
-        content_type -> Nullable<Text>,
-        content -> Nullable<Text>,
-        content_array -> Text,
-        tool_call_id -> Nullable<Text>,
-        tool_calls -> Nullable<Text>,
-        tenant_id -> Nullable<Text>,
+        parent_span_id -> Nullable<Text>,
+        operation_name -> Text,
+        start_time_us -> BigInt,
+        finish_time_us -> BigInt,
+        attribute -> Text,
+        run_id -> Nullable<Text>,
         project_id -> Nullable<Text>,
-        created_at -> Text,
     }
 }
 
 diesel::joinable!(messages -> threads (thread_id));
 
-diesel::allow_tables_to_appear_in_same_query!(models, projects, threads, messages,);
+diesel::allow_tables_to_appear_in_same_query!(messages, models, projects, threads, traces,);

@@ -28,6 +28,7 @@ use serde::{Deserialize, Serialize};
 )]
 #[serde(crate = "serde")]
 #[diesel(table_name = threads)]
+#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct DbThread {
     pub id: String,
     pub user_id: Option<String>,

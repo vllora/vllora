@@ -119,7 +119,13 @@ where
             match project {
                 Ok(Some(p)) => {
                     tracing::debug!("Project resolved: {}", p.name);
-                    req.extensions_mut().insert(p);
+                    // Store full DbProject for handlers
+                    req.extensions_mut().insert(p.clone());
+                    // Store lightweight GatewayTenant for telemetry (core crate)
+                    req.extensions_mut().insert(langdb_core::types::GatewayTenant {
+                        name: "default".to_string(),
+                        project_slug: p.slug.clone(),
+                    });
                 }
                 Ok(None) => {
                     error!("No project found");

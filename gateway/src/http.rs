@@ -2,14 +2,14 @@ use crate::callback_handler::init_callback_handler;
 use crate::config::{load_langdb_proxy_config, Config};
 use crate::cost::GatewayCostCalculator;
 use crate::guardrails::GuardrailsService;
-use crate::handlers::projects;
+use crate::handlers::{projects, runs, traces};
 use crate::limit::GatewayLimitChecker;
 use crate::middleware::project::ProjectMiddleware;
 use crate::middleware::run_id::RunId;
 use crate::middleware::thread_id::ThreadId;
 use crate::middleware::trace_logger::TraceLogger;
 use crate::middleware::tracing_context::TracingContext;
-use crate::otel::DummyTraceWritterTransport;
+use langdb_core::telemetry::database::SqliteTraceWriterTransport;
 use actix_cors::Cors;
 use actix_web::Scope as ActixScope;
 use actix_web::{
@@ -186,7 +186,7 @@ impl ApiServer {
                 let client = ClickhouseHttp::root().with_url(&c.url).clone_box();
                 Box::new(DatabaseSpanWritter::new(client)) as Box<dyn SpanWriterTransport>
             }
-            None => Box::new(DummyTraceWritterTransport {}) as Box<dyn SpanWriterTransport>,
+            None => Box::new(SqliteTraceWriterTransport::new(Arc::new(server_config.db_pool.clone()))) as Box<dyn SpanWriterTransport>,
         };
 
         let project_service = ProjectServiceImpl::new(server_config.db_pool.clone());
@@ -266,6 +266,7 @@ impl ApiServer {
             .app_data(Data::new(available_models));
 
         app.wrap(TraceLogger)
+            .wrap(TracingContext)
             .wrap(ProjectMiddleware::new())
             .app_data(Data::new(broadcaster))
             .app_data(web::Data::from(project_trace_senders))
@@ -300,6 +301,15 @@ impl ApiServer {
             .route(
                 "/events",
                 web::get().to(langdb_core::handler::events::stream_events),
+            )
+            .service(
+                web::scope("/traces")
+                    .route("", web::get().to(traces::list_traces))
+                    .route("/run/{run_id}", web::get().to(traces::get_spans_by_run)),
+            )
+            .service(
+                web::scope("/runs")
+                    .route("", web::get().to(runs::list_runs)),
             )
             .wrap(cors)
     }
