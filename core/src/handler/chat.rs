@@ -322,7 +322,7 @@ pub async fn create_chat_completion(
         Some(thread_id.clone()),
         Some(history_manager),
         history_context,
-        Some(predefined_message_id),
+        Some(predefined_message_id.clone()),
         span.clone(),
         cost_calculator.clone(),
     )
