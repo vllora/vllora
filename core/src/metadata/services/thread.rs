@@ -138,20 +138,35 @@ impl ThreadService {
         let limit = page_options.limit.unwrap_or(50);
         let offset = page_options.offset.unwrap_or(0);
 
-        // Use a single efficient raw SQL query with LEFT JOIN and aggregations
-        let sql_query_str = "SELECT t.*,
-                    max(m.created_at) as last_message_at,
-                    group_concat(CASE WHEN tr.operation_name = 'model_call' THEN json_extract(tr.attribute, '$.model_name') END) as model_names,
-                    SUM(CAST(json_extract(attribute, '$.cost') as float)) as cost,
-                    SUM(CASE WHEN operation_name != 'model_call' THEN json_extract(json_extract(attribute, '$.usage'), '$.input_tokens') END) as input_tokens,
-                    SUM(CASE WHEN operation_name != 'model_call' THEN json_extract(json_extract(attribute, '$.usage'), '$.output_tokens') END) as output_tokens
-             FROM threads t 
-             LEFT JOIN messages m on t.id = m.thread_id
-             LEFT JOIN traces tr on t.id = tr.thread_id
-             WHERE t.project_id = ?
-             GROUP BY t.id
-             ORDER BY last_message_at DESC NULLS LAST, t.created_at DESC
-             LIMIT ? OFFSET ?".to_string();
+        // Use subqueries to avoid row multiplication between messages and traces
+        let sql_query_str = "SELECT 
+                    t.*, 
+                    m.last_message_at, 
+                    tr.model_names, 
+                    CAST(COALESCE(tr.cost, 0) AS TEXT) AS cost, 
+                    CAST(COALESCE(tr.input_tokens, 0) AS TEXT) AS input_tokens, 
+                    CAST(COALESCE(tr.output_tokens, 0) AS TEXT) AS output_tokens
+                FROM threads t
+                LEFT JOIN (
+                    SELECT 
+                        thread_id, 
+                        MAX(created_at) AS last_message_at
+                    FROM messages
+                    GROUP BY thread_id
+                ) m ON t.id = m.thread_id
+                LEFT JOIN (
+                    SELECT 
+                        thread_id,
+                        group_concat(CASE WHEN operation_name = 'model_call' THEN json_extract(attribute, '$.model_name') END) AS model_names,
+                        SUM(COALESCE(CAST(json_extract(attribute, '$.cost') AS REAL), 0)) AS cost,
+                        SUM(CASE WHEN operation_name != 'model_call' THEN json_extract(json_extract(attribute, '$.usage'), '$.input_tokens') END) AS input_tokens,
+                        SUM(CASE WHEN operation_name != 'model_call' THEN json_extract(json_extract(attribute, '$.usage'), '$.output_tokens') END) AS output_tokens
+                    FROM traces
+                    GROUP BY thread_id
+                ) tr ON t.id = tr.thread_id
+                WHERE t.project_id = ?
+                ORDER BY last_message_at DESC NULLS LAST, t.created_at DESC
+                LIMIT ? OFFSET ?".to_string();
 
         let query = sql_query(&sql_query_str);
         let results: Vec<ThreadWithMessageInfo> = query
