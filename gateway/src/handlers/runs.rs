@@ -2,7 +2,7 @@ use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Result};
 use langdb_core::metadata::models::project::DbProject;
 use langdb_core::metadata::models::run::RunUsageResponse;
 use langdb_core::metadata::pool::DbPool;
-use langdb_core::metadata::services::run::{ListRunsQuery, RunService, RunServiceImpl};
+use langdb_core::metadata::services::run::{ListRunsQuery, RunService, RunServiceImpl, TypeFilter};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -11,14 +11,17 @@ pub struct ListRunsQueryParams {
     pub run_ids: Option<String>,        // Comma-separated
     #[serde(alias = "threadIds")]
     pub thread_ids: Option<String>,     // Comma-separated
+    #[serde(alias = "traceIds")]
     pub trace_ids: Option<String>,      // Comma-separated
+    #[serde(alias = "modelName")]
     pub model_name: Option<String>,
     #[serde(alias = "typeFilter")]
-    pub type_filter: Option<String>,
+    pub type_filter: Option<TypeFilter>,
     pub start_time_min: Option<i64>,
     pub start_time_max: Option<i64>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
+    #[serde(alias = "includeMcpTemplates")]
     pub include_mcp_templates: Option<bool>,
 }
 
@@ -46,25 +49,26 @@ pub async fn list_runs(
     let project_id = req.extensions().get::<DbProject>().map(|p| p.slug.clone());
 
     let list_query = ListRunsQuery {
-        project_id,
+        project_id: project_id.clone(),
         run_ids: query
             .run_ids
             .as_ref()
-            .map(|s| s.split(',').map(String::from).collect()),
+            .map(|s| s.split(',').map(|id| id.trim().to_string()).collect()),
         thread_ids: query
             .thread_ids
             .as_ref()
-            .map(|s| s.split(',').map(String::from).collect()),
+            .map(|s| s.split(',').map(|id| id.trim().to_string()).collect()),
         trace_ids: query
             .trace_ids
             .as_ref()
-            .map(|s| s.split(',').map(String::from).collect()),
+            .map(|s| s.split(',').map(|id| id.trim().to_string()).collect()),
         model_name: query.model_name.clone(),
         type_filter: query.type_filter.clone(),
         start_time_min: query.start_time_min,
         start_time_max: query.start_time_max,
         limit: query.limit.unwrap_or(100),
         offset: query.offset.unwrap_or(0),
+        include_mcp_templates: query.include_mcp_templates.unwrap_or(false),
     };
 
     match run_service.list(list_query.clone()) {

@@ -2,7 +2,15 @@ use crate::metadata::error::DatabaseError;
 use crate::metadata::models::run::RunUsageInformation;
 use crate::metadata::pool::DbPool;
 use diesel::prelude::*;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TypeFilter {
+    Model,
+    Mcp,
+}
 
 #[derive(Debug, Clone)]
 pub struct ListRunsQuery {
@@ -11,11 +19,12 @@ pub struct ListRunsQuery {
     pub thread_ids: Option<Vec<String>>,
     pub trace_ids: Option<Vec<String>>,
     pub model_name: Option<String>,
-    pub type_filter: Option<String>,
+    pub type_filter: Option<TypeFilter>,
     pub start_time_min: Option<i64>,
     pub start_time_max: Option<i64>,
     pub limit: i64,
     pub offset: i64,
+    pub include_mcp_templates: bool,
 }
 
 pub trait RunService {
@@ -74,17 +83,12 @@ impl RunServiceImpl {
         }
 
         if let Some(type_filter) = &query.type_filter {
-            match type_filter.as_str() {
-                "model" => {
+            match type_filter {
+                TypeFilter::Model => {
                     conditions.push("operation_name = 'model_call'".to_string());
                 }
-                "api" => {
-                    conditions.push("operation_name = 'api_invoke'".to_string());
-                }
-                _ => {
-                    // For other types, filter by operation_name if it matches
-                    let escaped_type = type_filter.replace("'", "''");
-                    conditions.push(format!("operation_name = '{}'", escaped_type));
+                TypeFilter::Mcp => {
+                    conditions.push("operation_name = 'mcp_call'".to_string());
                 }
             }
         }
