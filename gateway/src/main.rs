@@ -93,6 +93,8 @@ fn seed_database(db_pool: &DbPool) -> Result<(), CliError> {
         };
 
         let created_project = project_service.create(default_project, dummy_owner_id)?;
+        // set this project as default
+        project_service.set_default(created_project.id, dummy_owner_id)?;
         info!(
             "Created default project: {} (ID: {})",
             created_project.name, created_project.id

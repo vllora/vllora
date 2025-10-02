@@ -312,12 +312,12 @@ impl ApiServer {
             )
             .service(
                 web::scope("/traces")
-                    .route("", web::get().to(traces::list_traces))
-                    .route("/run/{run_id}", web::get().to(traces::get_spans_by_run)),
+                    .route("", web::get().to(traces::list_traces)),
             )
             .service(
                 web::scope("/runs")
-                    .route("", web::get().to(runs::list_runs)),
+                    .route("", web::get().to(runs::list_runs))
+                    .route("/{run_id}", web::get().to(traces::get_spans_by_run)),
             )
             .wrap(cors)
     }
