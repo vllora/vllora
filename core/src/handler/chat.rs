@@ -358,6 +358,7 @@ pub async fn create_chat_completion(
             memory_storage,
             None,
             Some(&predefined_message_id),
+            Some(&thread_id),
         )
         .instrument(span.clone())
         .await

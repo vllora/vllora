@@ -63,6 +63,7 @@ impl RoutedExecutor {
         memory_storage: Option<Arc<Mutex<InMemoryStorage>>>,
         project_id: Option<&uuid::Uuid>,
         predefined_message_id: Option<&String>,
+        thread_id: Option<&String>,
     ) -> Result<HttpResponse, GatewayApiError> {
         let span = Span::current();
 
@@ -148,6 +149,7 @@ impl RoutedExecutor {
                     executor_context,
                     project_id,
                     predefined_message_id,
+                    thread_id,
                 )
                 .await;
 
@@ -175,6 +177,7 @@ impl RoutedExecutor {
         executor_context: &ExecutorContext,
         project_id: Option<&uuid::Uuid>,
         predefined_message_id: Option<&String>,
+        thread_id: Option<&String>,
     ) -> Result<HttpResponse, GatewayApiError> {
         let span = tracing::Span::current();
         span.record("request", &serde_json::to_string(&request)?);
@@ -198,7 +201,7 @@ impl RoutedExecutor {
         .await?;
 
         let mut response_builder = HttpResponse::Ok();
-        let builder = response_builder
+        let builder: &mut actix_web::HttpResponseBuilder = response_builder
             .insert_header(("X-Trace-Id", trace_id_uuid(trace_id).to_string()))
             .insert_header(("X-Model-Name", model_name.clone()))
             .insert_header((
@@ -208,6 +211,10 @@ impl RoutedExecutor {
 
         if let Some(predefined_message_id) = predefined_message_id {
             builder.insert_header(("X-Message-Id", predefined_message_id.to_string()));
+        }
+
+        if let Some(thread_id) = thread_id {
+            builder.insert_header(("X-Thread-Id", thread_id.to_string()));
         }
 
         match response {
