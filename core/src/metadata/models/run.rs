@@ -32,11 +32,11 @@ pub struct RunUsageInformation {
     #[diesel(sql_type = Double)]
     pub cost: f64,
 
-    #[diesel(sql_type = BigInt)]
-    pub input_tokens: i64,
+    #[diesel(sql_type = Nullable<BigInt>)]
+    pub input_tokens: Option<i64>,
 
-    #[diesel(sql_type = BigInt)]
-    pub output_tokens: i64,
+    #[diesel(sql_type = Nullable<BigInt>)]
+    pub output_tokens: Option<i64>,
 
     #[diesel(sql_type = BigInt)]
     pub start_time_us: i64,
@@ -109,8 +109,8 @@ impl From<RunUsageInformation> for RunUsageResponse {
             mcp_template_definition_ids: info.mcp_template_definition_ids(),
             llm_calls: info.llm_calls,
             cost: info.cost,
-            input_tokens: info.input_tokens,
-            output_tokens: info.output_tokens,
+            input_tokens: info.input_tokens.unwrap_or(0),
+            output_tokens: info.output_tokens.unwrap_or(0),
             start_time_us: info.start_time_us,
             finish_time_us: info.finish_time_us,
             errors: info.errors(),

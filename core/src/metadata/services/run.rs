@@ -162,6 +162,7 @@ impl RunService for RunServiceImpl {
             filter_clause, query.limit, query.offset
         );
 
+        tracing::info!("SQL: {}", sql);
         let results = diesel::sql_query(sql)
             .load::<RunUsageInformation>(&mut conn)
             .map_err(DatabaseError::QueryError)?;

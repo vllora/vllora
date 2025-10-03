@@ -94,7 +94,6 @@ pub(crate) async fn prepare_request(
                     if let Some(model) = &model_event.model {
                         let (cost, usage) = match &e.usage {
                             Some(usage) => {
-                                tracing::info!("Usage: {:?}", usage);
                                 let cost = cost_calculator
                                     .as_ref()
                                     .calculate_cost(

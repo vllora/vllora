@@ -180,7 +180,7 @@ pub async fn get_thread_messages(
 
             let message_service = MessageService::new(db_pool.get_ref().clone());
 
-            match message_service.get_by_thread_id(
+            match message_service.get_thread_messages_with_metrics(
                 &thread_id,
                 page_options.unwrap_or(PageOptions {
                     order_by: vec![("created_at".to_string(), PageOrderType::Asc)],

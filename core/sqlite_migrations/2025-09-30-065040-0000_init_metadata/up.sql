@@ -50,3 +50,71 @@ create table messages
     foreign key (thread_id) references threads(id)
 );
 
+-- Your SQL goes here
+CREATE TABLE traces (
+    trace_id TEXT NOT NULL,
+    span_id TEXT NOT NULL,
+    thread_id TEXT,
+    parent_span_id TEXT,
+    operation_name TEXT NOT NULL,
+    start_time_us BIGINT NOT NULL,
+    finish_time_us BIGINT NOT NULL,
+    attribute TEXT NOT NULL, -- JSON stored as text
+    run_id TEXT,
+    project_id TEXT,
+    PRIMARY KEY (trace_id, span_id)
+);
+
+-- Create indexes for common query patterns
+CREATE INDEX idx_traces_trace_id ON traces(trace_id);
+CREATE INDEX idx_traces_thread_id ON traces(thread_id);
+CREATE INDEX idx_traces_run_id ON traces(run_id);
+CREATE INDEX idx_traces_project_id ON traces(project_id);
+CREATE INDEX idx_traces_start_time_us ON traces(start_time_us);
+CREATE INDEX idx_traces_finish_time_us ON traces(finish_time_us);
+CREATE INDEX idx_traces_parent_span_id ON traces(parent_span_id);
+
+-- Composite index for child_attribute JOIN query (trace_id, parent_span_id, operation_name, start_time_us)
+CREATE INDEX idx_traces_child_lookup ON traces(trace_id, parent_span_id, operation_name, start_time_us);
+
+-- Your SQL goes here
+CREATE TABLE models (
+    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    model_name TEXT NOT NULL,
+    description TEXT,
+    provider_name TEXT NOT NULL,
+    model_type TEXT NOT NULL,
+    input_token_price REAL,
+    output_token_price REAL,
+    context_size INTEGER,
+    capabilities TEXT, -- JSON array stored as text
+    input_types TEXT, -- JSON array stored as text
+    output_types TEXT, -- JSON array stored as text
+    tags TEXT, -- JSON array stored as text
+    type_prices TEXT, -- JSON object stored as text
+    mp_price REAL,
+    model_name_in_provider TEXT,
+    owner_name TEXT NOT NULL,
+    priority INTEGER NOT NULL DEFAULT 0,
+    parameters TEXT, -- JSON object stored as text
+    created_at TEXT DEFAULT (datetime('now')) NOT NULL,
+    updated_at TEXT DEFAULT (datetime('now')) NOT NULL,
+    deleted_at TEXT,
+    benchmark_info TEXT, -- JSON object stored as text
+    cached_input_token_price REAL,
+    cached_input_write_token_price REAL,
+    release_date TEXT,
+    langdb_release_date TEXT,
+    knowledge_cutoff_date TEXT,
+    license TEXT,
+    project_id TEXT,
+    endpoint TEXT -- Foreign key to projects table
+);
+
+-- Create indexes for common queries
+CREATE INDEX idx_models_model_name ON models(model_name);
+CREATE INDEX idx_models_provider_info_id ON models(provider_name);
+CREATE INDEX idx_models_model_type ON models(model_type);
+CREATE INDEX idx_models_owner_name ON models(owner_name);
+CREATE INDEX idx_models_deleted_at ON models(deleted_at);
+CREATE INDEX idx_models_project_id ON models(project_id);

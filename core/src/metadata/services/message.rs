@@ -6,9 +6,11 @@ use crate::types::gateway::ToolCall;
 use crate::types::message::MessageType;
 use crate::types::threads::PageOptions;
 use crate::types::threads::{
-    InsertMessageResult, Message, MessageContentPart, MessageContentType, MessageWithId,
+    InsertMessageResult, Message, MessageContentPart, MessageContentType, MessageWithAllMetrics,
+    MessageWithId,
 };
-use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
+use diesel::sql_types::{BigInt, Double, Nullable, Text};
+use diesel::{ExpressionMethods, QueryDsl, QueryableByName, RunQueryDsl};
 use std::str::FromStr;
 use uuid::Uuid;
 
@@ -25,7 +27,7 @@ impl MessageService {
         &self,
         thread_id: &str,
         page_options: PageOptions,
-    ) -> Result<Vec<Message>, DatabaseError> {
+    ) -> Result<Vec<MessageWithId>, DatabaseError> {
         let mut conn = self.db_pool.get()?;
 
         let mut query = DbMessage::by_thread_id(thread_id).into_boxed();
@@ -166,23 +168,6 @@ impl MessageService {
         Ok(created_messages)
     }
 
-    // Required methods for ThreadEntity interface
-    pub fn get_by_thread_id(
-        &self,
-        thread_id: &str,
-        page_options: PageOptions,
-    ) -> Result<Vec<MessageWithId>, DatabaseError> {
-        let messages = self.get_messages_by_thread_id(thread_id, page_options)?;
-        let messages_with_id = messages
-            .into_iter()
-            .map(|message| MessageWithId {
-                id: Uuid::new_v4().to_string(), // Generate ID for each message
-                message,
-            })
-            .collect();
-        Ok(messages_with_id)
-    }
-
     pub fn insert_many(
         &self,
         messages: Vec<Message>,
@@ -209,7 +194,7 @@ impl MessageService {
         Ok(Some(created_message))
     }
 
-    fn db_message_to_message(&self, db_message: DbMessage) -> Message {
+    fn db_message_to_message(&self, db_message: DbMessage) -> MessageWithId {
         let content_type = db_message
             .content_type
             .as_deref()
@@ -240,17 +225,129 @@ impl MessageService {
             .parse_tool_calls()
             .and_then(|tc| serde_json::from_value(tc).ok());
 
-        Message {
-            model_name: db_message.model_name.unwrap_or_default(),
-            thread_id: db_message.thread_id,
-            user_id: db_message.user_id.unwrap_or_default(),
-            content_type,
-            content: db_message.content,
-            content_array,
-            r#type: message_type,
-            tool_call_id: db_message.tool_call_id,
-            tool_calls,
+        MessageWithId {
+            id: db_message.id,
+            message: Message {
+                model_name: db_message.model_name.unwrap_or_default(),
+                thread_id: db_message.thread_id,
+                user_id: db_message.user_id.unwrap_or_default(),
+                content_type,
+                content: db_message.content,
+                content_array,
+                r#type: message_type,
+                tool_call_id: db_message.tool_call_id,
+                tool_calls,
+            },
         }
+    }
+
+    pub fn get_thread_messages_with_metrics(
+        &self,
+        thread_id: &str,
+        page_options: PageOptions,
+    ) -> Result<Vec<MessageWithAllMetrics>, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+
+        #[derive(QueryableByName)]
+        #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+        struct MessageMetricsQueryResult {
+            #[diesel(sql_type = Text)]
+            message_id: String,
+            #[diesel(sql_type = Nullable<Double>)]
+            cost: Option<f64>,
+            #[diesel(sql_type = Nullable<BigInt>)]
+            duration: Option<i64>,
+            #[diesel(sql_type = BigInt)]
+            start_time_us: i64,
+            #[diesel(sql_type = Nullable<BigInt>)]
+            ttft: Option<i64>,
+            #[diesel(sql_type = Nullable<Text>)]
+            usage: Option<String>,
+            #[diesel(sql_type = Nullable<Text>)]
+            run_id: Option<String>,
+            #[diesel(sql_type = Text)]
+            trace_id: String,
+            #[diesel(sql_type = Text)]
+            span_id: String,
+        }
+
+        let sql = format!(
+            r#"
+            SELECT json_extract(attribute, '$.message_id') as message_id,
+                   CAST(json_extract(attribute, '$.cost') as float) as cost,
+                   finish_time_us - start_time_us as duration,
+                   start_time_us,
+                   CAST(json_extract(attribute, '$.ttft') as int) as ttft,
+                   json_extract(attribute, '$.usage') as usage,
+                   run_id,
+                   trace_id,
+                   span_id
+            FROM traces
+            WHERE thread_id = '{}' AND json_extract(attribute, '$.message_id') IS NOT NULL
+            ORDER BY start_time_us ASC
+            "#,
+            thread_id
+        );
+
+        let results = diesel::sql_query(sql)
+            .load::<MessageMetricsQueryResult>(&mut conn)
+            .map_err(DatabaseError::QueryError)?;
+
+        // Get all messages for this thread
+        let messages = self.get_messages_by_thread_id(thread_id, page_options)?;
+
+        // Create a map of message_id to metrics for quick lookup
+        let mut metrics_map: std::collections::HashMap<
+            String,
+            Vec<crate::types::threads::MessageMetrics>,
+        > = std::collections::HashMap::new();
+
+        for result in results {
+            let usage: Option<crate::types::gateway::CompletionModelUsage> =
+                result.usage.and_then(|u| serde_json::from_str(&u).ok());
+
+            let metrics = crate::types::threads::MessageMetrics {
+                ttft: result.ttft.map(|t| t as u64),
+                usage,
+                duration: result.duration.map(|d| d as u64),
+                run_id: result.run_id,
+                trace_id: Some(result.trace_id),
+                span_id: Some(result.span_id),
+                start_time_us: Some(result.start_time_us as u64),
+                cost: result.cost,
+            };
+
+            // Only add metrics with non-empty run_id
+            if let Some(run_id) = metrics.run_id.as_ref() {
+                if !run_id.is_empty() {
+                    metrics_map
+                        .entry(result.message_id)
+                        .or_default()
+                        .push(metrics);
+                }
+            }
+        }
+
+        // Sort metrics by start_time_us (ascending), putting None at the end
+        for metrics_list in metrics_map.values_mut() {
+            metrics_list.sort_by_key(|m| m.start_time_us.unwrap_or(u64::MAX));
+        }
+
+        // Build result starting from messages, attaching metrics if available
+        let result: Vec<MessageWithAllMetrics> = messages
+            .into_iter()
+            .map(|message| {
+                let metrics = metrics_map.remove(&message.id).unwrap_or_default();
+                MessageWithAllMetrics {
+                    message: message.message,
+                    created_at: "".to_string(), // We'll need to get this from the message
+                    id: message.id,
+                    metrics,
+                }
+            })
+            .collect();
+
+        Ok(result)
     }
 }
 
@@ -282,13 +379,17 @@ mod tests {
 
         let message = service.db_message_to_message(db_message);
 
-        assert_eq!(message.model_name, "gpt-4");
-        assert_eq!(message.thread_id, Some("test-thread-id".to_string()));
-        assert_eq!(message.user_id, "test-user-id");
-        assert_eq!(message.content, Some("Hello, world!".to_string()));
-        assert_eq!(message.content_array.len(), 1);
-        assert_eq!(message.content_array[0].value, "Hello, world!");
-        assert_eq!(message.tool_call_id, None);
-        assert_eq!(message.tool_calls, None);
+        assert_eq!(message.id, "test-message-id");
+        assert_eq!(message.message.model_name, "gpt-4");
+        assert_eq!(
+            message.message.thread_id,
+            Some("test-thread-id".to_string())
+        );
+        assert_eq!(message.message.user_id, "test-user-id");
+        assert_eq!(message.message.content, Some("Hello, world!".to_string()));
+        assert_eq!(message.message.content_array.len(), 1);
+        assert_eq!(message.message.content_array[0].value, "Hello, world!");
+        assert_eq!(message.message.tool_call_id, None);
+        assert_eq!(message.message.tool_calls, None);
     }
 }
