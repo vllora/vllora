@@ -2,6 +2,7 @@ use crate::metadata::error::DatabaseError;
 use crate::metadata::models::run::RunUsageInformation;
 use crate::metadata::pool::DbPool;
 use diesel::prelude::*;
+use diesel::{sql_query, RunQueryDsl};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -41,43 +42,41 @@ impl RunServiceImpl {
         Self { db_pool }
     }
 
+    // Helper function to safely escape string values for SQL
+    fn escape_sql_string(value: &str) -> String {
+        value.replace('\'', "''")
+    }
+
+    // Helper function to build a SQL IN clause with properly escaped values
+    fn build_in_clause(values: &[String]) -> String {
+        values
+            .iter()
+            .map(|v| format!("'{}'", Self::escape_sql_string(v)))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
     fn build_filters(&self, query: &ListRunsQuery) -> String {
         let mut conditions = vec![];
 
         if let Some(project_id) = &query.project_id {
-            let escaped_project = project_id.replace("'", "''");
-            conditions.push(format!("project_id = '{}'", escaped_project));
+            conditions.push(format!("project_id = '{}'", Self::escape_sql_string(project_id)));
         }
 
         if let Some(run_ids) = &query.run_ids {
-            let values = run_ids
-                .iter()
-                .map(|id| format!("'{}'", id.replace("'", "''")))
-                .collect::<Vec<_>>()
-                .join(",");
-            conditions.push(format!("run_id IN ({})", values));
+            conditions.push(format!("run_id IN ({})", Self::build_in_clause(run_ids)));
         }
 
         if let Some(thread_ids) = &query.thread_ids {
-            let values = thread_ids
-                .iter()
-                .map(|id| format!("'{}'", id.replace("'", "''")))
-                .collect::<Vec<_>>()
-                .join(",");
-            conditions.push(format!("thread_id IN ({})", values));
+            conditions.push(format!("thread_id IN ({})", Self::build_in_clause(thread_ids)));
         }
 
         if let Some(trace_ids) = &query.trace_ids {
-            let values = trace_ids
-                .iter()
-                .map(|id| format!("'{}'", id.replace("'", "''")))
-                .collect::<Vec<_>>()
-                .join(",");
-            conditions.push(format!("trace_id IN ({})", values));
+            conditions.push(format!("trace_id IN ({})", Self::build_in_clause(trace_ids)));
         }
 
         if let Some(model_name) = &query.model_name {
-            let escaped_model = model_name.replace("'", "''");
+            let escaped_model = Self::escape_sql_string(model_name);
             conditions.push(format!(
                 "(operation_name = 'model_call' AND json_extract(attribute, '$.model_name') = '{}')
                  OR (operation_name = 'api_invoke' AND json_extract(json_extract(attribute, '$.request'), '$.model') = '{}')",
@@ -118,9 +117,7 @@ impl RunService for RunServiceImpl {
 
         let filter_clause = self.build_filters(&query);
 
-        let sql = format!(
-            r#"
-            SELECT
+        let sql_query_str = format!("SELECT
               run_id,
               COALESCE(json_group_array(DISTINCT thread_id) FILTER (WHERE thread_id IS NOT NULL), '[]') as thread_ids_json,
               COALESCE(json_group_array(DISTINCT trace_id), '[]') as trace_ids_json,
@@ -157,12 +154,11 @@ impl RunService for RunServiceImpl {
             )
             GROUP BY run_id
             ORDER BY start_time_us DESC
-            LIMIT {} OFFSET {}
-            "#,
-            filter_clause, query.limit, query.offset
-        );
+            LIMIT ? OFFSET ?", filter_clause);
 
-        let results = diesel::sql_query(sql)
+        let results = sql_query(&sql_query_str)
+            .bind::<diesel::sql_types::BigInt, _>(query.limit)
+            .bind::<diesel::sql_types::BigInt, _>(query.offset)
             .load::<RunUsageInformation>(&mut conn)
             .map_err(DatabaseError::QueryError)?;
 
@@ -180,20 +176,16 @@ impl RunService for RunServiceImpl {
             count: i64,
         }
 
-        let sql = format!(
-            r#"
-            SELECT COUNT(DISTINCT run_id) as count
+        let sql_query_str = format!(
+            "SELECT COUNT(DISTINCT run_id) as count
             FROM traces
             WHERE run_id IS NOT NULL
-              {}
-            "#,
-            filter_clause
-        );
+              {}", filter_clause);
 
-        let result = diesel::sql_query(sql)
-            .get_result::<CountResult>(&mut conn)
+        let result = sql_query(&sql_query_str)
+            .load::<CountResult>(&mut conn)
             .map_err(DatabaseError::QueryError)?;
 
-        Ok(result.count)
+        Ok(result.first().map(|r| r.count).unwrap_or(0))
     }
 }
