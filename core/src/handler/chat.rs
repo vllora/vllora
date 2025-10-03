@@ -5,6 +5,7 @@ use crate::events::callback_handler::GatewayModelEventWithDetails;
 use crate::executor::context::ExecutorContext;
 use crate::handler::ModelEventWithDetails;
 use crate::history::ThreadHistoryManager;
+use crate::model::types::CostEvent;
 use crate::model::types::CustomEvent;
 use crate::model::types::ModelEvent;
 use crate::model::types::ModelEventType;
@@ -128,28 +129,37 @@ pub(crate) async fn prepare_request(
                             }
                         };
 
-                        cloud_callback_handler
-                            .on_message(
-                                GatewayModelEventWithDetails {
-                                    event: ModelEventWithDetails::new(
-                                        ModelEvent::new(
-                                            &span,
-                                            ModelEventType::Custom(CustomEvent::new(
-                                                "cost".to_string(),
-                                                serde_json::json!({"cost": cost, "usage": usage}),
-                                            )),
-                                        ),
-                                        model_event.model.clone(),
-                                    ),
-                                    tenant_name: tenant_name.clone(),
-                                    project_id: project_id.clone(),
-                                    usage_identifiers: identifiers.clone(),
-                                    run_id: run_id.clone(),
-                                    thread_id: thread_id.clone(),
-                                }
-                                .into(),
-                            )
-                            .await;
+                        let cost_event = CostEvent::new(cost, usage);
+                        let cost_event_value = serde_json::to_value(cost_event);
+                        match cost_event_value {
+                            Ok(cost_event_value) => {
+                                cloud_callback_handler
+                                    .on_message(
+                                        GatewayModelEventWithDetails {
+                                            event: ModelEventWithDetails::new(
+                                                ModelEvent::new(
+                                                    &span,
+                                                    ModelEventType::Custom(CustomEvent::new(
+                                                        "cost".to_string(),
+                                                        cost_event_value,
+                                                    )),
+                                                ),
+                                                model_event.model.clone(),
+                                            ),
+                                            tenant_name: tenant_name.clone(),
+                                            project_id: project_id.clone(),
+                                            usage_identifiers: identifiers.clone(),
+                                            run_id: run_id.clone(),
+                                            thread_id: thread_id.clone(),
+                                        }
+                                        .into(),
+                                    )
+                                    .await;
+                            }
+                            Err(e) => {
+                                tracing::error!("Error serializing cost event: {}", e);
+                            }
+                        }
 
                         if let Some(span) = &model_event.event.span {
                             span.record("cost", serde_json::to_string(&cost).unwrap());

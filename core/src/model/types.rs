@@ -35,6 +35,18 @@ impl CustomEvent {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CostEvent {
+    cost: f64,
+    usage: Option<CompletionModelUsage>,
+}
+
+impl CostEvent {
+    pub fn new(cost: f64, usage: Option<CompletionModelUsage>) -> Self {
+        Self { cost, usage }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "type", content = "data")]
 pub enum ModelEventType {
