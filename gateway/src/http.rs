@@ -124,6 +124,7 @@ impl ApiServer {
         model_service: Arc<
             Box<dyn langdb_core::metadata::services::model::ModelService + Send + Sync>,
         >,
+        project_trace_senders: Arc<BroadcastChannelManager>,
     ) -> Result<impl Future<Output = Result<(), ServerError>>, ServerError> {
         let cost_calculator = GatewayCostCalculator::new();
         let callback = if let Some(storage) = &storage {
@@ -138,14 +139,7 @@ impl ApiServer {
         let events_senders = Arc::new(Mutex::new(HashMap::new()));
         let events_senders_container = Arc::new(EventsSendersContainer::new(events_senders));
 
-        let project_trace_senders = Arc::new(BroadcastChannelManager::new(Default::default()));
-
-        let project_trace_senders_cleanup = Arc::clone(&project_trace_senders);
-        langdb_core::events::broadcast_channel_manager::start_cleanup_task(
-            (*project_trace_senders_cleanup).clone(),
-        );
         let project_traces_senders = project_trace_senders.clone();
-
         let server = HttpServer::new(move || {
             let limit_checker = if let Some(storage) = storage.clone() {
                 match &server_config_for_closure.config.cost_control {
@@ -195,7 +189,6 @@ impl ApiServer {
 
         let project_service = ProjectServiceImpl::new(server_config.db_pool.clone());
         let trace_service = TraceServiceServer::new(TraceServiceImpl::new(
-            project_trace_senders.inner().clone(),
             writer,
             Box::new(ProjectTraceTenantResolver::new(project_service)),
         ));

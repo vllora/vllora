@@ -1,13 +1,16 @@
 use langdb_core::telemetry::events::{self, BaggageSpanProcessor};
+use langdb_core::telemetry::ProjectTraceMap;
+use langdb_core::telemetry::ProjectTraceSpanExporter;
 use opentelemetry::trace::TracerProvider as _;
 use opentelemetry_sdk::trace::SdkTracerProvider;
+use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Layer, Registry};
 
-pub fn init_tracing() {
+pub fn init_tracing(project_trace_senders: Arc<ProjectTraceMap>) {
     let log_level = std::env::var("RUST_LOG").unwrap_or("info".to_string());
     let env_filter = EnvFilter::new(log_level).add_directive("actix_server=off".parse().unwrap());
     let color = std::env::var("ANSI_OUTPUT").map_or(true, |v| v == "true");
@@ -27,6 +30,8 @@ pub fn init_tracing() {
         .with_tonic()
         .build()
         .unwrap();
+    let project_trace_span_exporter = ProjectTraceSpanExporter::new(project_trace_senders);
+
     let provider = SdkTracerProvider::builder()
         .with_span_processor(BaggageSpanProcessor::new([
             "langdb.run_id",
@@ -35,6 +40,7 @@ pub fn init_tracing() {
             "langdb.tenant",
             "langdb.project_id",
         ]))
+        .with_simple_exporter(project_trace_span_exporter)
         .with_batch_exporter(otlp_exporter)
         .with_id_generator(events::UuidIdGenerator::default())
         .build();

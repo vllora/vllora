@@ -28,6 +28,7 @@ mod session;
 mod tracing;
 mod tui;
 mod usage;
+use langdb_core::events::broadcast_channel_manager::BroadcastChannelManager;
 use tokio::sync::Mutex;
 use tui::{Counters, Tui};
 
@@ -121,20 +122,27 @@ async fn main() -> Result<(), CliError> {
     // Seed the database with a default project if none exist
     seed_database(&db_pool)?;
 
+    let project_trace_senders = Arc::new(BroadcastChannelManager::new(Default::default()));
+
+    let project_trace_senders_cleanup = Arc::clone(&project_trace_senders);
+    langdb_core::events::broadcast_channel_manager::start_cleanup_task(
+        (*project_trace_senders_cleanup).clone(),
+    );
+
     match cli
         .command
         .unwrap_or(cli::Commands::Serve(cli::ServeArgs::default()))
     {
         cli::Commands::Login => session::login().await,
         cli::Commands::Sync => {
-            tracing::init_tracing();
+            tracing::init_tracing(project_trace_senders.inner().clone());
             println!("Syncing models from API to database...");
             let models = run::models::fetch_and_store_models(db_pool.clone()).await?;
             println!("Successfully synced {} models to database", models.len());
             Ok(())
         }
         cli::Commands::List => {
-            tracing::init_tracing();
+            tracing::init_tracing(project_trace_senders.inner().clone());
             // Query models from database
             use langdb_core::metadata::services::model::ModelService;
             let model_service = ModelServiceImpl::new(db_pool.clone());
@@ -191,7 +199,14 @@ async fn main() -> Result<(), CliError> {
                 let model_service = Arc::new(Box::new(ModelServiceImpl::new(db_pool.clone()))
                     as Box<dyn langdb_core::metadata::services::model::ModelService + Send + Sync>);
                 let server_handle = tokio::spawn(async move {
-                    match api_server.start(Some(storage_clone), model_service).await {
+                    match api_server
+                        .start(
+                            Some(storage_clone),
+                            model_service,
+                            project_trace_senders.clone(),
+                        )
+                        .await
+                    {
                         Ok(server) => server.await,
                         Err(e) => Err(e),
                     }
@@ -230,7 +245,7 @@ async fn main() -> Result<(), CliError> {
                     }
                 }
             } else {
-                tracing::init_tracing();
+                tracing::init_tracing(project_trace_senders.inner().clone());
 
                 let config = Config::load(&cli.config)?;
                 let config = config.apply_cli_overrides(&cli::Commands::Serve(serve_args));
@@ -239,7 +254,10 @@ async fn main() -> Result<(), CliError> {
                     as Box<dyn langdb_core::metadata::services::model::ModelService + Send + Sync>);
                 let server_handle = tokio::spawn(async move {
                     let storage = Arc::new(Mutex::new(InMemoryStorage::new()));
-                    match api_server.start(Some(storage), model_service).await {
+                    match api_server
+                        .start(Some(storage), model_service, project_trace_senders.clone())
+                        .await
+                    {
                         Ok(server) => server.await,
                         Err(e) => Err(e),
                     }

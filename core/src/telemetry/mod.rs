@@ -32,6 +32,7 @@ use opentelemetry_proto::tonic::{
     trace::v1::span as otel_span,
 };
 use opentelemetry_sdk::propagation::TraceContextPropagator;
+use opentelemetry_sdk::trace::SpanData;
 use serde::{Serialize, Serializer};
 use serde_json::Value;
 use tokio::select;
@@ -184,14 +185,12 @@ impl SpanWriter {
 
 #[derive(Debug)]
 pub struct TraceServiceImpl {
-    pub(crate) project_trace_senders: Arc<ProjectTraceMap>,
     pub(crate) writer_sender: mpsc::Sender<Span>,
     pub(crate) tenant_resolver: Box<dyn TraceTenantResolver>,
 }
 
 impl TraceServiceImpl {
     pub fn new(
-        project_trace_senders: Arc<ProjectTraceMap>,
         transport: Box<dyn SpanWriterTransport>,
         tenant_resolver: Box<dyn TraceTenantResolver>,
     ) -> Self {
@@ -204,7 +203,6 @@ impl TraceServiceImpl {
         };
         tokio::spawn(writer.run());
         Self {
-            project_trace_senders,
             writer_sender: sender,
             tenant_resolver,
         }
@@ -235,6 +233,95 @@ pub(crate) fn serialize_any_value(value: AnyValue) -> serde_json::Value {
             .into(),
         any_value::Value::BytesValue(bytes) => bytes.into(),
     }
+}
+
+const DEFAULT_SPAN_ID: SpanId = SpanId::from_bytes([0; 8]);
+
+pub fn map_span(span: SpanData) -> Option<Span> {
+    let kind = match span.span_kind {
+        opentelemetry::trace::SpanKind::Internal => SpanKind::Internal,
+        opentelemetry::trace::SpanKind::Server => SpanKind::Server,
+        opentelemetry::trace::SpanKind::Client => SpanKind::Client,
+        opentelemetry::trace::SpanKind::Producer => SpanKind::Producer,
+        opentelemetry::trace::SpanKind::Consumer => SpanKind::Consumer,
+    };
+
+    let trace_id = span.span_context.trace_id();
+    let span_id = span.span_context.span_id();
+    let parent_span_id = match span.parent_span_id {
+        parent_span_id if parent_span_id != DEFAULT_SPAN_ID => {
+            Some(SpanId::from_bytes(parent_span_id.to_bytes()))
+        }
+        _ => None,
+    };
+
+    let mut attributes: serde_json::Map<String, Value> = span
+        .attributes
+        .into_iter()
+        .map(|attr| (attr.key.to_string(), serialize_any_value(attr.value.into())))
+        .collect();
+
+    let tenant_id = attributes
+        .remove("langdb.tenant")
+        .and_then(|v| Some(v.as_str()?.to_owned()));
+
+    let project_id = attributes
+        .remove("langdb.project_id")
+        .and_then(|v| Some(v.as_str()?.to_owned()));
+
+    let thread_id = attributes
+        .remove("langdb.thread_id")
+        .and_then(|v| Some(v.as_str()?.to_owned()));
+
+    let run_id = attributes
+        .remove("langdb.run_id")
+        .and_then(|v| Some(v.as_str()?.to_owned()));
+
+    let label = attributes
+        .remove("langdb.label")
+        .and_then(|v| Some(v.as_str()?.to_owned()));
+
+    if !attributes.contains_key("label") {
+        if let Some(label) = label {
+            attributes.insert("label".to_string(), label.into());
+        }
+    }
+
+    let tags_value = attributes.remove("tags");
+    let mut tags: serde_json::Map<String, Value> = Default::default();
+    if let Some(Value::String(s)) = tags_value {
+        tags = serde_json::from_str(&s).ok().unwrap_or_default();
+    }
+
+    // Convert SystemTime to unix nanoseconds
+    let start_time_unix_nano = span
+        .start_time
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("Time went backwards")
+        .as_nanos() as u64;
+    let end_time_unix_nano = span
+        .end_time
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("Time went backwards")
+        .as_nanos() as u64;
+
+    let span = Span {
+        trace_id,
+        span_id,
+        parent_span_id,
+        operation_name: span.name.to_string(),
+        start_time_unix_nano,
+        end_time_unix_nano,
+        kind,
+        attributes,
+        tenant_id,
+        project_id: project_id.clone(),
+        thread_id,
+        tags,
+        run_id,
+    };
+
+    Some(span)
 }
 
 #[tonic::async_trait]
@@ -278,13 +365,6 @@ impl TraceService for TraceServiceImpl {
                     } else {
                         Some(SpanId::from_bytes(try_!(span.parent_span_id.try_into())))
                     };
-
-                    tracing::debug!(target: "otel",
-                        "Span name {}({}) <- {:?}",
-                        span.name,
-                        span_id,
-                        parent_span_id,
-                    );
 
                     let mut attributes: serde_json::Map<String, Value> = span
                         .attributes
@@ -357,12 +437,6 @@ impl TraceService for TraceServiceImpl {
                         run_id,
                     };
 
-                    if let Some(project_id) = project_id.as_ref() {
-                        if let Some(sender) = self.project_trace_senders.get(project_id).as_deref()
-                        {
-                            let _result = sender.send(span.clone());
-                        }
-                    }
                     self.writer_sender.send(span).await.unwrap();
                 }
             }
@@ -524,5 +598,38 @@ impl Extractor for HeaderExtractor<'_> {
 
     fn keys(&self) -> Vec<&str> {
         self.0.keys().map(|header| header.as_str()).collect()
+    }
+}
+
+pub struct ProjectTraceSpanExporter {
+    project_trace_senders: Arc<ProjectTraceMap>,
+}
+
+impl ProjectTraceSpanExporter {
+    pub fn new(project_trace_senders: Arc<ProjectTraceMap>) -> Self {
+        Self {
+            project_trace_senders,
+        }
+    }
+}
+
+impl std::fmt::Debug for ProjectTraceSpanExporter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProjectTraceSpanExporter").finish()
+    }
+}
+
+impl opentelemetry_sdk::trace::SpanExporter for ProjectTraceSpanExporter {
+    async fn export(&self, batch: Vec<SpanData>) -> opentelemetry_sdk::error::OTelSdkResult {
+        for span in batch {
+            if let Some(span) = map_span(span) {
+                if let Some(project_id) = span.project_id.as_ref() {
+                    if let Some(sender) = self.project_trace_senders.get(project_id).as_deref() {
+                        let _result = sender.send(span.clone());
+                    }
+                }
+            }
+        }
+        opentelemetry_sdk::error::OTelSdkResult::Ok(())
     }
 }
