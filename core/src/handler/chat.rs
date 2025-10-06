@@ -150,6 +150,7 @@ pub(crate) async fn prepare_request(
                                             usage_identifiers: identifiers.clone(),
                                             run_id: run_id.clone(),
                                             thread_id: thread_id.clone(),
+                                            message_id: predefined_message_id.clone(),
                                         }
                                         .into(),
                                     )
@@ -211,6 +212,7 @@ pub(crate) async fn prepare_request(
                         usage_identifiers: identifiers.clone(),
                         run_id: run_id.clone(),
                         thread_id: thread_id.clone(),
+                        message_id: predefined_message_id.clone(),
                     }
                     .into(),
                 )

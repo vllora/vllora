@@ -242,6 +242,7 @@ pub fn map_cloud_event_to_agui_events(value: &GatewayEvent) -> Vec<Event> {
         GatewayEvent::ChatEvent(event) => {
             let event_info = event.event.event.clone();
             let model = event.event.model.clone();
+            let message_id = event.message_id.clone();
             match &event.event.event.event {
                 ModelEventType::RunStart(_start_event) => {
                     vec![Event::RunStarted {
@@ -275,10 +276,14 @@ pub fn map_cloud_event_to_agui_events(value: &GatewayEvent) -> Vec<Event> {
                             "model_name": start_event.model_name,
                         }),
                     };
+                    let message_id = match message_id {
+                        Some(message_id) => message_id,
+                        None => "".to_string(),
+                    };
                     vec![
                         Event::TextMessageStart {
                             run_context: value.into(),
-                            message_id: event.event.event.trace_id.clone(),
+                            message_id,
                             role: "assistant".to_string(),
                             timestamp,
                         },
@@ -301,26 +306,34 @@ pub fn map_cloud_event_to_agui_events(value: &GatewayEvent) -> Vec<Event> {
                     }]
                 }
                 ModelEventType::LlmContent(content_event) => {
+                    let message_id = match message_id {
+                        Some(message_id) => message_id,
+                        None => "".to_string(),
+                    };
                     vec![Event::TextMessageContent {
                         run_context: value.into(),
                         delta: content_event.content.clone(),
-                        message_id: event.event.event.trace_id.clone(),
+                        message_id,
                         timestamp: event_info.timestamp.timestamp_millis() as u64,
                     }]
                 }
                 ModelEventType::LlmStop(stop_event) => {
                     let mut events = vec![];
+                    let message_id = match message_id {
+                        Some(message_id) => message_id,
+                        None => "".to_string(),
+                    };
                     if let Some(output) = &stop_event.output {
                         events.push(Event::TextMessageContent {
                             run_context: value.into(),
                             delta: output.clone(),
-                            message_id: event.event.event.trace_id.clone(),
+                            message_id: message_id.clone(),
                             timestamp: event_info.timestamp.timestamp_millis() as u64,
                         });
                     }
                     events.push(Event::TextMessageEnd {
                         run_context: value.into(),
-                        message_id: event.event.event.trace_id.clone(),
+                        message_id: message_id.clone(),
                         timestamp: event_info.timestamp.timestamp_millis() as u64,
                     });
                     events
@@ -329,7 +342,7 @@ pub fn map_cloud_event_to_agui_events(value: &GatewayEvent) -> Vec<Event> {
                     vec![Event::ToolCallStart {
                         run_context: value.into(),
                         tool_call_id: tool_start.tool_id.clone(),
-                        parent_message_id: Some(event.event.event.trace_id.clone()),
+                        parent_message_id: message_id.clone(),
                         tool_call_name: tool_start.tool_name.clone(),
                         timestamp: event_info.timestamp.timestamp_millis() as u64,
                     }]
@@ -337,7 +350,7 @@ pub fn map_cloud_event_to_agui_events(value: &GatewayEvent) -> Vec<Event> {
                 ModelEventType::ToolResult(tool_result) => {
                     vec![Event::ToolCallResult {
                         run_context: value.into(),
-                        message_id: Some(event.event.event.trace_id.clone()),
+                        message_id: message_id.clone(),
                         tool_call_id: tool_result.tool_id.clone(),
                         content: tool_result.output.clone(),
                         role: "tool".to_string(),

@@ -13,6 +13,7 @@ pub struct GatewayModelEventWithDetails {
     pub usage_identifiers: Vec<(String, String)>,
     pub run_id: Option<String>,
     pub thread_id: Option<String>,
+    pub message_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
