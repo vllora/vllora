@@ -1,4 +1,5 @@
 use crate::handler::ModelEventWithDetails;
+use crate::types::message::MessageType;
 use crate::types::threads::MessageThreadWithTitle;
 use serde::Serialize;
 
@@ -28,6 +29,7 @@ pub struct CloudMessageEvent {
     pub event_type: MessageEventType,
     pub thread_id: String,
     pub message_id: String,
+    pub message_type: MessageType,
     pub project_id: String,
     pub tenant_name: String,
     pub run_id: Option<String>,

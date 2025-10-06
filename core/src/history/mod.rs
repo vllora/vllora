@@ -113,6 +113,7 @@ impl ThreadHistoryManager {
             true => request.request.messages.clone(),
         };
 
+        let mut message_type = MessageType::HumanMessage;
         if let Some(last_new_message) = messages_to_insert.last() {
             let message = MessageMapper::map_completions_message_to_langdb_message(
                 last_new_message,
@@ -120,6 +121,8 @@ impl ThreadHistoryManager {
                 user_id,
             )
             .map_err(HistoryError::FailedToMapMessage)?;
+
+            message_type = MessageMapper::map_role_to_message_type(&last_new_message.role);
 
             if let Some(last_prev_message) = prev_messages.last() {
                 if last_prev_message.message.is_content_identical(&message) {
@@ -151,6 +154,7 @@ impl ThreadHistoryManager {
                 &self.project_id,
                 &self.thread_entities.get_tenant_name(),
                 run_id,
+                message_type,
             )
             .await;
         }
@@ -179,6 +183,7 @@ impl ThreadHistoryManager {
         });
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn broadcast_message_event(
         &self,
         event_type: MessageEventType,
@@ -187,6 +192,7 @@ impl ThreadHistoryManager {
         project_id: &str,
         tenant_name: &str,
         run_id: Option<String>,
+        message_type: MessageType,
     ) {
         let cloud_callback_handler = self.cloud_callback_handler.clone();
 
@@ -207,6 +213,7 @@ impl ThreadHistoryManager {
                         project_id,
                         tenant_name,
                         run_id,
+                        message_type,
                     }
                     .into(),
                 )
@@ -410,6 +417,7 @@ impl ThreadHistoryManager {
                         &self.project_id,
                         &self.thread_entities.get_tenant_name(),
                         run_id,
+                        MessageType::AIMessage,
                     )
                     .await;
 

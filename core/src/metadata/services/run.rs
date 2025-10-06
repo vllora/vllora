@@ -60,7 +60,10 @@ impl RunServiceImpl {
         let mut conditions = vec![];
 
         if let Some(project_id) = &query.project_id {
-            conditions.push(format!("project_id = '{}'", Self::escape_sql_string(project_id)));
+            conditions.push(format!(
+                "project_id = '{}'",
+                Self::escape_sql_string(project_id)
+            ));
         }
 
         if let Some(run_ids) = &query.run_ids {
@@ -68,11 +71,17 @@ impl RunServiceImpl {
         }
 
         if let Some(thread_ids) = &query.thread_ids {
-            conditions.push(format!("thread_id IN ({})", Self::build_in_clause(thread_ids)));
+            conditions.push(format!(
+                "thread_id IN ({})",
+                Self::build_in_clause(thread_ids)
+            ));
         }
 
         if let Some(trace_ids) = &query.trace_ids {
-            conditions.push(format!("trace_id IN ({})", Self::build_in_clause(trace_ids)));
+            conditions.push(format!(
+                "trace_id IN ({})",
+                Self::build_in_clause(trace_ids)
+            ));
         }
 
         if let Some(model_name) = &query.model_name {
@@ -180,7 +189,9 @@ impl RunService for RunServiceImpl {
             "SELECT COUNT(DISTINCT run_id) as count
             FROM traces
             WHERE run_id IS NOT NULL
-              {}", filter_clause);
+              {}",
+            filter_clause
+        );
 
         let result = sql_query(&sql_query_str)
             .load::<CountResult>(&mut conn)

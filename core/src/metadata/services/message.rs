@@ -10,6 +10,7 @@ use crate::types::threads::{
     MessageWithId,
 };
 use diesel::sql_types::{BigInt, Double, Nullable, Text};
+use diesel::OptionalExtension;
 use diesel::{ExpressionMethods, QueryDsl, QueryableByName, RunQueryDsl};
 use std::str::FromStr;
 use uuid::Uuid;
@@ -194,6 +195,20 @@ impl MessageService {
         Ok(Some(created_message))
     }
 
+    pub fn get_message_by_id(
+        &self,
+        message_id: &str,
+    ) -> Result<Option<MessageWithId>, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+
+        let db_message = DbMessage::all()
+            .filter(messages::id.eq(message_id))
+            .first::<DbMessage>(&mut conn)
+            .optional()?;
+
+        Ok(db_message.map(|m| self.db_message_to_message(m)))
+    }
+
     fn db_message_to_message(&self, db_message: DbMessage) -> MessageWithId {
         let content_type = db_message
             .content_type
@@ -355,6 +370,7 @@ impl MessageService {
 mod tests {
     use super::*;
     use crate::metadata::test_utils::setup_test_database;
+    use crate::types::threads::{Message, MessageContentType};
 
     #[test]
     fn test_db_message_to_message() {
@@ -391,5 +407,44 @@ mod tests {
         assert_eq!(message.message.content_array[0].value, "Hello, world!");
         assert_eq!(message.message.tool_call_id, None);
         assert_eq!(message.message.tool_calls, None);
+    }
+
+    #[test]
+    fn test_get_message_by_id() {
+        let db_pool = setup_test_database();
+        let service = MessageService::new(db_pool);
+
+        let msg = Message {
+            model_name: "gpt-4".to_string(),
+            thread_id: Some("test-thread-id".to_string()),
+            user_id: "test-user-id".to_string(),
+            content_type: MessageContentType::Text,
+            content: Some("Hello, world!".to_string()),
+            content_array: vec![],
+            r#type: MessageType::HumanMessage,
+            tool_call_id: None,
+            tool_calls: None,
+        };
+
+        let predefined_id = Some("test-message-id-123".to_string());
+        let res = service
+            .insert_one(msg, "test-project".to_string(), predefined_id.clone())
+            .expect("insert should succeed")
+            .expect("insert should return result");
+
+        assert_eq!(res.message_id, predefined_id.clone().unwrap());
+
+        let fetched = service
+            .get_message_by_id(&res.message_id)
+            .expect("fetch by id should succeed")
+            .expect("fetch by id should return result");
+
+        assert_eq!(fetched.id, res.message_id);
+        assert_eq!(fetched.message.user_id, "test-user-id");
+        assert_eq!(
+            fetched.message.thread_id,
+            Some("test-thread-id".to_string())
+        );
+        assert_eq!(fetched.message.content, Some("Hello, world!".to_string()));
     }
 }
