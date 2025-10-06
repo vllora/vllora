@@ -174,15 +174,7 @@ impl MessageService {
         messages: Vec<Message>,
         project_id: String,
     ) -> Result<Vec<InsertMessageResult>, DatabaseError> {
-        let created_messages = self.insert_many_messages(messages, project_id)?;
-        let results = created_messages
-            .into_iter()
-            .map(|message| InsertMessageResult {
-                message_id: Uuid::new_v4().to_string(), // Generate ID for each result
-                thread_id: message.thread_id,
-            })
-            .collect();
-        Ok(results)
+        self.insert_many_messages(messages, project_id)
     }
 
     pub fn insert_one(
