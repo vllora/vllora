@@ -33,6 +33,14 @@ impl Credentials {
     }
 }
 
+impl Default for Credentials {
+    fn default() -> Self {
+        Credentials::ApiKey(ApiKeyCredentials {
+            api_key: String::new(),
+        })
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct IntegrationCredentials {
     pub secrets: HashMap<String, Value>,
