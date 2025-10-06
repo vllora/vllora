@@ -93,6 +93,7 @@ impl MessageService {
             }
         };
 
+        let created_at = chrono::Utc::now();
         let new_message = DbNewMessage {
             id: message_id.unwrap_or_else(|| Uuid::new_v4().to_string()),
             model_name: Some(message.model_name),
@@ -110,6 +111,7 @@ impl MessageService {
                 .map(|tc| serde_json::to_string(&tc).unwrap_or_else(|_| "null".to_string())),
             tenant_id: None,
             project_id: Some(project_id),
+            created_at: created_at.to_rfc3339_opts(chrono::SecondsFormat::Micros, true),
         };
 
         diesel::insert_into(messages::table)
@@ -129,6 +131,9 @@ impl MessageService {
     ) -> Result<Vec<InsertMessageResult>, DatabaseError> {
         let mut conn = self.db_pool.get()?;
         let mut created_messages = Vec::new();
+
+        let mut created_at = chrono::Utc::now();
+        let mut new_messages = vec![];
 
         for message in messages {
             let thread_id = match message.thread_id {
@@ -154,17 +159,24 @@ impl MessageService {
                     .map(|tc| serde_json::to_string(&tc).unwrap_or_else(|_| "null".to_string())),
                 tenant_id: None,
                 project_id: Some(project_id.clone()),
+                created_at: created_at.to_rfc3339_opts(chrono::SecondsFormat::Micros, true),
             };
 
-            diesel::insert_into(messages::table)
-                .values(&new_message)
-                .execute(&mut conn)?;
-
             created_messages.push(InsertMessageResult {
-                message_id: new_message.id,
-                thread_id: new_message.thread_id,
+                message_id: new_message.id.clone(),
+                thread_id: new_message.thread_id.clone(),
             });
+            new_messages.push(new_message);
+
+            // Add 1 nanosecond to the created_at time to avoid duplicate timestamps
+            created_at = created_at
+                .checked_add_signed(chrono::Duration::microseconds(1))
+                .unwrap();
         }
+
+        diesel::insert_into(messages::table)
+            .values(&new_messages)
+            .execute(&mut conn)?;
 
         Ok(created_messages)
     }

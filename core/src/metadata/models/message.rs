@@ -115,6 +115,7 @@ pub struct DbNewMessage {
     pub tool_calls: Option<String>,
     pub tenant_id: Option<String>,
     pub project_id: Option<String>,
+    pub created_at: String,
 }
 
 #[derive(AsChangeset, PartialEq, Debug, Serialize, Deserialize)]

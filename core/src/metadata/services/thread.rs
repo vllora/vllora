@@ -150,7 +150,7 @@ impl ThreadService {
                 LEFT JOIN (
                     SELECT 
                         thread_id, 
-                        MAX(created_at) AS last_message_at
+                    strftime('%Y-%m-%d %H:%M:%S', (strftime('%s', MAX(created_at)) / 5) * 5, 'unixepoch') AS last_message_at
                     FROM messages
                     GROUP BY thread_id
                 ) m ON t.id = m.thread_id
