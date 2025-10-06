@@ -70,6 +70,19 @@ diesel::table! {
 }
 
 diesel::table! {
+    provider_credentials (id) {
+        id -> Nullable<Text>,
+        provider_name -> Text,
+        provider_type -> Text,
+        credentials -> Text,
+        project_id -> Nullable<Text>,
+        created_at -> Text,
+        updated_at -> Text,
+        is_active -> Integer,
+    }
+}
+
+diesel::table! {
     threads (id) {
         id -> Text,
         user_id -> Nullable<Text>,
@@ -100,5 +113,13 @@ diesel::table! {
 }
 
 diesel::joinable!(messages -> threads (thread_id));
+diesel::joinable!(provider_credentials -> projects (project_id));
 
-diesel::allow_tables_to_appear_in_same_query!(messages, models, projects, threads, traces,);
+diesel::allow_tables_to_appear_in_same_query!(
+    messages,
+    models,
+    projects,
+    provider_credentials,
+    threads,
+    traces,
+);

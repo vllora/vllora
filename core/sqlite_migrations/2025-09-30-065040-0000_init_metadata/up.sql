@@ -111,6 +111,29 @@ CREATE TABLE models (
     endpoint TEXT -- Foreign key to projects table
 );
 
+-- Add provider_credentials table for storing API keys and credentials
+CREATE TABLE provider_credentials (
+    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    provider_name TEXT NOT NULL,
+    provider_type TEXT NOT NULL,
+    credentials TEXT NOT NULL, -- JSON serialized credentials
+    project_id TEXT, -- NULL for global credentials
+    created_at TEXT DEFAULT (datetime('now')) NOT NULL,
+    updated_at TEXT DEFAULT (datetime('now')) NOT NULL,
+    is_active INTEGER DEFAULT 1 NOT NULL,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
+-- Create indexes for common query patterns
+CREATE INDEX idx_provider_credentials_provider_name ON provider_credentials(provider_name);
+CREATE INDEX idx_provider_credentials_project_id ON provider_credentials(project_id);
+CREATE INDEX idx_provider_credentials_provider_project ON provider_credentials(provider_name, project_id);
+CREATE INDEX idx_provider_credentials_is_active ON provider_credentials(is_active);
+
+-- Composite index for efficient credential lookups
+CREATE INDEX idx_provider_credentials_lookup ON provider_credentials(provider_name, project_id, is_active);
+
+
 -- Create indexes for common queries
 CREATE INDEX idx_models_model_name ON models(model_name);
 CREATE INDEX idx_models_provider_info_id ON models(provider_name);
