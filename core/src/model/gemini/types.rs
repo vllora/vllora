@@ -139,6 +139,7 @@ pub struct PartFunctionResponse {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct GenerateContentResponse {
+    #[serde(default)]
     pub candidates: Vec<Candidate>,
     pub usage_metadata: Option<UsageMetadata>,
     pub model_version: String,

@@ -267,4 +267,41 @@ mod tests {
             FinishReason::Stop
         );
     }
+
+    #[test]
+    fn test_validate_prohibited_content_deseralization() {
+        let response = r#"
+        {
+            "promptFeedback": {
+                "blockReason": "PROHIBITED_CONTENT"
+            },
+            "usageMetadata": {
+                "promptTokenCount": 434225,
+                "totalTokenCount": 434225,
+                "promptTokensDetails": [
+                {
+                    "modality": "TEXT",
+                    "tokenCount": 434225
+                }
+                ]
+            },
+            "modelVersion": "gemini-2.5-pro",
+            "responseId": "L8nkaI3zNOOc-8YP96TN-QM"
+        }"#;
+
+        let r = serde_json::from_str::<GenerateContentResponse>(response).unwrap();
+
+        assert_eq!(r.candidates.len(), 0);
+        assert_eq!(
+            r.usage_metadata.as_ref().unwrap().prompt_token_count,
+            434225
+        );
+        assert_eq!(r.usage_metadata.as_ref().unwrap().total_token_count, 434225);
+        assert_eq!(
+            r.usage_metadata.as_ref().unwrap().thoughts_token_count,
+            None
+        );
+        assert_eq!(r.model_version, "gemini-2.5-pro");
+        assert_eq!(r.response_id, "L8nkaI3zNOOc-8YP96TN-QM");
+    }
 }
