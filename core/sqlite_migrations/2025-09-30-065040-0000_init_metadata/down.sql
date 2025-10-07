@@ -15,3 +15,8 @@ DROP INDEX IF EXISTS idx_provider_credentials_provider_name;
 
 -- Drop the table
 DROP TABLE IF EXISTS provider_credentials;
+
+DROP INDEX IF EXISTS idx_providers_priority;
+DROP INDEX IF EXISTS idx_providers_is_active;
+DROP INDEX IF EXISTS idx_providers_provider_name;
+DROP TABLE IF EXISTS providers;

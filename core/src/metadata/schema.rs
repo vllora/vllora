@@ -4,6 +4,7 @@ diesel::table! {
     messages (id) {
         id -> Text,
         model_name -> Nullable<Text>,
+        #[sql_name = "type"]
         r#type -> Nullable<Text>,
         thread_id -> Nullable<Text>,
         user_id -> Nullable<Text>,
@@ -71,11 +72,26 @@ diesel::table! {
 
 diesel::table! {
     provider_credentials (id) {
-        id -> Nullable<Text>,
+        id -> Text,
         provider_name -> Text,
         provider_type -> Text,
         credentials -> Text,
         project_id -> Nullable<Text>,
+        created_at -> Text,
+        updated_at -> Text,
+        is_active -> Integer,
+    }
+}
+
+diesel::table! {
+    providers (id) {
+        id -> Text,
+        provider_name -> Text,
+        description -> Nullable<Text>,
+        endpoint -> Nullable<Text>,
+        priority -> Integer,
+        privacy_policy_url -> Nullable<Text>,
+        terms_of_service_url -> Nullable<Text>,
         created_at -> Text,
         updated_at -> Text,
         is_active -> Integer,
@@ -120,6 +136,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     models,
     projects,
     provider_credentials,
+    providers,
     threads,
     traces,
 );

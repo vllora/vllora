@@ -124,6 +124,23 @@ CREATE TABLE provider_credentials (
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
+CREATE TABLE providers (
+    id TEXT PRIMARY KEY NOT NULL,
+    provider_name TEXT NOT NULL UNIQUE,
+    description TEXT,
+    endpoint TEXT,
+    priority INTEGER NOT NULL DEFAULT 0,
+    privacy_policy_url TEXT,
+    terms_of_service_url TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    is_active INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX idx_providers_provider_name ON providers(provider_name);
+CREATE INDEX idx_providers_is_active ON providers(is_active);
+CREATE INDEX idx_providers_priority ON providers(priority);
+
 -- Create indexes for common query patterns
 CREATE INDEX idx_provider_credentials_provider_name ON provider_credentials(provider_name);
 CREATE INDEX idx_provider_credentials_project_id ON provider_credentials(project_id);

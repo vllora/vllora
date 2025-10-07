@@ -63,6 +63,8 @@ pub struct ServeArgs {
 pub enum Commands {
     /// Sync models from API to database
     Sync,
+    /// Sync providers from API to database
+    SyncProviders,
     /// List all available models
     List,
     /// Start the API server (default if no command specified)

@@ -8,6 +8,7 @@ use langdb_core::metadata::error::DatabaseError;
 use langdb_core::metadata::models::project::NewProjectDTO;
 use langdb_core::metadata::pool::DbPool;
 use langdb_core::metadata::services::model::ModelServiceImpl;
+use langdb_core::metadata::services::providers::ProviderServiceImpl;
 use langdb_core::metadata::services::project::{ProjectService, ProjectServiceImpl};
 use langdb_core::{error::GatewayError, usage::InMemoryStorage};
 use serde::{Deserialize, Serialize};
@@ -50,6 +51,8 @@ pub enum CliError {
     DatabaseError(#[from] DatabaseError),
     #[error(transparent)]
     ModelsLoadError(#[from] run::models::ModelsLoadError),
+    #[error(transparent)]
+    ProvidersLoadError(#[from] run::providers::ProvidersLoadError),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -141,6 +144,13 @@ async fn main() -> Result<(), CliError> {
             println!("Successfully synced {} models to database", models.len());
             Ok(())
         }
+        cli::Commands::SyncProviders => {
+            tracing::init_tracing(project_trace_senders.inner().clone());
+            println!("Syncing providers from API to database...");
+            run::providers::sync_providers(db_pool.clone()).await?;
+            println!("Successfully synced providers to database");
+            Ok(())
+        }
         cli::Commands::List => {
             tracing::init_tracing(project_trace_senders.inner().clone());
             // Query models from database
@@ -178,6 +188,28 @@ async fn main() -> Result<(), CliError> {
                             eprintln!("  Continuing with empty models table. You can manually sync with: langdb sync");
                         }
                     }
+                }
+            }
+
+            // Check if providers table is empty and sync if needed
+            {
+                use langdb_core::metadata::services::providers::ProviderService;
+                let provider_service = ProviderServiceImpl::new(db_pool.clone());
+                let providers = provider_service.list_providers()?;
+
+                if providers.is_empty() {
+                    println!("Providers table is empty. Syncing providers from API...");
+                    match run::providers::sync_providers(db_pool.clone()).await {
+                        Ok(()) => {
+                            println!("✓ Successfully synced providers to database");
+                        }
+                        Err(e) => {
+                            eprintln!("⚠ Warning: Failed to sync providers: {}", e);
+                            eprintln!("  Continuing with empty providers table.");
+                        }
+                    }
+                } else {
+                    println!("Found {} existing providers in database", providers.len());
                 }
             }
 
