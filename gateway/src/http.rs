@@ -19,6 +19,8 @@ use actix_web::{
     App, HttpServer,
 };
 use futures::{future::try_join, Future, TryFutureExt};
+use langdb_core::credentials::KeyStorage;
+use langdb_core::credentials::ProviderKeyResolver;
 use langdb_core::database::clickhouse::ClickhouseHttp;
 use langdb_core::database::DatabaseTransportClone;
 use langdb_core::events::broadcast_channel_manager::BroadcastChannelManager;
@@ -36,8 +38,6 @@ use langdb_core::history::thread_entity::ThreadEntityImpl;
 use langdb_core::metadata::pool::DbPool;
 use langdb_core::metadata::project_trace::ProjectTraceTenantResolver;
 use langdb_core::metadata::services::project::ProjectServiceImpl;
-use langdb_core::providers::credentials::ProviderCredentialResolver;
-use langdb_core::providers::KeyStorage;
 use langdb_core::telemetry::database::DatabaseSpanWritter;
 use langdb_core::telemetry::database::SqliteTraceWriterTransport;
 use langdb_core::telemetry::SpanWriterTransport;
@@ -259,7 +259,7 @@ impl ApiServer {
 
         let callback_handler = GatewayCallbackHandlerFn::new(vec![], Some(broadcaster.clone()));
         let key_storage =
-            Box::new(ProviderCredentialResolver::new(db_pool.clone())) as Box<dyn KeyStorage>;
+            Box::new(ProviderKeyResolver::new(db_pool.clone())) as Box<dyn KeyStorage>;
 
         // Add model_service and available_models to app_data
         let service = service

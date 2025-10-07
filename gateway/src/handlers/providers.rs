@@ -1,11 +1,11 @@
 use actix_web::{web, HttpResponse, Result};
+use langdb_core::credentials::KeyStorage;
+use langdb_core::credentials::ProviderCredentialsId;
 use langdb_core::metadata::pool::DbPool;
 use langdb_core::metadata::services::providers::{
     ProviderInfo as ProvidersProviderInfo, ProviderService as ProvidersService,
     ProviderServiceImpl as ProvidersServiceImpl,
 };
-use langdb_core::providers::KeyStorage;
-use langdb_core::providers::ProviderCredentialsId;
 use langdb_core::types::credentials::Credentials;
 use langdb_core::types::metadata::project::Project;
 use serde::{Deserialize, Serialize};
@@ -55,6 +55,8 @@ pub async fn update_provider(
     let storage = key_storage.into_inner();
     // Check if provider already exists
     let existing_provider = storage.get_key(provider_credentials_id.clone()).await;
+
+    tracing::error!("Existing_provider: {:?}", existing_provider);
 
     match existing_provider {
         Ok(Some(_)) => {

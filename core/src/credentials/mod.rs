@@ -1,8 +1,8 @@
-pub mod credentials;
-
-use async_trait::async_trait;
+mod storage;
 
 use crate::models::ModelMetadata;
+use async_trait::async_trait;
+pub use storage::ProviderKeyResolver;
 
 /// Error type for key storage operations
 #[derive(Debug, thiserror::Error)]

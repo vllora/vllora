@@ -1,78 +1,22 @@
+use crate::credentials::{KeyStorage, KeyStorageError, ProviderCredentialsId};
 use crate::metadata::models::provider::{DbInsertProviderCredentials, DbUpdateProviderCredentials};
 use crate::metadata::pool::DbPool;
 use crate::metadata::services::provider::{ProviderService, ProviderServiceImpl};
-use crate::providers::{KeyStorage, KeyStorageError, ProviderCredentialsId};
-use crate::types::credentials::{ApiKeyCredentials, Credentials};
-use std::env;
 
-pub struct ProviderCredentialResolver {
+pub struct ProviderKeyResolver {
     provider_service: ProviderServiceImpl,
 }
 
-impl ProviderCredentialResolver {
+impl ProviderKeyResolver {
     pub fn new(db_pool: DbPool) -> Self {
         Self {
             provider_service: ProviderServiceImpl::new(db_pool),
         }
     }
-
-    /// Get credentials from environment variables as fallback
-    /// Tries patterns: {PROVIDER}_API_KEY and LANGDB_{PROVIDER}_API_KEY
-    fn get_env_credentials(&self, provider_name: &str) -> Option<String> {
-        let env_key = format!("{}_API_KEY", provider_name.to_uppercase().replace("-", "_"));
-
-        match env::var(&env_key) {
-            Ok(api_key) => {
-                let credentials = Credentials::ApiKey(ApiKeyCredentials { api_key });
-                serde_json::to_string(&credentials).ok()
-            }
-            Err(_) => {
-                // Try alternative pattern
-                let alt_env_key = format!(
-                    "LANGDB_{}_API_KEY",
-                    provider_name.to_uppercase().replace("-", "_")
-                );
-                env::var(&alt_env_key).ok().and_then(|api_key| {
-                    let credentials = Credentials::ApiKey(ApiKeyCredentials { api_key });
-                    serde_json::to_string(&credentials).ok()
-                })
-            }
-        }
-    }
-
-    /// Resolve credentials using hierarchy: Project → Environment
-    async fn resolve_with_fallback(
-        &self,
-        key_id: &ProviderCredentialsId,
-    ) -> Result<Option<String>, KeyStorageError> {
-        let provider_name = key_id.provider_name();
-        let project_id = key_id.project_id();
-
-        // 1. Try project-specific credentials first
-        match self
-            .provider_service
-            .get_provider_credentials(&provider_name, Some(&project_id))
-        {
-            Ok(Some(creds)) if creds.is_active_credential() => {
-                return Ok(Some(creds.credentials));
-            }
-            Ok(_) => {} // Not found or inactive, continue to next level
-            Err(e) => {
-                tracing::warn!(
-                    "Error fetching project credentials for {}: {}",
-                    provider_name,
-                    e
-                );
-            }
-        }
-
-        // 2. Fall back to environment variables
-        Ok(self.get_env_credentials(&provider_name))
-    }
 }
 
 #[async_trait::async_trait]
-impl KeyStorage for ProviderCredentialResolver {
+impl KeyStorage for ProviderKeyResolver {
     async fn insert_key(
         &self,
         key_id: ProviderCredentialsId,
@@ -96,8 +40,28 @@ impl KeyStorage for ProviderCredentialResolver {
         &self,
         key_id: ProviderCredentialsId,
     ) -> Result<Option<String>, KeyStorageError> {
-        // Use hierarchy resolution
-        self.resolve_with_fallback(&key_id).await
+        let provider_name = key_id.provider_name();
+        let project_id = key_id.project_id();
+
+        match self
+            .provider_service
+            .get_provider_credentials(&provider_name, Some(&project_id))
+        {
+            Ok(Some(creds)) if creds.is_active_credential() => {
+                tracing::error!("Creds: {:?}", creds);
+                return Ok(Some(creds.credentials));
+            }
+            Ok(_) => {} // Not found or inactive, continue to next level
+            Err(e) => {
+                tracing::warn!(
+                    "Error fetching project credentials for {}: {}",
+                    provider_name,
+                    e
+                );
+            }
+        }
+
+        Ok(None)
     }
 
     async fn get_batch_keys(

@@ -1,5 +1,5 @@
+use crate::credentials::KeyStorage;
 use crate::model::ModelMetadataFactory;
-use crate::providers::KeyStorage;
 use crate::routing::interceptor::rate_limiter::RateLimiterService;
 use crate::types::guardrails::service::GuardrailsEvaluator;
 use crate::{

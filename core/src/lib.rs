@@ -1,3 +1,4 @@
+pub mod credentials;
 #[cfg(feature = "database")]
 pub mod database;
 pub mod embed_mod;
@@ -12,7 +13,6 @@ pub mod metadata;
 pub mod model;
 pub mod models;
 pub mod pricing;
-pub mod providers;
 pub mod responses;
 pub mod routing;
 pub mod telemetry;

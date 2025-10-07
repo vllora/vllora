@@ -1,3 +1,4 @@
+use crate::credentials::GatewayCredentials;
 use crate::error::GatewayError;
 use crate::executor::chat_completion::basic_executor::BasicCacheContext;
 use crate::executor::chat_completion::stream_executor::{stream_chunks, StreamCacheContext};
@@ -11,7 +12,6 @@ use crate::model::types::ModelEvent;
 use crate::model::types::ModelEventType;
 use crate::model::{ModelInstance, ResponseCacheState};
 use crate::models::ModelMetadata;
-use crate::providers::GatewayCredentials;
 use crate::types::credentials::Credentials;
 use crate::types::engine::{
     CompletionModelDefinition, CompletionModelParams, ExecutionOptions, Model, ModelTool,

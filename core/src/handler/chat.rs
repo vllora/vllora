@@ -43,8 +43,8 @@ use tracing::Span;
 use tracing_futures::Instrument;
 use uuid::Uuid;
 
+use crate::credentials::KeyStorage;
 use crate::executor::chat_completion::routed_executor::RoutedExecutor;
-use crate::providers::KeyStorage;
 
 pub type SSOChatEvent = (
     Option<ChatCompletionDelta>,
