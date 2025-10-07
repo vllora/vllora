@@ -12,6 +12,24 @@ use langdb_core::types::gateway::ChatModel;
 use langdb_core::GatewayApiError;
 use std::sync::Arc;
 
+/// Macro to convert a Result<T, E> into Result<HttpResponse>
+///
+/// Takes an expression that returns a Result, maps the Ok value to an HttpResponse::Ok().json(),
+/// and wraps the entire result in Ok().
+///
+/// # Example
+/// ```
+/// ok_json!(service.get_data())
+/// // expands to:
+/// // Ok(service.get_data().map(|data| HttpResponse::Ok().json(data))?)
+/// ```
+#[macro_export]
+macro_rules! ok_json {
+    ($expr:expr) => {
+        Ok($expr.map(|result| actix_web::HttpResponse::Ok().json(result))?)
+    };
+}
+
 /// Handler to list models from SQLite database
 pub async fn list_models_from_db(
     model_service: web::Data<Arc<Box<dyn ModelService + Send + Sync>>>,

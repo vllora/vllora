@@ -169,8 +169,9 @@ pub async fn get_thread_messages(
     let thread_service = ThreadService::new(db_pool.get_ref().clone());
 
     // First, verify the thread exists and belongs to the project
-    match thread_service.get_thread_by_id(&thread_id) {
-        Ok(thread) => {
+    Ok(thread_service
+        .get_thread_by_id(&thread_id)
+        .and_then(|thread| {
             if thread.project_id != project.slug {
                 return Ok(HttpResponse::NotFound().json(serde_json::json!({
                     "error": "Thread not found",
@@ -180,29 +181,17 @@ pub async fn get_thread_messages(
 
             let message_service = MessageService::new(db_pool.get_ref().clone());
 
-            match message_service.get_thread_messages_with_metrics(
-                &thread_id,
-                page_options.unwrap_or(PageOptions {
-                    order_by: vec![("created_at".to_string(), PageOrderType::Asc)],
-                    limit: Some(50),
-                    offset: None,
-                }),
-            ) {
-                Ok(messages) => Ok(HttpResponse::Ok().json(messages)),
-                Err(e) => {
-                    tracing::error!("Failed to get messages for thread {}: {:?}", thread_id, e);
-                    Ok(HttpResponse::InternalServerError().json(serde_json::json!({
-                        "error": "Failed to get messages",
-                        "message": e.to_string()
-                    })))
-                }
-            }
-        }
-        Err(_) => Ok(HttpResponse::NotFound().json(serde_json::json!({
-            "error": "Thread not found",
-            "message": format!("Thread with ID {} not found", thread_id)
-        }))),
-    }
+            Ok(
+                HttpResponse::Ok().json(message_service.get_thread_messages_with_metrics(
+                    &thread_id,
+                    page_options.unwrap_or(PageOptions {
+                        order_by: vec![("created_at".to_string(), PageOrderType::Asc)],
+                        limit: Some(50),
+                        offset: None,
+                    }),
+                )?),
+            )
+        })?)
 }
 
 /// GET /threads/{thread_id}/messages/{message_id} - Get message for a thread
@@ -218,8 +207,9 @@ pub async fn get_thread_message(
     let thread_service = ThreadService::new(db_pool.get_ref().clone());
 
     // First, verify the thread exists and belongs to the project
-    match thread_service.get_thread_by_id(&thread_id_str) {
-        Ok(thread) => {
+    Ok(thread_service
+        .get_thread_by_id(&thread_id_str)
+        .and_then(|thread| {
             if thread.project_id != project.slug {
                 tracing::warn!(
                     "Unauthorized access attempt: thread {} does not belong to project {}",
@@ -234,28 +224,8 @@ pub async fn get_thread_message(
 
             let message_service = MessageService::new(db_pool.get_ref().clone());
 
-            match message_service.get_thread_message_with_metrics(&thread_id_str, &message_id_str) {
-                Ok(message) => Ok(HttpResponse::Ok().json(message)),
-                Err(e) => {
-                    tracing::error!(
-                        "Failed to get message {} for thread {}: {:?}",
-                        message_id,
-                        thread_id,
-                        e
-                    );
-                    Ok(HttpResponse::InternalServerError().json(serde_json::json!({
-                        "error": "Failed to get message",
-                        "message": e.to_string()
-                    })))
-                }
-            }
-        }
-        Err(e) => {
-            tracing::warn!("Thread {} not found: {:?}", thread_id, e);
-            Ok(HttpResponse::NotFound().json(serde_json::json!({
-                "error": "Thread not found",
-                "message": format!("Thread with ID {} not found", thread_id)
-            })))
-        }
-    }
+            Ok(HttpResponse::Ok().json(
+                message_service.get_thread_message_with_metrics(&thread_id_str, &message_id_str)?,
+            ))
+        })?)
 }

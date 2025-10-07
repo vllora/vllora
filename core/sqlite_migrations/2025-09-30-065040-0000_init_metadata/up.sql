@@ -79,7 +79,7 @@ CREATE INDEX idx_traces_child_lookup ON traces(trace_id, parent_span_id, operati
 
 -- Your SQL goes here
 CREATE TABLE models (
-    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))) NOT NULL,
     model_name TEXT NOT NULL,
     description TEXT,
     provider_name TEXT NOT NULL,
@@ -113,7 +113,7 @@ CREATE TABLE models (
 
 -- Add provider_credentials table for storing API keys and credentials
 CREATE TABLE provider_credentials (
-    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))) NOT NULL,
     provider_name TEXT NOT NULL,
     provider_type TEXT NOT NULL,
     credentials TEXT NOT NULL, -- JSON serialized credentials

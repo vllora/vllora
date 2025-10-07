@@ -6,6 +6,8 @@ use langdb_core::types::metadata::project::Project;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::ok_json;
+
 #[derive(Deserialize)]
 pub struct CreateProjectRequest {
     pub name: String,
@@ -32,16 +34,7 @@ pub async fn list_projects(_req: HttpRequest, db_pool: web::Data<DbPool>) -> Res
     // Use a dummy owner_id for now (you might want to get this from auth context)
     let owner_id = Uuid::nil();
 
-    match project_service.list(owner_id) {
-        Ok(projects) => Ok(HttpResponse::Ok().json(projects)),
-        Err(e) => {
-            tracing::error!("Failed to list projects: {:?}", e);
-            Ok(HttpResponse::InternalServerError().json(serde_json::json!({
-                "error": "Failed to list projects",
-                "message": e.to_string()
-            })))
-        }
-    }
+    ok_json!(project_service.list(owner_id))
 }
 
 pub async fn create_project(
@@ -61,103 +54,53 @@ pub async fn create_project(
         usage_limit: None,
     };
 
-    match project_service.create(new_project, owner_id) {
-        Ok(project) => Ok(HttpResponse::Created().json(project)),
-        Err(e) => {
-            tracing::error!("Failed to create project: {:?}", e);
-            Ok(HttpResponse::InternalServerError().json(serde_json::json!({
-                "error": "Failed to create project",
-                "message": e.to_string()
-            })))
-        }
-    }
+    Ok(project_service
+        .create(new_project, owner_id)
+        .map(|project| HttpResponse::Created().json(project))?)
 }
 
 pub async fn get_project(
-    path: web::Path<String>,
+    project_id: web::Path<Uuid>,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
-    let project_id = match path.parse::<Uuid>() {
-        Ok(id) => id,
-        Err(_) => {
-            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
-                "error": "Invalid project ID",
-                "message": "Project ID must be a valid UUID"
-            })));
-        }
-    };
+    let project_id = project_id.into_inner();
 
     let project_service = ProjectServiceImpl::new(db_pool.get_ref().clone());
 
     // Use a dummy owner_id for now (you might want to get this from auth context)
     let owner_id = Uuid::nil();
 
-    match project_service.get_by_id(project_id, owner_id) {
-        Ok(project) => {
-            let response = GetProjectResponse { project };
-            Ok(HttpResponse::Ok().json(response))
-        }
-        Err(e) => {
-            tracing::error!("Failed to get project {}: {:?}", project_id, e);
-            Ok(HttpResponse::NotFound().json(serde_json::json!({
-                "error": "Project not found",
-                "message": format!("Project with ID {} not found", project_id)
-            })))
-        }
-    }
+    ok_json!(project_service
+        .get_by_id(project_id, owner_id)
+        .map(|project| GetProjectResponse { project }))
 }
 
 pub async fn delete_project(
-    path: web::Path<String>,
+    project_id: web::Path<Uuid>,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
-    let project_id = match path.parse::<Uuid>() {
-        Ok(id) => id,
-        Err(_) => {
-            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
-                "error": "Invalid project ID",
-                "message": "Project ID must be a valid UUID"
-            })));
-        }
-    };
+    let project_id = project_id.into_inner();
 
     let project_service = ProjectServiceImpl::new(db_pool.get_ref().clone());
 
     // Use a dummy owner_id for now (you might want to get this from auth context)
     let owner_id = Uuid::nil();
 
-    match project_service.delete(project_id, owner_id) {
-        Ok(_) => {
-            tracing::info!("Successfully deleted project: {}", project_id);
-            Ok(HttpResponse::Ok().json(serde_json::json!({
+    Ok(project_service
+        .delete(project_id, owner_id)
+        .map(|_result| {
+            HttpResponse::Ok().json(serde_json::json!({
                 "message": "Project deleted successfully"
-            })))
-        }
-        Err(e) => {
-            tracing::error!("Failed to delete project {}: {:?}", project_id, e);
-            Ok(HttpResponse::NotFound().json(serde_json::json!({
-                "error": "Project not found",
-                "message": format!("Project with ID {} not found or already deleted", project_id)
-            })))
-        }
-    }
+            }))
+        })?)
 }
 
 pub async fn update_project(
-    path: web::Path<String>,
+    project_id: web::Path<Uuid>,
     req: web::Json<UpdateProjectRequest>,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
-    let project_id = match path.parse::<Uuid>() {
-        Ok(id) => id,
-        Err(_) => {
-            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
-                "error": "Invalid project ID",
-                "message": "Project ID must be a valid UUID"
-            })));
-        }
-    };
-
+    let project_id = project_id.into_inner();
     let project_service = ProjectServiceImpl::new(db_pool.get_ref().clone());
 
     // Use a dummy owner_id for now (you might want to get this from auth context)
@@ -171,46 +114,19 @@ pub async fn update_project(
         is_default: req.is_default,
     };
 
-    match project_service.update(project_id, owner_id, update_data) {
-        Ok(updated_project) => Ok(HttpResponse::Ok().json(updated_project)),
-        Err(e) => {
-            tracing::error!("Failed to update project {}: {:?}", project_id, e);
-            Ok(HttpResponse::NotFound()
-                .json(serde_json::json!({
-                    "error": "Project not found",
-                    "message": format!("Project with ID {} not found or could not be updated", project_id)
-                })))
-        }
-    }
+    ok_json!(project_service.update(project_id, owner_id, update_data))
 }
 
 pub async fn set_default_project(
-    path: web::Path<String>,
+    project_id: web::Path<Uuid>,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
-    let project_id = match path.parse::<Uuid>() {
-        Ok(id) => id,
-        Err(_) => {
-            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
-                "error": "Invalid project ID",
-                "message": "Project ID must be a valid UUID"
-            })));
-        }
-    };
+    let project_id = project_id.into_inner();
 
     let project_service = ProjectServiceImpl::new(db_pool.get_ref().clone());
 
     // Use a dummy owner_id for now (you might want to get this from auth context)
     let owner_id = Uuid::nil();
 
-    match project_service.set_default(project_id, owner_id) {
-        Ok(updated_project) => Ok(HttpResponse::Ok().json(updated_project)),
-        Err(e) => {
-            tracing::error!("Failed to set project as default {}: {:?}", project_id, e);
-            Ok(HttpResponse::NotFound().json(serde_json::json!({
-                "error": "Project not found",
-                "message": format!("Project with ID {} not found", project_id)
-            })))
-        }
-    }
+    ok_json!(project_service.set_default(project_id, owner_id))
 }

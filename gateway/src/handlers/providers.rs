@@ -12,6 +12,8 @@ use langdb_core::types::credentials::Credentials;
 use langdb_core::types::metadata::project::Project;
 use serde::{Deserialize, Serialize};
 
+use crate::ok_json;
+
 #[derive(Deserialize)]
 pub struct UpdateProviderRequest {
     pub provider_type: Option<String>,
@@ -22,11 +24,6 @@ pub struct UpdateProviderRequest {
 pub struct CreateProviderRequest {
     pub provider_type: String,
     pub credentials: Credentials,
-}
-
-#[derive(Serialize)]
-pub struct ListProvidersResponse {
-    pub providers: Vec<ProvidersProviderInfo>,
 }
 
 #[derive(Serialize)]
@@ -43,23 +40,7 @@ pub async fn list_providers(
 
     let providers_service = ProvidersServiceImpl::new(db_pool.get_ref().clone());
 
-    match providers_service.list_providers_with_credential_status(Some(&project.id.to_string())) {
-        Ok(providers) => {
-            let response = ListProvidersResponse { providers };
-            Ok(HttpResponse::Ok().json(response))
-        }
-        Err(e) => {
-            tracing::error!(
-                "Failed to list providers for project {}: {:?}",
-                project.id,
-                e
-            );
-            Ok(HttpResponse::InternalServerError().json(serde_json::json!({
-                "error": "Failed to list providers",
-                "message": e.to_string()
-            })))
-        }
-    }
+    ok_json!(providers_service.list_providers_with_credential_status(Some(&project.id.to_string())))
 }
 
 /// Update provider credentials for the current project

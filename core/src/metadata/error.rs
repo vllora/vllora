@@ -1,3 +1,4 @@
+use actix_web::{http::StatusCode, HttpResponse, ResponseError};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -16,4 +17,24 @@ pub enum DatabaseError {
 
     #[error("Invalid argument: {0}")]
     InvalidArgument(String),
+}
+
+impl ResponseError for DatabaseError {
+    fn error_response(&self) -> HttpResponse {
+        match self {
+            DatabaseError::QueryError(diesel::result::Error::NotFound) => {
+                HttpResponse::NotFound().finish()
+            }
+            _ => HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": self.to_string(),
+            })),
+        }
+    }
+
+    fn status_code(&self) -> StatusCode {
+        match self {
+            DatabaseError::QueryError(diesel::result::Error::NotFound) => StatusCode::NOT_FOUND,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
 }

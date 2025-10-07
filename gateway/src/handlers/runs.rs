@@ -71,30 +71,21 @@ pub async fn list_runs(
         include_mcp_templates: query.include_mcp_templates.unwrap_or(false),
     };
 
-    match run_service.list(list_query.clone()) {
-        Ok(runs) => {
-            let total = run_service.count(list_query).unwrap_or(0);
+    Ok(run_service.list(list_query.clone()).map(|runs| {
+        let total = run_service.count(list_query).unwrap_or(0);
 
-            // Convert to RunUsageResponse for JSON serialization
-            let runs_response: Vec<RunUsageResponse> =
-                runs.into_iter().map(|run| run.into()).collect();
+        // Convert to RunUsageResponse for JSON serialization
+        let runs_response: Vec<RunUsageResponse> = runs.into_iter().map(|run| run.into()).collect();
 
-            let result = PaginatedResult {
-                pagination: Pagination {
-                    offset: query.offset.unwrap_or(0),
-                    limit: query.limit.unwrap_or(100),
-                    total,
-                },
-                data: runs_response,
-            };
+        let result = PaginatedResult {
+            pagination: Pagination {
+                offset: query.offset.unwrap_or(0),
+                limit: query.limit.unwrap_or(100),
+                total,
+            },
+            data: runs_response,
+        };
 
-            Ok(HttpResponse::Ok().json(result))
-        }
-        Err(e) => {
-            eprintln!("Error listing runs: {:?}", e);
-            Ok(HttpResponse::InternalServerError().json(serde_json::json!({
-                "error": "Failed to list runs"
-            })))
-        }
-    }
+        HttpResponse::Ok().json(result)
+    })?)
 }
