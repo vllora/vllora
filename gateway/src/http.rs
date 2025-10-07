@@ -301,13 +301,13 @@ impl ApiServer {
                     .route("", web::post().to(threads::list_threads))
                     .route("/{id}", web::put().to(threads::update_thread))
                     .route(
-                        "/messages/{message_id}",
-                        web::get().to(threads::get_thread_message),
-                    )
-                    .route(
                         "/{id}/messages",
                         web::get().to(threads::get_thread_messages),
-                    ),
+                    )
+                    .route(
+                        "/{id}/messages/{message_id}",
+                        web::get().to(threads::get_thread_message),
+                    )
             )
             .route(
                 "/events",

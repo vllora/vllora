@@ -205,18 +205,21 @@ pub async fn get_thread_messages(
     }
 }
 
-/// GET /threads/messages/{message_id} - Get message for a thread
+/// GET /threads/{thread_id}/messages/{message_id} - Get message for a thread
 pub async fn get_thread_message(
-    message_id: web::Path<uuid::Uuid>,
+    path: web::Path<(uuid::Uuid, uuid::Uuid)>,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
     let message_service = MessageService::new(db_pool.get_ref().clone());
+    let (thread_id, message_id) = path.into_inner();
+    let thread_id = thread_id.to_string();
+    let message_id = message_id.to_string();
 
-    let message = message_service.get_message_by_id(&message_id.into_inner().to_string());
+    let message = message_service.get_thread_message_with_metrics(&thread_id, &message_id);
 
     match message {
-        Ok(Some(message)) => Ok(HttpResponse::Ok().json(message)),
-        Ok(None) => Ok(HttpResponse::NotFound().json(serde_json::json!({
+        Ok(messages) if !messages.is_empty() => Ok(HttpResponse::Ok().json(messages)),
+        Ok(_) => Ok(HttpResponse::NotFound().json(serde_json::json!({
             "error": "Message not found",
             "message": "Message not found"
         }))),

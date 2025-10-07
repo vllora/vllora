@@ -2,6 +2,12 @@ use crate::metadata::error::DatabaseError;
 use crate::metadata::models::message::{DbMessage, DbNewMessage};
 use crate::metadata::pool::DbPool;
 use crate::metadata::schema::messages;
+
+#[cfg(feature = "postgres")]
+use diesel::pg::PgConnection as Connection;
+#[cfg(feature = "sqlite")]
+use diesel::sqlite::SqliteConnection as Connection;
+
 use crate::types::gateway::ToolCall;
 use crate::types::message::MessageType;
 use crate::types::threads::PageOptions;
@@ -15,6 +21,29 @@ use diesel::{ExpressionMethods, QueryDsl, QueryableByName, RunQueryDsl};
 use std::str::FromStr;
 use uuid::Uuid;
 
+#[derive(QueryableByName)]
+#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+struct MessageMetricsQueryResult {
+    #[diesel(sql_type = Text)]
+    message_id: String,
+    #[diesel(sql_type = Nullable<Double>)]
+    cost: Option<f64>,
+    #[diesel(sql_type = Nullable<BigInt>)]
+    duration: Option<i64>,
+    #[diesel(sql_type = BigInt)]
+    start_time_us: i64,
+    #[diesel(sql_type = Nullable<BigInt>)]
+    ttft: Option<i64>,
+    #[diesel(sql_type = Nullable<Text>)]
+    usage: Option<String>,
+    #[diesel(sql_type = Nullable<Text>)]
+    run_id: Option<String>,
+    #[diesel(sql_type = Text)]
+    trace_id: String,
+    #[diesel(sql_type = Text)]
+    span_id: String,
+}
+
 pub struct MessageService {
     db_pool: DbPool,
 }
@@ -22,6 +51,47 @@ pub struct MessageService {
 impl MessageService {
     pub fn new(db_pool: DbPool) -> Self {
         Self { db_pool }
+    }
+
+    fn get_message_metrics_from_traces(
+        &self,
+        conn: &mut Connection,
+        thread_id: &str,
+        message_id_filter: Option<&str>,
+    ) -> Result<Vec<MessageMetricsQueryResult>, DatabaseError> {
+        let where_clause = if let Some(msg_id) = message_id_filter {
+            format!(
+                "WHERE thread_id = '{}' AND json_extract(attribute, '$.message_id') = '{}'",
+                thread_id, msg_id
+            )
+        } else {
+            format!(
+                "WHERE thread_id = '{}' AND json_extract(attribute, '$.message_id') IS NOT NULL",
+                thread_id
+            )
+        };
+
+        let sql = format!(
+            r#"
+            SELECT json_extract(attribute, '$.message_id') as message_id,
+                   CAST(json_extract(attribute, '$.cost') as float) as cost,
+                   finish_time_us - start_time_us as duration,
+                   start_time_us,
+                   CAST(json_extract(attribute, '$.ttft') as int) as ttft,
+                   json_extract(attribute, '$.usage') as usage,
+                   run_id,
+                   trace_id,
+                   span_id
+            FROM traces
+            {}
+            ORDER BY start_time_us ASC
+            "#,
+            where_clause
+        );
+
+        diesel::sql_query(sql)
+            .load::<MessageMetricsQueryResult>(conn)
+            .map_err(DatabaseError::QueryError)
     }
 
     pub fn get_messages_by_thread_id(
@@ -260,6 +330,58 @@ impl MessageService {
         }
     }
 
+
+    pub fn get_thread_message_with_metrics(
+        &self,
+        thread_id: &str,
+        message_id: &str,
+    ) -> Result<Vec<MessageWithAllMetrics>, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+
+        let results = self.get_message_metrics_from_traces(&mut conn, thread_id, Some(message_id))?;
+
+        // Get the specific message
+        let message = self
+            .get_message_by_id(message_id)?
+            .ok_or_else(|| DatabaseError::InvalidArgument(format!("Message {} not found", message_id)))?;
+
+        // Collect all metrics for this message
+        let mut metrics: Vec<crate::types::threads::MessageMetrics> = results
+            .into_iter()
+            .filter_map(|result| {
+                let usage: Option<crate::types::gateway::CompletionModelUsage> =
+                    result.usage.and_then(|u| serde_json::from_str(&u).ok());
+
+                let metric = crate::types::threads::MessageMetrics {
+                    ttft: result.ttft.map(|t| t as u64),
+                    usage,
+                    duration: result.duration.map(|d| d as u64),
+                    run_id: result.run_id,
+                    trace_id: Some(result.trace_id),
+                    span_id: Some(result.span_id),
+                    start_time_us: Some(result.start_time_us as u64),
+                    cost: result.cost,
+                };
+
+                // Only include metrics with non-empty run_id
+                metric.run_id.as_ref().filter(|id| !id.is_empty())?;
+                Some(metric)
+            })
+            .collect();
+
+        // Sort metrics by start_time_us (ascending)
+        metrics.sort_by_key(|m| m.start_time_us.unwrap_or(u64::MAX));
+
+        let result = vec![MessageWithAllMetrics {
+            message: message.message,
+            created_at: "".to_string(),
+            id: message.id,
+            metrics,
+        }];
+
+        Ok(result)
+    }
+
     pub fn get_thread_messages_with_metrics(
         &self,
         thread_id: &str,
@@ -267,50 +389,7 @@ impl MessageService {
     ) -> Result<Vec<MessageWithAllMetrics>, DatabaseError> {
         let mut conn = self.db_pool.get()?;
 
-        #[derive(QueryableByName)]
-        #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
-        struct MessageMetricsQueryResult {
-            #[diesel(sql_type = Text)]
-            message_id: String,
-            #[diesel(sql_type = Nullable<Double>)]
-            cost: Option<f64>,
-            #[diesel(sql_type = Nullable<BigInt>)]
-            duration: Option<i64>,
-            #[diesel(sql_type = BigInt)]
-            start_time_us: i64,
-            #[diesel(sql_type = Nullable<BigInt>)]
-            ttft: Option<i64>,
-            #[diesel(sql_type = Nullable<Text>)]
-            usage: Option<String>,
-            #[diesel(sql_type = Nullable<Text>)]
-            run_id: Option<String>,
-            #[diesel(sql_type = Text)]
-            trace_id: String,
-            #[diesel(sql_type = Text)]
-            span_id: String,
-        }
-
-        let sql = format!(
-            r#"
-            SELECT json_extract(attribute, '$.message_id') as message_id,
-                   CAST(json_extract(attribute, '$.cost') as float) as cost,
-                   finish_time_us - start_time_us as duration,
-                   start_time_us,
-                   CAST(json_extract(attribute, '$.ttft') as int) as ttft,
-                   json_extract(attribute, '$.usage') as usage,
-                   run_id,
-                   trace_id,
-                   span_id
-            FROM traces
-            WHERE thread_id = '{}' AND json_extract(attribute, '$.message_id') IS NOT NULL
-            ORDER BY start_time_us ASC
-            "#,
-            thread_id
-        );
-
-        let results = diesel::sql_query(sql)
-            .load::<MessageMetricsQueryResult>(&mut conn)
-            .map_err(DatabaseError::QueryError)?;
+        let results = self.get_message_metrics_from_traces(&mut conn, thread_id, None)?;
 
         // Get all messages for this thread
         let messages = self.get_messages_by_thread_id(thread_id, page_options)?;
