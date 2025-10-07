@@ -5,15 +5,10 @@ use clap::Parser;
 use config::{Config, ConfigError};
 use http::ApiServer;
 use langdb_core::metadata::error::DatabaseError;
-use langdb_core::metadata::models::project::NewProjectDTO;
-use langdb_core::metadata::pool::DbPool;
 use langdb_core::metadata::services::model::ModelServiceImpl;
-use langdb_core::metadata::services::project::{ProjectService, ProjectServiceImpl};
-use langdb_core::metadata::services::providers::ProviderServiceImpl;
 use langdb_core::{error::GatewayError, usage::InMemoryStorage};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use uuid::Uuid;
 
 mod callback_handler;
 mod cli;
@@ -25,6 +20,7 @@ mod http;
 mod limit;
 mod middleware;
 mod run;
+mod seed;
 mod session;
 mod tracing;
 mod tui;
@@ -74,41 +70,6 @@ pub const LOGO: &str = r#"
   ███████ ██   ██ ██   ████  ██████  ██████  ██████
 "#;
 
-/// Seeds the database with a default project if no projects exist
-fn seed_database(db_pool: &DbPool) -> Result<(), CliError> {
-    let project_service = ProjectServiceImpl::new(db_pool.clone());
-
-    // Use a dummy owner_id for seeding (you might want to change this)
-    let dummy_owner_id = Uuid::nil();
-
-    // Check if any projects exist
-    let project_count = project_service.count(dummy_owner_id)?;
-
-    if project_count == 0 {
-        info!("No projects found in database. Creating default project...");
-
-        let default_project = NewProjectDTO {
-            name: "Default Project".to_string(),
-            description: Some("Default project created during database seeding".to_string()),
-            settings: None,
-            private_model_prices: None,
-            usage_limit: None,
-        };
-
-        let created_project = project_service.create(default_project, dummy_owner_id)?;
-        // set this project as default
-        project_service.set_default(created_project.id, dummy_owner_id)?;
-        info!(
-            "Created default project: {} (ID: {})",
-            created_project.name, created_project.id
-        );
-    } else {
-        info!("Found {} existing projects in database", project_count);
-    }
-
-    Ok(())
-}
-
 #[actix_web::main]
 async fn main() -> Result<(), CliError> {
     dotenv::dotenv().ok();
@@ -122,15 +83,16 @@ async fn main() -> Result<(), CliError> {
 
     langdb_core::metadata::utils::init_db(&db_pool);
 
-    // Seed the database with a default project if none exist
-    seed_database(&db_pool)?;
-
     let project_trace_senders = Arc::new(BroadcastChannelManager::new(Default::default()));
 
     let project_trace_senders_cleanup = Arc::clone(&project_trace_senders);
     langdb_core::events::broadcast_channel_manager::start_cleanup_task(
         (*project_trace_senders_cleanup).clone(),
     );
+
+    tracing::init_tracing(project_trace_senders.inner().clone());
+    // Seed the database with a default project if none exist
+    seed::seed_database(&db_pool)?;
 
     match cli
         .command
@@ -139,16 +101,16 @@ async fn main() -> Result<(), CliError> {
         cli::Commands::Login => session::login().await,
         cli::Commands::Sync => {
             tracing::init_tracing(project_trace_senders.inner().clone());
-            println!("Syncing models from API to database...");
+            info!("Syncing models from API to database...");
             let models = run::models::fetch_and_store_models(db_pool.clone()).await?;
-            println!("Successfully synced {} models to database", models.len());
+            info!("Successfully synced {} models to database", models.len());
             Ok(())
         }
         cli::Commands::SyncProviders => {
             tracing::init_tracing(project_trace_senders.inner().clone());
-            println!("Syncing providers from API to database...");
+            info!("Syncing providers from API to database...");
             run::providers::sync_providers(db_pool.clone()).await?;
-            println!("Successfully synced providers to database");
+            info!("Successfully synced providers to database");
             Ok(())
         }
         cli::Commands::List => {
@@ -158,7 +120,7 @@ async fn main() -> Result<(), CliError> {
             let model_service = ModelServiceImpl::new(db_pool.clone());
             let db_models = model_service.list(None)?;
 
-            println!("Found {} models in database\n", db_models.len());
+            info!("Found {} models in database\n", db_models.len());
 
             // Convert DbModel to ModelMetadata and display as table
             let models: Vec<langdb_core::models::ModelMetadata> =
@@ -169,49 +131,10 @@ async fn main() -> Result<(), CliError> {
         }
         cli::Commands::Serve(serve_args) => {
             // Check if models table is empty and sync if needed
-            {
-                use langdb_core::metadata::services::model::ModelService;
-                let model_service = ModelServiceImpl::new(db_pool.clone());
-                let models = model_service.list(None)?;
-
-                if models.is_empty() {
-                    println!("Models table is empty. Syncing models from API...");
-                    match run::models::fetch_and_store_models(db_pool.clone()).await {
-                        Ok(synced_models) => {
-                            println!(
-                                "✓ Successfully synced {} models to database",
-                                synced_models.len()
-                            );
-                        }
-                        Err(e) => {
-                            eprintln!("⚠ Warning: Failed to sync models: {}", e);
-                            eprintln!("  Continuing with empty models table. You can manually sync with: langdb sync");
-                        }
-                    }
-                }
-            }
+            seed::seed_models(&db_pool).await?;
 
             // Check if providers table is empty and sync if needed
-            {
-                use langdb_core::metadata::services::providers::ProviderService;
-                let provider_service = ProviderServiceImpl::new(db_pool.clone());
-                let providers = provider_service.list_providers()?;
-
-                if providers.is_empty() {
-                    println!("Providers table is empty. Syncing providers from API...");
-                    match run::providers::sync_providers(db_pool.clone()).await {
-                        Ok(()) => {
-                            println!("✓ Successfully synced providers to database");
-                        }
-                        Err(e) => {
-                            eprintln!("⚠ Warning: Failed to sync providers: {}", e);
-                            eprintln!("  Continuing with empty providers table.");
-                        }
-                    }
-                } else {
-                    println!("Found {} existing providers in database", providers.len());
-                }
-            }
+            seed::seed_providers(&db_pool).await?;
 
             if serve_args.interactive {
                 let storage = Arc::new(Mutex::new(InMemoryStorage::new()));
@@ -277,8 +200,6 @@ async fn main() -> Result<(), CliError> {
                     }
                 }
             } else {
-                tracing::init_tracing(project_trace_senders.inner().clone());
-
                 let config = Config::load(&cli.config)?;
                 let config = config.apply_cli_overrides(&cli::Commands::Serve(serve_args));
                 let api_server = ApiServer::new(config, db_pool.clone());
