@@ -12,6 +12,7 @@ pub mod metadata;
 pub mod model;
 pub mod models;
 pub mod pricing;
+pub mod providers;
 pub mod responses;
 pub mod routing;
 pub mod telemetry;

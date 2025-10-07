@@ -11,6 +11,8 @@ use crate::model::types::ModelEvent;
 use crate::model::types::ModelEventType;
 use crate::model::{ModelInstance, ResponseCacheState};
 use crate::models::ModelMetadata;
+use crate::providers::GatewayCredentials;
+use crate::types::credentials::Credentials;
 use crate::types::engine::{
     CompletionModelDefinition, CompletionModelParams, ExecutionOptions, Model, ModelTool,
     ModelTools, ModelType, Prompt,
@@ -18,6 +20,7 @@ use crate::types::engine::{
 use crate::types::gateway::{
     ChatCompletionMessage, ChatCompletionRequestWithTools, ChatCompletionResponse, Extra,
 };
+use crate::types::provider::InferenceModelProvider;
 use crate::GatewayApiError;
 
 use crate::model::CredentialsIdent;
@@ -31,7 +34,6 @@ use tracing_futures::Instrument;
 use uuid::Uuid;
 
 use super::context::ExecutorContext;
-use super::{get_key_credentials, use_langdb_proxy};
 use crate::executor::chat_completion::stream_wrapper::ChatCompletionStream;
 
 pub mod basic_executor;
@@ -107,6 +109,14 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         }
     }
 
+    let key = GatewayCredentials::extract_key_from_model(
+        llm_model,
+        &executor_context.project_id.to_string(),
+        "default",
+        executor_context.key_storage.as_ref().as_ref(),
+    )
+    .await
+    .map_err(|e| GatewayApiError::CustomError(e.to_string()))?;
     let resolved_model_context = resolve_model_instance(
         executor_context,
         request_with_tools,
@@ -118,6 +128,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         cached_instance,
         cache_state,
         llm_model,
+        key.as_ref(),
     )
     .await?;
 
@@ -266,14 +277,15 @@ pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Cl
     cached_model: Option<CachedModel>,
     cache_state: Option<ResponseCacheState>,
     llm_model: &ModelMetadata,
+    key: Option<&Credentials>,
 ) -> Result<ResolvedModelContext, GatewayApiError> {
-    let (key_credentials, llm_model) = use_langdb_proxy(executor_context, llm_model.clone());
+    // let (key_credentials, llm_model) = use_langdb_proxy(executor_context, llm_model.clone());
 
-    let key = get_key_credentials(
-        key_credentials.as_ref(),
-        executor_context.providers_config.as_ref(),
-        &llm_model.inference_provider.provider.to_string(),
-    );
+    // let key = get_key_credentials(
+    //     key_credentials.as_ref(),
+    //     executor_context.providers_config.as_ref(),
+    //     &llm_model.inference_provider.provider.to_string(),
+    // );
     let provider_specific = request.provider_specific.clone();
     let execution_options = request
         .max_retries
@@ -285,12 +297,20 @@ pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Cl
     let request = request.request.clone();
 
     let engine = Provider::get_completion_engine_for_model(
-        &llm_model,
+        llm_model,
         &request,
-        key.clone(),
+        key.cloned(),
         provider_specific.as_ref(),
         Some(execution_options.clone()),
     )?;
+
+    let credentials_ident = if llm_model.inference_provider.provider
+        == InferenceModelProvider::Proxy("langdb".to_string())
+    {
+        CredentialsIdent::Langdb
+    } else {
+        CredentialsIdent::Own
+    };
 
     let db_model = Model {
         name: llm_model.model.clone(),
@@ -298,10 +318,7 @@ pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Cl
         provider_name: llm_model.inference_provider.provider.to_string(),
         model_type: ModelType::Completions,
         price: llm_model.price.clone(),
-        credentials_ident: match key_credentials {
-            Some(_) => CredentialsIdent::Own,
-            _ => CredentialsIdent::Langdb,
-        },
+        credentials_ident,
     };
 
     let completion_model_definition = CompletionModelDefinition {
@@ -338,7 +355,7 @@ pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Cl
         completion_model_definition,
         model_instance,
         db_model,
-        llm_model,
+        llm_model: llm_model.clone(),
     })
 }
 

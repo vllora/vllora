@@ -36,6 +36,8 @@ use langdb_core::history::thread_entity::ThreadEntityImpl;
 use langdb_core::metadata::pool::DbPool;
 use langdb_core::metadata::project_trace::ProjectTraceTenantResolver;
 use langdb_core::metadata::services::project::ProjectServiceImpl;
+use langdb_core::providers::credentials::ProviderCredentialResolver;
+use langdb_core::providers::KeyStorage;
 use langdb_core::telemetry::database::DatabaseSpanWritter;
 use langdb_core::telemetry::database::SqliteTraceWriterTransport;
 use langdb_core::telemetry::SpanWriterTransport;
@@ -256,6 +258,8 @@ impl ApiServer {
             Box::new(ThreadEntityImpl::new(db_pool.clone())) as Box<dyn ThreadEntity>;
 
         let callback_handler = GatewayCallbackHandlerFn::new(vec![], Some(broadcaster.clone()));
+        let key_storage =
+            Box::new(ProviderCredentialResolver::new(db_pool.clone())) as Box<dyn KeyStorage>;
 
         // Add model_service and available_models to app_data
         let service = service
@@ -272,6 +276,7 @@ impl ApiServer {
             .app_data(web::Data::from(project_trace_senders))
             .app_data(Data::new(thread_entity))
             .app_data(Data::new(callback_handler))
+            .app_data(Data::new(key_storage))
             .service(
                 service
                     .app_data(limit_checker)
@@ -298,7 +303,6 @@ impl ApiServer {
             .service(
                 web::scope("/providers")
                     .route("", web::get().to(providers::list_providers))
-                    .route("", web::post().to(providers::create_provider))
                     .route(
                         "/{provider_name}",
                         web::put().to(providers::update_provider),

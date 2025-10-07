@@ -70,6 +70,7 @@ impl GuardModelInstanceFactory for GuardModelFactory {
             None,
             None,
             &llm_model,
+            None,
         )
         .await
         .expect("Failed to resolve model instance");

@@ -3,6 +3,7 @@ PROFILE:=release
 
 X86_CONTAINER_TARGET=x86_64-unknown-linux-gnu
 ARM_CONTAINER_TARGET=aarch64-unknown-linux-gnu
+MAC_M1_TARGET=aarch64-apple-darwin
 
 CONTAINER_GLIBC=2.31
 
@@ -35,6 +36,17 @@ gateway_local: ${TMPDIR}
 		--target ${X86_CONTAINER_TARGET} \
 		--bin ai-gateway
 
+# Mac M1 build targets
+udf_mac_m1: ${TMPDIR}
+	cargo build --profile ${PROFILE} \
+		--target ${MAC_M1_TARGET} \
+		--bin langdb_udf
+
+gateway_mac_m1: ${TMPDIR}
+	cargo build --profile ${PROFILE} \
+		--target ${MAC_M1_TARGET} \
+		--bin ai-gateway
+
 # Multi-architecture build targets
 build_all: build_udfs build_gateways
 
@@ -44,10 +56,28 @@ build_udfs: ${TMPDIR}
 		--target ${ARM_CONTAINER_TARGET} \
 		--bin langdb_udf
 
+build_udfs_all_platforms: ${TMPDIR}
+	cargo zigbuild --profile ${PROFILE} \
+		--target ${X86_CONTAINER_TARGET} \
+		--target ${ARM_CONTAINER_TARGET} \
+		--bin langdb_udf
+	cargo build --profile ${PROFILE} \
+		--target ${MAC_M1_TARGET} \
+		--bin langdb_udf
+
 build_gateways: ${TMPDIR}
 	cargo zigbuild --profile ${PROFILE} \
 		--target ${X86_CONTAINER_TARGET} \
 		--target ${ARM_CONTAINER_TARGET} \
+		--bin ai-gateway
+
+build_gateways_all_platforms: ${TMPDIR}
+	cargo zigbuild --profile ${PROFILE} \
+		--target ${X86_CONTAINER_TARGET} \
+		--target ${ARM_CONTAINER_TARGET} \
+		--bin ai-gateway
+	cargo build --profile ${PROFILE} \
+		--target ${MAC_M1_TARGET} \
 		--bin ai-gateway
 
 ${TMPDIR}:

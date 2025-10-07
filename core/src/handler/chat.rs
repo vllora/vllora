@@ -44,6 +44,7 @@ use tracing_futures::Instrument;
 use uuid::Uuid;
 
 use crate::executor::chat_completion::routed_executor::RoutedExecutor;
+use crate::providers::KeyStorage;
 
 pub type SSOChatEvent = (
     Option<ChatCompletionDelta>,
@@ -235,6 +236,7 @@ pub async fn create_chat_completion(
     run_id: web::ReqData<CompletionsRunId>,
     thread_id: web::ReqData<CompletionsThreadId>,
     project: web::ReqData<Project>,
+    key_storage: web::Data<Box<dyn KeyStorage>>,
 ) -> Result<HttpResponse, GatewayApiError> {
     can_execute_llm_for_request(&req).await?;
 
@@ -350,6 +352,8 @@ pub async fn create_chat_completion(
         HashMap::new(),
         guardrails_evaluator_service,
         Arc::new(rate_limiter_service),
+        project.id,
+        key_storage.into_inner(),
     )?;
 
     let executor = RoutedExecutor::new(request.clone());
