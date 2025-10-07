@@ -209,23 +209,53 @@ pub async fn get_thread_messages(
 pub async fn get_thread_message(
     path: web::Path<(uuid::Uuid, uuid::Uuid)>,
     db_pool: web::Data<DbPool>,
+    project: web::ReqData<Project>,
 ) -> Result<HttpResponse> {
-    let message_service = MessageService::new(db_pool.get_ref().clone());
     let (thread_id, message_id) = path.into_inner();
-    let thread_id = thread_id.to_string();
-    let message_id = message_id.to_string();
+    let thread_id_str = thread_id.to_string();
+    let message_id_str = message_id.to_string();
 
-    let message = message_service.get_thread_message_with_metrics(&thread_id, &message_id);
+    let thread_service = ThreadService::new(db_pool.get_ref().clone());
 
-    match message {
-        Ok(messages) if !messages.is_empty() => Ok(HttpResponse::Ok().json(messages)),
-        Ok(_) => Ok(HttpResponse::NotFound().json(serde_json::json!({
-            "error": "Message not found",
-            "message": "Message not found"
-        }))),
-        Err(e) => Ok(HttpResponse::InternalServerError().json(serde_json::json!({
-            "error": "Failed to get message",
-            "message": e.to_string()
-        }))),
+    // First, verify the thread exists and belongs to the project
+    match thread_service.get_thread_by_id(&thread_id_str) {
+        Ok(thread) => {
+            if thread.project_id != project.slug {
+                tracing::warn!(
+                    "Unauthorized access attempt: thread {} does not belong to project {}",
+                    thread_id,
+                    project.slug
+                );
+                return Ok(HttpResponse::NotFound().json(serde_json::json!({
+                    "error": "Thread not found",
+                    "message": "Thread does not belong to this project"
+                })));
+            }
+
+            let message_service = MessageService::new(db_pool.get_ref().clone());
+
+            match message_service.get_thread_message_with_metrics(&thread_id_str, &message_id_str) {
+                Ok(message) => Ok(HttpResponse::Ok().json(message)),
+                Err(e) => {
+                    tracing::error!(
+                        "Failed to get message {} for thread {}: {:?}",
+                        message_id,
+                        thread_id,
+                        e
+                    );
+                    Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                        "error": "Failed to get message",
+                        "message": e.to_string()
+                    })))
+                }
+            }
+        }
+        Err(e) => {
+            tracing::warn!("Thread {} not found: {:?}", thread_id, e);
+            Ok(HttpResponse::NotFound().json(serde_json::json!({
+                "error": "Thread not found",
+                "message": format!("Thread with ID {} not found", thread_id)
+            })))
+        }
     }
 }

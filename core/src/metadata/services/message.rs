@@ -330,20 +330,20 @@ impl MessageService {
         }
     }
 
-
     pub fn get_thread_message_with_metrics(
         &self,
         thread_id: &str,
         message_id: &str,
-    ) -> Result<Vec<MessageWithAllMetrics>, DatabaseError> {
+    ) -> Result<MessageWithAllMetrics, DatabaseError> {
         let mut conn = self.db_pool.get()?;
 
-        let results = self.get_message_metrics_from_traces(&mut conn, thread_id, Some(message_id))?;
+        let results =
+            self.get_message_metrics_from_traces(&mut conn, thread_id, Some(message_id))?;
 
         // Get the specific message
-        let message = self
-            .get_message_by_id(message_id)?
-            .ok_or_else(|| DatabaseError::InvalidArgument(format!("Message {} not found", message_id)))?;
+        let message = self.get_message_by_id(message_id)?.ok_or_else(|| {
+            DatabaseError::InvalidArgument(format!("Message {} not found", message_id))
+        })?;
 
         // Collect all metrics for this message
         let mut metrics: Vec<crate::types::threads::MessageMetrics> = results
@@ -372,12 +372,12 @@ impl MessageService {
         // Sort metrics by start_time_us (ascending)
         metrics.sort_by_key(|m| m.start_time_us.unwrap_or(u64::MAX));
 
-        let result = vec![MessageWithAllMetrics {
+        let result = MessageWithAllMetrics {
             message: message.message,
             created_at: "".to_string(),
             id: message.id,
             metrics,
-        }];
+        };
 
         Ok(result)
     }
