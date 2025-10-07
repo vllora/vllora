@@ -1,10 +1,15 @@
 use actix_web::{web, HttpResponse, Result};
-use langdb_core::metadata::models::provider::{NewProviderCredentialsDTO, UpdateProviderCredentialsDTO};
+use langdb_core::metadata::models::provider::{
+    NewProviderCredentialsDTO, UpdateProviderCredentialsDTO,
+};
 use langdb_core::metadata::pool::DbPool;
 use langdb_core::metadata::services::provider::{ProviderService, ProviderServiceImpl};
-use langdb_core::metadata::services::providers::{ProviderService as ProvidersService, ProviderServiceImpl as ProvidersServiceImpl, ProviderInfo as ProvidersProviderInfo};
-use langdb_core::types::metadata::project::Project;
+use langdb_core::metadata::services::providers::{
+    ProviderInfo as ProvidersProviderInfo, ProviderService as ProvidersService,
+    ProviderServiceImpl as ProvidersServiceImpl,
+};
 use langdb_core::types::credentials::Credentials;
+use langdb_core::types::metadata::project::Project;
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize)]
@@ -37,14 +42,18 @@ pub async fn list_providers(
     let project = project.into_inner();
 
     let providers_service = ProvidersServiceImpl::new(db_pool.get_ref().clone());
-    
+
     match providers_service.list_providers_with_credential_status(Some(&project.id.to_string())) {
         Ok(providers) => {
             let response = ListProvidersResponse { providers };
             Ok(HttpResponse::Ok().json(response))
         }
         Err(e) => {
-            tracing::error!("Failed to list providers for project {}: {:?}", project.id, e);
+            tracing::error!(
+                "Failed to list providers for project {}: {:?}",
+                project.id,
+                e
+            );
             Ok(HttpResponse::InternalServerError().json(serde_json::json!({
                 "error": "Failed to list providers",
                 "message": e.to_string()
@@ -67,10 +76,8 @@ pub async fn update_provider(
     let providers_service = ProvidersServiceImpl::new(db_pool.get_ref().clone());
 
     // Check if provider already exists
-    let existing_provider = provider_service.get_provider_credentials(
-        &provider_name,
-        Some(&project.id.to_string())
-    );
+    let existing_provider =
+        provider_service.get_provider_credentials(&provider_name, Some(&project.id.to_string()));
 
     match existing_provider {
         Ok(Some(_)) => {
@@ -89,12 +96,20 @@ pub async fn update_provider(
                 })?,
             ) {
                 Ok(_) => {
-                    tracing::info!("Successfully updated provider {} for project {}", provider_name, project.id);
-                    
+                    tracing::info!(
+                        "Successfully updated provider {} for project {}",
+                        provider_name,
+                        project.id
+                    );
+
                     // Return updated provider info
-                    match providers_service.list_providers_with_credential_status(Some(&project.id.to_string())) {
+                    match providers_service
+                        .list_providers_with_credential_status(Some(&project.id.to_string()))
+                    {
                         Ok(providers) => {
-                            if let Some(updated_provider) = providers.iter().find(|p| p.name == provider_name) {
+                            if let Some(updated_provider) =
+                                providers.iter().find(|p| p.name == provider_name)
+                            {
                                 let response = ProviderResponse {
                                     provider: updated_provider.clone(),
                                 };
@@ -106,7 +121,10 @@ pub async fn update_provider(
                             }
                         }
                         Err(e) => {
-                            tracing::warn!("Provider updated but failed to fetch updated info: {:?}", e);
+                            tracing::warn!(
+                                "Provider updated but failed to fetch updated info: {:?}",
+                                e
+                            );
                             Ok(HttpResponse::Ok().json(serde_json::json!({
                                 "message": "Provider updated successfully"
                             })))
@@ -114,7 +132,12 @@ pub async fn update_provider(
                     }
                 }
                 Err(e) => {
-                    tracing::error!("Failed to update provider {} for project {}: {:?}", provider_name, project.id, e);
+                    tracing::error!(
+                        "Failed to update provider {} for project {}: {:?}",
+                        provider_name,
+                        project.id,
+                        e
+                    );
                     Ok(HttpResponse::InternalServerError().json(serde_json::json!({
                         "error": "Failed to update provider",
                         "message": e.to_string()
@@ -126,7 +149,10 @@ pub async fn update_provider(
             // Create new provider if it doesn't exist
             let new_provider = NewProviderCredentialsDTO {
                 provider_name: provider_name.clone(),
-                provider_type: req.provider_type.clone().unwrap_or_else(|| "api_key".to_string()),
+                provider_type: req
+                    .provider_type
+                    .clone()
+                    .unwrap_or_else(|| "api_key".to_string()),
                 credentials: req.credentials.clone().unwrap_or_default(),
                 project_id: Some(project.id.to_string()),
             };
@@ -136,12 +162,20 @@ pub async fn update_provider(
                 actix_web::error::ErrorInternalServerError("Invalid credentials format")
             })?) {
                 Ok(_) => {
-                    tracing::info!("Successfully created provider {} for project {}", provider_name, project.id);
-                    
+                    tracing::info!(
+                        "Successfully created provider {} for project {}",
+                        provider_name,
+                        project.id
+                    );
+
                     // Return created provider info
-                    match providers_service.list_providers_with_credential_status(Some(&project.id.to_string())) {
+                    match providers_service
+                        .list_providers_with_credential_status(Some(&project.id.to_string()))
+                    {
                         Ok(providers) => {
-                            if let Some(created_provider) = providers.iter().find(|p| p.name == provider_name) {
+                            if let Some(created_provider) =
+                                providers.iter().find(|p| p.name == provider_name)
+                            {
                                 let response = ProviderResponse {
                                     provider: created_provider.clone(),
                                 };
@@ -153,7 +187,10 @@ pub async fn update_provider(
                             }
                         }
                         Err(e) => {
-                            tracing::warn!("Provider created but failed to fetch created info: {:?}", e);
+                            tracing::warn!(
+                                "Provider created but failed to fetch created info: {:?}",
+                                e
+                            );
                             Ok(HttpResponse::Created().json(serde_json::json!({
                                 "message": "Provider created successfully"
                             })))
@@ -161,7 +198,12 @@ pub async fn update_provider(
                     }
                 }
                 Err(e) => {
-                    tracing::error!("Failed to create provider {} for project {}: {:?}", provider_name, project.id, e);
+                    tracing::error!(
+                        "Failed to create provider {} for project {}: {:?}",
+                        provider_name,
+                        project.id,
+                        e
+                    );
                     Ok(HttpResponse::InternalServerError().json(serde_json::json!({
                         "error": "Failed to create provider",
                         "message": e.to_string()
@@ -170,7 +212,12 @@ pub async fn update_provider(
             }
         }
         Err(e) => {
-            tracing::error!("Failed to check if provider {} exists for project {}: {:?}", provider_name, project.id, e);
+            tracing::error!(
+                "Failed to check if provider {} exists for project {}: {:?}",
+                provider_name,
+                project.id,
+                e
+            );
             Ok(HttpResponse::InternalServerError().json(serde_json::json!({
                 "error": "Failed to check provider",
                 "message": e.to_string()
@@ -190,18 +237,24 @@ pub async fn delete_provider(
 
     let provider_service = ProviderServiceImpl::new(db_pool.get_ref().clone());
 
-    match provider_service.delete_provider(
-        &provider_name,
-        Some(&project.id.to_string()),
-    ) {
+    match provider_service.delete_provider(&provider_name, Some(&project.id.to_string())) {
         Ok(_) => {
-            tracing::info!("Successfully deleted provider {} for project {}", provider_name, project.id);
+            tracing::info!(
+                "Successfully deleted provider {} for project {}",
+                provider_name,
+                project.id
+            );
             Ok(HttpResponse::Ok().json(serde_json::json!({
                 "message": "Provider deleted successfully"
             })))
         }
         Err(e) => {
-            tracing::error!("Failed to delete provider {} for project {}: {:?}", provider_name, project.id, e);
+            tracing::error!(
+                "Failed to delete provider {} for project {}: {:?}",
+                provider_name,
+                project.id,
+                e
+            );
             Ok(HttpResponse::NotFound().json(serde_json::json!({
                 "error": "Provider not found",
                 "message": format!("Provider '{}' not found or already deleted", provider_name)
@@ -228,13 +281,11 @@ pub async fn create_provider(
         Credentials::Aws(_) => "aws_bedrock",
         Credentials::Vertex(_) => "vertex",
         Credentials::LangDb => "langdb",
-    }.to_string();
+    }
+    .to_string();
 
     // Check if provider already exists
-    match provider_service.get_provider_credentials(
-        &provider_name,
-        Some(&project.id.to_string())
-    ) {
+    match provider_service.get_provider_credentials(&provider_name, Some(&project.id.to_string())) {
         Ok(Some(_)) => {
             return Ok(HttpResponse::Conflict().json(serde_json::json!({
                 "error": "Provider already exists",
@@ -245,7 +296,12 @@ pub async fn create_provider(
             // Provider doesn't exist, create it
         }
         Err(e) => {
-            tracing::error!("Failed to check if provider {} exists for project {}: {:?}", provider_name, project.id, e);
+            tracing::error!(
+                "Failed to check if provider {} exists for project {}: {:?}",
+                provider_name,
+                project.id,
+                e
+            );
             return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
                 "error": "Failed to check provider",
                 "message": e.to_string()
@@ -265,12 +321,20 @@ pub async fn create_provider(
         actix_web::error::ErrorInternalServerError("Invalid credentials format")
     })?) {
         Ok(_) => {
-            tracing::info!("Successfully created provider {} for project {}", provider_name, project.id);
-            
+            tracing::info!(
+                "Successfully created provider {} for project {}",
+                provider_name,
+                project.id
+            );
+
             // Return created provider info
-            match providers_service.list_providers_with_credential_status(Some(&project.id.to_string())) {
+            match providers_service
+                .list_providers_with_credential_status(Some(&project.id.to_string()))
+            {
                 Ok(providers) => {
-                    if let Some(created_provider) = providers.iter().find(|p| p.name == provider_name) {
+                    if let Some(created_provider) =
+                        providers.iter().find(|p| p.name == provider_name)
+                    {
                         let response = ProviderResponse {
                             provider: created_provider.clone(),
                         };
@@ -290,7 +354,12 @@ pub async fn create_provider(
             }
         }
         Err(e) => {
-            tracing::error!("Failed to create provider {} for project {}: {:?}", provider_name, project.id, e);
+            tracing::error!(
+                "Failed to create provider {} for project {}: {:?}",
+                provider_name,
+                project.id,
+                e
+            );
             Ok(HttpResponse::InternalServerError().json(serde_json::json!({
                 "error": "Failed to create provider",
                 "message": e.to_string()

@@ -299,8 +299,14 @@ impl ApiServer {
                 web::scope("/providers")
                     .route("", web::get().to(providers::list_providers))
                     .route("", web::post().to(providers::create_provider))
-                    .route("/{provider_name}", web::put().to(providers::update_provider))
-                    .route("/{provider_name}", web::delete().to(providers::delete_provider)),
+                    .route(
+                        "/{provider_name}",
+                        web::put().to(providers::update_provider),
+                    )
+                    .route(
+                        "/{provider_name}",
+                        web::delete().to(providers::delete_provider),
+                    ),
             )
             .service(
                 web::scope("/threads")
@@ -314,7 +320,7 @@ impl ApiServer {
                     .route(
                         "/{id}/messages/{message_id}",
                         web::get().to(threads::get_thread_message),
-                    )
+                    ),
             )
             .route(
                 "/events",

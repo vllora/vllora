@@ -3,8 +3,8 @@ use crate::metadata::models::provider::{
     DbInsertProviderCredentials, DbProviderCredentials, DbUpdateProviderCredentials,
 };
 use crate::metadata::pool::DbPool;
-use crate::metadata::schema::provider_credentials::dsl::provider_credentials;
 use crate::metadata::schema::provider_credentials as pc;
+use crate::metadata::schema::provider_credentials::dsl::provider_credentials;
 use crate::types::credentials::Credentials;
 use diesel::dsl::count;
 use diesel::BoolExpressionMethods;
@@ -41,9 +41,13 @@ pub trait ProviderService {
 
     /// List all providers with their credential status
     fn list_providers(&self, project_id: Option<&str>) -> Result<Vec<ProviderInfo>, DatabaseError>;
-    
+
     /// List all available providers from models with their credential status
-    fn list_available_providers(&self, project_id: Option<&str>, available_models: &[crate::models::ModelMetadata]) -> Result<Vec<ProviderInfo>, DatabaseError>;
+    fn list_available_providers(
+        &self,
+        project_id: Option<&str>,
+        available_models: &[crate::models::ModelMetadata],
+    ) -> Result<Vec<ProviderInfo>, DatabaseError>;
 
     /// Check if provider has credentials configured
     fn has_provider_credentials(
@@ -152,7 +156,10 @@ impl ProviderService for ProviderServiceImpl {
         Ok(())
     }
 
-    fn list_providers(&self, project_id_param: Option<&str>) -> Result<Vec<ProviderInfo>, DatabaseError> {
+    fn list_providers(
+        &self,
+        project_id_param: Option<&str>,
+    ) -> Result<Vec<ProviderInfo>, DatabaseError> {
         let mut conn = self.db_pool.get()?;
 
         // Get all unique provider names that have credentials
@@ -178,7 +185,11 @@ impl ProviderService for ProviderServiceImpl {
             let has_creds = self.has_provider_credentials(&provider_name_str, project_id_param)?;
 
             providers.push(ProviderInfo {
-                id: format!("{}-{}", provider_name_str, project_id_param.unwrap_or("global")),
+                id: format!(
+                    "{}-{}",
+                    provider_name_str,
+                    project_id_param.unwrap_or("global")
+                ),
                 name: provider_name_str.clone(),
                 provider_type: provider_type_str,
                 has_credentials: has_creds,
@@ -200,7 +211,8 @@ impl ProviderService for ProviderServiceImpl {
             .filter(pc::provider_name.eq(provider_name_param))
             .filter(pc::project_id.eq(project_id_param))
             .filter(pc::is_active.eq(1))
-            .first::<i64>(&mut conn)? > 0)
+            .first::<i64>(&mut conn)?
+            > 0)
     }
 
     fn get_all_provider_credentials(
@@ -242,10 +254,14 @@ impl ProviderService for ProviderServiceImpl {
         Ok(result)
     }
 
-    fn list_available_providers(&self, project_id_param: Option<&str>, available_models: &[crate::models::ModelMetadata]) -> Result<Vec<ProviderInfo>, DatabaseError> {
+    fn list_available_providers(
+        &self,
+        project_id_param: Option<&str>,
+        available_models: &[crate::models::ModelMetadata],
+    ) -> Result<Vec<ProviderInfo>, DatabaseError> {
         // Extract unique providers from available models
         let mut unique_providers = std::collections::HashSet::new();
-        
+
         for model in available_models {
             let provider_name = model.inference_provider.provider.to_string().to_lowercase();
             unique_providers.insert(provider_name);
@@ -254,8 +270,9 @@ impl ProviderService for ProviderServiceImpl {
         // Convert to sorted vector and check credential status for each provider
         let mut providers = Vec::new();
         for provider_name in unique_providers {
-            let has_credentials = self.has_provider_credentials(&provider_name, project_id_param)?;
-            
+            let has_credentials =
+                self.has_provider_credentials(&provider_name, project_id_param)?;
+
             providers.push(ProviderInfo {
                 id: format!("provider-{}", provider_name),
                 name: provider_name.clone(),
@@ -266,7 +283,7 @@ impl ProviderService for ProviderServiceImpl {
 
         // Sort providers by name for consistent ordering
         providers.sort_by(|a, b| a.name.cmp(&b.name));
-        
+
         Ok(providers)
     }
 }
@@ -389,9 +406,7 @@ mod tests {
         };
 
         let update = update_dto.to_db_update().unwrap();
-        service
-            .update_provider("openai", None, update)
-            .unwrap();
+        service.update_provider("openai", None, update).unwrap();
 
         // Verify the update
         let retrieved = service

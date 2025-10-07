@@ -45,7 +45,10 @@ type All = Select<provider_credentials::table, AsSelect<DbProviderCredentials, P
 
 impl DbProviderCredentials {
     pub fn all() -> All {
-        diesel::QueryDsl::select(provider_credentials::table, DbProviderCredentials::as_select())
+        diesel::QueryDsl::select(
+            provider_credentials::table,
+            DbProviderCredentials::as_select(),
+        )
     }
 
     /// Parse the JSON credentials string into a Credentials enum
@@ -106,11 +109,7 @@ impl DbInsertProviderCredentials {
     }
 
     /// Create a new global provider credential
-    pub fn new_global(
-        provider_name: String,
-        provider_type: String,
-        credentials: String,
-    ) -> Self {
+    pub fn new_global(provider_name: String, provider_type: String, credentials: String) -> Self {
         Self::new(provider_name, provider_type, credentials, None)
     }
 
@@ -217,12 +216,12 @@ impl UpdateProviderCredentialsDTO {
     /// Convert to database updateable struct
     pub fn to_db_update(&self) -> Result<DbUpdateProviderCredentials, serde_json::Error> {
         let mut db_update = DbUpdateProviderCredentials::new();
-        
+
         if let Some(credentials) = &self.credentials {
             let credentials_json = serde_json::to_string(credentials)?;
             db_update = db_update.with_credentials(credentials_json);
         }
-        
+
         if let Some(is_active) = self.is_active {
             db_update = if is_active {
                 db_update.activate()
@@ -230,7 +229,7 @@ impl UpdateProviderCredentialsDTO {
                 db_update.deactivate()
             };
         }
-        
+
         Ok(db_update)
     }
 }
@@ -257,7 +256,7 @@ mod tests {
     fn test_parse_credentials() {
         let provider = test_provider_credentials();
         let credentials = provider.parse_credentials().unwrap();
-        
+
         match credentials {
             Credentials::ApiKey(api_key_creds) => {
                 assert_eq!(api_key_creds.api_key, "sk-test123");
@@ -272,7 +271,7 @@ mod tests {
         let new_credentials = Credentials::ApiKey(ApiKeyCredentials {
             api_key: "sk-newkey456".to_string(),
         });
-        
+
         provider.set_credentials(&new_credentials).unwrap();
         assert_eq!(provider.credentials, r#"{"api_key":"sk-newkey456"}"#);
     }
@@ -281,7 +280,7 @@ mod tests {
     fn test_is_global() {
         let mut provider = test_provider_credentials();
         assert!(provider.is_global());
-        
+
         provider.project_id = Some("project-123".to_string());
         assert!(!provider.is_global());
     }
@@ -290,7 +289,7 @@ mod tests {
     fn test_is_active_credential() {
         let mut provider = test_provider_credentials();
         assert!(provider.is_active_credential());
-        
+
         provider.is_active = 0;
         assert!(!provider.is_active_credential());
     }
@@ -305,7 +304,7 @@ mod tests {
             }),
             project_id: Some("project-456".to_string()),
         };
-        
+
         let db_insert = dto.to_db_insert().unwrap();
         assert_eq!(db_insert.provider_name, "anthropic");
         assert_eq!(db_insert.project_id, Some("project-456".to_string()));
@@ -320,7 +319,7 @@ mod tests {
             })),
             is_active: Some(false),
         };
-        
+
         let db_update = dto.to_db_update().unwrap();
         assert!(db_update.credentials.is_some());
         assert_eq!(db_update.is_active, Some(0));

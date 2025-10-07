@@ -52,11 +52,14 @@ pub async fn fetch_and_store_providers(
         .await?;
 
     // Convert LangDBProvider to DbInsertProvider
-    let db_providers: Vec<DbInsertProvider> = providers.iter().map(|p| DbInsertProvider::from(p.clone())).collect();
+    let db_providers: Vec<DbInsertProvider> = providers
+        .iter()
+        .map(|p| DbInsertProvider::from(p.clone()))
+        .collect();
 
     // Store in database using ProviderService
     let provider_service = ProviderServiceImpl::new(db_pool.clone());
-    
+
     // Get existing providers to avoid duplicates
     let existing_providers = provider_service.list_providers()?;
     let existing_provider_names: HashSet<String> = existing_providers
@@ -73,14 +76,15 @@ pub async fn fetch_and_store_providers(
         }
     }
 
-    tracing::info!("Successfully processed {} providers from LangDB API (inserted {} new ones)", 
-                   providers.len(), inserted_count);
+    tracing::info!(
+        "Successfully processed {} providers from LangDB API (inserted {} new ones)",
+        providers.len(),
+        inserted_count
+    );
 
     // Build set of identifiers from API response
-    let synced_provider_names: HashSet<String> = providers
-        .iter()
-        .map(|p| p.provider_name.clone())
-        .collect();
+    let synced_provider_names: HashSet<String> =
+        providers.iter().map(|p| p.provider_name.clone()).collect();
 
     // Get all active providers from database
     let db_providers = provider_service.list_providers()?;
@@ -107,7 +111,7 @@ pub async fn fetch_and_store_providers(
 /// Seed providers from hardcoded data (fallback if API is unavailable)
 pub async fn seed_providers_from_hardcoded_data(db_pool: DbPool) -> Result<(), ProvidersLoadError> {
     let provider_service = ProviderServiceImpl::new(db_pool.clone());
-    
+
     // Check if providers already exist
     let existing_providers = provider_service.list_providers()?;
     if !existing_providers.is_empty() {
@@ -277,11 +281,17 @@ pub async fn sync_providers(db_pool: DbPool) -> Result<(), ProvidersLoadError> {
     // Try to fetch from API first
     match fetch_and_store_providers(db_pool.clone()).await {
         Ok(providers) => {
-            tracing::info!("Successfully synced {} providers from LangDB API", providers.len());
+            tracing::info!(
+                "Successfully synced {} providers from LangDB API",
+                providers.len()
+            );
             Ok(())
         }
         Err(e) => {
-            tracing::warn!("Failed to sync providers from API: {}. Falling back to hardcoded data.", e);
+            tracing::warn!(
+                "Failed to sync providers from API: {}. Falling back to hardcoded data.",
+                e
+            );
             seed_providers_from_hardcoded_data(db_pool).await
         }
     }
