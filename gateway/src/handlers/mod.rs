@@ -1,6 +1,7 @@
 pub mod projects;
 pub mod providers;
 pub mod runs;
+pub mod session;
 pub mod threads;
 pub mod traces;
 
