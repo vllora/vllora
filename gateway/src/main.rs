@@ -78,8 +78,7 @@ async fn main() -> Result<(), CliError> {
 
     let cli = cli::Cli::parse();
 
-    let db_pool =
-        langdb_core::metadata::pool::establish_connection("langdb.sqlite".to_string(), 10);
+    let db_pool = init_db()?;
 
     langdb_core::metadata::utils::init_db(&db_pool);
 
@@ -228,4 +227,17 @@ async fn main() -> Result<(), CliError> {
             Ok(())
         }
     }
+}
+
+fn init_db() -> Result<langdb_core::metadata::pool::DbPool, CliError> {
+    let home_dir = std::env::var("HOME").unwrap_or_else(|_| "~".to_string());
+    let langdb_dir = format!("{home_dir}/.langdb");
+    std::fs::create_dir_all(&langdb_dir).unwrap_or_default();
+    let langdb_db_file = format!("{langdb_dir}/langdb.sqlite");
+    let db_pool =
+        langdb_core::metadata::pool::establish_connection(langdb_db_file, 10);
+
+    langdb_core::metadata::utils::init_db(&db_pool);
+
+    Ok(db_pool)
 }
