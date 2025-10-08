@@ -173,6 +173,7 @@ impl MessageMapper {
             r#type: Self::map_role_to_message_type(message.role.as_str()),
             tool_calls: message.tool_calls.clone(),
             tool_call_id: message.tool_call_id.clone(),
+            created_at: None,
         })
     }
 

@@ -326,6 +326,7 @@ impl MessageService {
                 r#type: message_type,
                 tool_call_id: db_message.tool_call_id,
                 tool_calls,
+                created_at: Some(db_message.created_at),
             },
         }
     }
@@ -374,7 +375,6 @@ impl MessageService {
 
         let result = MessageWithAllMetrics {
             message: message.message,
-            created_at: "".to_string(),
             id: message.id,
             metrics,
         };
@@ -438,7 +438,6 @@ impl MessageService {
                 let metrics = metrics_map.remove(&message.id).unwrap_or_default();
                 MessageWithAllMetrics {
                     message: message.message,
-                    created_at: "".to_string(), // We'll need to get this from the message
                     id: message.id,
                     metrics,
                 }
@@ -507,6 +506,7 @@ mod tests {
             r#type: MessageType::HumanMessage,
             tool_call_id: None,
             tool_calls: None,
+            created_at: None,
         };
 
         let predefined_id = Some("test-message-id-123".to_string());

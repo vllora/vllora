@@ -70,6 +70,8 @@ pub struct Message {
     pub r#type: MessageType, // Human / AI Message
     pub tool_call_id: Option<String>,
     pub tool_calls: Option<Vec<ToolCall>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -126,6 +128,7 @@ impl<'de> Deserialize<'de> for Message {
             r#type: helper.r#type,
             tool_call_id: helper.tool_call_id,
             tool_calls: tool_calls.and_then(|v| serde_json::from_value(v).ok()),
+            created_at: None,
         })
     }
 }
@@ -354,7 +357,6 @@ pub struct MessageWithMetrics {
 pub struct MessageWithAllMetrics {
     #[serde(flatten)]
     pub message: Message,
-    pub created_at: String,
     pub id: String,
     pub metrics: Vec<MessageMetrics>,
 }

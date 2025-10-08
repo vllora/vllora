@@ -396,6 +396,7 @@ impl ThreadHistoryManager {
                 Some(tool_calls)
             },
             tool_call_id: None,
+            created_at: None,
         };
 
         match self
