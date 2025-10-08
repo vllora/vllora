@@ -48,7 +48,6 @@ impl KeyStorage for ProviderKeyResolver {
             .get_provider_credentials(&provider_name, Some(&project_id))
         {
             Ok(Some(creds)) if creds.is_active_credential() => {
-                tracing::error!("Creds: {:?}", creds);
                 return Ok(Some(creds.credentials));
             }
             Ok(_) => {} // Not found or inactive, continue to next level

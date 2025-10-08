@@ -195,7 +195,7 @@ impl DbModel {
     }
 }
 
-#[derive(Insertable, AsChangeset, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Insertable, AsChangeset, PartialEq, Debug, Serialize, Deserialize, Clone)]
 #[serde(crate = "serde")]
 #[diesel(table_name = models)]
 pub struct DbNewModel {
