@@ -95,6 +95,8 @@ diesel = { version = "2.3.1", features = [
   "numeric",
 ] }
 diesel_migrations = { version = "2.3.0", features = ["sqlite"] }
+libsqlite3-sys = { version = "0.30", optional = true, features = ["bundled"] }
+libpq-sys = { version = "0.8", optional = true, features = ["bundled"] }
 r2d2 = "0.8.10"
 opentelemetry-semantic-conventions = "0.30.0"
 
@@ -103,3 +105,4 @@ default = ["database"]
 database = ["dep:openssh", "dep:clickhouse", "dep:tokio-util"]
 postgres = []
 sqlite = []
+bundled = ["dep:libsqlite3-sys", "dep:libpq-sys"]

@@ -69,6 +69,16 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
+      
+      - name: Install dependencies
+        run: |
+          brew install postgresql sqlite3
+       
+      - name: Set library paths
+        run: |
+          echo "LIBRARY_PATH=$(brew --prefix)/lib:$LIBRARY_PATH" >> $GITHUB_ENV
+          echo "CPATH=$(brew --prefix)/include:$CPATH" >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH=$(brew --prefix)/lib/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
        
       - name: Install stable
         uses: actions-rs/toolchain@v1
@@ -82,7 +92,7 @@ jobs:
           key: ${{ matrix.target }}
       
       - name: Build Gateway project
-        run: cargo build --release --target ${{ matrix.target }} --bin ai-gateway
+        run: cargo build --release --target ${{ matrix.target }} --bin ai-gateway --features bundled
           
       - name: Upload AI Gateway artifact
         uses: actions/upload-artifact@v4
