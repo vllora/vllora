@@ -92,7 +92,9 @@ jobs:
           key: ${{ matrix.target }}
       
       - name: Build Gateway project
-        run: cargo build --release --target ${{ matrix.target }} --bin ai-gateway --features bundled
+        env:
+          PQ_LIB_STATIC: "1"
+        run: cargo build --release --target ${{ matrix.target }} --bin ai-gateway
           
       - name: Upload AI Gateway artifact
         uses: actions/upload-artifact@v4
