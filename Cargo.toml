@@ -25,9 +25,9 @@ tracing-subscriber = { version = "0.3.20", features = [
 ] }
 
 opentelemetry = "0.30"
-opentelemetry-otlp = { version = "0.30", features = ["grpc-tonic", "tls-roots"] }
+opentelemetry-otlp = { version = "0.30", features = ["grpc-tonic"] }
 opentelemetry_sdk = { version = "0.30", features = ["rt-tokio"] }
 
 valuable = { version = "0.1", features = ["derive"] }
 
-tonic = { version = "0.13.0", default-features = false, features = ["transport", "codegen", "prost", "tls", "tls-roots"] }
+tonic = "0.13.0"
