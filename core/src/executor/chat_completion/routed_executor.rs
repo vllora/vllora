@@ -1,8 +1,11 @@
 use crate::executor::chat_completion::basic_executor::BasicCacheContext;
 use crate::executor::context::ExecutorContext;
 use crate::handler::chat::map_sso_event;
+use crate::models::InferenceProvider;
+use crate::models::ModelMetadata;
 use crate::routing::metrics::InMemoryMetricsRepository;
 use crate::routing::RoutingStrategy;
+use crate::types::provider::InferenceModelProvider;
 use crate::usage::InMemoryStorage;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -185,10 +188,32 @@ impl RoutedExecutor {
 
         let model_name = request.request.model.clone();
 
-        let llm_model = executor_context
+        let llm_model = match executor_context
             .model_metadata_factory
             .get_model_metadata(&request.request.model, false, false, project_id)
-            .await?;
+            .await
+        {
+            Ok(model) => model,
+            Err(GatewayApiError::GatewayError(GatewayError::ModelError(_))) => {
+                let model_name = request.request.model.clone();
+                let model_parts = model_name.split('/').collect::<Vec<&str>>();
+                let provider = model_parts.first().expect("Provider should not be empty");
+                let model = model_parts.last().expect("Model should not be empty");
+                //Proxying model call without details
+                ModelMetadata {
+                    model: model.to_string(),
+                    inference_provider: InferenceProvider {
+                        provider: InferenceModelProvider::from(provider.to_string()),
+                        model_name: model.to_string(),
+                        endpoint: None,
+                    },
+                    ..Default::default()
+                }
+            }
+            Err(e) => {
+                return Err(e);
+            }
+        };
         let response = execute(
             request,
             executor_context,

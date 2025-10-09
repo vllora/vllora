@@ -1,8 +1,8 @@
 use actix_web::{web, HttpResponse, Result};
-use serde::{Deserialize, Serialize};
 use langdb_core::credentials::construct_key_id;
 use langdb_core::credentials::KeyStorage;
 use langdb_core::types::metadata::project::Project;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionResponse {
@@ -75,10 +75,15 @@ pub async fn fetch_key(
         ))
     })?;
 
-    key_storage.insert_key(construct_key_id("default", "langdb", &project.id.to_string()), Some(serde_json::to_string(&credentials).unwrap_or_default())).await.map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to insert key: {}", e))
-    })?;
+    key_storage
+        .insert_key(
+            construct_key_id("default", "langdb", &project.id.to_string()),
+            Some(serde_json::to_string(&credentials).unwrap_or_default()),
+        )
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!("Failed to insert key: {}", e))
+        })?;
 
     Ok(HttpResponse::Ok().json(credentials))
 }
-
