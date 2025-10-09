@@ -55,3 +55,7 @@ uuid = { version = "1.18.1", features = ["serde", "v4"] }
 
 tokio-stream = "0.1"
 actix-http = "3.11.1"
+
+static-serve = "0.4"
+static-serve-macro = "0.4"
+axum = "0.8"

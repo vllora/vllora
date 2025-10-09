@@ -28,6 +28,9 @@ mod usage;
 use langdb_core::events::broadcast_channel_manager::BroadcastChannelManager;
 use tokio::sync::Mutex;
 use tui::{Counters, Tui};
+use static_serve::embed_assets;
+use axum::{Router};
+use static_serve::embed_asset;
 
 #[derive(Error, Debug)]
 pub enum CliError {
@@ -69,6 +72,8 @@ pub const LOGO: &str = r#"
   ██      ██   ██ ██  ██ ██ ██    ██ ██   ██ ██   ██ 
   ███████ ██   ██ ██   ████  ██████  ██████  ██████
 "#;
+
+embed_assets!("dist", compress = true);
 
 #[actix_web::main]
 async fn main() -> Result<(), CliError> {
@@ -215,13 +220,25 @@ async fn main() -> Result<(), CliError> {
                     }
                 });
 
-                match server_handle.await {
-                    Ok(result) => {
-                        if let Err(e) = result {
-                            eprintln!("{e}");
+                let frontend_handle = tokio::spawn(async move {
+                    let index = embed_asset!("dist/index.html");
+                    let router = static_router();
+                    let router = router.clone().route("/", index);
+                    let listener = tokio::net::TcpListener::bind("0.0.0.0:8084").await.unwrap();
+                    axum::serve(listener, router.into_make_service()).await.unwrap();
+                });
+
+                tokio::select! {
+                    r = server_handle => {
+                        if let Err(e) = r {
+                            eprintln!("Counter loop error: {e}");
                         }
                     }
-                    Err(e) => eprintln!("{e}"),
+                    r = frontend_handle => {
+                        if let Err(e) = r {
+                            eprintln!("Server error: {e}");
+                        }
+                    }
                 }
             }
             Ok(())

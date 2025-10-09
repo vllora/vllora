@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - feat/oss-refactor
 
   workflow_dispatch:
 
