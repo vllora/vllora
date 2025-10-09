@@ -68,7 +68,7 @@ jobs:
           
       - name: Build Gateway project (macOS Apple Silicon)
         run: |
-          cargo zigbuild --release --target aarch64-apple-darwin
+          cargo zigbuild --release --target aarch64-apple-darwin --bin ai-gateway
           
       # - name: Upload AI Gateway artifact (Linux)
       #   uses: actions/upload-artifact@v4
