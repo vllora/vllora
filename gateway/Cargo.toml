@@ -31,9 +31,7 @@ minijinja = "2.12.0"
 reqwest = { version = "0.12.23", default-features = false, features = [
   "json",
   "stream",
-  "rustls-tls-webpki-roots",
 ] }
-rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 actix-web = "4"
 tonic = { workspace = true}
 tracing = { workspace = true }

@@ -19,7 +19,8 @@ permissions:
   contents: write # This is required for actions/checkout
 
 jobs:
-  build:
+  build-linux:
+    name: Build for Linux
     timeout-minutes: 60
     runs-on: ubuntu-22.04
 
@@ -43,51 +44,50 @@ jobs:
         with:
           profile: minimal
           toolchain: stable
-          target: aarch64-apple-darwin
-      
-      # - name: Add Apple Silicon target
-      #   run: rustup target add aarch64-apple-darwin
       
       - uses: Swatinem/rust-cache@v2
-      
-      - name: Install Zig
-        uses: goto-bus-stop/setup-zig@v2
         with:
-          version: 0.11.0
+          key: linux-x86_64
       
-      - name: Install cargo-zigbuild
-        run: cargo install cargo-zigbuild
-      
-      # - name: Build Gateway project (Linux)
-      #   run: |
-      #     cargo build --release
+      - name: Build Gateway project
+        run: cargo build --release --bin ai-gateway
           
-      # - name: Build Gateway project (macOS Intel)
-      #   run: |
-      #     cargo zigbuild --release --target x86_64-apple-darwin
-          
-      - name: Build Gateway project (macOS Apple Silicon)
-        run: |
-          cargo zigbuild --release --target aarch64-apple-darwin --bin ai-gateway
-          
-      # - name: Upload AI Gateway artifact (Linux)
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: ai-gateway-linux-x86_64
-      #     path: target/release/ai-gateway
-      #     retention-days: 30
-          
-      # - name: Upload AI Gateway artifact (macOS Intel)
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: ai-gateway-macos-x86_64
-      #     path: target/x86_64-apple-darwin/release/ai-gateway
-      #     retention-days: 30
-          
-      - name: Upload AI Gateway artifact (macOS Apple Silicon)
+      - name: Upload AI Gateway artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ai-gateway-macos-aarch64
-          path: target/aarch64-apple-darwin/release/ai-gateway
+          name: ai-gateway-linux-x86_64
+          path: target/release/ai-gateway
+          retention-days: 30
+
+  build-macos:
+    name: Build for macOS
+    timeout-minutes: 60
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        target: [x86_64-apple-darwin, aarch64-apple-darwin]
+
+    steps:
+      - uses: actions/checkout@v3
+       
+      - name: Install stable
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          target: ${{ matrix.target }}
+      
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      
+      - name: Build Gateway project
+        run: cargo build --release --target ${{ matrix.target }} --bin ai-gateway
+          
+      - name: Upload AI Gateway artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-gateway-macos-${{ matrix.target == 'aarch64-apple-darwin' && 'aarch64' || 'x86_64' }}
+          path: target/${{ matrix.target }}/release/ai-gateway
           retention-days: 30
             
