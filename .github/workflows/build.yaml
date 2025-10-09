@@ -102,4 +102,41 @@ jobs:
           name: ai-gateway-macos-${{ matrix.target == 'aarch64-apple-darwin' && 'aarch64' || 'x86_64' }}
           path: target/${{ matrix.target }}/release/ai-gateway
           retention-days: 30
+
+  create-release:
+    name: Create Release
+    needs: [build-linux, build-macos]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/oss-refactor'
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      
+      - name: Prepare release binaries
+        run: |
+          mkdir -p release
+          cp artifacts/ai-gateway-linux-x86_64/ai-gateway release/ai-gateway-linux-x86_64
+          cp artifacts/ai-gateway-macos-x86_64/ai-gateway release/ai-gateway-macos-x86_64
+          cp artifacts/ai-gateway-macos-aarch64/ai-gateway release/ai-gateway-macos-aarch64
+          chmod +x release/*
+          ls -lh release/
+      
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Draft Release
+          draft: true
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            release/ai-gateway-linux-x86_64
+            release/ai-gateway-macos-x86_64
+            release/ai-gateway-macos-aarch64
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
             
