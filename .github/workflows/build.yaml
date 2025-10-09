@@ -43,10 +43,10 @@ jobs:
         with:
           profile: minimal
           toolchain: stable
-          target: x86_64-apple-darwin
+          target: aarch64-apple-darwin
       
-      - name: Add Apple Silicon target
-        run: rustup target add aarch64-apple-darwin
+      # - name: Add Apple Silicon target
+      #   run: rustup target add aarch64-apple-darwin
       
       - uses: Swatinem/rust-cache@v2
       
@@ -58,31 +58,31 @@ jobs:
       - name: Install cargo-zigbuild
         run: cargo install cargo-zigbuild
       
-      - name: Build Gateway project (Linux)
-        run: |
-          cargo build --release
+      # - name: Build Gateway project (Linux)
+      #   run: |
+      #     cargo build --release
           
-      - name: Build Gateway project (macOS Intel)
-        run: |
-          cargo zigbuild --release --target x86_64-apple-darwin
+      # - name: Build Gateway project (macOS Intel)
+      #   run: |
+      #     cargo zigbuild --release --target x86_64-apple-darwin
           
       - name: Build Gateway project (macOS Apple Silicon)
         run: |
           cargo zigbuild --release --target aarch64-apple-darwin
           
-      - name: Upload AI Gateway artifact (Linux)
-        uses: actions/upload-artifact@v4
-        with:
-          name: ai-gateway-linux-x86_64
-          path: target/release/ai-gateway
-          retention-days: 30
+      # - name: Upload AI Gateway artifact (Linux)
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: ai-gateway-linux-x86_64
+      #     path: target/release/ai-gateway
+      #     retention-days: 30
           
-      - name: Upload AI Gateway artifact (macOS Intel)
-        uses: actions/upload-artifact@v4
-        with:
-          name: ai-gateway-macos-x86_64
-          path: target/x86_64-apple-darwin/release/ai-gateway
-          retention-days: 30
+      # - name: Upload AI Gateway artifact (macOS Intel)
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: ai-gateway-macos-x86_64
+      #     path: target/x86_64-apple-darwin/release/ai-gateway
+      #     retention-days: 30
           
       - name: Upload AI Gateway artifact (macOS Apple Silicon)
         uses: actions/upload-artifact@v4
