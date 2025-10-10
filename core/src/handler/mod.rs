@@ -6,6 +6,7 @@ pub mod middleware;
 pub mod models;
 pub mod responses;
 
+use crate::metadata::services::model::ModelService;
 use crate::model::types::ModelEvent;
 use crate::models::ModelMetadata;
 use crate::types::engine::Model;
@@ -21,13 +22,14 @@ pub struct AvailableModels(pub Vec<ModelMetadata>);
 
 pub fn find_model_by_full_name(
     model_name: &str,
-    provided_models: &[ModelMetadata],
+    model_service: &dyn ModelService,
 ) -> Result<ModelMetadata, GatewayApiError> {
     let model_parts = model_name.split('/').collect::<Vec<&str>>();
     let llm_model = if model_parts.len() == 1 {
-        provided_models
-            .iter()
-            .find(|m| m.model.to_lowercase() == model_name.to_lowercase())
+        model_service
+            .get_by_name(model_name, None)
+            .map_err(|e| GatewayApiError::CustomError(e.to_string()))?
+            .first()
             .cloned()
     } else if model_parts.len() == 2 {
         let model_name = model_parts.last().expect("2 elements in model parts");
@@ -36,20 +38,19 @@ pub fn find_model_by_full_name(
         let model_parts = model_name.split('@').collect::<Vec<&str>>();
         let model_name = model_parts.first().expect("1 element in model parts");
 
-        provided_models
-            .iter()
-            .find(|m| {
-                (m.model.to_lowercase() == model_name.to_lowercase()
-                    || m.inference_provider.model_name == model_name.to_lowercase())
-                    && m.inference_provider.provider.to_string() == *provided_by
-            })
-            .cloned()
+        model_service
+            .get_by_provider_and_name(
+                &model_name.to_lowercase(),
+                &provided_by.to_lowercase(),
+                None,
+            )
+            .map_err(|e| GatewayApiError::CustomError(e.to_string()))?
     } else {
         None
     };
 
     match llm_model {
-        Some(model) => Ok(model),
+        Some(model) => Ok(model.into()),
         None => Err(GatewayApiError::GatewayError(GatewayError::ModelError(
             Box::new(ModelError::ModelNotFound(model_name.to_string())),
         ))),

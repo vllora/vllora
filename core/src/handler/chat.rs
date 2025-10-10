@@ -28,9 +28,9 @@ use tokio::task::JoinHandle;
 use valuable::Valuable;
 
 use super::can_execute_llm_for_request;
-use crate::handler::AvailableModels;
 use crate::handler::CallbackHandlerFn;
 use crate::history::HistoryContext;
+use crate::metadata::services::model::ModelService;
 use crate::model::ModelMetadataFactory;
 use crate::types::gateway::{
     ChatCompletionChunk, ChatCompletionChunkChoice, ChatCompletionDelta, ChatCompletionUsage,
@@ -229,7 +229,6 @@ pub async fn create_chat_completion(
     request: web::Json<ChatCompletionRequestWithTools<RoutingStrategy>>,
     callback_handler: web::Data<GatewayCallbackHandlerFn>,
     req: HttpRequest,
-    provided_models: web::Data<AvailableModels>,
     cost_calculator: web::Data<Box<dyn CostCalculator>>,
     evaluator_service: web::Data<Box<dyn GuardrailsEvaluator>>,
     thread_entity: web::Data<Box<dyn ThreadEntity>>,
@@ -237,6 +236,7 @@ pub async fn create_chat_completion(
     thread_id: web::ReqData<CompletionsThreadId>,
     project: web::ReqData<Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
+    models_service: web::Data<Box<dyn ModelService>>,
 ) -> Result<HttpResponse, GatewayApiError> {
     can_execute_llm_for_request(&req).await?;
 
@@ -344,10 +344,9 @@ pub async fn create_chat_completion(
     let executor_context = ExecutorContext::new(
         callback_handler_fn,
         cost_calculator,
-        Arc::new(
-            Box::new(DefaultModelMetadataFactory::new(&provided_models.0))
-                as Box<dyn ModelMetadataFactory>,
-        ),
+        Arc::new(Box::new(DefaultModelMetadataFactory::new(
+            models_service.into_inner(),
+        )) as Box<dyn ModelMetadataFactory>),
         &req,
         HashMap::new(),
         guardrails_evaluator_service,

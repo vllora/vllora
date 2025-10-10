@@ -1,7 +1,7 @@
 use crate::executor::image_generation::handle_image_generation;
 use crate::handler::record_map_err;
-use crate::handler::AvailableModels;
 use crate::handler::CallbackHandlerFn;
+use crate::metadata::services::model::ModelService;
 use crate::types::gateway::CreateImageRequest;
 use crate::types::{credentials::Credentials, gateway::CostCalculator};
 use crate::GatewayApiError;
@@ -16,7 +16,7 @@ use super::find_model_by_full_name;
 
 pub async fn create_image(
     request: web::Json<CreateImageRequest>,
-    models: web::Data<AvailableModels>,
+    models_service: web::Data<Box<dyn ModelService>>,
     req: HttpRequest,
     cost_calculator: web::Data<Box<dyn CostCalculator>>,
     callback_handler: web::Data<CallbackHandlerFn>,
@@ -24,8 +24,7 @@ pub async fn create_image(
     can_execute_llm_for_request(&req).await?;
 
     let request = request.into_inner();
-    let available_models = models.into_inner();
-    let llm_model = find_model_by_full_name(&request.model, &available_models.0)?;
+    let llm_model = find_model_by_full_name(&request.model, models_service.as_ref().as_ref())?;
 
     let span = Span::or_current(tracing::info_span!(
         target: "langdb::user_tracing::api_invoke",

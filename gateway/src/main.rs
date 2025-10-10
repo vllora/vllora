@@ -64,12 +64,10 @@ pub struct Credentials {
 }
 
 pub const LOGO: &str = r#"
-
-  ██       █████  ███    ██  ██████  ██████  ██████  
-  ██      ██   ██ ████   ██ ██       ██   ██ ██   ██ 
-  ██      ███████ ██ ██  ██ ██   ███ ██   ██ ██████  
-  ██      ██   ██ ██  ██ ██ ██    ██ ██   ██ ██   ██ 
-  ███████ ██   ██ ██   ████  ██████  ██████  ██████
+▗▄▄▄▖▗▖   ▗▖    ▗▄▖ ▗▄▄▖  ▗▄▖ 
+▐▌   ▐▌   ▐▌   ▐▌ ▐▌▐▌ ▐▌▐▌ ▐▌
+▐▛▀▀▘▐▌   ▐▌   ▐▌ ▐▌▐▛▀▚▖▐▛▀▜▌
+▐▙▄▄▖▐▙▄▄▖▐▙▄▄▖▝▚▄▞▘▐▌ ▐▌▐▌ ▐▌
 "#;
 
 embed_assets!("dist", compress = true);
@@ -154,15 +152,9 @@ async fn main() -> Result<(), CliError> {
                 let config = Config::load(&cli.config)?;
                 let config = config.apply_cli_overrides(&cli::Commands::Serve(serve_args));
                 let api_server = ApiServer::new(config, db_pool.clone());
-                let model_service = Arc::new(Box::new(ModelServiceImpl::new(db_pool.clone()))
-                    as Box<dyn langdb_core::metadata::services::model::ModelService + Send + Sync>);
                 let server_handle = tokio::spawn(async move {
                     match api_server
-                        .start(
-                            Some(storage_clone),
-                            model_service,
-                            project_trace_senders.clone(),
-                        )
+                        .start(Some(storage_clone), project_trace_senders.clone())
                         .await
                     {
                         Ok(server) => server.await,
@@ -206,12 +198,10 @@ async fn main() -> Result<(), CliError> {
                 let config = Config::load(&cli.config)?;
                 let config = config.apply_cli_overrides(&cli::Commands::Serve(serve_args));
                 let api_server = ApiServer::new(config, db_pool.clone());
-                let model_service = Arc::new(Box::new(ModelServiceImpl::new(db_pool.clone()))
-                    as Box<dyn langdb_core::metadata::services::model::ModelService + Send + Sync>);
                 let server_handle = tokio::spawn(async move {
                     let storage = Arc::new(Mutex::new(InMemoryStorage::new()));
                     match api_server
-                        .start(Some(storage), model_service, project_trace_senders.clone())
+                        .start(Some(storage), project_trace_senders.clone())
                         .await
                     {
                         Ok(server) => server.await,
@@ -221,9 +211,8 @@ async fn main() -> Result<(), CliError> {
 
                 let frontend_handle = tokio::spawn(async move {
                     let index = embed_asset!("dist/index.html");
-                    let router = static_router()
-                        .fallback(index);
-                      
+                    let router = static_router().fallback(index);
+
                     let listener = tokio::net::TcpListener::bind("0.0.0.0:8084").await.unwrap();
                     axum::serve(listener, router.into_make_service())
                         .await

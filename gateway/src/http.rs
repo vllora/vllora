@@ -3,7 +3,7 @@ use crate::config::{load_langdb_proxy_config, Config};
 use crate::cost::GatewayCostCalculator;
 use crate::guardrails::GuardrailsService;
 use crate::handlers::threads;
-use crate::handlers::{projects, providers, runs, session, traces};
+use crate::handlers::{models, projects, providers, runs, session, traces};
 use crate::limit::GatewayLimitChecker;
 use crate::middleware::project::ProjectMiddleware;
 use crate::middleware::run_id::RunId;
@@ -37,6 +37,8 @@ use langdb_core::handler::{CallbackHandlerFn, LimitCheckWrapper};
 use langdb_core::history::thread_entity::ThreadEntityImpl;
 use langdb_core::metadata::pool::DbPool;
 use langdb_core::metadata::project_trace::ProjectTraceTenantResolver;
+use langdb_core::metadata::services::model::ModelService;
+use langdb_core::metadata::services::model::ModelServiceImpl;
 use langdb_core::metadata::services::project::ProjectServiceImpl;
 use langdb_core::telemetry::database::DatabaseSpanWritter;
 use langdb_core::telemetry::database::SqliteTraceWriterTransport;
@@ -127,9 +129,6 @@ impl ApiServer {
     pub async fn start(
         self,
         storage: Option<Arc<Mutex<InMemoryStorage>>>,
-        model_service: Arc<
-            Box<dyn langdb_core::metadata::services::model::ModelService + Send + Sync>,
-        >,
         project_trace_senders: Arc<BroadcastChannelManager>,
     ) -> Result<impl Future<Output = Result<(), ServerError>>, ServerError> {
         let cost_calculator = GatewayCostCalculator::new();
@@ -173,7 +172,6 @@ impl ApiServer {
                 limit_checker.clone(),
                 server_config.config.rate_limit.clone(),
                 providers_config,
-                model_service.clone(),
                 server_config_for_closure.db_pool.clone(),
                 events_senders_container.clone(),
                 project_traces_senders.clone(),
@@ -222,9 +220,6 @@ impl ApiServer {
         limit_checker: Option<LimitCheckWrapper>,
         rate_limit: Option<RateLimiting>,
         providers: Option<ProvidersConfig>,
-        model_service: Arc<
-            Box<dyn langdb_core::metadata::services::model::ModelService + Send + Sync>,
-        >,
         db_pool: DbPool,
         events_senders_container: Arc<EventsSendersContainer>,
         project_trace_senders: Arc<BroadcastChannelManager>,
@@ -251,12 +246,6 @@ impl ApiServer {
         let guardrails_service = Box::new(GuardrailsService::new(guards.unwrap_or_default()))
             as Box<dyn GuardrailsEvaluator>;
 
-        // Load models from database and create AvailableModels
-        let db_models = model_service.list(None).unwrap_or_default();
-        let models: Vec<langdb_core::models::ModelMetadata> =
-            db_models.into_iter().map(|m| m.into()).collect();
-        let available_models = langdb_core::handler::AvailableModels(models);
-
         let broadcaster = EventsUIBroadcaster::new(events_senders_container.clone());
         let thread_entity =
             Box::new(ThreadEntityImpl::new(db_pool.clone())) as Box<dyn ThreadEntity>;
@@ -265,10 +254,8 @@ impl ApiServer {
         let key_storage =
             Box::new(ProviderKeyResolver::new(db_pool.clone())) as Box<dyn KeyStorage>;
 
-        // Add model_service and available_models to app_data
-        let service = service
-            .app_data(Data::new(model_service))
-            .app_data(Data::new(available_models));
+        let model_service =
+            Box::new(ModelServiceImpl::new(db_pool.clone())) as Box<dyn ModelService>;
 
         app.wrap(TraceLogger)
             .wrap(ActixOtelMiddleware)
@@ -283,6 +270,7 @@ impl ApiServer {
             .app_data(Data::new(key_storage))
             .service(
                 service
+                    .app_data(Data::new(model_service))
                     .app_data(limit_checker)
                     .app_data(Data::new(callback))
                     .app_data(Data::new(
@@ -365,6 +353,7 @@ impl ApiServer {
                 "/models",
                 web::get().to(crate::handlers::list_models_from_db),
             )
+            .route("/pricing", web::get().to(models::list_gateway_pricing))
             .route("/embeddings", web::post().to(embeddings_handler))
             .route("/images/generations", web::post().to(create_image))
     }

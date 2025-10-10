@@ -1,3 +1,4 @@
+pub mod models;
 pub mod projects;
 pub mod providers;
 pub mod runs;
@@ -11,7 +12,6 @@ use langdb_core::metadata::services::model::ModelService;
 use langdb_core::models::ModelMetadata;
 use langdb_core::types::gateway::ChatModel;
 use langdb_core::GatewayApiError;
-use std::sync::Arc;
 
 /// Macro to convert a Result<T, E> into Result<HttpResponse>
 ///
@@ -33,7 +33,7 @@ macro_rules! ok_json {
 
 /// Handler to list models from SQLite database
 pub async fn list_models_from_db(
-    model_service: web::Data<Arc<Box<dyn ModelService + Send + Sync>>>,
+    model_service: web::Data<Box<dyn ModelService>>,
 ) -> Result<HttpResponse, GatewayApiError> {
     // For now, we'll query all models (project_id = None means global models)
     // In the future, we can extract project context from the request

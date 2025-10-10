@@ -1,4 +1,5 @@
 use crate::executor::context::ExecutorContext;
+use crate::metadata::services::model::ModelService;
 use crate::model::bedrock::BedrockModel;
 use crate::model::cached::CachedModel;
 use crate::model::error::ModelError;
@@ -24,6 +25,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::fmt::Display;
+use std::sync::Arc;
 use tokio::sync::mpsc::{self, channel};
 use tools::Tool;
 use tracing::{info_span, Instrument};
@@ -753,14 +755,12 @@ pub trait ModelMetadataFactory: Send + Sync {
 }
 
 pub struct DefaultModelMetadataFactory {
-    models: Vec<ModelMetadata>,
+    service: Arc<Box<dyn ModelService>>,
 }
 
 impl DefaultModelMetadataFactory {
-    pub fn new(models: &[ModelMetadata]) -> Self {
-        Self {
-            models: models.to_vec(),
-        }
+    pub fn new(service: Arc<Box<dyn ModelService>>) -> Self {
+        Self { service }
     }
 }
 
@@ -775,21 +775,14 @@ impl ModelMetadataFactory for DefaultModelMetadataFactory {
         _include_benchmark: bool,
         _project_id: Option<&uuid::Uuid>,
     ) -> Result<ModelMetadata, GatewayApiError> {
-        find_model_by_full_name(model_name, &self.models)
+        find_model_by_full_name(model_name, self.service.as_ref().as_ref())
     }
 
     async fn get_cheapest_model_metadata(
         &self,
-        model_names: &[String],
+        _model_names: &[String],
     ) -> Result<ModelMetadata, GatewayApiError> {
-        let models = self
-            .models
-            .clone()
-            .into_iter()
-            .filter(|m| model_names.contains(&m.model.clone()))
-            .collect::<Vec<ModelMetadata>>();
-
-        get_cheapest_model_metadata(&models)
+        unimplemented!()
     }
 
     async fn get_models_by_name(
