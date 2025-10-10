@@ -1,4 +1,4 @@
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use ::tracing::info;
 use clap::Parser;
@@ -23,13 +23,11 @@ mod run;
 mod seed;
 mod session;
 mod tracing;
-mod tui;
 mod usage;
 use langdb_core::events::broadcast_channel_manager::BroadcastChannelManager;
 use static_serve::embed_asset;
 use static_serve::embed_assets;
 use tokio::sync::Mutex;
-use tui::{Counters, Tui};
 
 #[derive(Error, Debug)]
 pub enum CliError {
@@ -137,98 +135,39 @@ async fn main() -> Result<(), CliError> {
             // Check if providers table is empty and sync if needed
             seed::seed_providers(&db_pool).await?;
 
-            if serve_args.interactive {
+            let config = Config::load(&cli.config)?;
+            let config = config.apply_cli_overrides(&cli::Commands::Serve(serve_args));
+            let api_server = ApiServer::new(config, db_pool.clone());
+            let server_handle = tokio::spawn(async move {
                 let storage = Arc::new(Mutex::new(InMemoryStorage::new()));
-                let storage_clone = storage.clone();
-                let counters = Arc::new(RwLock::new(Counters::default()));
-                let counters_clone = counters.clone();
+                match api_server
+                    .start(Some(storage), project_trace_senders.clone())
+                    .await
+                {
+                    Ok(server) => server.await,
+                    Err(e) => Err(e),
+                }
+            });
 
-                let (log_sender, log_receiver) = tokio::sync::mpsc::channel(100);
-                tracing::init_tui_tracing(log_sender);
+            let frontend_handle = tokio::spawn(async move {
+                let index = embed_asset!("dist/index.html");
+                let router = static_router().fallback(index);
 
-                let counter_handle =
-                    tokio::spawn(async move { Tui::spawn_counter_loop(storage, counters).await });
+                let listener = tokio::net::TcpListener::bind("0.0.0.0:8084").await.unwrap();
+                axum::serve(listener, router.into_make_service())
+                    .await
+                    .unwrap();
+            });
 
-                let config = Config::load(&cli.config)?;
-                let config = config.apply_cli_overrides(&cli::Commands::Serve(serve_args));
-                let api_server = ApiServer::new(config, db_pool.clone());
-                let server_handle = tokio::spawn(async move {
-                    match api_server
-                        .start(Some(storage_clone), project_trace_senders.clone())
-                        .await
-                    {
-                        Ok(server) => server.await,
-                        Err(e) => Err(e),
-                    }
-                });
-
-                let tui_handle = tokio::spawn(async move {
-                    let tui = Tui::new(log_receiver);
-                    if let Ok(mut tui) = tui {
-                        tui.run(counters_clone).await?;
-                    }
-                    Ok::<(), CliError>(())
-                });
-
-                // Create abort handles
-                let counter_abort = counter_handle.abort_handle();
-                let server_abort = server_handle.abort_handle();
-
-                tokio::select! {
-                    r = counter_handle => {
-                        if let Err(e) = r {
-                            eprintln!("Counter loop error: {e}");
-                        }
-                    }
-                    r = server_handle => {
-                        if let Err(e) = r {
-                            eprintln!("Server error: {e}");
-                        }
-                    }
-                    r = tui_handle => {
-                        if let Err(e) = r {
-                            eprintln!("TUI error: {e}");
-                        }
-                        // If TUI exits, abort other tasks
-                        counter_abort.abort();
-                        server_abort.abort();
+            tokio::select! {
+                r = server_handle => {
+                    if let Err(e) = r {
+                        eprintln!("Counter loop error: {e}");
                     }
                 }
-            } else {
-                let config = Config::load(&cli.config)?;
-                let config = config.apply_cli_overrides(&cli::Commands::Serve(serve_args));
-                let api_server = ApiServer::new(config, db_pool.clone());
-                let server_handle = tokio::spawn(async move {
-                    let storage = Arc::new(Mutex::new(InMemoryStorage::new()));
-                    match api_server
-                        .start(Some(storage), project_trace_senders.clone())
-                        .await
-                    {
-                        Ok(server) => server.await,
-                        Err(e) => Err(e),
-                    }
-                });
-
-                let frontend_handle = tokio::spawn(async move {
-                    let index = embed_asset!("dist/index.html");
-                    let router = static_router().fallback(index);
-
-                    let listener = tokio::net::TcpListener::bind("0.0.0.0:8084").await.unwrap();
-                    axum::serve(listener, router.into_make_service())
-                        .await
-                        .unwrap();
-                });
-
-                tokio::select! {
-                    r = server_handle => {
-                        if let Err(e) = r {
-                            eprintln!("Counter loop error: {e}");
-                        }
-                    }
-                    r = frontend_handle => {
-                        if let Err(e) = r {
-                            eprintln!("Server error: {e}");
-                        }
+                r = frontend_handle => {
+                    if let Err(e) = r {
+                        eprintln!("Server error: {e}");
                     }
                 }
             }
