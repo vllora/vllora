@@ -89,6 +89,10 @@ impl ApiServer {
             "   🌐 HTTP server ready at: \x1b[36mhttp://{}:{}\x1b[0m",
             self.config.http.host, self.config.http.port
         );
+        println!(
+            "   🚀 UI server ready at: \x1b[36mhttp://{}:{}\x1b[0m",
+            self.config.http.host, 8084
+        );
 
         // Add documentation and community links
         println!("\n📚 Where the cool kids hang out:");

@@ -37,7 +37,7 @@ class Ellora < Formula
 
     def caveats
       <<~EOS
-        Server is running on port 8083 and UI can be accessed at http://localhost:8084
+        Server is running on port 8080 and UI can be accessed at http://localhost:8084
       EOS
     end
 

@@ -26,11 +26,10 @@ mod tracing;
 mod tui;
 mod usage;
 use langdb_core::events::broadcast_channel_manager::BroadcastChannelManager;
+use static_serve::embed_asset;
+use static_serve::embed_assets;
 use tokio::sync::Mutex;
 use tui::{Counters, Tui};
-use static_serve::embed_assets;
-use axum::{Router};
-use static_serve::embed_asset;
 
 #[derive(Error, Debug)]
 pub enum CliError {
@@ -225,7 +224,9 @@ async fn main() -> Result<(), CliError> {
                     let router = static_router();
                     let router = router.clone().route("/", index);
                     let listener = tokio::net::TcpListener::bind("0.0.0.0:8084").await.unwrap();
-                    axum::serve(listener, router.into_make_service()).await.unwrap();
+                    axum::serve(listener, router.into_make_service())
+                        .await
+                        .unwrap();
                 });
 
                 tokio::select! {
