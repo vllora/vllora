@@ -221,8 +221,9 @@ async fn main() -> Result<(), CliError> {
 
                 let frontend_handle = tokio::spawn(async move {
                     let index = embed_asset!("dist/index.html");
-                    let router = static_router();
-                    let router = router.clone().route("/", index);
+                    let router = static_router()
+                        .fallback(index);
+                      
                     let listener = tokio::net::TcpListener::bind("0.0.0.0:8084").await.unwrap();
                     axum::serve(listener, router.into_make_service())
                         .await
