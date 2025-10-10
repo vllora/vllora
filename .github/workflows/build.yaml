@@ -128,9 +128,9 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          name: ${{ endsWith(github.ref_name, '-prerelease') && format('Prerelease {0}', github.ref_name) || format('Release {0}', github.ref_name) }}
+          name: ${{ contains(github.ref_name, '-prerelease') && format('Prerelease {0}', github.ref_name) || format('Release {0}', github.ref_name) }}
           draft: false
-          prerelease: ${{ endsWith(github.ref_name, '-prerelease') }}
+          prerelease: ${{ contains(github.ref_name, '-prerelease') }}
           generate_release_notes: true
           files: |
             release/ai-gateway-linux-x86_64
