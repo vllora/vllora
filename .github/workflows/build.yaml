@@ -22,6 +22,9 @@ jobs:
     name: Build for Linux
     timeout-minutes: 60
     runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        target: [x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu]
 
     steps:
       - uses: actions/checkout@v3
@@ -36,26 +39,28 @@ jobs:
           libpq5 \
           libpq-dev \
           clang \
-          cmake
+          cmake \
+          gcc-aarch64-linux-gnu
        
       - name: Install stable
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: stable
+          target: ${{ matrix.target }}
       
       - uses: Swatinem/rust-cache@v2
         with:
-          key: linux-x86_64
+          key: ${{ matrix.target }}
       
       - name: Build Gateway project
-        run: cargo build --release --bin ai-gateway
+        run: cargo build --release --target ${{ matrix.target }} --bin ai-gateway
           
       - name: Upload AI Gateway artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ai-gateway-linux-x86_64
-          path: target/release/ai-gateway
+          name: ai-gateway-linux-${{ matrix.target == 'aarch64-unknown-linux-gnu' && 'aarch64' || 'x86_64' }}
+          path: target/${{ matrix.target }}/release/ai-gateway
           retention-days: 30
 
   build-macos:
@@ -120,6 +125,7 @@ jobs:
         run: |
           mkdir -p release
           cp artifacts/ai-gateway-linux-x86_64/ai-gateway release/ai-gateway-linux-x86_64
+          cp artifacts/ai-gateway-linux-aarch64/ai-gateway release/ai-gateway-linux-aarch64
           cp artifacts/ai-gateway-macos-x86_64/ai-gateway release/ai-gateway-macos-x86_64
           cp artifacts/ai-gateway-macos-aarch64/ai-gateway release/ai-gateway-macos-aarch64
           chmod +x release/*
@@ -134,8 +140,60 @@ jobs:
           generate_release_notes: true
           files: |
             release/ai-gateway-linux-x86_64
+            release/ai-gateway-linux-aarch64
             release/ai-gateway-macos-x86_64
             release/ai-gateway-macos-aarch64
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  update-formula:
+    name: Update Homebrew Formula
+    needs: [create-release]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.0'
+
+      - name: Download release assets
+        run: |
+          mkdir -p release-assets
+          # Download all release assets
+          gh release download ${{ github.ref_name }} --dir release-assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update formula.rb using Ruby script
+        run: |
+          # Make the script executable
+          chmod +x scripts/update-formula.rb
+          
+          # Run the script with all available assets
+          ruby scripts/update-formula.rb ${{ github.ref_name }} \
+            release-assets/ai-gateway-linux-x86_64 \
+            release-assets/ai-gateway-linux-aarch64 \
+            release-assets/ai-gateway-macos-x86_64 \
+            release-assets/ai-gateway-macos-aarch64
+
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add Formula/ellora.rb
+          git diff --staged
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update formula.rb for ${{ github.ref_name }}"
+            git push
+          fi
             
