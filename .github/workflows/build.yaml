@@ -2,8 +2,8 @@ name: Build AI Gateway
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - 'v*'
 
   workflow_dispatch:
 
@@ -106,7 +106,7 @@ jobs:
     name: Create Release
     needs: [build-linux, build-macos]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/oss-refactor'
+    if: startsWith(github.ref, 'refs/tags/')
     
     steps:
       - uses: actions/checkout@v3
@@ -128,9 +128,9 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          name: Draft Release
-          draft: true
-          prerelease: false
+          name: ${{ endsWith(github.ref_name, '-prerelease') && format('Prerelease {0}', github.ref_name) || format('Release {0}', github.ref_name) }}
+          draft: false
+          prerelease: ${{ endsWith(github.ref_name, '-prerelease') }}
           generate_release_notes: true
           files: |
             release/ai-gateway-linux-x86_64
