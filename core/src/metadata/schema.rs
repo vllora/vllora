@@ -55,6 +55,19 @@ diesel::table! {
 }
 
 diesel::table! {
+    project_model_restrictions (id) {
+        id -> Text,
+        project_id -> Text,
+        tag_type -> Text,
+        tag -> Text,
+        allowed_models -> Text,
+        disallowed_models -> Text,
+        created_at -> Text,
+        updated_at -> Text,
+    }
+}
+
+diesel::table! {
     projects (id) {
         id -> Text,
         name -> Text,
@@ -129,11 +142,13 @@ diesel::table! {
 }
 
 diesel::joinable!(messages -> threads (thread_id));
+diesel::joinable!(project_model_restrictions -> projects (project_id));
 diesel::joinable!(provider_credentials -> projects (project_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     messages,
     models,
+    project_model_restrictions,
     projects,
     provider_credentials,
     providers,

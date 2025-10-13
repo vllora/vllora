@@ -45,6 +45,8 @@ use uuid::Uuid;
 
 use crate::credentials::KeyStorage;
 use crate::executor::chat_completion::routed_executor::RoutedExecutor;
+use crate::model::model_restrictions::ProjectModelRestrictionsManager;
+use crate::metadata::services::project_model_restriction::ProjectModelRestrictionService;
 
 pub type SSOChatEvent = (
     Option<ChatCompletionDelta>,
@@ -341,11 +343,22 @@ pub async fn create_chat_completion(
     )
     .await?;
 
+    // Create restrictions manager for the project
+    let db_pool = req.app_data::<web::Data<crate::metadata::pool::DbPool>>()
+        .ok_or_else(|| GatewayApiError::CustomError("Database pool not found".to_string()))?;
+    
+    let restriction_service = ProjectModelRestrictionService::new(db_pool.as_ref().clone());
+    let restrictions_manager = Arc::new(ProjectModelRestrictionsManager::new(
+        restriction_service,
+        project.id,
+    ));
+
     let executor_context = ExecutorContext::new(
         callback_handler_fn,
         cost_calculator,
-        Arc::new(Box::new(DefaultModelMetadataFactory::new(
+        Arc::new(Box::new(DefaultModelMetadataFactory::with_restrictions(
             models_service.into_inner(),
+            restrictions_manager,
         )) as Box<dyn ModelMetadataFactory>),
         &req,
         HashMap::new(),

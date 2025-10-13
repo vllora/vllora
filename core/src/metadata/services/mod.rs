@@ -1,6 +1,7 @@
 pub mod message;
 pub mod model;
 pub mod project;
+pub mod project_model_restriction;
 pub mod provider;
 pub mod providers;
 pub mod run;

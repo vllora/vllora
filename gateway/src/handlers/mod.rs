@@ -1,4 +1,5 @@
 pub mod models;
+pub mod project_model_restrictions;
 pub mod projects;
 pub mod providers;
 pub mod runs;

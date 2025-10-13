@@ -49,6 +49,7 @@ pub mod google_vertex;
 pub mod image_generation;
 pub mod mcp;
 pub mod mcp_server;
+pub mod model_restrictions;
 pub mod openai;
 pub mod openai_spec_client;
 pub mod proxy;
@@ -756,11 +757,25 @@ pub trait ModelMetadataFactory: Send + Sync {
 
 pub struct DefaultModelMetadataFactory {
     service: Arc<Box<dyn ModelService>>,
+    restrictions_manager: Option<Arc<dyn model_restrictions::ProjectModelRestrictionsTrait>>,
 }
 
 impl DefaultModelMetadataFactory {
     pub fn new(service: Arc<Box<dyn ModelService>>) -> Self {
-        Self { service }
+        Self { 
+            service,
+            restrictions_manager: None,
+        }
+    }
+
+    pub fn with_restrictions(
+        service: Arc<Box<dyn ModelService>>,
+        restrictions_manager: Arc<dyn model_restrictions::ProjectModelRestrictionsTrait>,
+    ) -> Self {
+        Self { 
+            service,
+            restrictions_manager: Some(restrictions_manager),
+        }
     }
 }
 
@@ -775,7 +790,60 @@ impl ModelMetadataFactory for DefaultModelMetadataFactory {
         _include_benchmark: bool,
         _project_id: Option<&uuid::Uuid>,
     ) -> Result<ModelMetadata, GatewayApiError> {
-        find_model_by_full_name(model_name, self.service.as_ref().as_ref())
+        // Find the model using ModelService
+        let model = find_model_by_full_name(model_name, self.service.as_ref().as_ref())?;
+        
+        // If restrictions are configured, validate the model is allowed
+        if let Some(restrictions_manager) = &self.restrictions_manager {
+            let restrictions = restrictions_manager.fetch().await?;
+            
+            tracing::info!(
+                "Checking restrictions for model: {}, found {} restrictions",
+                model_name,
+                restrictions.len()
+            );
+            
+            // No tags for now (OSS version doesn't use tags initially)
+            // Just apply all project-level restrictions
+            let mut filtered_models = vec![model.clone()];
+            
+            // Apply each restriction
+            for restriction in restrictions {
+                // Apply allowed_models filter if present
+                let allowed = restriction.allowed_models();
+                if !allowed.is_empty() {
+                    tracing::info!(
+                        "Applying allow-list with {} models. Model qualified name: {}",
+                        allowed.len(),
+                        model.qualified_model_name()
+                    );
+                    filtered_models.retain(|m| {
+                        allowed.contains(&m.model) || allowed.contains(&m.qualified_model_name())
+                    });
+                }
+                
+                // Apply disallowed_models filter if present
+                let disallowed = restriction.disallowed_models();
+                if !disallowed.is_empty() {
+                    filtered_models.retain(|m| {
+                        !disallowed.contains(&m.model) && !disallowed.contains(&m.qualified_model_name())
+                    });
+                }
+            }
+            
+            // If filtered out, model is not allowed
+            if filtered_models.is_empty() {
+                tracing::warn!(
+                    "Model {} was filtered out by restrictions",
+                    model_name
+                );
+                return Err(GatewayApiError::GatewayError(crate::GatewayError::ModelError(
+                    Box::new(ModelError::ModelNotFound(model_name.to_string())),
+                )));
+            }
+        }
+        
+        Ok(model)
     }
 
     async fn get_cheapest_model_metadata(

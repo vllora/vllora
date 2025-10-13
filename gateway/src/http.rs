@@ -3,7 +3,7 @@ use crate::config::{load_langdb_proxy_config, Config};
 use crate::cost::GatewayCostCalculator;
 use crate::guardrails::GuardrailsService;
 use crate::handlers::threads;
-use crate::handlers::{models, projects, providers, runs, session, traces};
+use crate::handlers::{models, project_model_restrictions, projects, providers, runs, session, traces};
 use crate::limit::GatewayLimitChecker;
 use crate::middleware::project::ProjectMiddleware;
 use crate::middleware::run_id::RunId;
@@ -270,6 +270,7 @@ impl ApiServer {
             .app_data(Data::new(key_storage))
             .service(
                 service
+                    .app_data(web::Data::new(db_pool.clone()))
                     .app_data(Data::new(model_service))
                     .app_data(limit_checker)
                     .app_data(Data::new(callback))
@@ -290,7 +291,20 @@ impl ApiServer {
                     .route(
                         "/{id}/default",
                         web::post().to(projects::set_default_project),
-                    ),
+                    )
+                    .route(
+                        "/{id}/models",
+                        web::get().to(models::get_project_models),
+                    )
+                    .route(
+                        "/{id}/model_restrictions",
+                        web::get().to(project_model_restrictions::get_by_project_id),
+                    )
+                    .route(
+                        "/{id}/model_restrictions",
+                        web::post().to(project_model_restrictions::create_or_update),
+                    )
+                    .app_data(web::Data::new(db_pool.clone())),
             )
             .service(
                 web::scope("/providers")
