@@ -279,13 +279,6 @@ pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Cl
     llm_model: &ModelMetadata,
     key: Option<&Credentials>,
 ) -> Result<ResolvedModelContext, GatewayApiError> {
-    // let (key_credentials, llm_model) = use_langdb_proxy(executor_context, llm_model.clone());
-
-    // let key = get_key_credentials(
-    //     key_credentials.as_ref(),
-    //     executor_context.providers_config.as_ref(),
-    //     &llm_model.inference_provider.provider.to_string(),
-    // );
     let provider_specific = request.provider_specific.clone();
     let execution_options = request
         .max_retries
