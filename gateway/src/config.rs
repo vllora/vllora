@@ -36,6 +36,8 @@ pub struct Config {
     #[serde(default)]
     pub http: HttpConfig,
     #[serde(default)]
+    pub ui: UiConfig,
+    #[serde(default)]
     pub clickhouse: Option<ClickhouseConfig>,
     #[serde(default)]
     pub cost_control: Option<CostControl>,
@@ -45,6 +47,17 @@ pub struct Config {
     pub providers: Option<ProvidersConfig>,
     #[serde(default)]
     pub guards: Option<HashMap<String, Guard>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct UiConfig {
+    pub port: u16,
+}
+
+impl Default for UiConfig {
+    fn default() -> Self {
+        Self { port: 8084 }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -103,6 +116,12 @@ impl Config {
             if let Some(port) = args.port {
                 self.http.port = port;
             }
+
+            // Apply UI config overrides
+            if let Some(port) = args.ui_port {
+                self.ui.port = port;
+            }
+
             if let Some(cors) = &args.cors_origins {
                 self.http.cors_allowed_origins =
                     cors.split(',').map(|s| s.trim().to_string()).collect();

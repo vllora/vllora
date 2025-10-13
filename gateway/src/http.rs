@@ -93,7 +93,7 @@ impl ApiServer {
         );
         println!(
             "   🚀 UI server ready at: \x1b[36mhttp://{}:{}\x1b[0m",
-            self.config.http.host, 8084
+            self.config.http.host, self.config.ui.port
         );
 
         // Add documentation and community links
@@ -116,7 +116,7 @@ impl ApiServer {
         println!("\x1b[33m  -H \x1b[32m\"Content-Type: application/json\"\x1b[33m \\\x1b[0m");
         println!("\x1b[33m  -d\x1b[0m \x1b[32m'{{");
         println!("    \"model\": \"gpt-4o-mini\",");
-        println!("    \"messages\": [{{\"role\": \"user\", \"content\": \"Hello LangDB!\"}}]");
+        println!("    \"messages\": [{{\"role\": \"user\", \"content\": \"Hello Ellora!\"}}]");
         println!("  }}'\x1b[0m");
         println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use ::tracing::info;
+use axum::routing::get;
 use clap::Parser;
 use config::{Config, ConfigError};
 use http::ApiServer;
@@ -137,6 +138,10 @@ async fn main() -> Result<(), CliError> {
 
             let config = Config::load(&cli.config)?;
             let config = config.apply_cli_overrides(&cli::Commands::Serve(serve_args));
+
+            let backend_port = config.http.port;
+            let ui_port = config.ui.port;
+
             let api_server = ApiServer::new(config, db_pool.clone());
             let server_handle = tokio::spawn(async move {
                 let storage = Arc::new(Mutex::new(InMemoryStorage::new()));
@@ -150,13 +155,29 @@ async fn main() -> Result<(), CliError> {
             });
 
             let frontend_handle = tokio::spawn(async move {
-                let index = embed_asset!("dist/index.html");
-                let router = static_router().fallback(index);
+                // Handler for serving VITE_BACKEND_PORT environment variable as plain text or JSON
+                let vite_backend_port_handler = move || async move {
+                    axum::Json(
+                        serde_json::json!({ "VITE_BACKEND_PORT": backend_port, "version": env!("CARGO_PKG_VERSION") }),
+                    )
+                };
 
-                let listener = tokio::net::TcpListener::bind("0.0.0.0:8084").await.unwrap();
-                axum::serve(listener, router.into_make_service())
-                    .await
-                    .unwrap();
+                let index = embed_asset!("dist/index.html");
+                let router = static_router()
+                    .route("/api/env", get(vite_backend_port_handler))
+                    .fallback(index);
+
+                let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", ui_port)).await;
+                match listener {
+                    Ok(listener) => {
+                        axum::serve(listener, router.into_make_service())
+                            .await
+                            .unwrap();
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to bind frontend server to port 8084: {e}");
+                    }
+                }
             });
 
             tokio::select! {

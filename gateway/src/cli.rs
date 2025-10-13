@@ -21,6 +21,10 @@ pub struct ServeArgs {
     #[arg(long, value_name = "PORT")]
     pub port: Option<u16>,
 
+    /// Port to listen on (e.g., 8084)
+    #[arg(long, value_name = "UI_PORT")]
+    pub ui_port: Option<u16>,
+
     /// Comma-separated list of allowed CORS origins (e.g., http://localhost:3000,https://example.com)
     #[arg(long, value_name = "ORIGINS")]
     pub cors_origins: Option<String>,
