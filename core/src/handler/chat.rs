@@ -239,6 +239,7 @@ pub async fn create_chat_completion(
     project: web::ReqData<Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
     models_service: web::Data<Box<dyn ModelService>>,
+    db_pool: web::Data<crate::metadata::pool::DbPool>,
 ) -> Result<HttpResponse, GatewayApiError> {
     can_execute_llm_for_request(&req).await?;
 
@@ -344,9 +345,6 @@ pub async fn create_chat_completion(
     .await?;
 
     // Create restrictions manager for the project
-    let db_pool = req.app_data::<web::Data<crate::metadata::pool::DbPool>>()
-        .ok_or_else(|| GatewayApiError::CustomError("Database pool not found".to_string()))?;
-    
     let restriction_service = ProjectModelRestrictionService::new(db_pool.as_ref().clone());
     let restrictions_manager = Arc::new(ProjectModelRestrictionsManager::new(
         restriction_service,
