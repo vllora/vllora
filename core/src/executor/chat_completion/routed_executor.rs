@@ -1,11 +1,8 @@
 use crate::executor::chat_completion::basic_executor::BasicCacheContext;
 use crate::executor::context::ExecutorContext;
 use crate::handler::chat::map_sso_event;
-use crate::models::InferenceProvider;
-use crate::models::ModelMetadata;
 use crate::routing::metrics::InMemoryMetricsRepository;
 use crate::routing::RoutingStrategy;
-use crate::types::provider::InferenceModelProvider;
 use crate::usage::InMemoryStorage;
 use std::collections::BTreeMap;
 use std::collections::HashMap;

@@ -1,7 +1,6 @@
 use crate::metadata::models::project_model_restriction::ProjectModelRestriction;
 use crate::metadata::services::project_model_restriction::ProjectModelRestrictionService;
 use crate::GatewayApiError;
-use async_trait::async_trait;
 use uuid::Uuid;
 
 // Define a trait for ProjectModelRestrictions to make it mockable
