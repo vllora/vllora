@@ -187,12 +187,14 @@ impl SpanWriter {
 pub struct TraceServiceImpl {
     pub(crate) writer_sender: mpsc::Sender<Span>,
     pub(crate) tenant_resolver: Box<dyn TraceTenantResolver>,
+    pub(crate) project_trace_senders: Arc<ProjectTraceMap>,
 }
 
 impl TraceServiceImpl {
     pub fn new(
         transport: Box<dyn SpanWriterTransport>,
         tenant_resolver: Box<dyn TraceTenantResolver>,
+        project_trace_senders: Arc<ProjectTraceMap>,
     ) -> Self {
         let (sender, receiver) = mpsc::channel(1000);
         let writer = SpanWriter {
@@ -205,6 +207,7 @@ impl TraceServiceImpl {
         Self {
             writer_sender: sender,
             tenant_resolver,
+            project_trace_senders,
         }
     }
 }
@@ -349,6 +352,10 @@ impl TraceService for TraceServiceImpl {
         for resource in request.into_inner().resource_spans {
             for scope in resource.scope_spans {
                 for span in scope.spans {
+                    // tracing::info!("end received span: {:?}", span.name);
+                    // for event in &span.events {
+                    // tracing::info!("event: {:?}", event.name);
+                    // }
                     let kind = match span.kind() {
                         otel_span::SpanKind::Unspecified => SpanKind::Internal,
                         otel_span::SpanKind::Internal => SpanKind::Internal,
@@ -436,6 +443,13 @@ impl TraceService for TraceServiceImpl {
                         tags,
                         run_id,
                     };
+
+                    if let Some(project_id) = project_id.as_ref() {
+                        if let Some(sender) = self.project_trace_senders.get(project_id).as_deref()
+                        {
+                            let _result = sender.send(span.clone());
+                        }
+                    }
 
                     self.writer_sender.send(span).await.unwrap();
                 }

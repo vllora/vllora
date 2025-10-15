@@ -47,6 +47,7 @@ use std::sync::Arc;
 use tracing::field;
 use tracing::Instrument;
 use tracing::Span;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use valuable::Valuable;
 
 pub type StreamExecutionResult = (
@@ -418,6 +419,7 @@ impl<C: Config> OpenAIModel<C> {
                 Ok(mut response) => {
                     if !first_response_received {
                         first_response_received = true;
+                        Span::current().add_event("llm.first_token", vec![]);
                         tx.send(Some(ModelEvent::new(
                             &Span::current(),
                             ModelEventType::LlmFirstToken(LLMFirstToken {}),

@@ -3,6 +3,7 @@ use crate::metadata::services::model::ModelService;
 use crate::model::bedrock::BedrockModel;
 use crate::model::cached::CachedModel;
 use crate::model::error::ModelError;
+use crate::model::types::CustomEvent;
 use crate::telemetry::events::{JsonValue, RecordResult, SPAN_MODEL_CALL};
 use crate::types::engine::{CompletionEngineParams, CompletionModelParams};
 use crate::types::engine::{CompletionModelDefinition, ModelTools, ModelType};
@@ -411,6 +412,16 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
             span.record("cache", state.to_string());
         }
 
+        outer_tx
+            .send(Some(ModelEvent::new(
+                &span,
+                ModelEventType::Custom(CustomEvent::new(
+                    "span_start".to_string(),
+                    serde_json::json!({"operation_name": "model_call"}),
+                )),
+            )))
+            .await?;
+
         apply_guardrails(
             &self.initial_messages,
             self.extra.as_ref(),
@@ -577,6 +588,16 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
         )
         .instrument(span.clone())
         .await?;
+
+        outer_tx
+            .send(Some(ModelEvent::new(
+                &span,
+                ModelEventType::Custom(CustomEvent::new(
+                    "span_start".to_string(),
+                    serde_json::json!({"operation_name": "model_call"}),
+                )),
+            )))
+            .await?;
 
         async {
             let (tx, mut rx) = channel(outer_tx.max_capacity());

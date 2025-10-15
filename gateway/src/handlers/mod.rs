@@ -1,3 +1,4 @@
+pub mod events;
 pub mod models;
 pub mod projects;
 pub mod providers;

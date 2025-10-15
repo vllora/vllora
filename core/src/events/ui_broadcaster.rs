@@ -38,18 +38,52 @@ impl EventsUIBroadcaster {
                     span = traces_receiver.recv() => {
                         match span {
                             Ok(span) => {
-                                let _ = sender.send(Event::Custom {
-                                    name: "span_end".to_string(),
-                                    value: serde_json::json!({"span": span}),
-                                    timestamp: std::time::SystemTime::now()
-                                        .duration_since(std::time::UNIX_EPOCH)
-                                        .unwrap_or_default()
-                                        .as_millis() as u64,
-                                    run_context: EventRunContext {
-                                        run_id: span.run_id,
-                                        thread_id: span.thread_id,
-                                    },
-                                }).await;
+                                if span.operation_name == "run" {
+                                    let _ =sender.send(Event::RunFinished {
+                                        run_context: EventRunContext {
+                                            run_id: span.run_id,
+                                            thread_id: span.thread_id,
+                                            span_id: Some(span.span_id.to_string()),
+                                            parent_span_id: span.parent_span_id.map(|id| id.to_string()),
+                                        },
+                                        timestamp: span.end_time_unix_nano,
+                                    }).await;
+                                } else if span.operation_name == "agent" {
+                                    let _ = sender.send(Event::AgentFinished {
+                                        run_context: EventRunContext {
+                                            run_id: span.run_id,
+                                            thread_id: span.thread_id,
+                                            span_id: Some(span.span_id.to_string()),
+                                            parent_span_id: span.parent_span_id.map(|id| id.to_string()),
+                                        },
+                                        timestamp: span.end_time_unix_nano,
+                                    }).await;
+                                } else if span.operation_name == "task" {
+                                    let _ = sender.send(Event::TaskFinished {
+                                        run_context: EventRunContext {
+                                            run_id: span.run_id,
+                                            thread_id: span.thread_id,
+                                            span_id: Some(span.span_id.to_string()),
+                                            parent_span_id: span.parent_span_id.map(|id| id.to_string()),
+                                        },
+                                        timestamp: span.end_time_unix_nano,
+                                    }).await;
+                                } else {
+                                    let _ = sender.send(Event::Custom {
+                                        name: "span_end".to_string(),
+                                        value: serde_json::json!({"span": span}),
+                                        timestamp: std::time::SystemTime::now()
+                                            .duration_since(std::time::UNIX_EPOCH)
+                                            .unwrap_or_default()
+                                            .as_millis() as u64,
+                                        run_context: EventRunContext {
+                                            run_id: span.run_id,
+                                            thread_id: span.thread_id,
+                                            span_id: Some(span.span_id.to_string()),
+                                            parent_span_id: span.parent_span_id.map(|id| id.to_string()),
+                                        },
+                                    }).await;
+                                }
                             }
                             Err(_) => break, // channel closed
                         }
@@ -74,6 +108,8 @@ impl EventsUIBroadcaster {
                         run_context: EventRunContext {
                             run_id: None,
                             thread_id: None,
+                            span_id: None,
+                            parent_span_id: None,
                         },
                     })
                     .await
