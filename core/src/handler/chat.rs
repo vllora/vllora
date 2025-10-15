@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use crate::events::callback_handler::GatewayCallbackHandlerFn;
 use crate::events::callback_handler::GatewayEvent;
 use crate::events::callback_handler::GatewayModelEventWithDetails;
+use crate::events::callback_handler::GatewaySpanStartEvent;
+use crate::events::CustomEventType;
 use crate::executor::context::ExecutorContext;
 use crate::handler::ModelEventWithDetails;
 use crate::history::ThreadHistoryManager;
@@ -80,25 +82,15 @@ pub(crate) async fn prepare_request(
     let cloud_callback_handler = cloud_callback_handler.clone();
 
     let _ = cloud_callback_handler
-        .on_message(GatewayEvent::ChatEvent(Box::new(
-            GatewayModelEventWithDetails {
-                event: ModelEventWithDetails::new(
-                    ModelEvent::new(
-                        &span,
-                        ModelEventType::Custom(CustomEvent::new(
-                            "span_start".to_string(),
-                            serde_json::json!({"operation_name": "api_invoke"}),
-                        )),
-                    ),
-                    None,
-                ),
-                tenant_name: tenant_name.to_string(),
-                project_id: project_id.to_string(),
-                usage_identifiers: identifiers.clone(),
-                run_id: run_id.clone(),
-                thread_id: thread_id.clone(),
-                message_id: predefined_message_id.clone(),
-            },
+        .on_message(GatewayEvent::SpanStartEvent(Box::new(
+            GatewaySpanStartEvent::new(
+                &span,
+                "api_invoke".to_string(),
+                project_id.to_string(),
+                tenant_name.to_string(),
+                run_id.clone(),
+                thread_id.clone(),
+            ),
         )))
         .await;
 
@@ -154,37 +146,30 @@ pub(crate) async fn prepare_request(
                         };
 
                         let cost_event = CostEvent::new(cost, usage);
-                        let cost_event_value = serde_json::to_value(cost_event);
-                        match cost_event_value {
-                            Ok(cost_event_value) => {
-                                cloud_callback_handler
-                                    .on_message(
-                                        GatewayModelEventWithDetails {
-                                            event: ModelEventWithDetails::new(
-                                                ModelEvent::new(
-                                                    &span,
-                                                    ModelEventType::Custom(CustomEvent::new(
-                                                        "cost".to_string(),
-                                                        cost_event_value,
-                                                    )),
-                                                ),
-                                                model_event.model.clone(),
-                                            ),
-                                            tenant_name: tenant_name.clone(),
-                                            project_id: project_id.clone(),
-                                            usage_identifiers: identifiers.clone(),
-                                            run_id: run_id.clone(),
-                                            thread_id: thread_id.clone(),
-                                            message_id: predefined_message_id.clone(),
-                                        }
-                                        .into(),
-                                    )
-                                    .await;
-                            }
-                            Err(e) => {
-                                tracing::error!("Error serializing cost event: {}", e);
-                            }
-                        }
+                        let _ = cloud_callback_handler
+                            .on_message(
+                                GatewayModelEventWithDetails {
+                                    event: ModelEventWithDetails::new(
+                                        ModelEvent::new(
+                                            &span,
+                                            ModelEventType::Custom(CustomEvent::new(
+                                                CustomEventType::Cost {
+                                                    value: cost_event.clone(),
+                                                },
+                                            )),
+                                        ),
+                                        model_event.model.clone(),
+                                    ),
+                                    tenant_name: tenant_name.clone(),
+                                    project_id: project_id.clone(),
+                                    usage_identifiers: identifiers.clone(),
+                                    run_id: run_id.clone(),
+                                    thread_id: thread_id.clone(),
+                                    message_id: predefined_message_id.clone(),
+                                }
+                                .into(),
+                            )
+                            .await;
 
                         if let Some(span) = &model_event.event.span {
                             span.record("cost", serde_json::to_string(&cost).unwrap());
@@ -263,25 +248,15 @@ pub async fn create_chat_completion(
     models_service: web::Data<Box<dyn ModelService>>,
 ) -> Result<HttpResponse, GatewayApiError> {
     let _ = callback_handler
-        .on_message(GatewayEvent::ChatEvent(Box::new(
-            GatewayModelEventWithDetails {
-                event: ModelEventWithDetails::new(
-                    ModelEvent::new(
-                        &Span::current(),
-                        ModelEventType::Custom(CustomEvent::new(
-                            "span_start".to_string(),
-                            serde_json::json!({"operation_name": "cloud_api_invoke"}),
-                        )),
-                    ),
-                    None,
-                ),
-                tenant_name: "default".to_string(),
-                project_id: project.slug.to_string(),
-                usage_identifiers: vec![],
-                run_id: Some(run_id.value()),
-                thread_id: Some(thread_id.value()),
-                message_id: None,
-            },
+        .on_message(GatewayEvent::SpanStartEvent(Box::new(
+            GatewaySpanStartEvent::new(
+                &Span::current(),
+                "cloud_api_invoke".to_string(),
+                project.slug.to_string(),
+                "default".to_string(),
+                Some(run_id.value()),
+                Some(thread_id.value()),
+            ),
         )))
         .await;
 

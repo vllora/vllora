@@ -1,3 +1,4 @@
+use crate::events::CustomEventType;
 use crate::types::gateway::{CompletionModelUsage, ImageSize};
 use crate::types::gateway::{FunctionCall, ToolCall};
 use chrono::{DateTime, Utc};
@@ -16,21 +17,16 @@ pub enum StreamEvent {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CustomEvent {
-    value: serde_json::Value,
-    name: String,
+    event: CustomEventType,
 }
 
 impl CustomEvent {
-    pub fn new(name: String, value: serde_json::Value) -> Self {
-        Self { value, name }
+    pub fn new(event: CustomEventType) -> Self {
+        Self { event }
     }
 
-    pub fn name(&self) -> String {
-        self.name.clone()
-    }
-
-    pub fn value(&self) -> serde_json::Value {
-        self.value.clone()
+    pub fn event(&self) -> CustomEventType {
+        self.event.clone()
     }
 }
 

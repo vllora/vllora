@@ -1,3 +1,4 @@
+use crate::events::CustomEventType;
 use crate::executor::context::ExecutorContext;
 use crate::metadata::services::model::ModelService;
 use crate::model::bedrock::BedrockModel;
@@ -415,10 +416,10 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
         outer_tx
             .send(Some(ModelEvent::new(
                 &span,
-                ModelEventType::Custom(CustomEvent::new(
-                    "span_start".to_string(),
-                    serde_json::json!({"operation_name": "model_call"}),
-                )),
+                ModelEventType::Custom(CustomEvent::new(CustomEventType::SpanStart {
+                    operation_name: "model_call".to_string(),
+                    attributes: serde_json::json!({}),
+                })),
             )))
             .await?;
 
@@ -592,10 +593,10 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
         outer_tx
             .send(Some(ModelEvent::new(
                 &span,
-                ModelEventType::Custom(CustomEvent::new(
-                    "span_start".to_string(),
-                    serde_json::json!({"operation_name": "model_call"}),
-                )),
+                ModelEventType::Custom(CustomEvent::new(CustomEventType::SpanStart {
+                    operation_name: "model_call".to_string(),
+                    attributes: serde_json::json!({}),
+                })),
             )))
             .await?;
 

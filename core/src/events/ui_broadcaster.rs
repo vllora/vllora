@@ -1,6 +1,6 @@
 use crate::events::callback_handler::GatewayEvent;
-use crate::events::EventRunContext;
 use crate::events::{map_cloud_event_to_agui_events, Event};
+use crate::events::{CustomEventType, EventRunContext};
 use crate::telemetry::Span;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -70,8 +70,12 @@ impl EventsUIBroadcaster {
                                     }).await;
                                 } else {
                                     let _ = sender.send(Event::Custom {
-                                        name: "span_end".to_string(),
-                                        value: serde_json::json!({"span": span}),
+                                        custom_event: CustomEventType::SpanEnd {
+                                            operation_name: span.operation_name,
+                                            attributes: span.attributes.into(),
+                                            start_time_unix_nano: span.start_time_unix_nano,
+                                            finish_time_unix_nano: span.end_time_unix_nano,
+                                        },
                                         timestamp: std::time::SystemTime::now()
                                             .duration_since(std::time::UNIX_EPOCH)
                                             .unwrap_or_default()
@@ -99,8 +103,7 @@ impl EventsUIBroadcaster {
             loop {
                 match sender_inner
                     .send(Event::Custom {
-                        name: "ping".to_string(),
-                        value: serde_json::json!({"status": "alive"}),
+                        custom_event: CustomEventType::Ping,
                         timestamp: std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
                             .unwrap_or_default()
