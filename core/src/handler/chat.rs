@@ -7,7 +7,6 @@ use crate::events::callback_handler::GatewaySpanStartEvent;
 use crate::events::CustomEventType;
 use crate::executor::context::ExecutorContext;
 use crate::handler::ModelEventWithDetails;
-use crate::history::ThreadHistoryManager;
 use crate::model::types::CostEvent;
 use crate::model::types::CustomEvent;
 use crate::model::types::ModelEvent;
@@ -21,7 +20,6 @@ use crate::types::gateway::CompletionModelUsage;
 use crate::types::gateway::Extra;
 use crate::types::gateway::Usage;
 use crate::types::guardrails::service::GuardrailsEvaluator;
-use crate::types::threads::ThreadEntity;
 use crate::usage::InMemoryStorage;
 use actix_web::{web, HttpRequest, HttpResponse};
 use bytes::Bytes;
@@ -32,7 +30,6 @@ use valuable::Valuable;
 
 use super::can_execute_llm_for_request;
 use crate::handler::CallbackHandlerFn;
-use crate::history::HistoryContext;
 use crate::metadata::services::model::ModelService;
 use crate::model::ModelMetadataFactory;
 use crate::types::gateway::{
@@ -44,7 +41,6 @@ use crate::types::threads::{CompletionsRunId, CompletionsThreadId};
 use crate::GatewayApiError;
 use tracing::Span;
 use tracing_futures::Instrument;
-use uuid::Uuid;
 
 use crate::credentials::KeyStorage;
 use crate::executor::chat_completion::routed_executor::RoutedExecutor;
@@ -56,10 +52,7 @@ pub type SSOChatEvent = (
 );
 
 #[allow(clippy::too_many_arguments)]
-#[tracing::instrument(
-    level = "debug",
-    skip(cloud_callback_handler, history_manager, span, cost_calculator)
-)]
+#[tracing::instrument(level = "debug", skip(cloud_callback_handler, span, cost_calculator))]
 pub(crate) async fn prepare_request(
     cloud_callback_handler: &GatewayCallbackHandlerFn,
     tenant_name: &str,
@@ -67,9 +60,6 @@ pub(crate) async fn prepare_request(
     identifiers: Vec<(String, String)>,
     run_id: Option<String>,
     thread_id: Option<String>,
-    history_manager: Option<ThreadHistoryManager>,
-    history_context: HistoryContext,
-    predefined_message_id: Option<String>,
     span: Span,
     cost_calculator: Arc<Box<dyn CostCalculator>>,
 ) -> Result<(JoinHandle<()>, CallbackHandlerFn), GatewayApiError> {
@@ -165,7 +155,6 @@ pub(crate) async fn prepare_request(
                                     usage_identifiers: identifiers.clone(),
                                     run_id: run_id.clone(),
                                     thread_id: thread_id.clone(),
-                                    message_id: predefined_message_id.clone(),
                                 }
                                 .into(),
                             )
@@ -175,39 +164,6 @@ pub(crate) async fn prepare_request(
                             span.record("cost", serde_json::to_string(&cost).unwrap());
                         }
                         span.record("cost", serde_json::to_string(&cost).unwrap());
-                    }
-
-                    if let Some(history_manager) = &history_manager {
-                        let model_name = match &model_event.model {
-                            Some(model) => {
-                                format!("{}/{}", model.provider_name, model.name)
-                            }
-                            None => e.model_name.clone(),
-                        };
-
-                        let tool_calls = e
-                            .tool_calls
-                            .iter()
-                            .enumerate()
-                            .map(|(index, tc)| tc.into_tool_call_with_index(index))
-                            .collect();
-
-                        let assistant_result = history_manager
-                            .insert_assistant_message(
-                                content.clone(),
-                                tool_calls,
-                                model_name,
-                                thread_id.clone(),
-                                history_context.user_id.clone(),
-                                &model_event.event.span,
-                                run_id.clone(),
-                                predefined_message_id.clone(),
-                            )
-                            .await;
-
-                        if let Err(e) = assistant_result {
-                            tracing::error!("Error storing assistant message: {}", e);
-                        }
                     }
                 }
                 _ => {}
@@ -222,7 +178,6 @@ pub(crate) async fn prepare_request(
                         usage_identifiers: identifiers.clone(),
                         run_id: run_id.clone(),
                         thread_id: thread_id.clone(),
-                        message_id: predefined_message_id.clone(),
                     }
                     .into(),
                 )
@@ -240,7 +195,6 @@ pub async fn create_chat_completion(
     req: HttpRequest,
     cost_calculator: web::Data<Box<dyn CostCalculator>>,
     evaluator_service: web::Data<Box<dyn GuardrailsEvaluator>>,
-    thread_entity: web::Data<Box<dyn ThreadEntity>>,
     run_id: web::ReqData<CompletionsRunId>,
     thread_id: web::ReqData<CompletionsThreadId>,
     project: web::ReqData<Project>,
@@ -287,65 +241,12 @@ pub async fn create_chat_completion(
     let rate_limiter_service = InMemoryRateLimiterService::new();
     let guardrails_evaluator_service = evaluator_service.clone().into_inner();
 
-    let history_manager = ThreadHistoryManager::new(
-        thread_entity.into_inner(),
-        project.settings.clone(),
-        project.slug.clone(),
-        &callback_handler.get_ref().clone(),
-    );
     let project_slug = project.slug.clone();
-    let thread_title = req
-        .headers()
-        .get("X-Thread-Title")
-        .map(|v| v.to_str().unwrap().to_string());
+    // let thread_title = req
+    //     .headers()
+    //     .get("X-Thread-Title")
+    //     .map(|v| v.to_str().unwrap().to_string());
     let thread_id = thread_id.value();
-    // Fire-and-forget thread/message creation and insertion to run in parallel
-    // with model execution. We intentionally do not await the result here.
-    {
-        let history_manager_clone = history_manager.clone();
-        let thread_id_clone = thread_id.clone();
-        let user_id_clone = "langdb".to_string();
-        let project_slug_clone = project_slug.clone();
-        let thread_title_clone = thread_title.clone();
-        let request_clone = request.clone();
-        let run_id_clone = run_id.value();
-        let span_clone = span.clone();
-        tokio::spawn(async move {
-            let start = std::time::Instant::now();
-            match history_manager_clone
-                .insert_messages_for_request(
-                    &thread_id_clone,
-                    &user_id_clone,
-                    &project_slug_clone,
-                    false,
-                    thread_title_clone,
-                    &request_clone,
-                    Some(run_id_clone),
-                )
-                .await
-            {
-                Ok(bulk_result) => {
-                    tracing::info!(
-                        "Messages inserted in {} ms (last_message_id={})",
-                        start.elapsed().as_millis(),
-                        bulk_result.last_message_id
-                    );
-                    span_clone.record("message_id", &bulk_result.last_message_id);
-                }
-                Err(e) => {
-                    tracing::error!("Failed to insert messages: {}", e);
-                }
-            }
-        });
-    }
-
-    let history_context = HistoryContext {
-        thread_id: thread_id.clone(),
-        user_id: "langdb".to_string(),
-        model_name: request.request.model.to_string(),
-    };
-
-    let predefined_message_id = Uuid::new_v4().to_string();
 
     let cost_calculator = cost_calculator.into_inner();
     let (_handle, callback_handler_fn) = prepare_request(
@@ -355,9 +256,6 @@ pub async fn create_chat_completion(
         vec![],
         Some(run_id.value()),
         Some(thread_id.clone()),
-        Some(history_manager),
-        history_context,
-        Some(predefined_message_id.clone()),
         span.clone(),
         cost_calculator.clone(),
     )
@@ -379,13 +277,7 @@ pub async fn create_chat_completion(
 
     let executor = RoutedExecutor::new(request.clone());
     executor
-        .execute(
-            &executor_context,
-            memory_storage,
-            None,
-            Some(&predefined_message_id),
-            Some(&thread_id),
-        )
+        .execute(&executor_context, memory_storage, None, Some(&thread_id))
         .instrument(span.clone())
         .await
 }

@@ -34,7 +34,6 @@ use langdb_core::handler::image::create_image;
 use langdb_core::handler::middleware::actix_otel::ActixOtelMiddleware;
 use langdb_core::handler::middleware::rate_limit::{RateLimitMiddleware, RateLimiting};
 use langdb_core::handler::{CallbackHandlerFn, LimitCheckWrapper};
-use langdb_core::history::thread_entity::ThreadEntityImpl;
 use langdb_core::metadata::pool::DbPool;
 use langdb_core::metadata::project_trace::ProjectTraceTenantResolver;
 use langdb_core::metadata::services::model::ModelService;
@@ -47,7 +46,6 @@ use langdb_core::telemetry::{TraceServiceImpl, TraceServiceServer};
 use langdb_core::types::gateway::CostCalculator;
 use langdb_core::types::guardrails::service::GuardrailsEvaluator;
 use langdb_core::types::guardrails::Guard;
-use langdb_core::types::threads::ThreadEntity;
 use langdb_core::usage::InMemoryStorage;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -248,8 +246,6 @@ impl ApiServer {
             as Box<dyn GuardrailsEvaluator>;
 
         let broadcaster = EventsUIBroadcaster::new(events_senders_container.clone());
-        let thread_entity =
-            Box::new(ThreadEntityImpl::new(db_pool.clone())) as Box<dyn ThreadEntity>;
 
         let callback_handler = GatewayCallbackHandlerFn::new(vec![], Some(broadcaster.clone()));
         let key_storage =
@@ -266,7 +262,6 @@ impl ApiServer {
             .wrap(ProjectMiddleware::new())
             .app_data(Data::new(broadcaster))
             .app_data(web::Data::from(project_trace_senders))
-            .app_data(Data::new(thread_entity))
             .app_data(Data::new(callback_handler))
             .app_data(Data::new(key_storage))
             .service(

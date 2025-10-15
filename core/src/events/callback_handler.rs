@@ -1,6 +1,4 @@
 use crate::handler::ModelEventWithDetails;
-use crate::types::message::MessageType;
-use crate::types::threads::MessageThreadWithTitle;
 use opentelemetry::trace::TraceContextExt;
 use serde::Serialize;
 use tracing::Span;
@@ -16,27 +14,6 @@ pub struct GatewayModelEventWithDetails {
     pub usage_identifiers: Vec<(String, String)>,
     pub run_id: Option<String>,
     pub thread_id: Option<String>,
-    pub message_id: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct GatewayThreadEvent {
-    #[serde(rename = "event_type")]
-    pub event_type: ThreadEventType,
-    #[serde(flatten)]
-    pub thread: MessageThreadWithTitle,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct CloudMessageEvent {
-    #[serde(rename = "event_type")]
-    pub event_type: MessageEventType,
-    pub thread_id: String,
-    pub message_id: String,
-    pub message_type: MessageType,
-    pub project_id: String,
-    pub tenant_name: String,
-    pub run_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -86,27 +63,10 @@ impl GatewaySpanStartEvent {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ThreadEventType {
-    Created,
-    Updated,
-    Deleted,
-    MessageCreated,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum MessageEventType {
-    Created,
-}
-
 #[derive(Debug, Clone)]
 pub enum GatewayEvent {
     SpanStartEvent(Box<GatewaySpanStartEvent>),
     ChatEvent(Box<GatewayModelEventWithDetails>),
-    ThreadEvent(Box<GatewayThreadEvent>),
-    MessageEvent(Box<CloudMessageEvent>),
 }
 
 impl GatewayEvent {
@@ -114,8 +74,6 @@ impl GatewayEvent {
         match self {
             GatewayEvent::SpanStartEvent(event) => event.project_id.clone(),
             GatewayEvent::ChatEvent(event) => event.project_id.clone(),
-            GatewayEvent::ThreadEvent(event) => event.thread.project_id.clone(),
-            GatewayEvent::MessageEvent(event) => event.project_id.clone(),
         }
     }
 
@@ -123,8 +81,6 @@ impl GatewayEvent {
         match self {
             GatewayEvent::SpanStartEvent(event) => event.tenant_name.clone(),
             GatewayEvent::ChatEvent(event) => event.tenant_name.clone(),
-            GatewayEvent::ThreadEvent(_event) => "".to_string(),
-            GatewayEvent::MessageEvent(event) => event.tenant_name.clone(),
         }
     }
 }
@@ -132,18 +88,6 @@ impl GatewayEvent {
 impl From<GatewayModelEventWithDetails> for GatewayEvent {
     fn from(val: GatewayModelEventWithDetails) -> Self {
         GatewayEvent::ChatEvent(Box::new(val))
-    }
-}
-
-impl From<GatewayThreadEvent> for GatewayEvent {
-    fn from(val: GatewayThreadEvent) -> Self {
-        GatewayEvent::ThreadEvent(Box::new(val))
-    }
-}
-
-impl From<CloudMessageEvent> for GatewayEvent {
-    fn from(val: CloudMessageEvent) -> Self {
-        GatewayEvent::MessageEvent(Box::new(val))
     }
 }
 
