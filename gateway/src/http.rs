@@ -3,7 +3,7 @@ use crate::config::{load_langdb_proxy_config, Config};
 use crate::cost::GatewayCostCalculator;
 use crate::guardrails::GuardrailsService;
 use crate::handlers::threads;
-use crate::handlers::{models, projects, providers, runs, session, traces};
+use crate::handlers::{models, projects, providers, runs, session, spans, traces};
 use crate::limit::GatewayLimitChecker;
 use crate::middleware::project::ProjectMiddleware;
 use crate::middleware::run_id::RunId;
@@ -322,6 +322,7 @@ impl ApiServer {
                 "/events",
                 web::get().to(langdb_core::handler::events::stream_events),
             )
+            .service(web::scope("/spans").route("", web::get().to(spans::list_spans)))
             .service(web::scope("/traces").route("", web::get().to(traces::list_traces)))
             .service(
                 web::scope("/runs")

@@ -63,10 +63,22 @@ pub async fn list_traces(
         .as_ref()
         .map(|s| s.split(',').map(String::from).collect());
 
+    let run_ids = query.run_id.as_ref().map(|id| vec![id.clone()]);
+
     let list_query = ListTracesQuery {
         project_id: project_id.clone(),
-        run_id: query.run_id.clone(),
+        run_ids,
         thread_ids,
+        operation_names: None,
+        parent_span_ids: None,
+        filter_null_thread: false,
+        filter_null_run: false,
+        filter_null_operation: false,
+        filter_null_parent: false,
+        filter_not_null_thread: false,
+        filter_not_null_run: false,
+        filter_not_null_operation: false,
+        filter_not_null_parent: false,
         start_time_min: query.start_time_min,
         start_time_max: query.start_time_max,
         limit: query.limit.unwrap_or(100),
@@ -183,8 +195,18 @@ pub async fn get_spans_by_run(
             // Get total count for this run_id
             let count_query = ListTracesQuery {
                 project_id: project_id.clone(),
-                run_id: Some(run_id.into_inner()),
+                run_ids: Some(vec![run_id.into_inner()]),
                 thread_ids: None,
+                operation_names: None,
+                parent_span_ids: None,
+                filter_null_thread: false,
+                filter_null_run: false,
+                filter_null_operation: false,
+                filter_null_parent: false,
+                filter_not_null_thread: false,
+                filter_not_null_run: false,
+                filter_not_null_operation: false,
+                filter_not_null_parent: false,
                 start_time_min: None,
                 start_time_max: None,
                 limit: 1,
