@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use crate::events::callback_handler::GatewayCallbackHandlerFn;
+use crate::events::callback_handler::GatewayEvent;
 use crate::events::callback_handler::GatewayModelEventWithDetails;
 use crate::executor::context::ExecutorContext;
 use crate::handler::ModelEventWithDetails;
@@ -77,6 +78,29 @@ pub(crate) async fn prepare_request(
     let project_id = project_id.to_string();
     let identifiers = identifiers.clone();
     let cloud_callback_handler = cloud_callback_handler.clone();
+
+    let _ = cloud_callback_handler
+        .on_message(GatewayEvent::ChatEvent(Box::new(
+            GatewayModelEventWithDetails {
+                event: ModelEventWithDetails::new(
+                    ModelEvent::new(
+                        &span,
+                        ModelEventType::Custom(CustomEvent::new(
+                            "span_start".to_string(),
+                            serde_json::json!({"operation_name": "api_invoke"}),
+                        )),
+                    ),
+                    None,
+                ),
+                tenant_name: tenant_name.to_string(),
+                project_id: project_id.to_string(),
+                usage_identifiers: identifiers.clone(),
+                run_id: run_id.clone(),
+                thread_id: thread_id.clone(),
+                message_id: predefined_message_id.clone(),
+            },
+        )))
+        .await;
 
     let span = span.clone();
     let cost_calculator = cost_calculator.clone();
@@ -238,6 +262,29 @@ pub async fn create_chat_completion(
     key_storage: web::Data<Box<dyn KeyStorage>>,
     models_service: web::Data<Box<dyn ModelService>>,
 ) -> Result<HttpResponse, GatewayApiError> {
+    let _ = callback_handler
+        .on_message(GatewayEvent::ChatEvent(Box::new(
+            GatewayModelEventWithDetails {
+                event: ModelEventWithDetails::new(
+                    ModelEvent::new(
+                        &Span::current(),
+                        ModelEventType::Custom(CustomEvent::new(
+                            "span_start".to_string(),
+                            serde_json::json!({"operation_name": "cloud_api_invoke"}),
+                        )),
+                    ),
+                    None,
+                ),
+                tenant_name: "default".to_string(),
+                project_id: project.slug.to_string(),
+                usage_identifiers: vec![],
+                run_id: Some(run_id.value()),
+                thread_id: Some(thread_id.value()),
+                message_id: None,
+            },
+        )))
+        .await;
+
     can_execute_llm_for_request(&req).await?;
 
     let span = Span::or_current(tracing::info_span!(

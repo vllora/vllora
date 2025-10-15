@@ -36,6 +36,32 @@ pub enum Event {
         /// Timestamp of when the event occurred
         timestamp: u64,
     },
+    AgentStarted {
+        #[serde(flatten)]
+        run_context: EventRunContext,
+        /// Timestamp of when the event occurred
+        timestamp: u64,
+        name: Option<String>,
+    },
+    AgentFinished {
+        #[serde(flatten)]
+        run_context: EventRunContext,
+        /// Timestamp of when the event occurred
+        timestamp: u64,
+    },
+    TaskStarted {
+        #[serde(flatten)]
+        run_context: EventRunContext,
+        /// Timestamp of when the event occurred
+        timestamp: u64,
+        name: Option<String>,
+    },
+    TaskFinished {
+        #[serde(flatten)]
+        run_context: EventRunContext,
+        /// Timestamp of when the event occurred
+        timestamp: u64,
+    },
     StepStarted {
         #[serde(flatten)]
         run_context: EventRunContext,
@@ -187,6 +213,10 @@ impl Event {
             Event::RunError { timestamp, .. } => *timestamp,
             Event::StepStarted { timestamp, .. } => *timestamp,
             Event::StepFinished { timestamp, .. } => *timestamp,
+            Event::AgentStarted { timestamp, .. } => *timestamp,
+            Event::AgentFinished { timestamp, .. } => *timestamp,
+            Event::TaskStarted { timestamp, .. } => *timestamp,
+            Event::TaskFinished { timestamp, .. } => *timestamp,
             Event::TextMessageStart { timestamp, .. } => *timestamp,
             Event::TextMessageContent { timestamp, .. } => *timestamp,
             Event::TextMessageEnd { timestamp, .. } => *timestamp,
@@ -207,6 +237,8 @@ impl Event {
 pub struct EventRunContext {
     pub run_id: Option<String>,
     pub thread_id: Option<String>,
+    pub span_id: Option<String>,
+    pub parent_span_id: Option<String>,
 }
 
 impl From<&GatewayModelEventWithDetails> for EventRunContext {
@@ -214,6 +246,8 @@ impl From<&GatewayModelEventWithDetails> for EventRunContext {
         EventRunContext {
             run_id: value.run_id.clone(),
             thread_id: value.thread_id.clone(),
+            span_id: None,
+            parent_span_id: None,
         }
     }
 }
@@ -224,14 +258,20 @@ impl From<&GatewayEvent> for EventRunContext {
             GatewayEvent::ChatEvent(event) => EventRunContext {
                 run_id: event.run_id.clone(),
                 thread_id: event.thread_id.clone(),
+                span_id: Some(event.event.event.span_id.to_string()),
+                parent_span_id: event.event.event.parent_span_id.clone(),
             },
             GatewayEvent::ThreadEvent(event) => EventRunContext {
                 run_id: None,
                 thread_id: Some(event.thread.id.clone()),
+                span_id: None,
+                parent_span_id: None,
             },
             GatewayEvent::MessageEvent(event) => EventRunContext {
                 run_id: event.run_id.clone(),
                 thread_id: Some(event.thread_id.clone()),
+                span_id: None,
+                parent_span_id: None,
             },
         }
     }
@@ -281,18 +321,24 @@ pub fn map_cloud_event_to_agui_events(value: &GatewayEvent) -> Vec<Event> {
                         None => "".to_string(),
                     };
                     vec![
+                        Event::Custom {
+                            run_context: value.into(),
+                            name: "llm_start".to_string(),
+                            value: model_value,
+                            timestamp,
+                        },
                         Event::TextMessageStart {
                             run_context: value.into(),
                             message_id,
                             role: "assistant".to_string(),
                             timestamp,
                         },
-                        Event::Custom {
-                            run_context: value.into(),
-                            name: "model_start".to_string(),
-                            value: model_value,
-                            timestamp,
-                        },
+                        // Event::Custom {
+                        //     run_context: value.into(),
+                        //     name: "model_start".to_string(),
+                        //     value: model_value,
+                        //     timestamp,
+                        // },
                     ]
                 }
                 ModelEventType::LlmFirstToken(_) => {
@@ -334,6 +380,12 @@ pub fn map_cloud_event_to_agui_events(value: &GatewayEvent) -> Vec<Event> {
                     events.push(Event::TextMessageEnd {
                         run_context: value.into(),
                         message_id: message_id.clone(),
+                        timestamp: event_info.timestamp.timestamp_millis() as u64,
+                    });
+                    events.push(Event::Custom {
+                        run_context: value.into(),
+                        name: "llm_stop".to_string(),
+                        value: serde_json::Value::Null,
                         timestamp: event_info.timestamp.timestamp_millis() as u64,
                     });
                     events
@@ -381,27 +433,29 @@ pub fn map_cloud_event_to_agui_events(value: &GatewayEvent) -> Vec<Event> {
                 }
             }
         }
-        ThreadEvent(event) => {
-            vec![Event::Custom {
-                run_context: value.into(),
-                name: "thread_event".to_string(),
-                value: serde_json::json!(event),
-                timestamp: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_millis() as u64,
-            }]
+        ThreadEvent(_event) => {
+            vec![]
+            // vec![Event::Custom {
+            //     run_context: value.into(),
+            //     name: "thread_event".to_string(),
+            //     value: serde_json::json!(event),
+            //     timestamp: std::time::SystemTime::now()
+            //         .duration_since(std::time::UNIX_EPOCH)
+            //         .unwrap()
+            //         .as_millis() as u64,
+            // }]
         }
-        GatewayEvent::MessageEvent(event) => {
-            vec![Event::Custom {
-                run_context: value.into(),
-                name: "message_event".to_string(),
-                value: serde_json::json!(event),
-                timestamp: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_millis() as u64,
-            }]
+        GatewayEvent::MessageEvent(_event) => {
+            vec![]
+            // vec![Event::Custom {
+            //     run_context: value.into(),
+            //     name: "message_event".to_string(),
+            //     value: serde_json::json!(event),
+            //     timestamp: std::time::SystemTime::now()
+            //         .duration_since(std::time::UNIX_EPOCH)
+            //         .unwrap()
+            //         .as_millis() as u64,
+            // }]
         }
     }
 }

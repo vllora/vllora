@@ -88,16 +88,32 @@ pub struct ModelEvent {
     pub timestamp: DateTime<Utc>,
     #[serde(skip)]
     pub span: Option<Span>,
+    pub parent_span_id: Option<String>,
 }
 
 impl ModelEvent {
     pub fn new(span: &Span, event_type: ModelEventType) -> Self {
+        // Try to get parent span ID from current context
+        let parent_span_id = {
+            let current = Span::current();
+            let current_span_id = current.context().span().span_context().span_id();
+            let this_span_id = span.context().span().span_context().span_id();
+
+            // If the passed span is different from current, current is likely the parent
+            if current_span_id != this_span_id && !current_span_id.to_string().is_empty() {
+                Some(current_span_id.to_string())
+            } else {
+                None
+            }
+        };
+
         Self {
             event: event_type,
             timestamp: Utc::now(),
             span_id: span.context().span().span_context().span_id().to_string(),
             trace_id: span.context().span().span_context().trace_id().to_string(),
             span: Some(span.clone()),
+            parent_span_id,
         }
     }
 }

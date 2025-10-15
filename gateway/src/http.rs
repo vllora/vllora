@@ -3,8 +3,8 @@ use crate::config::{load_langdb_proxy_config, Config};
 use crate::cost::GatewayCostCalculator;
 use crate::guardrails::GuardrailsService;
 use crate::handlers::threads;
-use crate::handlers::{models, projects, providers, runs, session, spans, traces};
-use crate::limit::GatewayLimitChecker;
+use crate::handlers::{events, models, projects, providers, runs, session, spans, traces};
+use crate::limit::GatwayLim
 use crate::middleware::project::ProjectMiddleware;
 use crate::middleware::run_id::RunId;
 use crate::middleware::thread_id::ThreadId;
@@ -195,6 +195,7 @@ impl ApiServer {
         let trace_service = TraceServiceServer::new(TraceServiceImpl::new(
             writer,
             Box::new(ProjectTraceTenantResolver::new(project_service)),
+            project_trace_senders.inner().clone(),
         ));
         let tonic_server = tonic::transport::Server::builder()
             .add_service(trace_service)
@@ -318,9 +319,13 @@ impl ApiServer {
                         web::get().to(threads::get_thread_message),
                     ),
             )
-            .route(
-                "/events",
-                web::get().to(langdb_core::handler::events::stream_events),
+            .service(
+                web::scope("/events")
+                    .route(
+                        "",
+                        web::get().to(langdb_core::handler::events::stream_events),
+                    )
+                    .route("", web::post().to(events::send_events)),
             )
             .service(web::scope("/spans").route("", web::get().to(spans::list_spans)))
             .service(web::scope("/traces").route("", web::get().to(traces::list_traces)))
