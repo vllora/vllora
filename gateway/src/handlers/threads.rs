@@ -28,6 +28,10 @@ struct ThreadQueryResult {
     finish_time_us: i64,
     #[diesel(sql_type = Nullable<Text>)]
     run_ids: Option<String>, // comma-separated
+    #[diesel(sql_type = Nullable<Text>)]
+    input_models: Option<String>, // comma-separated
+    #[diesel(sql_type = diesel::sql_types::Double)]
+    cost: f64,
 }
 
 #[derive(Serialize)]
@@ -36,6 +40,8 @@ pub struct ThreadSpan {
     pub start_time_us: i64,
     pub finish_time_us: i64,
     pub run_ids: Vec<String>,
+    pub input_models: Vec<String>,
+    pub cost: f64,
 }
 
 #[derive(Serialize)]
@@ -86,24 +92,36 @@ pub async fn list_threads(
         }
     };
 
-    // SQL query to group root spans by thread_id
+    // Optimized SQL query - single scan of traces table
     let query_sql = r#"
+        WITH thread_aggregates AS (
+            SELECT
+                thread_id,
+                MIN(CASE WHEN parent_span_id IS NULL THEN start_time_us END) as start_time_us,
+                MAX(CASE WHEN parent_span_id IS NULL THEN finish_time_us END) as finish_time_us,
+                GROUP_CONCAT(DISTINCT CASE WHEN parent_span_id IS NULL THEN run_id END) as run_ids,
+                GROUP_CONCAT(DISTINCT json_extract(attribute, '$.model_name')) as input_models,
+                SUM(CAST(json_extract(attribute, '$.cost') AS REAL)) as cost
+            FROM traces
+            WHERE project_id = ?
+                AND thread_id IS NOT NULL
+            GROUP BY thread_id
+            HAVING start_time_us IS NOT NULL
+        )
         SELECT
             thread_id,
-            MIN(start_time_us) as start_time_us,
-            MAX(finish_time_us) as finish_time_us,
-            GROUP_CONCAT(DISTINCT run_id) as run_ids
-        FROM traces
-        WHERE project_id = ?
-            AND thread_id IS NOT NULL
-            AND parent_span_id IS NULL
-        GROUP BY thread_id
+            start_time_us,
+            finish_time_us,
+            run_ids,
+            input_models,
+            COALESCE(cost, 0.0) as cost
+        FROM thread_aggregates
         ORDER BY start_time_us DESC
         LIMIT ? OFFSET ?
     "#;
 
     let results: Vec<ThreadQueryResult> = match diesel::sql_query(query_sql)
-        .bind::<Text, _>(&project.slug)
+        .bind::<Text, _>(&project.slug) // project_id filter
         .bind::<BigInt, _>(limit)
         .bind::<BigInt, _>(offset)
         .load(&mut conn)
@@ -118,7 +136,7 @@ pub async fn list_threads(
         }
     };
 
-    // Count total unique thread_ids
+    // Count total unique thread_ids (optimized)
     let count_sql = r#"
         SELECT COUNT(DISTINCT thread_id) as count
         FROM traces
@@ -160,6 +178,13 @@ pub async fn list_threads(
                     .map(|s| s.to_string())
                     .collect())
                 .unwrap_or_default(),
+            input_models: result.input_models
+                .map(|models| models.split(',')
+                    .filter(|s| !s.is_empty())
+                    .map(|s| s.to_string())
+                    .collect())
+                .unwrap_or_default(),
+            cost: result.cost,
         })
         .collect();
 
