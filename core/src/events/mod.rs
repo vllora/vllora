@@ -1,6 +1,6 @@
 use crate::events::callback_handler::GatewayEvent;
 use crate::events::callback_handler::GatewayModelEventWithDetails;
-use crate::events::GatewayEvent::ThreadEvent;
+use crate::model::types::CostEvent;
 use crate::model::types::ModelEventType;
 use serde::{Deserialize, Serialize};
 
@@ -83,8 +83,6 @@ pub enum Event {
     TextMessageStart {
         #[serde(flatten)]
         run_context: EventRunContext,
-        /// Unique identifier for this message
-        message_id: String,
         /// Role (e.g., "assistant", "user")
         role: String,
         /// Timestamp of when the event occurred
@@ -95,16 +93,12 @@ pub enum Event {
         run_context: EventRunContext,
         /// Incremental content to append to the message
         delta: String,
-        /// Associated message identifier
-        message_id: String,
         /// Timestamp of when the event occurred
         timestamp: u64,
     },
     TextMessageEnd {
         #[serde(flatten)]
         run_context: EventRunContext,
-        /// Associated message identifier
-        message_id: String,
         /// Timestamp of when the event occurred
         timestamp: u64,
     },
@@ -115,8 +109,6 @@ pub enum Event {
         run_context: EventRunContext,
         /// Unique identifier for this tool call
         tool_call_id: String,
-        /// Optional parent message identifier
-        parent_message_id: Option<String>,
         /// Name of the tool being called
         tool_call_name: String,
         /// Timestamp of when the event occurred
@@ -143,8 +135,6 @@ pub enum Event {
     ToolCallResult {
         #[serde(flatten)]
         run_context: EventRunContext,
-        /// Optional message identifier
-        message_id: Option<String>,
         /// Associated tool call identifier
         tool_call_id: String,
         /// Result content
@@ -195,12 +185,48 @@ pub enum Event {
     Custom {
         #[serde(flatten)]
         run_context: EventRunContext,
-        /// Custom event name
-        name: String,
-        /// Custom event value
-        value: serde_json::Value,
         /// Timestamp of when the event occurred
         timestamp: u64,
+        #[serde(rename = "event")]
+        custom_event: CustomEventType,
+    },
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum CustomEventType {
+    SpanStart {
+        operation_name: String,
+        attributes: serde_json::Value,
+    },
+    SpanEnd {
+        operation_name: String,
+        attributes: serde_json::Value,
+        start_time_unix_nano: u64,
+        finish_time_unix_nano: u64,
+    },
+    Ping,
+    ImageGenerationFinish {
+        model_name: String,
+        quality: String,
+        size: String,
+        count_of_images: u8,
+        steps: u8,
+    },
+    LlmStart {
+        provider_name: String,
+        model_name: String,
+        input: String,
+    },
+    LlmStop {
+        content: Option<String>,
+    },
+    Cost {
+        value: CostEvent,
+    },
+    CustomEvent {
+        operation: String,
+        attributes: serde_json::Value,
     },
 }
 
@@ -255,23 +281,17 @@ impl From<&GatewayModelEventWithDetails> for EventRunContext {
 impl From<&GatewayEvent> for EventRunContext {
     fn from(value: &GatewayEvent) -> Self {
         match value {
+            GatewayEvent::SpanStartEvent(event) => EventRunContext {
+                run_id: event.run_id.clone(),
+                thread_id: event.thread_id.clone(),
+                span_id: Some(event.span_id.to_string()),
+                parent_span_id: event.parent_span_id.clone(),
+            },
             GatewayEvent::ChatEvent(event) => EventRunContext {
                 run_id: event.run_id.clone(),
                 thread_id: event.thread_id.clone(),
                 span_id: Some(event.event.event.span_id.to_string()),
                 parent_span_id: event.event.event.parent_span_id.clone(),
-            },
-            GatewayEvent::ThreadEvent(event) => EventRunContext {
-                run_id: None,
-                thread_id: Some(event.thread.id.clone()),
-                span_id: None,
-                parent_span_id: None,
-            },
-            GatewayEvent::MessageEvent(event) => EventRunContext {
-                run_id: event.run_id.clone(),
-                thread_id: Some(event.thread_id.clone()),
-                span_id: None,
-                parent_span_id: None,
             },
         }
     }
@@ -282,7 +302,6 @@ pub fn map_cloud_event_to_agui_events(value: &GatewayEvent) -> Vec<Event> {
         GatewayEvent::ChatEvent(event) => {
             let event_info = event.event.event.clone();
             let model = event.event.model.clone();
-            let message_id = event.message_id.clone();
             match &event.event.event.event {
                 ModelEventType::RunStart(_start_event) => {
                     vec![Event::RunStarted {
@@ -306,30 +325,26 @@ pub fn map_cloud_event_to_agui_events(value: &GatewayEvent) -> Vec<Event> {
                 }
                 ModelEventType::LlmStart(start_event) => {
                     let timestamp = event_info.timestamp.timestamp_millis() as u64;
-                    let model_value = match model {
-                        Some(model) => serde_json::json!({
-                            "provider_name": model.provider_name,
-                            "model_name": model.name,
-                        }),
-                        None => serde_json::json!({
-                            "provider_name": start_event.provider_name,
-                            "model_name": start_event.model_name,
-                        }),
+                    let (provider_name, model_name) = match model {
+                        Some(model) => (model.provider_name, model.name),
+                        None => (
+                            start_event.provider_name.clone(),
+                            start_event.model_name.clone(),
+                        ),
                     };
-                    let message_id = match message_id {
-                        Some(message_id) => message_id,
-                        None => "".to_string(),
-                    };
+
                     vec![
                         Event::Custom {
                             run_context: value.into(),
-                            name: "llm_start".to_string(),
-                            value: model_value,
                             timestamp,
+                            custom_event: CustomEventType::LlmStart {
+                                provider_name,
+                                model_name,
+                                input: start_event.input.clone(),
+                            },
                         },
                         Event::TextMessageStart {
                             run_context: value.into(),
-                            message_id,
                             role: "assistant".to_string(),
                             timestamp,
                         },
@@ -352,41 +367,31 @@ pub fn map_cloud_event_to_agui_events(value: &GatewayEvent) -> Vec<Event> {
                     }]
                 }
                 ModelEventType::LlmContent(content_event) => {
-                    let message_id = match message_id {
-                        Some(message_id) => message_id,
-                        None => "".to_string(),
-                    };
                     vec![Event::TextMessageContent {
                         run_context: value.into(),
                         delta: content_event.content.clone(),
-                        message_id,
                         timestamp: event_info.timestamp.timestamp_millis() as u64,
                     }]
                 }
                 ModelEventType::LlmStop(stop_event) => {
                     let mut events = vec![];
-                    let message_id = match message_id {
-                        Some(message_id) => message_id,
-                        None => "".to_string(),
-                    };
                     if let Some(output) = &stop_event.output {
                         events.push(Event::TextMessageContent {
                             run_context: value.into(),
                             delta: output.clone(),
-                            message_id: message_id.clone(),
                             timestamp: event_info.timestamp.timestamp_millis() as u64,
                         });
                     }
                     events.push(Event::TextMessageEnd {
                         run_context: value.into(),
-                        message_id: message_id.clone(),
                         timestamp: event_info.timestamp.timestamp_millis() as u64,
                     });
                     events.push(Event::Custom {
                         run_context: value.into(),
-                        name: "llm_stop".to_string(),
-                        value: serde_json::Value::Null,
                         timestamp: event_info.timestamp.timestamp_millis() as u64,
+                        custom_event: CustomEventType::LlmStop {
+                            content: stop_event.output.clone(),
+                        },
                     });
                     events
                 }
@@ -394,7 +399,6 @@ pub fn map_cloud_event_to_agui_events(value: &GatewayEvent) -> Vec<Event> {
                     vec![Event::ToolCallStart {
                         run_context: value.into(),
                         tool_call_id: tool_start.tool_id.clone(),
-                        parent_message_id: message_id.clone(),
                         tool_call_name: tool_start.tool_name.clone(),
                         timestamp: event_info.timestamp.timestamp_millis() as u64,
                     }]
@@ -402,7 +406,6 @@ pub fn map_cloud_event_to_agui_events(value: &GatewayEvent) -> Vec<Event> {
                 ModelEventType::ToolResult(tool_result) => {
                     vec![Event::ToolCallResult {
                         run_context: value.into(),
-                        message_id: message_id.clone(),
                         tool_call_id: tool_result.tool_id.clone(),
                         content: tool_result.output.clone(),
                         role: "tool".to_string(),
@@ -412,50 +415,37 @@ pub fn map_cloud_event_to_agui_events(value: &GatewayEvent) -> Vec<Event> {
                 ModelEventType::ImageGenerationFinish(image_event) => {
                     vec![Event::Custom {
                         run_context: value.into(),
-                        name: "image_generation_finish".to_string(),
-                        value: serde_json::json!({
-                            "model_name": image_event.model_name,
-                            "quality": image_event.quality,
-                            "size": image_event.size,
-                            "count_of_images": image_event.count_of_images,
-                            "steps": image_event.steps
-                        }),
+                        custom_event: CustomEventType::ImageGenerationFinish {
+                            model_name: image_event.model_name.clone(),
+                            quality: image_event.quality.clone(),
+                            size: image_event.size.to_string(),
+                            count_of_images: image_event.count_of_images,
+                            steps: image_event.steps,
+                        },
                         timestamp: event_info.timestamp.timestamp_millis() as u64,
                     }]
                 }
                 ModelEventType::Custom(custom_event) => {
                     vec![Event::Custom {
                         run_context: value.into(),
-                        name: custom_event.name(),
-                        value: custom_event.value(),
+                        custom_event: custom_event.event(),
                         timestamp: event_info.timestamp.timestamp_millis() as u64,
                     }]
                 }
             }
         }
-        ThreadEvent(_event) => {
-            vec![]
-            // vec![Event::Custom {
-            //     run_context: value.into(),
-            //     name: "thread_event".to_string(),
-            //     value: serde_json::json!(event),
-            //     timestamp: std::time::SystemTime::now()
-            //         .duration_since(std::time::UNIX_EPOCH)
-            //         .unwrap()
-            //         .as_millis() as u64,
-            // }]
-        }
-        GatewayEvent::MessageEvent(_event) => {
-            vec![]
-            // vec![Event::Custom {
-            //     run_context: value.into(),
-            //     name: "message_event".to_string(),
-            //     value: serde_json::json!(event),
-            //     timestamp: std::time::SystemTime::now()
-            //         .duration_since(std::time::UNIX_EPOCH)
-            //         .unwrap()
-            //         .as_millis() as u64,
-            // }]
+        GatewayEvent::SpanStartEvent(event) => {
+            vec![Event::Custom {
+                run_context: value.into(),
+                timestamp: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis() as u64,
+                custom_event: CustomEventType::SpanStart {
+                    operation_name: event.operation_name.clone(),
+                    attributes: serde_json::Value::Null,
+                },
+            }]
         }
     }
 }

@@ -1,5 +1,6 @@
 use actix_web::{web, HttpResponse, Result};
 use langdb_core::events::ui_broadcaster::EventsUIBroadcaster;
+use langdb_core::events::CustomEventType;
 use langdb_core::events::{Event, EventRunContext};
 use langdb_core::types::metadata::project::Project;
 use serde::{Deserialize, Serialize};
@@ -64,8 +65,6 @@ pub async fn send_events(
         SendEventsRequest::Single(event) => vec![event],
         SendEventsRequest::Multiple(events) => events,
     };
-
-    tracing::info!("Custom events: {:#?}", custom_events);
 
     let event_count = custom_events.len();
 
@@ -162,19 +161,20 @@ pub async fn send_events(
                             span_id: Some(custom_event.span_id),
                             parent_span_id: custom_event.parent_span_id,
                         },
-                        name: operation,
-                        value: custom_event.attributes,
                         timestamp: std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
                             .unwrap_or_default()
                             .as_millis() as u64,
+                        custom_event: CustomEventType::CustomEvent {
+                            operation: operation.clone(),
+                            attributes: custom_event.attributes,
+                        },
                     }
                 }
             }
         })
         .collect();
 
-    tracing::info!("Events: {:#?}", events);
     // Send events to the broadcaster for this project
     broadcaster
         .send_events(&project.slug.to_string(), &events)

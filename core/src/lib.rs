@@ -6,7 +6,6 @@ pub mod error;
 pub mod events;
 pub mod executor;
 pub mod handler;
-pub mod history;
 pub mod http;
 pub mod llm_gateway;
 pub mod metadata;
