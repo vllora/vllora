@@ -4,7 +4,7 @@ use crate::cost::GatewayCostCalculator;
 use crate::guardrails::GuardrailsService;
 use crate::handlers::threads;
 use crate::handlers::{events, models, projects, providers, runs, session, spans, traces};
-use crate::limit::GatwayLim
+use crate::limit::GatewayLimitChecker;
 use crate::middleware::project::ProjectMiddleware;
 use crate::middleware::run_id::RunId;
 use crate::middleware::thread_id::ThreadId;
