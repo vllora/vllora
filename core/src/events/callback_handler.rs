@@ -36,17 +36,33 @@ impl GatewaySpanStartEvent {
         tenant_name: String,
         run_id: Option<String>,
         thread_id: Option<String>,
+        parent_span_id: Option<String>,
     ) -> Self {
-        let parent_span_id = {
-            let current = Span::current();
-            let current_span_id = current.context().span().span_context().span_id();
-            let this_span_id = span.context().span().span_context().span_id();
+        let parent_span_id = match parent_span_id {
+            Some(parent_span_id) => Some(parent_span_id.clone()),
+            None => {
+                // Get the current span ID immediately as an owned value
+                let current_span_id = {
+                    let otel_context = span.context();
+                    let span_ref = otel_context.span();
+                    span_ref.span_context().span_id()
+                };
 
-            // If the passed span is different from current, current is likely the parent
-            if current_span_id != this_span_id && !current_span_id.to_string().is_empty() {
-                Some(current_span_id.to_string())
-            } else {
-                None
+                // Get the parent span from the current context (propagated from tracing_context middleware)
+                let current = Span::current();
+                let parent_context = current.context();
+                let parent_span_ref = parent_context.span();
+                let parent_span_context = parent_span_ref.span_context();
+
+                // If we have a valid parent span that's different from the current span
+                if parent_span_context.is_valid()
+                    && parent_span_context.span_id() != current_span_id
+                    && !parent_span_context.span_id().to_string().is_empty()
+                {
+                    Some(parent_span_context.span_id().to_string())
+                } else {
+                    None
+                }
             }
         };
 
