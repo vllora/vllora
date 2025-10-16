@@ -255,8 +255,6 @@ impl ApiServer {
             Box::new(ModelServiceImpl::new(db_pool.clone())) as Box<dyn ModelService>;
 
         app.wrap(TraceLogger)
-            .wrap(ActixOtelMiddleware)
-            .wrap(TracingContext)
             .wrap(ThreadId)
             .wrap(RunId)
             .wrap(ProjectMiddleware::new())
@@ -274,6 +272,8 @@ impl ApiServer {
                     ))
                     .app_data(rate_limit)
                     .app_data(Data::new(guardrails_service))
+                    .wrap(ActixOtelMiddleware)
+                    .wrap(TracingContext)
                     .wrap(RateLimitMiddleware),
             )
             .service(
