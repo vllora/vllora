@@ -46,7 +46,7 @@ impl EventsUIBroadcaster {
                                             span_id: Some(span.span_id.to_string()),
                                             parent_span_id: span.parent_span_id.map(|id| id.to_string()),
                                         },
-                                        timestamp: span.end_time_unix_nano,
+                                        timestamp: span.end_time_unix_nano / 1000000,
                                     }).await;
                                 } else if span.operation_name == "agent" {
                                     let _ = sender.send(Event::AgentFinished {
@@ -56,7 +56,7 @@ impl EventsUIBroadcaster {
                                             span_id: Some(span.span_id.to_string()),
                                             parent_span_id: span.parent_span_id.map(|id| id.to_string()),
                                         },
-                                        timestamp: span.end_time_unix_nano,
+                                        timestamp: span.end_time_unix_nano / 1000000,
                                     }).await;
                                 } else if span.operation_name == "task" {
                                     let _ = sender.send(Event::TaskFinished {
@@ -66,7 +66,7 @@ impl EventsUIBroadcaster {
                                             span_id: Some(span.span_id.to_string()),
                                             parent_span_id: span.parent_span_id.map(|id| id.to_string()),
                                         },
-                                        timestamp: span.end_time_unix_nano,
+                                        timestamp: span.end_time_unix_nano / 1000000,
                                     }).await;
                                 } else {
                                     let _ = sender.send(Event::Custom {
@@ -76,10 +76,7 @@ impl EventsUIBroadcaster {
                                             start_time_unix_nano: span.start_time_unix_nano,
                                             finish_time_unix_nano: span.end_time_unix_nano,
                                         },
-                                        timestamp: std::time::SystemTime::now()
-                                            .duration_since(std::time::UNIX_EPOCH)
-                                            .unwrap_or_default()
-                                            .as_millis() as u64,
+                                        timestamp: span.end_time_unix_nano / 1000000,
                                         run_context: EventRunContext {
                                             run_id: span.run_id,
                                             thread_id: span.thread_id,
