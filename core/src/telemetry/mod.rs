@@ -428,6 +428,8 @@ impl TraceService for TraceServiceImpl {
                         tags = serde_json::from_str(&s).ok().unwrap_or_default();
                     }
 
+                    let is_client = attributes.get("langdb.client_name").is_some();
+
                     let span = Span {
                         trace_id,
                         span_id,
@@ -444,10 +446,13 @@ impl TraceService for TraceServiceImpl {
                         run_id,
                     };
 
-                    if let Some(project_id) = project_id.as_ref() {
-                        if let Some(sender) = self.project_trace_senders.get(project_id).as_deref()
-                        {
-                            let _result = sender.send(span.clone());
+                    if is_client {
+                        if let Some(project_id) = project_id.as_ref() {
+                            if let Some(sender) =
+                                self.project_trace_senders.get(project_id).as_deref()
+                            {
+                                let _result = sender.send(span.clone());
+                            }
                         }
                     }
 
