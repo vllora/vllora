@@ -23,6 +23,7 @@ use crate::types::guardrails::service::GuardrailsEvaluator;
 use crate::usage::InMemoryStorage;
 use actix_web::{web, HttpRequest, HttpResponse};
 use bytes::Bytes;
+use opentelemetry::trace::TraceContextExt;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
@@ -80,6 +81,7 @@ pub(crate) async fn prepare_request(
                 tenant_name.to_string(),
                 run_id.clone(),
                 thread_id.clone(),
+                None,
             ),
         )))
         .await;
@@ -200,7 +202,10 @@ pub async fn create_chat_completion(
     project: web::ReqData<Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
     models_service: web::Data<Box<dyn ModelService>>,
+    context: web::ReqData<opentelemetry::Context>,
 ) -> Result<HttpResponse, GatewayApiError> {
+    let context_span = context.span();
+    let span_context = context_span.span_context();
     let _ = callback_handler
         .on_message(GatewayEvent::SpanStartEvent(Box::new(
             GatewaySpanStartEvent::new(
@@ -210,6 +215,11 @@ pub async fn create_chat_completion(
                 "default".to_string(),
                 Some(run_id.value()),
                 Some(thread_id.value()),
+                if span_context.is_valid() {
+                    Some(span_context.span_id().to_string())
+                } else {
+                    None
+                },
             ),
         )))
         .await;

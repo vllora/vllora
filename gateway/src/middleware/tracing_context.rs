@@ -51,6 +51,9 @@ where
         let context =
             propagator.extract_with_context(&Context::new(), &HeaderExtractor(req.headers()));
 
+        // TODO: Remove this once we have a better way to get the parent span ID
+        req.extensions_mut().insert(context.clone());
+
         let mut project_slug = None;
 
         if let Some(project) = &req.extensions().get::<Project>().cloned() {
