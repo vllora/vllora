@@ -1,11 +1,10 @@
 use actix_web::{web, HttpResponse, Result};
+use diesel::prelude::*;
+use diesel::sql_types::{BigInt, Nullable, Text};
 use langdb_core::metadata::pool::DbPool;
-use langdb_core::metadata::services::message::MessageService;
 use langdb_core::metadata::services::thread::ThreadService;
 use langdb_core::types::metadata::project::Project;
-use langdb_core::types::threads::{
-    MessageThread, MessageThreadWithTitle, PageOptions, PageOrderType,
-};
+use langdb_core::types::threads::{MessageThread, PageOptions, PageOrderType};
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize)]
@@ -19,9 +18,29 @@ pub struct UpdateThreadRequest {
     pub title: Option<String>,
 }
 
+#[derive(QueryableByName, Debug)]
+struct ThreadQueryResult {
+    #[diesel(sql_type = Text)]
+    thread_id: String,
+    #[diesel(sql_type = BigInt)]
+    start_time_us: i64,
+    #[diesel(sql_type = BigInt)]
+    finish_time_us: i64,
+    #[diesel(sql_type = Nullable<Text>)]
+    run_ids: Option<String>, // comma-separated
+}
+
+#[derive(Serialize)]
+pub struct ThreadSpan {
+    pub thread_id: String,
+    pub start_time_us: i64,
+    pub finish_time_us: i64,
+    pub run_ids: Vec<String>,
+}
+
 #[derive(Serialize)]
 pub struct ListThreadsResponse {
-    pub data: Vec<MessageThreadWithTitle>,
+    pub data: Vec<ThreadSpan>,
     pub pagination: Pagination,
 }
 
@@ -30,11 +49,6 @@ pub struct UpdateThreadResponse {
     pub thread: MessageThread,
 }
 
-#[derive(Deserialize)]
-pub struct ThreadMessagesQuery {
-    #[serde(default, flatten)]
-    pub page_options: Option<PageOptions>,
-}
 
 #[derive(Serialize)]
 pub struct Pagination {
@@ -43,63 +57,122 @@ pub struct Pagination {
     pub total: i64,
 }
 
-/// GET /threads - List threads for a single project ordered by last_message_date
+/// GET /threads - List threads (root spans with thread_id and no parent_span_id)
 pub async fn list_threads(
     db_pool: web::Data<DbPool>,
     query: web::Query<ListThreadsRequest>,
-    body: web::Json<ListThreadsRequest>,
     project: web::ReqData<Project>,
 ) -> Result<HttpResponse> {
-    let page_options = body
-        .page_options
-        .clone()
-        .unwrap_or(query.page_options.clone().unwrap_or(PageOptions {
-            order_by: vec![("created_at".to_string(), PageOrderType::Desc)],
-            limit: Some(50),
-            offset: None,
-        }));
+    let page_options: PageOptions = query.page_options.clone().unwrap_or(PageOptions {
+        order_by: vec![("created_at".to_string(), PageOrderType::Desc)],
+        limit: Some(50),
+        offset: None,
+    });
 
     // Get project from middleware
     let project = project.into_inner();
 
-    let thread_service = ThreadService::new(db_pool.get_ref().clone());
+    let limit = page_options.limit.unwrap_or(50) as i64;
+    let offset = page_options.offset.unwrap_or(0) as i64;
 
-    match thread_service.list_threads_by_project(&project.slug.to_string(), page_options.clone()) {
-        Ok(data) => {
-            let total = match thread_service.count_threads_by_project(&project.slug.to_string()) {
-                Ok(total) => total,
-                Err(e) => {
-                    tracing::error!(
-                        "Failed to count threads for project {}: {:?}",
-                        project.slug,
-                        e
-                    );
-                    return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
-                        "error": "Failed to count threads",
-                        "message": e.to_string()
-                    })));
-                }
-            };
-
-            let response = ListThreadsResponse {
-                data,
-                pagination: Pagination {
-                    offset: page_options.offset.unwrap_or(0),
-                    limit: page_options.limit.unwrap_or(50),
-                    total,
-                },
-            };
-
-            Ok(HttpResponse::Ok().json(response))
-        }
+    let mut conn = match db_pool.get() {
+        Ok(conn) => conn,
         Err(e) => {
-            tracing::error!("Failed to list threads for project {}: {:?}", project.id, e);
-            Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+            tracing::error!("Failed to get database connection: {:?}", e);
+            return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "Database connection error",
+                "message": e.to_string()
+            })));
+        }
+    };
+
+    // SQL query to group root spans by thread_id
+    let query_sql = r#"
+        SELECT
+            thread_id,
+            MIN(start_time_us) as start_time_us,
+            MAX(finish_time_us) as finish_time_us,
+            GROUP_CONCAT(DISTINCT run_id) as run_ids
+        FROM traces
+        WHERE project_id = ?
+            AND thread_id IS NOT NULL
+            AND parent_span_id IS NULL
+        GROUP BY thread_id
+        ORDER BY start_time_us DESC
+        LIMIT ? OFFSET ?
+    "#;
+
+    let results: Vec<ThreadQueryResult> = match diesel::sql_query(query_sql)
+        .bind::<Text, _>(&project.slug)
+        .bind::<BigInt, _>(limit)
+        .bind::<BigInt, _>(offset)
+        .load(&mut conn)
+    {
+        Ok(results) => results,
+        Err(e) => {
+            tracing::error!("Failed to query threads for project {}: {:?}", project.slug, e);
+            return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
                 "error": "Failed to list threads",
                 "message": e.to_string()
-            })))
+            })));
         }
+    };
+
+    // Count total unique thread_ids
+    let count_sql = r#"
+        SELECT COUNT(DISTINCT thread_id) as count
+        FROM traces
+        WHERE project_id = ?
+            AND thread_id IS NOT NULL
+            AND parent_span_id IS NULL
+    "#;
+
+    #[derive(QueryableByName)]
+    struct CountResult {
+        #[diesel(sql_type = BigInt)]
+        count: i64,
     }
+
+    let total: i64 = match diesel::sql_query(count_sql)
+        .bind::<Text, _>(&project.slug)
+        .load::<CountResult>(&mut conn)
+    {
+        Ok(mut counts) => counts.pop().map(|c| c.count).unwrap_or(0),
+        Err(e) => {
+            tracing::error!("Failed to count threads for project {}: {:?}", project.slug, e);
+            return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "Failed to count threads",
+                "message": e.to_string()
+            })));
+        }
+    };
+
+    // Convert results to ThreadSpan
+    let data: Vec<ThreadSpan> = results
+        .into_iter()
+        .map(|result| ThreadSpan {
+            thread_id: result.thread_id,
+            start_time_us: result.start_time_us,
+            finish_time_us: result.finish_time_us,
+            run_ids: result.run_ids
+                .map(|ids| ids.split(',')
+                    .filter(|s| !s.is_empty())
+                    .map(|s| s.to_string())
+                    .collect())
+                .unwrap_or_default(),
+        })
+        .collect();
+
+    let response = ListThreadsResponse {
+        data,
+        pagination: Pagination {
+            offset: page_options.offset.unwrap_or(0),
+            limit: page_options.limit.unwrap_or(50),
+            total,
+        },
+    };
+
+    Ok(HttpResponse::Ok().json(response))
 }
 
 /// PUT /threads/{id} - Update thread title
@@ -155,77 +228,3 @@ pub async fn update_thread(
     }
 }
 
-/// GET /threads/messages - Get messages for a thread
-pub async fn get_thread_messages(
-    thread_id: web::Path<uuid::Uuid>,
-    query: web::Query<ThreadMessagesQuery>,
-    db_pool: web::Data<DbPool>,
-    project: web::ReqData<Project>,
-) -> Result<HttpResponse> {
-    let page_options = query.page_options.clone();
-
-    let thread_id = thread_id.into_inner().to_string();
-
-    let thread_service = ThreadService::new(db_pool.get_ref().clone());
-
-    // First, verify the thread exists and belongs to the project
-    Ok(thread_service
-        .get_thread_by_id(&thread_id)
-        .and_then(|thread| {
-            if thread.project_id != project.slug {
-                return Ok(HttpResponse::NotFound().json(serde_json::json!({
-                    "error": "Thread not found",
-                    "message": "Thread does not belong to this project"
-                })));
-            }
-
-            let message_service = MessageService::new(db_pool.get_ref().clone());
-
-            Ok(
-                HttpResponse::Ok().json(message_service.get_thread_messages_with_metrics(
-                    &thread_id,
-                    page_options.unwrap_or(PageOptions {
-                        order_by: vec![("created_at".to_string(), PageOrderType::Asc)],
-                        limit: Some(50),
-                        offset: None,
-                    }),
-                )?),
-            )
-        })?)
-}
-
-/// GET /threads/{thread_id}/messages/{message_id} - Get message for a thread
-pub async fn get_thread_message(
-    path: web::Path<(uuid::Uuid, uuid::Uuid)>,
-    db_pool: web::Data<DbPool>,
-    project: web::ReqData<Project>,
-) -> Result<HttpResponse> {
-    let (thread_id, message_id) = path.into_inner();
-    let thread_id_str = thread_id.to_string();
-    let message_id_str = message_id.to_string();
-
-    let thread_service = ThreadService::new(db_pool.get_ref().clone());
-
-    // First, verify the thread exists and belongs to the project
-    Ok(thread_service
-        .get_thread_by_id(&thread_id_str)
-        .and_then(|thread| {
-            if thread.project_id != project.slug {
-                tracing::warn!(
-                    "Unauthorized access attempt: thread {} does not belong to project {}",
-                    thread_id,
-                    project.slug
-                );
-                return Ok(HttpResponse::NotFound().json(serde_json::json!({
-                    "error": "Thread not found",
-                    "message": "Thread does not belong to this project"
-                })));
-            }
-
-            let message_service = MessageService::new(db_pool.get_ref().clone());
-
-            Ok(HttpResponse::Ok().json(
-                message_service.get_thread_message_with_metrics(&thread_id_str, &message_id_str)?,
-            ))
-        })?)
-}

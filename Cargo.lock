@@ -250,6 +250,7 @@ dependencies = [
  "axum",
  "chrono",
  "clap",
+ "diesel",
  "directories",
  "dotenv",
  "futures",
