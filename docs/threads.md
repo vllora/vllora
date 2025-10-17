@@ -13,10 +13,19 @@
   - Body: `{ "page_options": { "limit": 50, "offset": 0 } }` (optional)
   - Returns: Same as GET endpoint
 
+- **GET /threads/{id}**: Get a specific thread by ID
+  - Path param: `id` (thread_id UUID)
+  - Returns: Thread object with metadata
+  - Response: `{ "thread": { ... MessageThread object ... } }`
+  - Errors:
+    - 404 if thread not found
+    - 404 if thread doesn't belong to the current project
+
 - **PUT /threads/{id}**: Update thread metadata
   - Path param: `id` (thread_id UUID)
   - Body: `{ "title": "New Title" }` (optional)
   - Returns: Updated thread object
+  - Response: `{ "thread": { ... MessageThread object ... } }`
 
 #### Notes
 - Auth and project context required (via X-Project-Id header or default project)
@@ -37,6 +46,8 @@ Thread response type: `ai-gateway/gateway/src/handlers/threads.rs::ThreadSpan`
 - `cost` (number) - Total cost summed from all spans with the same thread_id
 
 #### Response Format:
+
+**List Threads (GET /threads):**
 ```json
 {
   "data": [
@@ -53,6 +64,24 @@ Thread response type: `ai-gateway/gateway/src/handlers/threads.rs::ThreadSpan`
     "offset": 0,
     "limit": 50,
     "total": 145
+  }
+}
+```
+
+**Get Thread by ID (GET /threads/{id}):**
+```json
+{
+  "thread": {
+    "id": "f8b9c1d2-3456-7890-abcd-ef0123456789",
+    "project_id": "project-slug",
+    "title": "My Thread Title",
+    "user_id": "user-123",
+    "model_name": "openai/gpt-4",
+    "is_public": false,
+    "description": "Thread description",
+    "keywords": ["keyword1", "keyword2"],
+    "created_at": "2024-01-01T12:00:00Z",
+    "updated_at": "2024-01-01T12:30:00Z"
   }
 }
 ```

@@ -55,6 +55,11 @@ pub struct UpdateThreadResponse {
     pub thread: MessageThread,
 }
 
+#[derive(Serialize)]
+pub struct GetThreadResponse {
+    pub thread: MessageThread,
+}
+
 
 #[derive(Serialize)]
 pub struct Pagination {
@@ -198,6 +203,36 @@ pub async fn list_threads(
     };
 
     Ok(HttpResponse::Ok().json(response))
+}
+
+/// GET /threads/{id} - Get thread by ID
+pub async fn get_thread(
+    path: web::Path<uuid::Uuid>,
+    project: web::ReqData<Project>,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let thread_id = path.into_inner().to_string();
+
+    let thread_service = ThreadService::new(db_pool.get_ref().clone());
+
+    // Fetch the thread and verify it belongs to the project
+    match thread_service.get_thread_by_id(&thread_id) {
+        Ok(thread) => {
+            if thread.project_id != project.slug {
+                return Ok(HttpResponse::NotFound().json(serde_json::json!({
+                    "error": "Thread not found",
+                    "message": "Thread does not belong to this project"
+                })));
+            }
+
+            let response = GetThreadResponse { thread };
+            Ok(HttpResponse::Ok().json(response))
+        }
+        Err(_) => Ok(HttpResponse::NotFound().json(serde_json::json!({
+            "error": "Thread not found",
+            "message": format!("Thread with ID {} not found", thread_id)
+        }))),
+    }
 }
 
 /// PUT /threads/{id} - Update thread title

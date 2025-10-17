@@ -304,6 +304,7 @@ impl ApiServer {
                 web::scope("/threads")
                     .route("", web::get().to(threads::list_threads))
                     .route("", web::post().to(threads::list_threads))
+                    .route("/{id}", web::get().to(threads::get_thread))
                     .route("/{id}", web::put().to(threads::update_thread)),
             )
             .service(
