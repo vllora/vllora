@@ -22,7 +22,6 @@ use crate::types::gateway::Usage;
 use crate::types::guardrails::service::GuardrailsEvaluator;
 use crate::usage::InMemoryStorage;
 use actix_web::{web, HttpRequest, HttpResponse};
-use bytes::Bytes;
 use opentelemetry::trace::TraceContextExt;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -33,10 +32,7 @@ use super::can_execute_llm_for_request;
 use crate::handler::CallbackHandlerFn;
 use crate::metadata::services::model::ModelService;
 use crate::model::ModelMetadataFactory;
-use crate::types::gateway::{
-    ChatCompletionChunk, ChatCompletionChunkChoice, ChatCompletionDelta, ChatCompletionUsage,
-    CostCalculator,
-};
+use crate::types::gateway::{ChatCompletionDelta, CostCalculator};
 use crate::types::metadata::project::Project;
 use crate::types::threads::{CompletionsRunId, CompletionsThreadId};
 use crate::GatewayApiError;
@@ -290,94 +286,4 @@ pub async fn create_chat_completion(
         .execute(&executor_context, memory_storage, None, Some(&thread_id))
         .instrument(span.clone())
         .await
-}
-
-pub fn map_sso_event(
-    delta: Result<SSOChatEvent, GatewayApiError>,
-    model_name: String,
-) -> Result<Bytes, GatewayApiError> {
-    let model_name = model_name.clone();
-    let chunks = match delta {
-        Ok((None, usage, Some(finish_reason))) => {
-            let mut chunks = vec![];
-            chunks.push(ChatCompletionChunk {
-                id: uuid::Uuid::new_v4().to_string(),
-                object: "chat.completion.chunk".to_string(),
-                created: chrono::Utc::now().timestamp(),
-                model: model_name.clone(),
-                choices: vec![ChatCompletionChunkChoice {
-                    index: 0,
-                    delta: ChatCompletionDelta {
-                        content: None,
-                        role: None,
-                        tool_calls: None,
-                    },
-                    finish_reason: Some(finish_reason.clone()),
-                    logprobs: None,
-                }],
-                usage: None,
-            });
-
-            if let Some(u) = &usage {
-                chunks.push(ChatCompletionChunk {
-                    id: uuid::Uuid::new_v4().to_string(),
-                    object: "chat.completion.chunk".to_string(),
-                    created: chrono::Utc::now().timestamp(),
-                    model: model_name.clone(),
-                    choices: vec![],
-                    usage: Some(ChatCompletionUsage {
-                        prompt_tokens: u.input_tokens as i32,
-                        completion_tokens: u.output_tokens as i32,
-                        total_tokens: u.total_tokens as i32,
-                        prompt_tokens_details: u.prompt_tokens_details.clone(),
-                        completion_tokens_details: u.completion_tokens_details.clone(),
-                        cost: 0.0,
-                    }),
-                });
-            }
-
-            Ok(chunks)
-        }
-        Ok((delta, _, finish_reason)) => {
-            let chunk = ChatCompletionChunk {
-                id: uuid::Uuid::new_v4().to_string(),
-                object: "chat.completion.chunk".to_string(),
-                created: chrono::Utc::now().timestamp(),
-                model: model_name.clone(),
-                choices: delta.as_ref().map_or(vec![], |d| {
-                    vec![ChatCompletionChunkChoice {
-                        index: 0,
-                        delta: d.clone(),
-                        finish_reason,
-                        logprobs: None,
-                    }]
-                }),
-                usage: None,
-            };
-
-            Ok(vec![chunk])
-        }
-        Err(e) => Err(e),
-    };
-
-    let mut result_combined = String::new();
-    match chunks {
-        Ok(chunks) => {
-            for c in chunks {
-                let json_str = serde_json::to_string(&c).unwrap_or_else(|e| {
-                    format!("{{\"error\": \"Failed to serialize chunk: {e}\"}}")
-                });
-
-                result_combined.push_str(&format!("data: {json_str}\n\n"));
-            }
-        }
-        Err(e) => {
-            let result = serde_json::to_string(&HashMap::from([("error", e.to_string())]))
-                .unwrap_or_else(|e| format!("{{\"error\": \"Failed to serialize chunk: {e}\"}}"));
-
-            result_combined.push_str(&format!("data: {result}\n\n"));
-        }
-    }
-
-    Ok(Bytes::from(result_combined))
 }
