@@ -4,6 +4,7 @@ use actix_web::{
     dev::{Service, ServiceRequest, ServiceResponse, Transform},
     Error,
 };
+use opentelemetry::trace::TraceContextExt;
 use std::collections::HashMap;
 use std::future::{ready, Future, Ready};
 use std::pin::Pin;
@@ -12,7 +13,7 @@ use tracing::{field, Span};
 use tracing_futures::Instrument;
 use valuable::Valuable;
 
-use actix_web::HttpRequest;
+use actix_web::{HttpMessage, HttpRequest};
 
 use opentelemetry_semantic_conventions::trace::HTTP_RESPONSE_STATUS_CODE;
 
@@ -87,52 +88,75 @@ where
         let service = Rc::clone(&self.service);
 
         Box::pin(async move {
-            let span = tracing::info_span!(
-                target: "langdb::user_tracing::cloud_api",
-                "cloud_api_invoke",
-                http.request.method = req.method().to_string(),
-                http.request.path = req.path().to_string(),
-                http.request.header = JsonValue(
-                    &serde_json::to_value(
-                        req.headers()
-                            .iter()
-                            .filter(|(k, _)| !IGNORED_HEADERS.contains(&k.as_str()))
-                            .map(|(k, v)| (k.as_str(), v.to_str().unwrap_or_default())).collect::<HashMap<_, _>>()
-                    ).unwrap_or_default()
-                ).as_value(),
-                http.response.status_code = field::Empty,
-                status = field::Empty,
-                ip = get_client_ip(req.request())
-            );
+            let context = req.extensions().get::<opentelemetry::Context>().cloned();
 
-            async move {
-                // Proceed with the request if within limits
-                match service.call(req).await {
-                    Ok(ok_res) => {
-                        let span = Span::current();
-                        span.record(HTTP_RESPONSE_STATUS_CODE, ok_res.status().as_u16() as i64);
-                        span.record("status", ok_res.status().as_u16() as i64);
-                        if ok_res.status().is_server_error() {
-                            span.record(
-                                "status",
-                                ok_res
-                                    .status()
-                                    .canonical_reason()
-                                    .map(ToString::to_string)
-                                    .unwrap_or_default(),
-                            );
-                        };
-                        Ok(ok_res)
-                    }
-                    Err(err) => {
-                        let span = Span::current();
-                        span.record("status", format!("err {err:?}"));
-                        Err(err)
+            let execution_fn = async move || {
+                let span = tracing::info_span!(
+                    target: "langdb::user_tracing::cloud_api",
+                    "cloud_api_invoke",
+                    http.request.method = req.method().to_string(),
+                    http.request.path = req.path().to_string(),
+                    http.request.header = JsonValue(
+                        &serde_json::to_value(
+                            req.headers()
+                                .iter()
+                                .filter(|(k, _)| !IGNORED_HEADERS.contains(&k.as_str()))
+                                .map(|(k, v)| (k.as_str(), v.to_str().unwrap_or_default())).collect::<HashMap<_, _>>()
+                        ).unwrap_or_default()
+                    ).as_value(),
+                    http.response.status_code = field::Empty,
+                    status = field::Empty,
+                    ip = get_client_ip(req.request())
+                );
+
+                async move {
+                    // Proceed with the request if within limits
+                    match service.call(req).await {
+                        Ok(ok_res) => {
+                            let span = Span::current();
+                            span.record(HTTP_RESPONSE_STATUS_CODE, ok_res.status().as_u16() as i64);
+                            span.record("status", ok_res.status().as_u16() as i64);
+                            if ok_res.status().is_server_error() {
+                                span.record(
+                                    "status",
+                                    ok_res
+                                        .status()
+                                        .canonical_reason()
+                                        .map(ToString::to_string)
+                                        .unwrap_or_default(),
+                                );
+                            };
+                            Ok(ok_res)
+                        }
+                        Err(err) => {
+                            let span = Span::current();
+                            span.record("status", format!("err {err:?}"));
+                            Err(err)
+                        }
                     }
                 }
+                .instrument(span.clone())
+                .await
+            };
+
+            let is_remote_context = if let Some(context) = context {
+                context.span().span_context().is_remote()
+            } else {
+                false
+            };
+
+            if is_remote_context {
+                // If the context is remote, we don't need to start a new span for the run
+                execution_fn().await
+            } else {
+                // If the context is local, we need to start a new span for the run
+                let span = tracing::info_span!(
+                    target: "langdb::user_tracing::run",
+                    "run",
+                )
+                .clone();
+                execution_fn().instrument(span).await
             }
-            .instrument(span.clone())
-            .await
         })
     }
 }
