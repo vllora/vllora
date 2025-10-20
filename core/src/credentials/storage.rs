@@ -26,7 +26,7 @@ impl KeyStorage for ProviderKeyResolver {
             key_id.provider_name(),
             "api_key".to_string(), // Default type, can be enhanced later
             key.unwrap_or_default(),
-            Some(key_id.project_id()),
+            Some(key_id.project_slug()),
         );
 
         self.provider_service
@@ -41,7 +41,7 @@ impl KeyStorage for ProviderKeyResolver {
         key_id: ProviderCredentialsId,
     ) -> Result<Option<String>, KeyStorageError> {
         let provider_name = key_id.provider_name();
-        let project_id = key_id.project_id();
+        let project_id = key_id.project_slug();
 
         match self
             .provider_service
@@ -90,7 +90,7 @@ impl KeyStorage for ProviderKeyResolver {
             is_active: None,
         };
         let provider_name = key_id.provider_name();
-        let project_id = key_id.project_id();
+        let project_id = key_id.project_slug();
         self.provider_service
             .update_provider(&provider_name, Some(&project_id), update)
             .map_err(|e| KeyStorageError::StorageError(e.to_string()))?;
@@ -100,7 +100,7 @@ impl KeyStorage for ProviderKeyResolver {
 
     async fn delete_key(&self, key_id: ProviderCredentialsId) -> Result<(), KeyStorageError> {
         let provider_name = key_id.provider_name();
-        let project_id = key_id.project_id();
+        let project_id = key_id.project_slug();
 
         self.provider_service
             .delete_provider(&provider_name, Some(&project_id))

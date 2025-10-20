@@ -46,17 +46,17 @@ pub trait KeyStorage: Send + Sync {
 #[derive(Debug, Clone)]
 pub struct ProviderCredentialsId {
     value: String,
-    project_id: String,
+    project_slug: String,
     provider_name: String,
     #[allow(dead_code)]
     company_slug: String,
 }
 
 impl ProviderCredentialsId {
-    pub fn new(company_slug: String, provider_name: String, project_id: String) -> Self {
+    pub fn new(company_slug: String, provider_name: String, project_slug: String) -> Self {
         Self {
-            value: format!("{company_slug}_{provider_name}_{project_id}"),
-            project_id,
+            value: format!("{company_slug}_{provider_name}_{project_slug}"),
+            project_slug,
             provider_name,
             company_slug,
         }
@@ -66,8 +66,8 @@ impl ProviderCredentialsId {
         self.value.clone()
     }
 
-    pub fn project_id(&self) -> String {
-        self.project_id.clone()
+    pub fn project_slug(&self) -> String {
+        self.project_slug.clone()
     }
 
     pub fn provider_name(&self) -> String {
@@ -79,12 +79,12 @@ impl ProviderCredentialsId {
 pub fn construct_key_id(
     company_slug: &str,
     provider_name: &str,
-    project_id: &str,
+    project_slug: &str,
 ) -> ProviderCredentialsId {
     ProviderCredentialsId::new(
         company_slug.to_string(),
         provider_name.to_string(),
-        project_id.to_string(),
+        project_slug.to_string(),
     )
 }
 
