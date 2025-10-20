@@ -125,10 +125,6 @@ pub(crate) async fn prepare_request(
                                     e,
                                     model_event.event
                                 );
-                                tracing::error!(
-                                    "Usage is none for event {e:?}. Event: {event:?}",
-                                    event = model_event.event
-                                );
                                 (0.0, None)
                             }
                         };

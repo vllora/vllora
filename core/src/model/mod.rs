@@ -10,7 +10,7 @@ use crate::types::engine::{CompletionEngineParams, CompletionModelParams};
 use crate::types::engine::{CompletionModelDefinition, ModelTools, ModelType};
 use crate::types::gateway::{
     ChatCompletionContent, ChatCompletionMessage, ChatCompletionMessageWithFinishReason,
-    ContentType, Extra, GuardOrName, GuardWithParameters, Usage,
+    CompletionModelUsage, ContentType, Extra, GuardOrName, GuardWithParameters, Usage,
 };
 use crate::types::guardrails::service::GuardrailsEvaluator;
 use crate::types::guardrails::{GuardError, GuardResult, GuardStage};
@@ -438,6 +438,8 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
         tokio::spawn(
             async move {
                 let mut start_time = None;
+                let mut usage = CompletionModelUsage::default();
+                let mut total_cost = 0.0;
                 while let Some(Some(msg)) = rx.recv().await {
                     match &msg.event {
                         ModelEventType::LlmStart(_) => {
@@ -458,7 +460,9 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
                                     )
                                     .await
                                 {
-                                    Ok(c) => {
+                                    Ok(mut c) => {
+                                        total_cost += c.cost;
+                                        c.cost = total_cost;
                                         current_span
                                             .record("cost", serde_json::to_string(&c).unwrap());
                                     }
@@ -471,6 +475,7 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
                                     }
                                 };
 
+                                usage.add_usage(u);
                                 current_span.record("usage", serde_json::to_string(u).unwrap());
                             }
                         }

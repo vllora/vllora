@@ -43,7 +43,7 @@ pub trait KeyStorage: Send + Sync {
     async fn delete_key(&self, key_id: ProviderCredentialsId) -> Result<(), KeyStorageError>;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProviderCredentialsId {
     value: String,
     project_slug: String,
@@ -107,7 +107,7 @@ impl GatewayCredentials {
         Self::extract_key(provider_str, project_slug, tenant_name, key_storage).await
     }
 
-    pub(crate) async fn extract_key<T: serde::de::DeserializeOwned>(
+    pub async fn extract_key<T: serde::de::DeserializeOwned>(
         provider_name: &str,
         project_slug: &str,
         tenant_name: &str,

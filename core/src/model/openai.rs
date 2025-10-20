@@ -626,25 +626,25 @@ impl<C: Config> OpenAIModel<C> {
                     .tools
                     .get(tool_name.as_str())
                     .unwrap_or_else(|| panic!("Tool {tool_name} not found checked"));
-                if tool.stop_at_call() {
-                    let finish_reason = Self::map_finish_reason(
-                        &finish_reason.expect("Finish reason is already checked"),
-                    );
-                    tx.send(Some(ModelEvent::new(
-                        &span,
-                        ModelEventType::LlmStop(LLMFinishEvent {
-                            provider_name: SPAN_OPENAI.to_string(),
-                            model_name: self.params.model.clone().unwrap_or_default(),
-                            output: content.clone(),
-                            usage: Self::map_usage(response.usage.as_ref()),
-                            finish_reason: finish_reason.clone(),
-                            tool_calls: tool_calls.iter().map(Self::map_tool_call).collect(),
-                            credentials_ident: self.credentials_ident.clone(),
-                        }),
-                    )))
-                    .await
-                    .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+                let finish_reason = Self::map_finish_reason(
+                    &finish_reason.expect("Finish reason is already checked"),
+                );
+                tx.send(Some(ModelEvent::new(
+                    &span,
+                    ModelEventType::LlmStop(LLMFinishEvent {
+                        provider_name: SPAN_OPENAI.to_string(),
+                        model_name: self.params.model.clone().unwrap_or_default(),
+                        output: content.clone(),
+                        usage: Self::map_usage(response.usage.as_ref()),
+                        finish_reason: finish_reason.clone(),
+                        tool_calls: tool_calls.iter().map(Self::map_tool_call).collect(),
+                        credentials_ident: self.credentials_ident.clone(),
+                    }),
+                )))
+                .await
+                .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
+                if tool.stop_at_call() {
                     Ok(InnerExecutionResult::Finish(
                         ChatCompletionMessageWithFinishReason::new(
                             ChatCompletionMessage {
