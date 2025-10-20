@@ -91,7 +91,7 @@ pub fn construct_key_id(
 pub struct GatewayCredentials {}
 
 impl GatewayCredentials {
-    pub(crate) async fn extract_key_from_model<T: serde::de::DeserializeOwned>(
+    pub async fn extract_key_from_model<T: serde::de::DeserializeOwned>(
         model: &ModelMetadata,
         project_slug: &str,
         tenant_name: &str,
