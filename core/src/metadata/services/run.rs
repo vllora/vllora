@@ -132,6 +132,7 @@ impl RunService for RunServiceImpl {
               run_id,
               COALESCE(json_group_array(DISTINCT thread_id) FILTER (WHERE thread_id IS NOT NULL), '[]') as thread_ids_json,
               COALESCE(json_group_array(DISTINCT trace_id), '[]') as trace_ids_json,
+              COALESCE(json_group_array(DISTINCT span_id) FILTER (WHERE parent_span_id IS NULL), '[]') as root_span_ids_json,
               COALESCE(json_group_array(DISTINCT request_model) FILTER (WHERE request_model IS NOT NULL), '[]') as request_models_json,
               COALESCE(json_group_array(DISTINCT used_model) FILTER (WHERE used_model IS NOT NULL), '[]') as used_models_json,
               CAST(SUM(CASE WHEN operation_name = 'model_call' THEN 1 ELSE 0 END) AS BIGINT) as llm_calls,
@@ -148,6 +149,8 @@ impl RunService for RunServiceImpl {
                 run_id,
                 thread_id,
                 trace_id,
+                span_id,
+                parent_span_id,
                 operation_name,
                 CASE WHEN operation_name = 'api_invoke'
                   THEN json_extract(json_extract(attribute, '$.request'), '$.model')
@@ -213,6 +216,7 @@ impl RunService for RunServiceImpl {
               run_id,
               COALESCE(json_group_array(DISTINCT thread_id) FILTER (WHERE thread_id IS NOT NULL), '[]') as thread_ids_json,
               COALESCE(json_group_array(DISTINCT trace_id), '[]') as trace_ids_json,
+              COALESCE(json_group_array(DISTINCT span_id) FILTER (WHERE parent_span_id IS NULL), '[]') as root_span_ids_json,
               COALESCE(json_group_array(DISTINCT request_model) FILTER (WHERE request_model IS NOT NULL), '[]') as request_models_json,
               COALESCE(json_group_array(DISTINCT used_model) FILTER (WHERE used_model IS NOT NULL), '[]') as used_models_json,
               CAST(SUM(CASE WHEN operation_name = 'model_call' THEN 1 ELSE 0 END) AS BIGINT) as llm_calls,
@@ -229,6 +233,8 @@ impl RunService for RunServiceImpl {
                 run_id,
                 thread_id,
                 trace_id,
+                span_id,
+                parent_span_id,
                 operation_name,
                 CASE WHEN operation_name = 'api_invoke'
                   THEN json_extract(json_extract(attribute, '$.request'), '$.model')

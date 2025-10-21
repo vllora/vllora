@@ -15,6 +15,9 @@ pub struct RunUsageInformation {
     trace_ids_json: String,
 
     #[diesel(sql_type = Text)]
+    root_span_ids_json: String,
+
+    #[diesel(sql_type = Text)]
     request_models_json: String,
 
     #[diesel(sql_type = Text)]
@@ -57,6 +60,10 @@ impl RunUsageInformation {
         serde_json::from_str(&self.trace_ids_json).unwrap_or_default()
     }
 
+    pub fn root_span_ids(&self) -> Vec<String> {
+        serde_json::from_str(&self.root_span_ids_json).unwrap_or_default()
+    }
+
     pub fn request_models(&self) -> Vec<String> {
         serde_json::from_str(&self.request_models_json).unwrap_or_default()
     }
@@ -84,6 +91,7 @@ pub struct RunUsageResponse {
     pub run_id: Option<String>,
     pub thread_ids: Vec<String>,
     pub trace_ids: Vec<String>,
+    pub root_span_ids: Vec<String>,
     pub request_models: Vec<String>,
     pub used_models: Vec<String>,
     pub used_tools: Vec<String>,
@@ -103,6 +111,7 @@ impl From<RunUsageInformation> for RunUsageResponse {
             run_id: info.run_id.clone(),
             thread_ids: info.thread_ids(),
             trace_ids: info.trace_ids(),
+            root_span_ids: info.root_span_ids(),
             request_models: info.request_models(),
             used_models: info.used_models(),
             used_tools: info.used_tools(),
