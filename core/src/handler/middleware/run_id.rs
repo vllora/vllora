@@ -1,10 +1,10 @@
+use crate::telemetry::AdditionalContext;
+use crate::types::threads::CompletionsRunId;
 use actix_http::h1::Payload;
 use actix_web::dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform};
 use actix_web::web::BytesMut;
 use actix_web::HttpMessage;
 use futures::TryStreamExt;
-use langdb_core::telemetry::AdditionalContext;
-use langdb_core::types::threads::CompletionsRunId;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::future::{ready, Future, Ready};
