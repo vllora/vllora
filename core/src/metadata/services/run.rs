@@ -215,7 +215,7 @@ impl RunService for RunServiceImpl {
         let sql_query_str = format!("SELECT
               run_id,
               COALESCE(json_group_array(DISTINCT thread_id) FILTER (WHERE thread_id IS NOT NULL), '[]') as thread_ids_json,
-              COALESCE(json_group_array(DISTINCT trace_id), '[]') as trace_ids_json,
+              COALESCE(json_group_array(DISTINCT trace_id) FILTER (WHERE parent_span_id IS NULL), '[]') as trace_ids_json,
               COALESCE(json_group_array(DISTINCT span_id) FILTER (WHERE parent_span_id IS NULL), '[]') as root_span_ids_json,
               COALESCE(json_group_array(DISTINCT request_model) FILTER (WHERE request_model IS NOT NULL), '[]') as request_models_json,
               COALESCE(json_group_array(DISTINCT used_model) FILTER (WHERE used_model IS NOT NULL), '[]') as used_models_json,
