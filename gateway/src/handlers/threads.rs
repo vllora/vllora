@@ -7,6 +7,14 @@ use langdb_core::types::metadata::project::Project;
 use langdb_core::types::threads::{MessageThread, PageOptions, PageOrderType};
 use serde::{Deserialize, Serialize};
 
+/// Extract the first N words from a text string
+fn extract_first_n_words(text: &str, n: usize) -> String {
+    text.split_whitespace()
+        .take(n)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 #[derive(Deserialize)]
 pub struct ListThreadsRequest {
     #[serde(default, flatten)]
@@ -32,6 +40,8 @@ struct ThreadQueryResult {
     input_models: Option<String>, // comma-separated
     #[diesel(sql_type = diesel::sql_types::Double)]
     cost: f64,
+    #[diesel(sql_type = Nullable<Text>)]
+    title: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -42,6 +52,7 @@ pub struct ThreadSpan {
     pub run_ids: Vec<String>,
     pub input_models: Vec<String>,
     pub cost: f64,
+    pub title: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -106,7 +117,19 @@ pub async fn list_threads(
                 MAX(CASE WHEN parent_span_id IS NULL THEN finish_time_us END) as finish_time_us,
                 GROUP_CONCAT(DISTINCT CASE WHEN parent_span_id IS NULL THEN run_id END) as run_ids,
                 GROUP_CONCAT(DISTINCT json_extract(attribute, '$.model_name')) as input_models,
-                SUM(CAST(json_extract(attribute, '$.cost') AS REAL)) as cost
+                SUM(CAST(json_extract(attribute, '$.cost') AS REAL)) as cost,
+                (
+                    SELECT json_extract(value, '$.content')
+                    FROM traces t2,
+                         json_each(json_extract(t2.attribute, '$.request.messages'))
+                    WHERE t2.thread_id = traces.thread_id
+                        AND t2.project_id = ?
+                        AND t2.operation_name = 'api_invoke'
+                    ORDER BY
+                        t2.start_time_us ASC,
+                        CASE WHEN json_extract(value, '$.role') = 'user' THEN 0 ELSE 1 END
+                    LIMIT 1
+                ) as first_message_content
             FROM traces
             WHERE project_id = ?
                 AND thread_id IS NOT NULL
@@ -119,14 +142,16 @@ pub async fn list_threads(
             finish_time_us,
             run_ids,
             input_models,
-            COALESCE(cost, 0.0) as cost
+            COALESCE(cost, 0.0) as cost,
+            first_message_content as title
         FROM thread_aggregates
         ORDER BY start_time_us DESC
         LIMIT ? OFFSET ?
     "#;
 
     let results: Vec<ThreadQueryResult> = match diesel::sql_query(query_sql)
-        .bind::<Text, _>(&project.slug) // project_id filter
+        .bind::<Text, _>(&project.slug) // project_id for message subquery
+        .bind::<Text, _>(&project.slug) // project_id filter for main query
         .bind::<BigInt, _>(limit)
         .bind::<BigInt, _>(offset)
         .load(&mut conn)
@@ -173,23 +198,36 @@ pub async fn list_threads(
     // Convert results to ThreadSpan
     let data: Vec<ThreadSpan> = results
         .into_iter()
-        .map(|result| ThreadSpan {
-            thread_id: result.thread_id,
-            start_time_us: result.start_time_us,
-            finish_time_us: result.finish_time_us,
-            run_ids: result.run_ids
-                .map(|ids| ids.split(',')
-                    .filter(|s| !s.is_empty())
-                    .map(|s| s.to_string())
-                    .collect())
-                .unwrap_or_default(),
-            input_models: result.input_models
-                .map(|models| models.split(',')
-                    .filter(|s| !s.is_empty())
-                    .map(|s| s.to_string())
-                    .collect())
-                .unwrap_or_default(),
-            cost: result.cost,
+        .map(|result| {
+            // Extract first 10 words from title if available
+            let title = result.title.and_then(|t| {
+                let trimmed = t.trim();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(extract_first_n_words(trimmed, 10))
+                }
+            });
+
+            ThreadSpan {
+                thread_id: result.thread_id,
+                start_time_us: result.start_time_us,
+                finish_time_us: result.finish_time_us,
+                run_ids: result.run_ids
+                    .map(|ids| ids.split(',')
+                        .filter(|s| !s.is_empty())
+                        .map(|s| s.to_string())
+                        .collect())
+                    .unwrap_or_default(),
+                input_models: result.input_models
+                    .map(|models| models.split(',')
+                        .filter(|s| !s.is_empty())
+                        .map(|s| s.to_string())
+                        .collect())
+                    .unwrap_or_default(),
+                cost: result.cost,
+                title,
+            }
         })
         .collect();
 
