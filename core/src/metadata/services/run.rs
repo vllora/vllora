@@ -31,6 +31,8 @@ pub struct ListRunsQuery {
 pub trait RunService {
     fn list(&self, query: ListRunsQuery) -> Result<Vec<RunUsageInformation>, DatabaseError>;
     fn count(&self, query: ListRunsQuery) -> Result<i64, DatabaseError>;
+    fn list_root_runs(&self, query: ListRunsQuery) -> Result<Vec<RunUsageInformation>, DatabaseError>;
+    fn count_root_runs(&self, query: ListRunsQuery) -> Result<i64, DatabaseError>;
 }
 
 pub struct RunServiceImpl {
@@ -189,6 +191,96 @@ impl RunService for RunServiceImpl {
             "SELECT COUNT(DISTINCT run_id) as count
             FROM traces
             WHERE run_id IS NOT NULL
+              {}",
+            filter_clause
+        );
+
+        let result = sql_query(&sql_query_str)
+            .load::<CountResult>(&mut conn)
+            .map_err(DatabaseError::QueryError)?;
+
+        Ok(result.first().map(|r| r.count).unwrap_or(0))
+    }
+
+    fn list_root_runs(&self, query: ListRunsQuery) -> Result<Vec<RunUsageInformation>, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+
+        let filter_clause = self.build_filters(&query);
+
+        // This query only considers runs where there exists at least one root span
+        // (span with run_id but no parent_span_id)
+        let sql_query_str = format!("SELECT
+              run_id,
+              COALESCE(json_group_array(DISTINCT thread_id) FILTER (WHERE thread_id IS NOT NULL), '[]') as thread_ids_json,
+              COALESCE(json_group_array(DISTINCT trace_id), '[]') as trace_ids_json,
+              COALESCE(json_group_array(DISTINCT request_model) FILTER (WHERE request_model IS NOT NULL), '[]') as request_models_json,
+              COALESCE(json_group_array(DISTINCT used_model) FILTER (WHERE used_model IS NOT NULL), '[]') as used_models_json,
+              CAST(SUM(CASE WHEN operation_name = 'model_call' THEN 1 ELSE 0 END) AS BIGINT) as llm_calls,
+              SUM(COALESCE(CAST(json_extract(attribute, '$.cost') as REAL), 0)) as cost,
+              SUM(CASE WHEN operation_name != 'model_call' THEN json_extract(json_extract(attribute, '$.usage'), '$.input_tokens') END) AS input_tokens,
+              SUM(CASE WHEN operation_name != 'model_call' THEN json_extract(json_extract(attribute, '$.usage'), '$.output_tokens') END) AS output_tokens,
+              MIN(start_time_us) as start_time_us,
+              MAX(finish_time_us) as finish_time_us,
+              COALESCE(json_group_array(DISTINCT error_msg) FILTER (WHERE error_msg IS NOT NULL), '[]') as errors_json,
+              '[]' as used_tools_json,
+              '[]' as mcp_template_definition_ids_json
+            FROM (
+              SELECT
+                run_id,
+                thread_id,
+                trace_id,
+                operation_name,
+                CASE WHEN operation_name = 'api_invoke'
+                  THEN json_extract(json_extract(attribute, '$.request'), '$.model')
+                END as request_model,
+                CASE WHEN operation_name = 'model_call'
+                  THEN json_extract(attribute, '$.model_name')
+                END as used_model,
+                attribute,
+                start_time_us,
+                finish_time_us,
+                json_extract(attribute, '$.error') as error_msg
+              FROM traces
+              WHERE run_id IS NOT NULL
+                {}
+            )
+            WHERE run_id IN (
+              SELECT DISTINCT run_id
+              FROM traces
+              WHERE run_id IS NOT NULL
+                AND parent_span_id IS NULL
+                {}
+            )
+            GROUP BY run_id
+            ORDER BY start_time_us DESC
+            LIMIT ? OFFSET ?", filter_clause, filter_clause);
+
+        let results = sql_query(&sql_query_str)
+            .bind::<diesel::sql_types::BigInt, _>(query.limit)
+            .bind::<diesel::sql_types::BigInt, _>(query.offset)
+            .load::<RunUsageInformation>(&mut conn)
+            .map_err(DatabaseError::QueryError)?;
+
+        Ok(results)
+    }
+
+    fn count_root_runs(&self, query: ListRunsQuery) -> Result<i64, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+
+        let filter_clause = self.build_filters(&query);
+
+        #[derive(QueryableByName)]
+        struct CountResult {
+            #[diesel(sql_type = diesel::sql_types::BigInt)]
+            count: i64,
+        }
+
+        // Count distinct run_ids that have at least one root span
+        let sql_query_str = format!(
+            "SELECT COUNT(DISTINCT run_id) as count
+            FROM traces
+            WHERE run_id IS NOT NULL
+              AND parent_span_id IS NULL
               {}",
             filter_clause
         );
