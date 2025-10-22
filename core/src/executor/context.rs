@@ -1,4 +1,5 @@
 use crate::credentials::KeyStorage;
+use crate::mcp::McpConfig;
 use crate::model::ModelMetadataFactory;
 use crate::routing::interceptor::rate_limiter::RateLimiterService;
 use crate::types::guardrails::service::GuardrailsEvaluator;
@@ -26,6 +27,7 @@ pub struct ExecutorContext {
     pub rate_limiter_service: Arc<dyn RateLimiterService>,
     pub project_id: uuid::Uuid,
     pub key_storage: Arc<Box<dyn KeyStorage>>,
+    pub mcp_config: Option<McpConfig>,
 }
 
 // Implement Send + Sync since all fields are Send + Sync
@@ -44,6 +46,7 @@ impl ExecutorContext {
         rate_limiter_service: Arc<dyn RateLimiterService>,
         project_id: uuid::Uuid,
         key_storage: Arc<Box<dyn KeyStorage>>,
+        mcp_config: Option<McpConfig>,
     ) -> Result<Self, GatewayError> {
         let tags = extract_tags(req)?;
 
@@ -60,6 +63,7 @@ impl ExecutorContext {
             rate_limiter_service,
             project_id,
             key_storage,
+            mcp_config,
         })
     }
 

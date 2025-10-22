@@ -275,6 +275,7 @@ pub async fn create_chat_completion(
         Arc::new(rate_limiter_service),
         project.id,
         key_storage.into_inner(),
+        None,
     )?;
 
     let executor = RoutedExecutor::new(request.clone());

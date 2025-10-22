@@ -5,6 +5,7 @@ use crate::executor::chat_completion::stream_executor::{stream_chunks, StreamCac
 use crate::handler::ModelEventWithDetails;
 use crate::llm_gateway::message_mapper::MessageMapper;
 use crate::llm_gateway::provider::Provider;
+use crate::mcp::McpConfig;
 use crate::model::cached::CachedModel;
 use crate::model::mcp::get_tools;
 use crate::model::tools::{GatewayTool, Tool};
@@ -57,40 +58,10 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
 ) -> Result<ChatCompletionExecutionResult, GatewayApiError> {
     let span = Span::current();
 
-    let mut request_tools = vec![];
-    let mut tools_map = HashMap::new();
-    if let Some(tools) = &request_with_tools.request.tools {
-        for tool in tools {
-            request_tools.push(ModelTool {
-                name: tool.function.name.clone(),
-                description: tool.function.description.clone(),
-                passed_args: vec![],
-            });
-
-            tools_map.insert(
-                tool.function.name.clone(),
-                Box::new(GatewayTool { def: tool.clone() }) as Box<dyn Tool>,
-            );
-        }
-    }
-
-    let mcp_tools = match &request_with_tools.mcp_servers {
-        Some(tools) => get_tools(tools)
-            .await
-            .map_err(|e| GatewayError::McpServerError(Box::new(e)))?,
-        None => Vec::new(),
-    };
-
-    for server_tools in mcp_tools {
-        for tool in server_tools.tools {
-            tools_map.insert(tool.name(), Box::new(tool.clone()) as Box<dyn Tool>);
-            request_tools.push(tool.into());
-        }
-    }
-
     let (tx, mut rx) = tokio::sync::mpsc::channel::<Option<ModelEvent>>(1000);
 
-    let tools = ModelTools(request_tools);
+    let (tools, tools_map) =
+        resolve_mcp_tools(executor_context.mcp_config.as_ref(), request_with_tools).await?;
 
     let mut cached_instance = None;
     let mut cache_state = match request_with_tools.extra {
@@ -352,9 +323,106 @@ pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Cl
     })
 }
 
+pub async fn resolve_mcp_tools<T: Serialize + DeserializeOwned + Debug + Clone>(
+    mcp_config: Option<&McpConfig>,
+    request: &ChatCompletionRequestWithTools<T>,
+) -> Result<(ModelTools, HashMap<String, Box<dyn Tool>>), GatewayApiError> {
+    let mut request_tools = vec![];
+    let mut tools_map = HashMap::new();
+    if let Some(tools) = &request.request.tools {
+        for tool in tools {
+            request_tools.push(ModelTool {
+                name: tool.function.name.clone(),
+                description: tool.function.description.clone(),
+                passed_args: vec![],
+            });
+
+            tools_map.insert(
+                tool.function.name.clone(),
+                Box::new(GatewayTool { def: tool.clone() }) as Box<dyn Tool>,
+            );
+        }
+    }
+
+    let mcp_tools = match &request.mcp_servers {
+        Some(tools) => get_tools(tools)
+            .await
+            .map_err(|e| GatewayError::McpServerError(Box::new(e)))?,
+        None => Vec::new(),
+    };
+
+    for server_tools in mcp_tools {
+        for tool in server_tools.tools {
+            tools_map.insert(tool.name(), Box::new(tool.clone()) as Box<dyn Tool>);
+            request_tools.push(tool.into());
+        }
+    }
+
+    if let Some(mcp_config) = mcp_config {
+        for (_name, config) in mcp_config.mcp_servers.iter() {
+            let definition = config.to_mcp_definition();
+            let tools = get_tools(&[definition])
+                .await
+                .map_err(|e| GatewayError::McpServerError(Box::new(e)))?;
+            for server_tools in tools {
+                for tool in server_tools.tools {
+                    tools_map.insert(tool.name(), Box::new(tool.clone()) as Box<dyn Tool>);
+                    request_tools.push(tool.into());
+                }
+            }
+        }
+    }
+
+    Ok((ModelTools(request_tools), tools_map))
+}
+
 pub struct ResolvedModelContext {
     pub completion_model_definition: CompletionModelDefinition,
     pub model_instance: Box<dyn ModelInstance>,
     pub db_model: Model,
     pub llm_model: ModelMetadata,
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::model::mcp::get_tools;
+    use crate::types::mcp::{McpConfig, McpServerConfig};
+
+    #[tokio::test]
+    async fn test_resolve_mcp_tools_integration() {
+        // Connect to a real MCP service (for testing, use mcp.deepwiki.com)
+        let mcp_url = "https://mcp.deepwiki.com/mcp".to_string();
+        let mcp_server_config = McpServerConfig::new(mcp_url.clone());
+
+        let mut mcp_config = McpConfig::new();
+        mcp_config.add_server("deepwiki".to_string(), mcp_server_config);
+
+        // Attempt to fetch tools from the MCP config definition
+        let server_defs = mcp_config.to_mcp_definitions();
+
+        // get_tools returns a Vec of ToolServerTools
+        let tools_result = get_tools(&server_defs).await;
+        assert!(
+            tools_result.is_ok(),
+            "Fetching tools from DeepWiki MCP failed: {:?}",
+            tools_result.err()
+        );
+        let all_server_tools = tools_result.unwrap();
+        assert!(
+            !all_server_tools.is_empty(),
+            "No tools received from MCP server"
+        );
+
+        // Tools for each server should not be empty
+        let mut found_tools = false;
+        for server_tools in all_server_tools {
+            if !server_tools.tools.is_empty() {
+                found_tools = true;
+            }
+        }
+        assert!(
+            found_tools,
+            "No tools found from https://mcp.deepwiki.com/mcp"
+        );
+    }
 }

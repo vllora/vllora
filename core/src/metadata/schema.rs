@@ -128,6 +128,18 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    mcp_configs (id) {
+        id -> Text,
+        company_slug -> Text,
+        config -> Text,
+        tools -> Text,
+        tools_refreshed_at -> Nullable<Text>,
+        created_at -> Text,
+        updated_at -> Text,
+    }
+}
+
 diesel::joinable!(messages -> threads (thread_id));
 diesel::joinable!(provider_credentials -> projects (project_id));
 

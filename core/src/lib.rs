@@ -8,6 +8,7 @@ pub mod executor;
 pub mod handler;
 pub mod http;
 pub mod llm_gateway;
+pub mod mcp;
 pub mod metadata;
 pub mod model;
 pub mod models;

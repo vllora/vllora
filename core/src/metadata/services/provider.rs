@@ -314,6 +314,8 @@ impl ProviderServiceImpl {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::metadata::models::provider::NewProviderCredentialsDTO;
+    use crate::metadata::models::provider::UpdateProviderCredentialsDTO;
     use crate::metadata::test_utils::setup_test_database;
     use crate::types::credentials::{ApiKeyCredentials, Credentials};
 
