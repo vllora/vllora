@@ -137,6 +137,16 @@ CREATE TABLE providers (
     is_active INTEGER NOT NULL DEFAULT 1
 );
 
+CREATE TABLE mcp_configs (
+    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))) NOT NULL,
+    company_slug TEXT NOT NULL,
+    config TEXT NOT NULL,
+    tools TEXT NOT NULL,
+    tools_refreshed_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX idx_providers_provider_name ON providers(provider_name);
 CREATE INDEX idx_providers_is_active ON providers(is_active);
 CREATE INDEX idx_providers_priority ON providers(priority);
@@ -158,3 +168,5 @@ CREATE INDEX idx_models_model_type ON models(model_type);
 CREATE INDEX idx_models_owner_name ON models(owner_name);
 CREATE INDEX idx_models_deleted_at ON models(deleted_at);
 CREATE INDEX idx_models_project_id ON models(project_id);
+
+CREATE INDEX idx_mcp_configs_company_slug ON mcp_configs(company_slug);

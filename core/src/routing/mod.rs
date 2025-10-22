@@ -491,6 +491,8 @@ mod tests {
     use crate::model::DefaultModelMetadataFactory;
     use std::sync::Arc;
 
+    use crate::metadata::services::model::ModelServiceImpl;
+    use crate::metadata::test_utils::setup_test_database;
     use crate::routing::interceptor::InterceptorFactory;
 
     use super::*;
@@ -594,10 +596,12 @@ mod tests {
         };
 
         // Test routing
+
+        let db_pool = setup_test_database();
         let request = ChatCompletionRequest::default();
-        let model_metadata_factory = Arc::new(
-            Box::new(DefaultModelMetadataFactory::new(&[])) as Box<dyn ModelMetadataFactory>
-        );
+        let model_metadata_factory = Arc::new(Box::new(DefaultModelMetadataFactory::new(Arc::new(
+            Box::new(ModelServiceImpl::new(db_pool)),
+        ))) as Box<dyn ModelMetadataFactory>);
         let headers = HashMap::new();
 
         struct DummyFactory;
@@ -639,6 +643,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_llm_router_conditional() {
+        use crate::metadata::services::model::ModelServiceImpl;
         use crate::model::DefaultModelMetadataFactory;
         use crate::routing::interceptor::{
             Interceptor, InterceptorContext, InterceptorError, InterceptorFactory,
@@ -748,10 +753,11 @@ mod tests {
             targets: vec![],
             metrics_duration: None,
         };
+        let db_pool = setup_test_database();
         let factory = Box::new(MockFactory { result: true }) as Box<dyn InterceptorFactory>;
-        let model_metadata_factory = Arc::new(
-            Box::new(DefaultModelMetadataFactory::new(&[])) as Box<dyn ModelMetadataFactory>
-        );
+        let model_metadata_factory = Arc::new(Box::new(DefaultModelMetadataFactory::new(Arc::new(
+            Box::new(ModelServiceImpl::new(db_pool.clone())),
+        ))) as Box<dyn ModelMetadataFactory>);
         let result = router
             .route(
                 ChatCompletionRequest::default(),
@@ -768,9 +774,9 @@ mod tests {
         assert_eq!(routing_result.targets[0]["model"], "mock/model");
         // Failing guardrail
         let factory = Box::new(MockFactory { result: false }) as Box<dyn InterceptorFactory>;
-        let model_metadata_factory = Arc::new(
-            Box::new(DefaultModelMetadataFactory::new(&[])) as Box<dyn ModelMetadataFactory>
-        );
+        let model_metadata_factory = Arc::new(Box::new(DefaultModelMetadataFactory::new(Arc::new(
+            Box::new(ModelServiceImpl::new(db_pool)),
+        ))) as Box<dyn ModelMetadataFactory>);
         let result = router
             .route(
                 ChatCompletionRequest::default(),

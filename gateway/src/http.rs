@@ -2,8 +2,9 @@ use crate::callback_handler::init_callback_handler;
 use crate::config::{load_langdb_proxy_config, Config};
 use crate::cost::GatewayCostCalculator;
 use crate::guardrails::GuardrailsService;
-use crate::handlers::threads;
-use crate::handlers::{events, models, projects, providers, runs, session, spans, traces};
+use crate::handlers::{spans, threads};
+
+use crate::handlers::{events, mcp_configs, models, projects, providers, runs, session, traces};
 use crate::limit::GatewayLimitChecker;
 use crate::middleware::project::ProjectMiddleware;
 use crate::middleware::trace_logger::TraceLogger;
@@ -316,6 +317,19 @@ impl ApiServer {
                     .route("", web::post().to(events::send_events)),
             )
             .service(web::scope("/spans").route("", web::get().to(spans::list_spans)))
+            .service(
+                web::scope("/mcp-configs")
+                    .route("", web::get().to(mcp_configs::list_mcp_configs))
+                    .route("", web::post().to(mcp_configs::upsert_mcp_config))
+                    .route("/tools", web::post().to(mcp_configs::get_mcp_config_tools))
+                    .route("/{id}", web::get().to(mcp_configs::get_mcp_config))
+                    .route(
+                        "/{id}/tools",
+                        web::get().to(mcp_configs::update_mcp_config_tools),
+                    )
+                    .route("/{id}", web::delete().to(mcp_configs::delete_mcp_config))
+                    .route("/{id}", web::put().to(mcp_configs::update_mcp_config)),
+            )
             .service(web::scope("/traces").route("", web::get().to(traces::list_traces)))
             .service(
                 web::scope("/runs")
