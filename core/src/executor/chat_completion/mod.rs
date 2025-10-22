@@ -386,8 +386,8 @@ pub struct ResolvedModelContext {
 #[cfg(test)]
 mod tests {
     use crate::model::mcp::get_tools;
-    use crate::types::mcp::{McpConfig, McpServerConfig};
     use crate::types::mcp::McpServerType;
+    use crate::types::mcp::{McpConfig, McpServerConfig};
 
     #[tokio::test]
     async fn test_resolve_mcp_tools_integration() {

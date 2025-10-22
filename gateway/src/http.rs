@@ -326,6 +326,7 @@ impl ApiServer {
                 web::scope("/mcp-configs")
                     .route("", web::get().to(mcp_configs::list_mcp_configs))
                     .route("", web::post().to(mcp_configs::upsert_mcp_config))
+                    .route("/tools", web::post().to(mcp_configs::get_mcp_config_tools))
                     .route("/{id}", web::get().to(mcp_configs::get_mcp_config))
                     .route(
                         "/{id}/tools",

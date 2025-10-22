@@ -183,9 +183,9 @@ pub async fn update_mcp_config_tools(
     let mut tools_result = HashMap::new();
     for (name, config) in config.mcp_servers.iter() {
         let definition = config.to_mcp_definition();
-        let tools = get_tools(&[definition]).await.map_err(|e| {
-            GatewayApiError::CustomError(format!("Failed to fetch MCP tools: {}", e))
-        });
+        let tools = get_tools(&[definition])
+            .await
+            .map_err(|e| GatewayApiError::CustomError(format!("Failed to fetch MCP tools: {}", e)));
 
         match tools {
             Ok(tools) => {
@@ -207,6 +207,34 @@ pub async fn update_mcp_config_tools(
     service.update_tools(&id, &tools_result).map_err(|e| {
         GatewayApiError::CustomError(format!("Failed to update MCP config tools: {}", e))
     })?;
+
+    Ok(HttpResponse::Ok().json(tools_result))
+}
+
+pub async fn get_mcp_config_tools(
+    json: web::Json<McpConfig>,
+) -> Result<HttpResponse, GatewayApiError> {
+    let mut tools_result = HashMap::new();
+    for (name, config) in json.mcp_servers.iter() {
+        let definition = config.to_mcp_definition();
+        let tools = get_tools(&[definition])
+            .await
+            .map_err(|e| GatewayApiError::CustomError(format!("Failed to fetch MCP tools: {}", e)));
+        match tools {
+            Ok(tools) => {
+                let mut tools_list = vec![];
+                for server_tools in tools {
+                    for tool in server_tools.tools {
+                        tools_list.push(tool.0);
+                    }
+                }
+                tools_result.insert(name.clone(), tools_list);
+            }
+            Err(e) => {
+                tracing::error!("Failed to fetch MCP tools: {}", e);
+            }
+        }
+    }
 
     Ok(HttpResponse::Ok().json(tools_result))
 }
