@@ -22,7 +22,6 @@ use crate::types::gateway::Usage;
 use crate::types::guardrails::service::GuardrailsEvaluator;
 use crate::usage::InMemoryStorage;
 use actix_web::{web, HttpRequest, HttpResponse};
-use opentelemetry::trace::TraceContextExt;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
@@ -193,29 +192,8 @@ pub async fn create_chat_completion(
     thread_id: web::ReqData<CompletionsThreadId>,
     project: web::ReqData<Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
-    models_service: web::Data<Box<dyn ModelService>>,
-    context: web::ReqData<opentelemetry::Context>,
+    models_service: web::Data<Box<dyn ModelService>>
 ) -> Result<HttpResponse, GatewayApiError> {
-    let context_span = context.span();
-    let span_context = context_span.span_context();
-    let _ = callback_handler
-        .on_message(GatewayEvent::SpanStartEvent(Box::new(
-            GatewaySpanStartEvent::new(
-                &Span::current(),
-                "cloud_api_invoke".to_string(),
-                project.slug.to_string(),
-                "default".to_string(),
-                Some(run_id.value()),
-                Some(thread_id.value()),
-                if span_context.is_valid() {
-                    Some(span_context.span_id().to_string())
-                } else {
-                    None
-                },
-            ),
-        )))
-        .await;
-
     can_execute_llm_for_request(&req).await?;
 
     let span = Span::or_current(tracing::info_span!(
