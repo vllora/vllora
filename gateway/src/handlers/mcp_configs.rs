@@ -8,10 +8,10 @@ use langdb_core::GatewayApiError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+use langdb_core::types::GatewayTenant;
 
 #[derive(Deserialize)]
 pub struct CreateMcpConfigRequest {
-    pub company_slug: String,
     pub config: McpConfig,
 }
 
@@ -91,11 +91,12 @@ pub async fn get_mcp_config(
 pub async fn upsert_mcp_config(
     req: web::Json<CreateMcpConfigRequest>,
     db_pool: web::Data<DbPool>,
+    gateway_tenant: web::ReqData<GatewayTenant>,
 ) -> Result<HttpResponse, GatewayApiError> {
     let service = McpConfigService::new(db_pool.get_ref().clone());
 
     let db_config = service
-        .upsert(req.company_slug.clone(), &req.config)
+        .upsert(gateway_tenant.name.clone(), &req.config)
         .map_err(|e| GatewayApiError::CustomError(format!("Failed to upsert MCP config: {}", e)))?;
 
     Ok(HttpResponse::Ok().json(McpConfigResponse::from(db_config)))
