@@ -387,12 +387,13 @@ pub struct ResolvedModelContext {
 mod tests {
     use crate::model::mcp::get_tools;
     use crate::types::mcp::{McpConfig, McpServerConfig};
+    use crate::types::mcp::McpServerType;
 
     #[tokio::test]
     async fn test_resolve_mcp_tools_integration() {
         // Connect to a real MCP service (for testing, use mcp.deepwiki.com)
         let mcp_url = "https://mcp.deepwiki.com/mcp".to_string();
-        let mcp_server_config = McpServerConfig::new(mcp_url.clone());
+        let mcp_server_config = McpServerConfig::new(mcp_url.clone(), McpServerType::Http);
 
         let mut mcp_config = McpConfig::new();
         mcp_config.add_server("deepwiki".to_string(), mcp_server_config);

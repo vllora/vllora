@@ -197,11 +197,12 @@ mod tests {
     use crate::types::mcp::{McpConfig, McpServerConfig};
     use rmcp::model::JsonObject;
     use std::collections::HashMap;
+    use crate::types::mcp::McpServerType;
 
     #[test]
     fn test_new_mcp_config_from_domain_model() {
         let mut config = McpConfig::new();
-        let server_config = McpServerConfig::new("http://localhost:3000/mcp".to_string());
+        let server_config = McpServerConfig::new("http://localhost:3000/mcp".to_string(), McpServerType::Http);
         config.add_server("test-server".to_string(), server_config);
 
         let new_config =
@@ -216,7 +217,7 @@ mod tests {
     #[test]
     fn test_new_mcp_config_with_tools() {
         let mut config = McpConfig::new();
-        let server_config = McpServerConfig::new("http://localhost:3000/mcp".to_string());
+        let server_config = McpServerConfig::new("http://localhost:3000/mcp".to_string(), McpServerType::Http);
         config.add_server("test-server".to_string(), server_config);
 
         let tools = HashMap::from([(
@@ -316,7 +317,7 @@ mod tests {
         };
 
         let mut new_mcp_config = McpConfig::new();
-        let server_config = McpServerConfig::new("http://updated:3000/mcp".to_string());
+        let server_config = McpServerConfig::new("http://updated:3000/mcp".to_string(), McpServerType::Http);
         new_mcp_config.add_server("updated-server".to_string(), server_config);
 
         let old_updated_at = config.updated_at.clone();

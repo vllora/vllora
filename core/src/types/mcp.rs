@@ -13,11 +13,21 @@ pub struct McpConfig {
 /// Configuration for a single MCP server
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct McpServerConfig {
+    #[serde(rename = "type", default)]
+    pub r#type: McpServerType,
     /// URL of the MCP server
     pub url: String,
     /// Optional headers to include in requests
     #[serde(skip_serializing_if = "Option::is_none")]
     pub headers: Option<HashMap<String, String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum McpServerType {
+    #[default]
+    Http,
+    Sse,
 }
 
 impl McpConfig {
@@ -71,15 +81,16 @@ impl Default for McpConfig {
 
 impl McpServerConfig {
     /// Creates a new MCP server configuration
-    pub fn new(url: String) -> Self {
-        Self { url, headers: None }
+    pub fn new(url: String, r#type: McpServerType) -> Self {
+        Self { url, headers: None, r#type }
     }
 
     /// Creates a new MCP server configuration with headers
-    pub fn with_headers(url: String, headers: HashMap<String, String>) -> Self {
+    pub fn with_headers(url: String, headers: HashMap<String, String>, r#type: McpServerType) -> Self {
         Self {
             url,
             headers: Some(headers),
+            r#type,
         }
     }
 
@@ -95,10 +106,21 @@ impl McpServerConfig {
 
     /// Converts this McpServerConfig to an McpDefinition with HTTP transport
     pub fn to_mcp_definition(&self) -> McpDefinition {
-        let transport_type = McpTransportType::Http {
-            server_url: self.url.clone(),
-            headers: self.headers.clone().unwrap_or_default(),
-            env: None,
+        let transport_type = match self.r#type {
+            McpServerType::Http => {
+                McpTransportType::Http {
+                    server_url: self.url.clone(),
+                    headers: self.headers.clone().unwrap_or_default(),
+                    env: None,
+                }
+            }
+            McpServerType::Sse => {
+                McpTransportType::Sse {
+                    server_url: self.url.clone(),
+                    headers: self.headers.clone().unwrap_or_default(),
+                    env: None,
+                }
+            }
         };
 
         McpDefinition {
@@ -148,7 +170,7 @@ mod tests {
 
     #[test]
     fn test_mcp_server_config_creation() {
-        let server_config = McpServerConfig::new("http://localhost:3000/mcp".to_string());
+        let server_config = McpServerConfig::new("http://localhost:3000/mcp".to_string(), McpServerType::Http);
         assert_eq!(server_config.url, "http://localhost:3000/mcp");
         assert!(server_config.headers.is_none());
     }
@@ -159,7 +181,7 @@ mod tests {
         headers.insert("API_KEY".to_string(), "value".to_string());
 
         let server_config =
-            McpServerConfig::with_headers("http://localhost:3000/mcp".to_string(), headers.clone());
+            McpServerConfig::with_headers("http://localhost:3000/mcp".to_string(), headers.clone(), McpServerType::Http);
 
         assert_eq!(server_config.url, "http://localhost:3000/mcp");
         assert_eq!(server_config.headers, Some(headers));
@@ -168,7 +190,7 @@ mod tests {
     #[test]
     fn test_mcp_config_add_server() {
         let mut config = McpConfig::new();
-        let server_config = McpServerConfig::new("http://localhost:3000/mcp".to_string());
+        let server_config = McpServerConfig::new("http://localhost:3000/mcp".to_string(), McpServerType::Http);
 
         config.add_server("server-name".to_string(), server_config);
 
@@ -186,7 +208,7 @@ mod tests {
         headers.insert("API_KEY".to_string(), "value".to_string());
 
         let server_config =
-            McpServerConfig::with_headers("http://localhost:3000/mcp".to_string(), headers);
+            McpServerConfig::with_headers("http://localhost:3000/mcp".to_string(), headers, McpServerType::Http);
 
         config.add_server("server-name".to_string(), server_config);
 
@@ -244,7 +266,7 @@ mod tests {
         headers.insert("API_KEY".to_string(), "value".to_string());
 
         let server_config =
-            McpServerConfig::with_headers("http://localhost:3000/mcp".to_string(), headers);
+            McpServerConfig::with_headers("http://localhost:3000/mcp".to_string(), headers, McpServerType::Http);
 
         let definition = server_config.to_mcp_definition();
 
@@ -273,7 +295,7 @@ mod tests {
         headers.insert("API_KEY".to_string(), "value".to_string());
 
         let server_config =
-            McpServerConfig::with_headers("http://localhost:3000/mcp".to_string(), headers);
+            McpServerConfig::with_headers("http://localhost:3000/mcp".to_string(), headers, McpServerType::Http);
 
         let definition = server_config.to_mcp_definition_sse();
 
@@ -297,7 +319,7 @@ mod tests {
         headers.insert("API_KEY".to_string(), "value".to_string());
 
         let server_config =
-            McpServerConfig::with_headers("ws://localhost:3000/mcp".to_string(), headers);
+            McpServerConfig::with_headers("ws://localhost:3000/mcp".to_string(), headers, McpServerType::Http);
 
         let definition = server_config.to_mcp_definition_ws();
 
@@ -317,7 +339,7 @@ mod tests {
 
     #[test]
     fn test_mcp_server_config_to_definition_no_headers() {
-        let server_config = McpServerConfig::new("http://localhost:3000/mcp".to_string());
+        let server_config = McpServerConfig::new("http://localhost:3000/mcp".to_string(), McpServerType::Http);
 
         let definition = server_config.to_mcp_definition();
 
@@ -342,12 +364,12 @@ mod tests {
         let mut headers1 = HashMap::new();
         headers1.insert("API_KEY".to_string(), "value1".to_string());
         let server1 =
-            McpServerConfig::with_headers("http://server1:3000/mcp".to_string(), headers1);
+            McpServerConfig::with_headers("http://server1:3000/mcp".to_string(), headers1, McpServerType::Http);
 
         let mut headers2 = HashMap::new();
         headers2.insert("API_KEY".to_string(), "value2".to_string());
         let server2 =
-            McpServerConfig::with_headers("http://server2:3000/mcp".to_string(), headers2);
+            McpServerConfig::with_headers("http://server2:3000/mcp".to_string(), headers2, McpServerType::Http);
 
         config.add_server("server1".to_string(), server1);
         config.add_server("server2".to_string(), server2);

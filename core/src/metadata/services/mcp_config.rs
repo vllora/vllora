@@ -272,11 +272,12 @@ mod tests {
     use rmcp::model::JsonObject;
     use std::collections::HashMap;
     use serde_json::Value;
-
+    use crate::types::mcp::McpServerType;
+    
     #[test]
     fn test_mcp_config_creation_validation() {
         let mut config = McpConfig::new();
-        let server_config = McpServerConfig::new("http://localhost:3000/mcp".to_string());
+        let server_config = McpServerConfig::new("http://localhost:3000/mcp".to_string(), McpServerType::Http);
         config.add_server("test-server".to_string(), server_config);
 
         // Test that we can create a new config struct
@@ -291,7 +292,7 @@ mod tests {
     #[test]
     fn test_update_mcp_config_validation() {
         let mut config = McpConfig::new();
-        let server_config = McpServerConfig::new("http://localhost:3000/mcp".to_string());
+        let server_config = McpServerConfig::new("http://localhost:3000/mcp".to_string(), McpServerType::Http);
         config.add_server("test-server".to_string(), server_config);
 
         let update = UpdateMcpConfig::from_mcp_config(&config).unwrap();
@@ -318,7 +319,7 @@ mod tests {
     #[test]
     fn test_upsert_functionality() {
         let mut config = McpConfig::new();
-        let server_config = McpServerConfig::new("http://localhost:3000/mcp".to_string());
+        let server_config = McpServerConfig::new("http://localhost:3000/mcp".to_string(), McpServerType::Http);
         config.add_server("test-server".to_string(), server_config);
 
         // Test upsert creation (should create new)

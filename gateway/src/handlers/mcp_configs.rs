@@ -185,15 +185,23 @@ pub async fn update_mcp_config_tools(
         let definition = config.to_mcp_definition();
         let tools = get_tools(&[definition]).await.map_err(|e| {
             GatewayApiError::CustomError(format!("Failed to fetch MCP tools: {}", e))
-        })?;
-        let mut tools_list = vec![];
-        for server_tools in tools {
-            for tool in server_tools.tools {
-                tools_list.push(tool.0);
+        });
+
+        match tools {
+            Ok(tools) => {
+                let mut tools_list = vec![];
+                for server_tools in tools {
+                    for tool in server_tools.tools {
+                        tools_list.push(tool.0);
+                    }
+                }
+
+                tools_result.insert(name.clone(), tools_list);
+            }
+            Err(e) => {
+                tracing::error!("Failed to fetch MCP tools: {}", e);
             }
         }
-
-        tools_result.insert(name.clone(), tools_list);
     }
 
     service.update_tools(&id, &tools_result).map_err(|e| {
