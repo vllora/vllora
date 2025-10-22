@@ -21,6 +21,7 @@ pub enum Operation {
     Run,
     Agent,
     Task,
+    Tool,
     Other(String),
 }
 
@@ -34,6 +35,7 @@ impl<'de> Deserialize<'de> for Operation {
             "run" => Operation::Run,
             "agent" => Operation::Agent,
             "task" => Operation::Task,
+            "tool" => Operation::Tool,
             other => Operation::Other(other.to_string()),
         })
     }
@@ -138,6 +140,35 @@ pub async fn send_events(
                             .unwrap_or_default()
                             .as_millis() as u64,
                         name,
+                    }
+                }
+                Operation::Tool => {
+                    let tool_name = custom_event
+                        .attributes
+                        .get("langdb.tool_name")
+                        .unwrap_or_default()
+                        .as_str()
+                        .map(|s| s.to_string())
+                        .unwrap_or_default();
+                    Event::ToolCallStart {
+                        run_context: EventRunContext {
+                            run_id,
+                            thread_id,
+                            span_id: Some(custom_event.span_id),
+                            parent_span_id: custom_event.parent_span_id,
+                        },
+                        timestamp: std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_millis() as u64,
+                        tool_call_name: tool_name,
+                        tool_call_id: custom_event
+                            .attributes
+                            .get("langdb.tool_call_id")
+                            .unwrap_or_default()
+                            .as_str()
+                            .map(|s| s.to_string())
+                            .unwrap_or_default(),
                     }
                 }
                 Operation::Other(operation) => {

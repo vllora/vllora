@@ -4,11 +4,11 @@ use langdb_core::metadata::services::mcp_config::McpConfigService;
 use langdb_core::model::mcp::get_tools;
 use langdb_core::rmcp::model::Tool;
 use langdb_core::types::mcp::McpConfig;
+use langdb_core::types::GatewayTenant;
 use langdb_core::GatewayApiError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use langdb_core::types::GatewayTenant;
 
 #[derive(Deserialize)]
 pub struct CreateMcpConfigRequest {

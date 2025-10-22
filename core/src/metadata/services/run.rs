@@ -31,7 +31,10 @@ pub struct ListRunsQuery {
 pub trait RunService {
     fn list(&self, query: ListRunsQuery) -> Result<Vec<RunUsageInformation>, DatabaseError>;
     fn count(&self, query: ListRunsQuery) -> Result<i64, DatabaseError>;
-    fn list_root_runs(&self, query: ListRunsQuery) -> Result<Vec<RunUsageInformation>, DatabaseError>;
+    fn list_root_runs(
+        &self,
+        query: ListRunsQuery,
+    ) -> Result<Vec<RunUsageInformation>, DatabaseError>;
     fn count_root_runs(&self, query: ListRunsQuery) -> Result<i64, DatabaseError>;
 }
 
@@ -205,7 +208,10 @@ impl RunService for RunServiceImpl {
         Ok(result.first().map(|r| r.count).unwrap_or(0))
     }
 
-    fn list_root_runs(&self, query: ListRunsQuery) -> Result<Vec<RunUsageInformation>, DatabaseError> {
+    fn list_root_runs(
+        &self,
+        query: ListRunsQuery,
+    ) -> Result<Vec<RunUsageInformation>, DatabaseError> {
         let mut conn = self.db_pool.get()?;
 
         let filter_clause = self.build_filters(&query);

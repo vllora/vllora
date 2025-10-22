@@ -51,7 +51,6 @@ pub struct GetThreadResponse {
     pub thread: ThreadSpan,
 }
 
-
 #[derive(Serialize)]
 pub struct Pagination {
     pub offset: usize,
@@ -81,7 +80,11 @@ pub async fn list_threads(
     let results = match thread_service.list_thread_spans(&project.slug, limit, offset) {
         Ok(results) => results,
         Err(e) => {
-            tracing::error!("Failed to query threads for project {}: {:?}", project.slug, e);
+            tracing::error!(
+                "Failed to query threads for project {}: {:?}",
+                project.slug,
+                e
+            );
             return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
                 "error": "Failed to list threads",
                 "message": e.to_string()
@@ -93,7 +96,11 @@ pub async fn list_threads(
     let total = match thread_service.count_thread_spans(&project.slug) {
         Ok(count) => count,
         Err(e) => {
-            tracing::error!("Failed to count threads for project {}: {:?}", project.slug, e);
+            tracing::error!(
+                "Failed to count threads for project {}: {:?}",
+                project.slug,
+                e
+            );
             return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
                 "error": "Failed to count threads",
                 "message": e.to_string()
@@ -118,17 +125,24 @@ pub async fn list_threads(
                 thread_id: result.thread_id,
                 start_time_us: result.start_time_us,
                 finish_time_us: result.finish_time_us,
-                run_ids: result.run_ids
-                    .map(|ids| ids.split(',')
-                        .filter(|s| !s.is_empty())
-                        .map(|s| s.to_string())
-                        .collect())
+                run_ids: result
+                    .run_ids
+                    .map(|ids| {
+                        ids.split(',')
+                            .filter(|s| !s.is_empty())
+                            .map(|s| s.to_string())
+                            .collect()
+                    })
                     .unwrap_or_default(),
-                input_models: result.input_models
-                    .map(|models| models.split(',')
-                        .filter(|s| !s.is_empty())
-                        .map(|s| s.to_string())
-                        .collect())
+                input_models: result
+                    .input_models
+                    .map(|models| {
+                        models
+                            .split(',')
+                            .filter(|s| !s.is_empty())
+                            .map(|s| s.to_string())
+                            .collect()
+                    })
                     .unwrap_or_default(),
                 cost: result.cost,
                 title,
@@ -169,7 +183,12 @@ pub async fn get_thread(
             })));
         }
         Err(e) => {
-            tracing::error!("Failed to query thread {} for project {}: {:?}", thread_id, project.slug, e);
+            tracing::error!(
+                "Failed to query thread {} for project {}: {:?}",
+                thread_id,
+                project.slug,
+                e
+            );
             return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
                 "error": "Failed to get thread",
                 "message": e.to_string()
@@ -190,23 +209,32 @@ pub async fn get_thread(
         thread_id: result.thread_id,
         start_time_us: result.start_time_us,
         finish_time_us: result.finish_time_us,
-        run_ids: result.run_ids
-            .map(|ids| ids.split(',')
-                .filter(|s| !s.is_empty())
-                .map(|s| s.to_string())
-                .collect())
+        run_ids: result
+            .run_ids
+            .map(|ids| {
+                ids.split(',')
+                    .filter(|s| !s.is_empty())
+                    .map(|s| s.to_string())
+                    .collect()
+            })
             .unwrap_or_default(),
-        input_models: result.input_models
-            .map(|models| models.split(',')
-                .filter(|s| !s.is_empty())
-                .map(|s| s.to_string())
-                .collect())
+        input_models: result
+            .input_models
+            .map(|models| {
+                models
+                    .split(',')
+                    .filter(|s| !s.is_empty())
+                    .map(|s| s.to_string())
+                    .collect()
+            })
             .unwrap_or_default(),
         cost: result.cost,
         title,
     };
 
-    let response = GetThreadResponse { thread: thread_span };
+    let response = GetThreadResponse {
+        thread: thread_span,
+    };
     Ok(HttpResponse::Ok().json(response))
 }
 
@@ -227,8 +255,13 @@ pub async fn update_thread(
         Ok(Some(thread_span)) => {
             // Thread exists, update the span's title attribute
             if let Some(ref title) = req.title {
-                if let Err(e) = thread_service.update_thread_title(&thread_id, &project.slug, title) {
-                    tracing::error!("Failed to update span attribute for thread {}: {:?}", thread_id, e);
+                if let Err(e) = thread_service.update_thread_title(&thread_id, &project.slug, title)
+                {
+                    tracing::error!(
+                        "Failed to update span attribute for thread {}: {:?}",
+                        thread_id,
+                        e
+                    );
                     return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
                         "error": "Failed to update thread title",
                         "message": e.to_string()
@@ -241,11 +274,7 @@ pub async fn update_thread(
             let first_model = thread_span
                 .input_models
                 .as_ref()
-                .and_then(|models| {
-                    models.split(',')
-                        .next()
-                        .map(|s| s.trim().to_string())
-                })
+                .and_then(|models| models.split(',').next().map(|s| s.trim().to_string()))
                 .unwrap_or_default();
 
             let response = UpdateThreadResponse {
@@ -262,12 +291,10 @@ pub async fn update_thread(
             };
             Ok(HttpResponse::Ok().json(response))
         }
-        Ok(None) => {
-            Ok(HttpResponse::NotFound().json(serde_json::json!({
-                "error": "Thread not found",
-                "message": format!("Thread with ID {} not found", thread_id)
-            })))
-        }
+        Ok(None) => Ok(HttpResponse::NotFound().json(serde_json::json!({
+            "error": "Thread not found",
+            "message": format!("Thread with ID {} not found", thread_id)
+        }))),
         Err(e) => {
             tracing::error!("Failed to verify thread {}: {:?}", thread_id, e);
             Ok(HttpResponse::InternalServerError().json(serde_json::json!({
@@ -277,4 +304,3 @@ pub async fn update_thread(
         }
     }
 }
-
