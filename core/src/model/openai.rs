@@ -843,6 +843,9 @@ impl<C: Config> OpenAIModel<C> {
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
     ) -> GatewayResult<InnerExecutionResult> {
+        let request = self.build_request(&input_messages, true)?;
+        span.record("request", serde_json::to_string(&request)?);
+
         tx.send(Some(ModelEvent::new(
             &span,
             ModelEventType::LlmStart(LLMStartEvent {
@@ -853,9 +856,6 @@ impl<C: Config> OpenAIModel<C> {
         )))
         .await
         .map_err(|e| GatewayError::CustomError(e.to_string()))?;
-
-        let request = self.build_request(&input_messages, true)?;
-        span.record("request", serde_json::to_string(&request)?);
 
         let started_at = std::time::Instant::now();
         let stream = self
@@ -984,6 +984,7 @@ impl<C: Config> OpenAIModel<C> {
 
             match self
                 .execute_stream_inner(span.clone(), input_messages.clone(), tx, tags.clone())
+                .instrument(span.clone())
                 .await
             {
                 Ok(InnerExecutionResult::Finish(_)) => {

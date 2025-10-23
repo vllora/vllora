@@ -389,6 +389,14 @@ pub fn map_cloud_event_to_agui_events(value: &GatewayEvent) -> Vec<Event> {
                         Event::Custom {
                             run_context: value.into(),
                             timestamp,
+                            custom_event: CustomEventType::SpanStart {
+                                operation_name: provider_name.clone(),
+                                attributes: serde_json::Value::Null,
+                            },
+                        },
+                        Event::Custom {
+                            run_context: value.into(),
+                            timestamp,
                             custom_event: CustomEventType::LlmStart {
                                 provider_name,
                                 model_name,

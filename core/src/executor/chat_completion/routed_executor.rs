@@ -24,7 +24,6 @@ use actix_web::HttpResponse;
 use bytes::Bytes;
 use either::Either::{Left, Right};
 use futures::StreamExt;
-use futures::TryStreamExt;
 
 use crate::executor::chat_completion::StreamCacheContext;
 use thiserror::Error;
@@ -236,9 +235,7 @@ impl RoutedExecutor {
 
         match response {
             Left(result_stream) => {
-                let stream = result_stream?.map_err(|e| {
-                    GatewayApiError::GatewayError(GatewayError::CustomError(e.to_string()))
-                });
+                let stream = result_stream?;
 
                 // Pin the stream to heap
                 let mut stream = Box::pin(stream);

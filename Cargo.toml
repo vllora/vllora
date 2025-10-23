@@ -4,7 +4,7 @@ members = ["gateway", "core", "udfs", "guardrails"]
 default-members = ["gateway", "udfs"]
 
 [workspace.dependencies]
-async-openai = { package = "async-openai-compat", version = "0.29.7" }
+async-openai = { package = "async-openai-compat", version = "0.29.8" }
 thiserror = "2.0.12"
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
@@ -13,7 +13,7 @@ regex = "1.8"
 lazy_static = "1.4"
 async-trait = "0.1"
 tokio = { version = "1.45.1", features = ["rt", "rt-multi-thread", "sync"] }
-chrono = { version = "0.4", features = ["serde"] }
+chrono = { version = "0.4", features = ["serxOXXAde"] }
 
 tracing = { version = "0.1.41", features = ["log", "valuable"] }
 tracing-opentelemetry = { version = "0.31", default-features = false }

@@ -413,16 +413,6 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
             span.record("cache", state.to_string());
         }
 
-        outer_tx
-            .send(Some(ModelEvent::new(
-                &span,
-                ModelEventType::Custom(CustomEvent::new(CustomEventType::SpanStart {
-                    operation_name: "model_call".to_string(),
-                    attributes: serde_json::json!({}),
-                })),
-            )))
-            .await?;
-
         apply_guardrails(
             &self.initial_messages,
             self.extra.as_ref(),
@@ -432,6 +422,16 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
         )
         .instrument(span.clone())
         .await?;
+
+        outer_tx
+            .send(Some(ModelEvent::new(
+                &span,
+                ModelEventType::Custom(CustomEvent::new(CustomEventType::SpanStart {
+                    operation_name: "model_call".to_string(),
+                    attributes: serde_json::json!({}),
+                })),
+            )))
+            .await?;
 
         let cost_calculator = self.executor_context.cost_calculator.clone();
         let price = self.definition.db_model.price.clone();
@@ -611,7 +611,8 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
             let mut start_time = None;
             let result = join(
                 self.inner
-                    .stream(input_vars, tx, previous_messages, tags.clone()),
+                    .stream(input_vars, tx, previous_messages, tags.clone())
+                    .instrument(span.clone()),
                 async {
                     while let Some(Some(msg)) = rx.recv().await {
                         match &msg.event {
