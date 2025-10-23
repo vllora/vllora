@@ -10,13 +10,13 @@ use actix_web::{
 };
 use opentelemetry::trace::TraceContextExt;
 use opentelemetry::SpanId;
-use tracing_opentelemetry::OpenTelemetrySpanExt;
 use std::collections::HashMap;
 use std::future::{ready, Future, Ready};
 use std::pin::Pin;
 use std::rc::Rc;
 use tracing::{field, Span};
 use tracing_futures::Instrument;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use valuable::Valuable;
 
 use actix_web::{web, HttpMessage, HttpRequest};
@@ -93,13 +93,13 @@ where
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let service = Rc::clone(&self.service);
 
-        Box::pin(async move {            
+        Box::pin(async move {
             let extensions = req.extensions();
             let run_id = extensions.get::<CompletionsRunId>().cloned();
             let thread_id = extensions.get::<CompletionsThreadId>().cloned();
             let broadcaster: Option<web::Data<EventsUIBroadcaster>> = req.app_data().cloned();
             let project = extensions.get::<Project>().cloned();
-            let context = extensions.get::<opentelemetry::Context>().cloned();     
+            let context = extensions.get::<opentelemetry::Context>().cloned();
 
             drop(extensions);
 
@@ -133,7 +133,7 @@ where
                         let context_span = context.span();
                         let span_context = context_span.span_context();
                         if span_context.is_valid() {
-                            Some(span_context.span_id().clone())
+                            Some(span_context.span_id())
                         } else {
                             parent_span_id
                         }
@@ -141,13 +141,12 @@ where
                     None => parent_span_id,
                 };
 
-
                 if let (Some(run_id), Some(thread_id)) = (run_id, thread_id) {
                     let event = Event::Custom {
                         run_context: EventRunContext {
                             run_id: Some(run_id.value()),
                             thread_id: Some(thread_id.value()),
-                            span_id: Some(span.context().span().span_context().span_id().clone()),
+                            span_id: Some(span.context().span().span_context().span_id()),
                             parent_span_id,
                         },
                         timestamp: std::time::SystemTime::now()
@@ -213,7 +212,7 @@ where
                     "run",
                 )
                 .clone();
-                
+
                 let mut span_id = None;
                 if let (Some(run_id), Some(thread_id)) = (run_id_clone, thread_id_clone) {
                     span_id = Some(span.context().span().span_context().span_id());
@@ -221,7 +220,7 @@ where
                         run_context: EventRunContext {
                             run_id: Some(run_id.value()),
                             thread_id: Some(thread_id.value()),
-                            span_id: span_id.clone(),
+                            span_id,
                             parent_span_id: None,
                         },
                         timestamp: std::time::SystemTime::now()

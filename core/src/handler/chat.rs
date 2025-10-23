@@ -192,7 +192,7 @@ pub async fn create_chat_completion(
     thread_id: web::ReqData<CompletionsThreadId>,
     project: web::ReqData<Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
-    models_service: web::Data<Box<dyn ModelService>>
+    models_service: web::Data<Box<dyn ModelService>>,
 ) -> Result<HttpResponse, GatewayApiError> {
     can_execute_llm_for_request(&req).await?;
 

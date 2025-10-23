@@ -1,10 +1,10 @@
 use actix_web::{web, HttpResponse, Result};
+use langdb_core::events::string_to_span_id;
 use langdb_core::events::ui_broadcaster::EventsUIBroadcaster;
 use langdb_core::events::CustomEventType;
 use langdb_core::events::{Event, EventRunContext};
 use langdb_core::types::metadata::project::Project;
 use serde::{Deserialize, Serialize};
-use langdb_core::events::string_to_span_id;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CustomEvent {
@@ -89,7 +89,9 @@ pub async fn send_events(
                 .map(|s| s.to_string());
 
             let span_id = string_to_span_id(&custom_event.span_id);
-            let parent_span_id = custom_event.parent_span_id.and_then(|s| string_to_span_id(&s));
+            let parent_span_id = custom_event
+                .parent_span_id
+                .and_then(|s| string_to_span_id(&s));
             let run_context = EventRunContext {
                 run_id,
                 thread_id,
@@ -160,32 +162,17 @@ pub async fn send_events(
                             .unwrap_or_default(),
                     }
                 }
-                Operation::Other(operation) => {
-                    let run_id = custom_event
-                        .attributes
-                        .get("run_id")
+                Operation::Other(operation) => Event::Custom {
+                    run_context,
+                    timestamp: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
                         .unwrap_or_default()
-                        .as_str()
-                        .map(|s| s.to_string());
-                    let thread_id = custom_event
-                        .attributes
-                        .get("thread_id")
-                        .unwrap_or_default()
-                        .as_str()
-                        .map(|s| s.to_string());
-
-                    Event::Custom {
-                        run_context,
-                        timestamp: std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_millis() as u64,
-                        custom_event: CustomEventType::CustomEvent {
-                            operation: operation.clone(),
-                            attributes: custom_event.attributes,
-                        },
-                    }
-                }
+                        .as_millis() as u64,
+                    custom_event: CustomEventType::CustomEvent {
+                        operation: operation.clone(),
+                        attributes: custom_event.attributes,
+                    },
+                },
             }
         })
         .collect();

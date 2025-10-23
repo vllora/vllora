@@ -3,10 +3,10 @@ use crate::events::callback_handler::GatewayModelEventWithDetails;
 use crate::model::types::CostEvent;
 use crate::model::types::ModelEventType;
 use opentelemetry::SpanId;
+use serde::de::Error;
 use serde::Deserializer;
 use serde::Serializer;
 use serde::{Deserialize, Serialize};
-use serde::de::Error;
 
 pub mod broadcast_channel_manager;
 pub mod callback_handler;
@@ -267,9 +267,15 @@ impl Event {
 pub struct EventRunContext {
     pub run_id: Option<String>,
     pub thread_id: Option<String>,
-    #[serde(serialize_with = "serialize_option_span_id", deserialize_with = "deserialize_option_span_id")]
+    #[serde(
+        serialize_with = "serialize_option_span_id",
+        deserialize_with = "deserialize_option_span_id"
+    )]
     pub span_id: Option<SpanId>,
-    #[serde(serialize_with = "serialize_option_span_id", deserialize_with = "deserialize_option_span_id")]
+    #[serde(
+        serialize_with = "serialize_option_span_id",
+        deserialize_with = "deserialize_option_span_id"
+    )]
     pub parent_span_id: Option<SpanId>,
 }
 
@@ -280,7 +286,10 @@ where
     serializer.serialize_str(&u64::from_be_bytes(span_id.to_bytes()).to_string())
 }
 
-pub fn serialize_option_span_id<S>(span_id: &Option<SpanId>, serializer: S) -> Result<S::Ok, S::Error>
+pub fn serialize_option_span_id<S>(
+    span_id: &Option<SpanId>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
@@ -297,7 +306,7 @@ where
     let span_id = Option::<String>::deserialize(deserializer)?;
     let span_id = match span_id {
         Some(s) if s == "0" => None,
-        Some(s) => Some(SpanId::from_hex(&s).map_err(|e| D::Error::custom(e.to_string()))?.into()),
+        Some(s) => Some(SpanId::from_hex(&s).map_err(|e| D::Error::custom(e.to_string()))?),
         None => None,
     };
     Ok(span_id)
@@ -315,10 +324,7 @@ impl From<&GatewayModelEventWithDetails> for EventRunContext {
 }
 
 pub fn string_to_span_id(span_id: &str) -> Option<SpanId> {
-    match SpanId::from_hex(span_id) {
-        Ok(span_id) => Some(span_id.into()),
-        Err(_) => None,
-    }
+    SpanId::from_hex(span_id).ok()
 }
 
 impl From<&GatewayEvent> for EventRunContext {
@@ -327,18 +333,17 @@ impl From<&GatewayEvent> for EventRunContext {
             GatewayEvent::SpanStartEvent(event) => EventRunContext {
                 run_id: event.run_id.clone(),
                 thread_id: event.thread_id.clone(),
-                span_id: Some(event.span_id.clone()),
-                parent_span_id: event.parent_span_id.clone().and_then(|s| Some(s.clone())),
+                span_id: Some(event.span_id),
+                parent_span_id: event.parent_span_id,
             },
             GatewayEvent::ChatEvent(event) => EventRunContext {
                 run_id: event.run_id.clone(),
                 thread_id: event.thread_id.clone(),
                 span_id: string_to_span_id(&event.event.event.span_id),
-                parent_span_id: event.event.event.parent_span_id.as_ref()
-                    .and_then(|s| {
-                        let span_id = s.clone();
-                        string_to_span_id(&span_id)
-                    }),
+                parent_span_id: event.event.event.parent_span_id.as_ref().and_then(|s| {
+                    let span_id = s.clone();
+                    string_to_span_id(&span_id)
+                }),
             },
         }
     }
