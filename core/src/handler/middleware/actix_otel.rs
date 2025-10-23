@@ -9,6 +9,7 @@ use actix_web::{
     Error,
 };
 use opentelemetry::trace::TraceContextExt;
+use opentelemetry::SpanId;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use std::collections::HashMap;
 use std::future::{ready, Future, Ready};
@@ -108,7 +109,7 @@ where
             let project_clone = project.clone();
             let context_clone = context.clone();
 
-            let execution_fn = async move |parent_span_id: Option<String>| {
+            let execution_fn = async move |parent_span_id: Option<SpanId>| {
                 let span = tracing::info_span!(
                     target: "langdb::user_tracing::cloud_api",
                     "cloud_api_invoke",
@@ -132,7 +133,7 @@ where
                         let context_span = context.span();
                         let span_context = context_span.span_context();
                         if span_context.is_valid() {
-                            Some(span_context.span_id().to_string())
+                            Some(span_context.span_id().clone())
                         } else {
                             parent_span_id
                         }
@@ -146,7 +147,7 @@ where
                         run_context: EventRunContext {
                             run_id: Some(run_id.value()),
                             thread_id: Some(thread_id.value()),
-                            span_id: Some(span.context().span().span_context().span_id().to_string()),
+                            span_id: Some(span.context().span().span_context().span_id().clone()),
                             parent_span_id,
                         },
                         timestamp: std::time::SystemTime::now()
@@ -215,7 +216,7 @@ where
                 
                 let mut span_id = None;
                 if let (Some(run_id), Some(thread_id)) = (run_id_clone, thread_id_clone) {
-                    span_id = Some(span.context().span().span_context().span_id().to_string());
+                    span_id = Some(span.context().span().span_context().span_id());
                     let event = Event::RunStarted {
                         run_context: EventRunContext {
                             run_id: Some(run_id.value()),

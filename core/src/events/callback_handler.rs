@@ -1,9 +1,10 @@
 use crate::handler::ModelEventWithDetails;
-use opentelemetry::trace::TraceContextExt;
+use opentelemetry::{trace::TraceContextExt, SpanId};
 use serde::Serialize;
 use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
-
+use crate::events::serialize_option_span_id;
+use crate::events::serialize_span_id;
 use crate::events::ui_broadcaster::EventsUIBroadcaster;
 
 #[derive(Debug, Clone)]
@@ -20,8 +21,10 @@ pub struct GatewayModelEventWithDetails {
 pub struct GatewaySpanStartEvent {
     pub project_id: String,
     pub tenant_name: String,
-    pub span_id: String,
-    pub parent_span_id: Option<String>,
+    #[serde(serialize_with = "serialize_span_id")]
+    pub span_id: SpanId,
+    #[serde(serialize_with = "serialize_option_span_id")]
+    pub parent_span_id: Option<SpanId>,
     pub trace_id: String,
     pub run_id: Option<String>,
     pub thread_id: Option<String>,
@@ -36,10 +39,12 @@ impl GatewaySpanStartEvent {
         tenant_name: String,
         run_id: Option<String>,
         thread_id: Option<String>,
-        parent_span_id: Option<String>,
+        parent_span_id: Option<SpanId>,
     ) -> Self {
         let parent_span_id = match parent_span_id {
-            Some(parent_span_id) => Some(parent_span_id.clone()),
+            Some(parent_span_id) => {
+                Some(parent_span_id.clone())
+            },
             None => {
                 // Get the current span ID immediately as an owned value
                 let current_span_id = {
@@ -59,7 +64,7 @@ impl GatewaySpanStartEvent {
                     && parent_span_context.span_id() != current_span_id
                     && !parent_span_context.span_id().to_string().is_empty()
                 {
-                    Some(parent_span_context.span_id().to_string())
+                    Some(parent_span_context.span_id().clone())
                 } else {
                     None
                 }
@@ -67,7 +72,7 @@ impl GatewaySpanStartEvent {
         };
 
         Self {
-            span_id: span.context().span().span_context().span_id().to_string(),
+            span_id: span.context().span().span_context().span_id().clone(),
             parent_span_id,
             trace_id: span.context().span().span_context().trace_id().to_string(),
             operation_name,

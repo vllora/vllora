@@ -38,34 +38,25 @@ impl EventsUIBroadcaster {
                     span = traces_receiver.recv() => {
                         match span {
                             Ok(span) => {
+                                let run_context = EventRunContext {
+                                    run_id: span.run_id,
+                                    thread_id: span.thread_id,
+                                    span_id: Some(span.span_id),
+                                    parent_span_id: span.parent_span_id,
+                                };
                                 if span.operation_name == "run" {
                                     let _ =sender.send(Event::RunFinished {
-                                        run_context: EventRunContext {
-                                            run_id: span.run_id,
-                                            thread_id: span.thread_id,
-                                            span_id: Some(span.span_id.to_string()),
-                                            parent_span_id: span.parent_span_id.map(|id| id.to_string()),
-                                        },
+                                        run_context,
                                         timestamp: span.end_time_unix_nano / 1000000,
                                     }).await;
                                 } else if span.operation_name == "agent" {
                                     let _ = sender.send(Event::AgentFinished {
-                                        run_context: EventRunContext {
-                                            run_id: span.run_id,
-                                            thread_id: span.thread_id,
-                                            span_id: Some(span.span_id.to_string()),
-                                            parent_span_id: span.parent_span_id.map(|id| id.to_string()),
-                                        },
+                                        run_context,
                                         timestamp: span.end_time_unix_nano / 1000000,
                                     }).await;
                                 } else if span.operation_name == "task" {
                                     let _ = sender.send(Event::TaskFinished {
-                                        run_context: EventRunContext {
-                                            run_id: span.run_id,
-                                            thread_id: span.thread_id,
-                                            span_id: Some(span.span_id.to_string()),
-                                            parent_span_id: span.parent_span_id.map(|id| id.to_string()),
-                                        },
+                                        run_context,
                                         timestamp: span.end_time_unix_nano / 1000000,
                                     }).await;
                                 } else {
@@ -77,12 +68,7 @@ impl EventsUIBroadcaster {
                                             finish_time_unix_nano: span.end_time_unix_nano,
                                         },
                                         timestamp: span.end_time_unix_nano / 1000000,
-                                        run_context: EventRunContext {
-                                            run_id: span.run_id,
-                                            thread_id: span.thread_id,
-                                            span_id: Some(span.span_id.to_string()),
-                                            parent_span_id: span.parent_span_id.map(|id| id.to_string()),
-                                        },
+                                        run_context,
                                     }).await;
                                 }
                             }

@@ -4,6 +4,7 @@ use langdb_core::events::CustomEventType;
 use langdb_core::events::{Event, EventRunContext};
 use langdb_core::types::metadata::project::Project;
 use serde::{Deserialize, Serialize};
+use langdb_core::events::string_to_span_id;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CustomEvent {
@@ -87,14 +88,17 @@ pub async fn send_events(
                 .as_str()
                 .map(|s| s.to_string());
 
+            let span_id = string_to_span_id(&custom_event.span_id);
+            let parent_span_id = custom_event.parent_span_id.and_then(|s| string_to_span_id(&s));
+            let run_context = EventRunContext {
+                run_id,
+                thread_id,
+                span_id,
+                parent_span_id,
+            };
             match custom_event.operation {
                 Operation::Run => Event::RunStarted {
-                    run_context: EventRunContext {
-                        run_id,
-                        thread_id,
-                        span_id: Some(custom_event.span_id),
-                        parent_span_id: custom_event.parent_span_id,
-                    },
+                    run_context,
                     timestamp: std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap_or_default()
@@ -108,12 +112,7 @@ pub async fn send_events(
                         .as_str()
                         .map(|s| s.to_string());
                     Event::AgentStarted {
-                        run_context: EventRunContext {
-                            run_id,
-                            thread_id,
-                            span_id: Some(custom_event.span_id),
-                            parent_span_id: custom_event.parent_span_id,
-                        },
+                        run_context,
                         timestamp: std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
                             .unwrap_or_default()
@@ -129,12 +128,7 @@ pub async fn send_events(
                         .as_str()
                         .map(|s| s.to_string());
                     Event::TaskStarted {
-                        run_context: EventRunContext {
-                            run_id,
-                            thread_id,
-                            span_id: Some(custom_event.span_id),
-                            parent_span_id: custom_event.parent_span_id,
-                        },
+                        run_context,
                         timestamp: std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
                             .unwrap_or_default()
@@ -151,12 +145,7 @@ pub async fn send_events(
                         .map(|s| s.to_string())
                         .unwrap_or_default();
                     Event::ToolCallStart {
-                        run_context: EventRunContext {
-                            run_id,
-                            thread_id,
-                            span_id: Some(custom_event.span_id),
-                            parent_span_id: custom_event.parent_span_id,
-                        },
+                        run_context,
                         timestamp: std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
                             .unwrap_or_default()
@@ -186,12 +175,7 @@ pub async fn send_events(
                         .map(|s| s.to_string());
 
                     Event::Custom {
-                        run_context: EventRunContext {
-                            run_id,
-                            thread_id,
-                            span_id: Some(custom_event.span_id),
-                            parent_span_id: custom_event.parent_span_id,
-                        },
+                        run_context,
                         timestamp: std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
                             .unwrap_or_default()
