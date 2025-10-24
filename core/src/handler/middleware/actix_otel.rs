@@ -9,7 +9,6 @@ use actix_web::{
     Error,
 };
 use opentelemetry::trace::TraceContextExt;
-use opentelemetry::SpanId;
 use std::collections::HashMap;
 use std::future::{ready, Future, Ready};
 use std::pin::Pin;
@@ -94,22 +93,57 @@ where
         let service = Rc::clone(&self.service);
 
         Box::pin(async move {
-            let extensions = req.extensions();
-            let run_id = extensions.get::<CompletionsRunId>().cloned();
-            let thread_id = extensions.get::<CompletionsThreadId>().cloned();
+            let run_id = req.extensions().get::<CompletionsRunId>().cloned();
+            let thread_id = req.extensions().get::<CompletionsThreadId>().cloned();
             let broadcaster: Option<web::Data<EventsUIBroadcaster>> = req.app_data().cloned();
-            let project = extensions.get::<Project>().cloned();
-            let context = extensions.get::<opentelemetry::Context>().cloned();
+            let project = req.extensions().get::<Project>().cloned();
+            let context = req.extensions().get::<opentelemetry::Context>().cloned();
 
-            drop(extensions);
+            let is_remote_context = if let Some(context) = context.as_ref() {
+                context.span().span_context().is_remote()
+            } else {
+                false
+            };
 
-            let run_id_clone = run_id.clone();
-            let thread_id_clone = thread_id.clone();
-            let broadcaster_clone = broadcaster.clone();
-            let project_clone = project.clone();
-            let context_clone = context.clone();
+            let mut parent_span_id = None;
+            let mut run_span = None;
 
-            let execution_fn = async move |parent_span_id: Option<SpanId>| {
+            if !is_remote_context {
+                // If the context is local, we need to start a new span for the run
+                let span = tracing::info_span!(
+                    target: "langdb::user_tracing::run",
+                    "run",
+                )
+                .clone();
+
+                run_span = Some(span.clone());
+
+                if let (Some(run_id), Some(thread_id)) = (run_id.as_ref(), thread_id.as_ref()) {
+                    parent_span_id = Some(span.context().span().span_context().span_id());
+                    let event = Event::RunStarted {
+                        run_context: EventRunContext {
+                            run_id: Some(run_id.value()),
+                            thread_id: Some(thread_id.value()),
+                            span_id: parent_span_id,
+                            parent_span_id: None,
+                        },
+                        timestamp: std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_millis() as u64,
+                    };
+
+                    if let (Some(broadcaster), Some(project)) =
+                        (broadcaster.as_ref(), project.as_ref())
+                    {
+                        broadcaster
+                            .send_events(&project.slug.to_string(), &[event])
+                            .await;
+                    }
+                }
+            }
+
+            async {
                 let span = tracing::info_span!(
                     target: "langdb::user_tracing::cloud_api",
                     "cloud_api_invoke",
@@ -127,6 +161,12 @@ where
                     status = field::Empty,
                     ip = get_client_ip(req.request())
                 );
+
+                if let Some(parent_span_id) = parent_span_id {
+                    span.follows_from(tracing::Id::from_u64(u64::from_be_bytes(
+                        parent_span_id.to_bytes(),
+                    )));
+                }
 
                 let parent_span_id = match context {
                     Some(context) => {
@@ -166,78 +206,32 @@ where
                     }
                 }
 
-                async move {
-                    // Proceed with the request if within limits
-                    match service.call(req).await {
-                        Ok(ok_res) => {
-                            let span = Span::current();
-                            span.record(HTTP_RESPONSE_STATUS_CODE, ok_res.status().as_u16() as i64);
-                            span.record("status", ok_res.status().as_u16() as i64);
-                            if ok_res.status().is_server_error() {
-                                span.record(
-                                    "status",
-                                    ok_res
-                                        .status()
-                                        .canonical_reason()
-                                        .map(ToString::to_string)
-                                        .unwrap_or_default(),
-                                );
-                            };
-                            Ok(ok_res)
-                        }
-                        Err(err) => {
-                            let span = Span::current();
-                            span.record("status", format!("err {err:?}"));
-                            Err(err)
-                        }
+                // Proceed with the request if within limits
+                match service.call(req).instrument(span.clone()).await {
+                    Ok(ok_res) => {
+                        let span = Span::current();
+                        span.record(HTTP_RESPONSE_STATUS_CODE, ok_res.status().as_u16() as i64);
+                        span.record("status", ok_res.status().as_u16() as i64);
+                        if ok_res.status().is_server_error() {
+                            span.record(
+                                "status",
+                                ok_res
+                                    .status()
+                                    .canonical_reason()
+                                    .map(ToString::to_string)
+                                    .unwrap_or_default(),
+                            );
+                        };
+                        Ok(ok_res)
+                    }
+                    Err(err) => {
+                        let span = Span::current();
+                        span.record("status", format!("err {err:?}"));
+                        Err(err)
                     }
                 }
-                .instrument(span.clone())
-                .await
-            };
-
-            let is_remote_context = if let Some(context) = context_clone {
-                context.span().span_context().is_remote()
-            } else {
-                false
-            };
-
-            if is_remote_context {
-                // If the context is remote, we don't need to start a new span for the run
-                execution_fn(None).await
-            } else {
-                // If the context is local, we need to start a new span for the run
-                let span = tracing::info_span!(
-                    target: "langdb::user_tracing::run",
-                    "run",
-                )
-                .clone();
-
-                let mut span_id = None;
-                if let (Some(run_id), Some(thread_id)) = (run_id_clone, thread_id_clone) {
-                    span_id = Some(span.context().span().span_context().span_id());
-                    let event = Event::RunStarted {
-                        run_context: EventRunContext {
-                            run_id: Some(run_id.value()),
-                            thread_id: Some(thread_id.value()),
-                            span_id,
-                            parent_span_id: None,
-                        },
-                        timestamp: std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_millis() as u64,
-                    };
-
-                    if let (Some(broadcaster), Some(project)) = (broadcaster_clone, project_clone) {
-                        broadcaster
-                            .send_events(&project.slug.to_string(), &[event])
-                            .await;
-                    }
-                }
-
-                execution_fn(span_id).instrument(span).await
-            }
+            }.instrument(run_span.unwrap_or(Span::current()))
+            .await
         })
     }
 }

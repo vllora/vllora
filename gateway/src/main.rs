@@ -104,28 +104,25 @@ async fn main() -> Result<(), CliError> {
         .unwrap_or(cli::Commands::Serve(cli::ServeArgs::default()))
     {
         cli::Commands::Sync { models, providers } => {
-            tracing::init_tracing(project_trace_senders.inner().clone());
-            
             // If no specific flags are provided, sync both
-            let sync_models = models || (!models && !providers);
-            let sync_providers = providers || (!models && !providers);
-            
+            let sync_models = models || !providers;
+            let sync_providers = providers || !models;
+
             if sync_models {
                 info!("Syncing models from API to database...");
                 let models = run::models::fetch_and_store_models(db_pool.clone()).await?;
                 info!("Successfully synced {} models to database", models.len());
             }
-            
+
             if sync_providers {
                 info!("Syncing providers from API to database...");
                 run::providers::sync_providers(db_pool.clone()).await?;
                 info!("Successfully synced providers to database");
             }
-            
+
             Ok(())
         }
         cli::Commands::List => {
-            tracing::init_tracing(project_trace_senders.inner().clone());
             // Query models from database
             use langdb_core::metadata::services::model::ModelService;
             let model_service = ModelServiceImpl::new(db_pool.clone());

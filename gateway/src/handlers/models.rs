@@ -26,17 +26,17 @@ pub async fn list_gateway_pricing(
             .into_iter()
             .map(|m| {
                 let mut model_metadata: ModelMetadata = m.into();
-                
+
                 // Filter out parameters if not requested
                 if !query.include_parameters {
                     model_metadata.parameters = None;
                 }
-                
+
                 // Filter out benchmark_info if not requested
                 if !query.include_benchmark {
                     model_metadata.benchmark_info = None;
                 }
-                
+
                 model_metadata
             })
             .collect::<Vec<ModelMetadata>>()
