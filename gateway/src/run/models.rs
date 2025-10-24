@@ -28,7 +28,7 @@ pub async fn fetch_and_store_models(
     // Fetch models from API
     let client = reqwest::Client::new();
     let models: Vec<ModelMetadata> = client
-        .get(format!("{langdb_api_url}/pricing?include_parameters=true"))
+        .get(format!("{langdb_api_url}/pricing?include_parameters=true&include_benchmark=true"))
         .send()
         .await?
         .json()

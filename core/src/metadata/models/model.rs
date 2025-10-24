@@ -137,7 +137,7 @@ impl From<DbModel> for ModelMetadata {
 
         ModelMetadata {
             model: val.model_name.clone(),
-            model_provider: val.provider_name.clone(),
+            model_provider: val.owner_name.clone(),
             inference_provider,
             price,
             input_formats,
