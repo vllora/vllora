@@ -147,6 +147,18 @@ CREATE TABLE mcp_configs (
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE sessions (
+    id TEXT PRIMARY KEY DEFAULT (
+        lower(hex(randomblob(4))) || '-' ||
+        lower(hex(randomblob(2))) || '-' ||
+        lower(hex(randomblob(2))) || '-' ||
+        lower(hex(randomblob(2))) || '-' ||
+        lower(hex(randomblob(6)))
+    ) NOT NULL
+);
+
+INSERT INTO sessions DEFAULT VALUES;
+
 CREATE INDEX idx_providers_provider_name ON providers(provider_name);
 CREATE INDEX idx_providers_is_active ON providers(is_active);
 CREATE INDEX idx_providers_priority ON providers(priority);

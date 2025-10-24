@@ -1,6 +1,7 @@
 use actix_web::{web, HttpResponse, Result};
 use langdb_core::credentials::construct_key_id;
 use langdb_core::credentials::KeyStorage;
+use langdb_core::metadata::models::session::DbSession;
 use langdb_core::types::metadata::project::Project;
 use serde::{Deserialize, Serialize};
 
@@ -14,9 +15,45 @@ pub struct Credentials {
     pub api_key: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct TrackSessionRequest {
+    pub email: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TrackSessionApiRequest {
+    pub session_id: String,
+    pub email: String,
+}
+
 pub fn get_api_url() -> String {
     std::env::var("LANGDB_API_URL")
         .unwrap_or_else(|_| langdb_core::types::LANGDB_API_URL.to_string())
+}
+
+pub async fn track_session(
+    session: web::Data<DbSession>,
+    request: web::Json<TrackSessionRequest>,
+) -> Result<HttpResponse> {
+    tokio::spawn(async move {
+        let client = reqwest::Client::new();
+        let _ = client
+            .post(format!("{}/session/track", get_api_url()))
+            .json(&TrackSessionApiRequest {
+                session_id: session.id.clone(),
+                email: request.into_inner().email.clone(),
+            })
+            .send()
+            .await
+            .map_err(|e| {
+                actix_web::error::ErrorInternalServerError(format!(
+                    "Failed to start session: {}",
+                    e
+                ))
+            });
+    });
+
+    Ok(HttpResponse::Ok().finish())
 }
 
 /// Start a new session

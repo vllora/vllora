@@ -5,5 +5,6 @@ pub mod project;
 pub mod provider;
 pub mod providers;
 pub mod run;
+pub mod session;
 pub mod thread;
 pub mod trace;

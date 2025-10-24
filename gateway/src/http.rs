@@ -35,6 +35,7 @@ use langdb_core::handler::middleware::rate_limit::{RateLimitMiddleware, RateLimi
 use langdb_core::handler::middleware::run_id::RunId;
 use langdb_core::handler::middleware::thread_id::ThreadId;
 use langdb_core::handler::{CallbackHandlerFn, LimitCheckWrapper};
+use langdb_core::metadata::models::session::DbSession;
 use langdb_core::metadata::pool::DbPool;
 use langdb_core::metadata::project_trace::ProjectTraceTenantResolver;
 use langdb_core::metadata::services::model::ModelService;
@@ -129,6 +130,7 @@ impl ApiServer {
         self,
         storage: Option<Arc<Mutex<InMemoryStorage>>>,
         project_trace_senders: Arc<BroadcastChannelManager>,
+        session: DbSession,
     ) -> Result<impl Future<Output = Result<(), ServerError>>, ServerError> {
         let cost_calculator = GatewayCostCalculator::new();
         let callback = if let Some(storage) = &storage {
@@ -174,6 +176,7 @@ impl ApiServer {
                 server_config_for_closure.db_pool.clone(),
                 events_senders_container.clone(),
                 project_traces_senders.clone(),
+                session.clone(),
             )
         })
         .bind((self.config.http.host.as_str(), self.config.http.port))?
@@ -223,6 +226,7 @@ impl ApiServer {
         db_pool: DbPool,
         events_senders_container: Arc<EventsSendersContainer>,
         project_trace_senders: Arc<BroadcastChannelManager>,
+        session: DbSession,
     ) -> App<
         impl ServiceFactory<
             ServiceRequest,
@@ -263,6 +267,7 @@ impl ApiServer {
             .app_data(web::Data::from(project_trace_senders))
             .app_data(Data::new(callback_handler))
             .app_data(Data::new(key_storage))
+            .app_data(Data::new(session))
             .service(
                 service
                     .app_data(Data::new(model_service))
@@ -338,6 +343,7 @@ impl ApiServer {
             )
             .service(
                 web::scope("/session")
+                    .route("/track", web::post().to(session::track_session))
                     .route("/start", web::post().to(session::start_session))
                     .route("/fetch_key/{session_id}", web::get().to(session::fetch_key)),
             )

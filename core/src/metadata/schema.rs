@@ -140,6 +140,12 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    sessions (id) {
+        id -> Text,
+    }
+}
+
 diesel::joinable!(messages -> threads (thread_id));
 diesel::joinable!(provider_credentials -> projects (project_id));
 
@@ -149,6 +155,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     projects,
     provider_credentials,
     providers,
+    sessions,
     threads,
     traces,
 );

@@ -13,7 +13,7 @@ regex = "1.8"
 lazy_static = "1.4"
 async-trait = "0.1"
 tokio = { version = "1.45.1", features = ["rt", "rt-multi-thread", "sync"] }
-chrono = { version = "0.4", features = ["serxOXXAde"] }
+chrono = { version = "0.4", features = ["serde"] }
 
 tracing = { version = "0.1.41", features = ["log", "valuable"] }
 tracing-opentelemetry = { version = "0.31", default-features = false }

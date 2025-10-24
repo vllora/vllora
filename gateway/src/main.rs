@@ -79,9 +79,13 @@ async fn main() -> Result<(), CliError> {
 
     let cli = cli::Cli::parse();
 
-    let db_pool = init_db()?;
+    let db_pool = get_db_pool()?;
 
     langdb_core::metadata::utils::init_db(&db_pool);
+    let session = session::fetch_session_id(db_pool.clone()).await;
+
+    // Ping session once in background (non-blocking)
+    session::ping_session(session.id.clone());
 
     let project_trace_senders = Arc::new(BroadcastChannelManager::new(Default::default()));
 
@@ -146,7 +150,11 @@ async fn main() -> Result<(), CliError> {
             let server_handle = tokio::spawn(async move {
                 let storage = Arc::new(Mutex::new(InMemoryStorage::new()));
                 match api_server
-                    .start(Some(storage), project_trace_senders.clone())
+                    .start(
+                        Some(storage),
+                        project_trace_senders.clone(),
+                        session.clone(),
+                    )
                     .await
                 {
                     Ok(server) => server.await,
@@ -197,7 +205,7 @@ async fn main() -> Result<(), CliError> {
     }
 }
 
-fn init_db() -> Result<langdb_core::metadata::pool::DbPool, CliError> {
+fn get_db_pool() -> Result<langdb_core::metadata::pool::DbPool, CliError> {
     let home_dir = std::env::var("HOME").unwrap_or_else(|_| "~".to_string());
     let ellora_dir = format!("{home_dir}/.ellora");
     std::fs::create_dir_all(&ellora_dir).unwrap_or_default();
