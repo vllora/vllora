@@ -312,6 +312,19 @@ pub struct ModelMetadata {
     pub is_private: bool,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ModelMetadataWithEndpoints {
+    #[serde(flatten)]
+    pub model: ModelMetadata,
+    pub endpoints: Vec<Endpoint>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Endpoint {
+    pub provider: InferenceProvider,
+    pub available: bool,
+}
+
 impl Default for ModelMetadata {
     fn default() -> Self {
         Self {

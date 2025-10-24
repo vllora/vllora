@@ -1,16 +1,20 @@
 use crate::credentials::{KeyStorage, KeyStorageError, ProviderCredentialsId};
-use crate::metadata::models::provider::{DbInsertProviderCredentials, DbUpdateProviderCredentials};
+use crate::metadata::models::provider_credentials::{
+    DbInsertProviderCredentials, DbUpdateProviderCredentials,
+};
 use crate::metadata::pool::DbPool;
-use crate::metadata::services::provider::{ProviderService, ProviderServiceImpl};
+use crate::metadata::services::provider_credentials::{
+    ProviderCredentialsService, ProviderCredentialsServiceImpl,
+};
 
 pub struct ProviderKeyResolver {
-    provider_service: ProviderServiceImpl,
+    provider_service: ProviderCredentialsServiceImpl,
 }
 
 impl ProviderKeyResolver {
     pub fn new(db_pool: DbPool) -> Self {
         Self {
-            provider_service: ProviderServiceImpl::new(db_pool),
+            provider_service: ProviderCredentialsServiceImpl::new(db_pool),
         }
     }
 }

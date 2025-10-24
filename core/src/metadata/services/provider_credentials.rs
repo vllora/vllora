@@ -1,5 +1,5 @@
 use crate::metadata::error::DatabaseError;
-use crate::metadata::models::provider::{
+use crate::metadata::models::provider_credentials::{
     DbInsertProviderCredentials, DbProviderCredentials, DbUpdateProviderCredentials,
 };
 use crate::metadata::pool::DbPool;
@@ -13,7 +13,7 @@ use diesel::OptionalExtension;
 use diesel::{QueryDsl, RunQueryDsl};
 use std::collections::HashMap;
 
-pub trait ProviderService {
+pub trait ProviderCredentialsService {
     /// Get provider credentials by provider name and optional project ID
     fn get_provider_credentials(
         &self,
@@ -40,14 +40,17 @@ pub trait ProviderService {
     ) -> Result<(), DatabaseError>;
 
     /// List all providers with their credential status
-    fn list_providers(&self, project_id: Option<&str>) -> Result<Vec<ProviderInfo>, DatabaseError>;
+    fn list_providers(
+        &self,
+        project_id: Option<&str>,
+    ) -> Result<Vec<ProviderCredentialsInfo>, DatabaseError>;
 
     /// List all available providers from models with their credential status
     fn list_available_providers(
         &self,
         project_id: Option<&str>,
         available_models: &[crate::models::ModelMetadata],
-    ) -> Result<Vec<ProviderInfo>, DatabaseError>;
+    ) -> Result<Vec<ProviderCredentialsInfo>, DatabaseError>;
 
     /// Check if provider has credentials configured
     fn has_provider_credentials(
@@ -65,14 +68,14 @@ pub trait ProviderService {
 
 /// Information about a provider's credential status
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct ProviderInfo {
+pub struct ProviderCredentialsInfo {
     pub id: String,
     pub name: String,
     pub provider_type: String,
     pub has_credentials: bool,
 }
 
-impl ProviderService for ProviderServiceImpl {
+impl ProviderCredentialsService for ProviderCredentialsServiceImpl {
     fn get_provider_credentials(
         &self,
         provider_name_param: &str,
@@ -159,7 +162,7 @@ impl ProviderService for ProviderServiceImpl {
     fn list_providers(
         &self,
         project_id_param: Option<&str>,
-    ) -> Result<Vec<ProviderInfo>, DatabaseError> {
+    ) -> Result<Vec<ProviderCredentialsInfo>, DatabaseError> {
         let mut conn = self.db_pool.get()?;
 
         // Get all unique provider names that have credentials
@@ -182,9 +185,7 @@ impl ProviderService for ProviderServiceImpl {
         let mut providers = Vec::new();
 
         for (provider_name_str, provider_type_str) in providers_with_creds {
-            let has_creds = self.has_provider_credentials(&provider_name_str, project_id_param)?;
-
-            providers.push(ProviderInfo {
+            providers.push(ProviderCredentialsInfo {
                 id: format!(
                     "{}-{}",
                     provider_name_str,
@@ -192,7 +193,7 @@ impl ProviderService for ProviderServiceImpl {
                 ),
                 name: provider_name_str.clone(),
                 provider_type: provider_type_str,
-                has_credentials: has_creds,
+                has_credentials: true,
             });
         }
 
@@ -258,7 +259,7 @@ impl ProviderService for ProviderServiceImpl {
         &self,
         project_id_param: Option<&str>,
         available_models: &[crate::models::ModelMetadata],
-    ) -> Result<Vec<ProviderInfo>, DatabaseError> {
+    ) -> Result<Vec<ProviderCredentialsInfo>, DatabaseError> {
         // Extract unique providers from available models
         let mut unique_providers = std::collections::HashSet::new();
 
@@ -273,7 +274,7 @@ impl ProviderService for ProviderServiceImpl {
             let has_credentials =
                 self.has_provider_credentials(&provider_name, project_id_param)?;
 
-            providers.push(ProviderInfo {
+            providers.push(ProviderCredentialsInfo {
                 id: format!("provider-{}", provider_name),
                 name: provider_name.clone(),
                 provider_type: get_provider_type(&provider_name),
@@ -301,11 +302,11 @@ fn get_provider_type(provider_name: &str) -> String {
     }
 }
 
-pub struct ProviderServiceImpl {
+pub struct ProviderCredentialsServiceImpl {
     db_pool: DbPool,
 }
 
-impl ProviderServiceImpl {
+impl ProviderCredentialsServiceImpl {
     pub fn new(db_pool: DbPool) -> Self {
         Self { db_pool }
     }
@@ -314,14 +315,14 @@ impl ProviderServiceImpl {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::metadata::models::provider::NewProviderCredentialsDTO;
-    use crate::metadata::models::provider::UpdateProviderCredentialsDTO;
+    use crate::metadata::models::provider_credentials::NewProviderCredentialsDTO;
+    use crate::metadata::models::provider_credentials::UpdateProviderCredentialsDTO;
     use crate::metadata::test_utils::setup_test_database;
     use crate::types::credentials::{ApiKeyCredentials, Credentials};
 
-    fn create_test_provider_service() -> ProviderServiceImpl {
+    fn create_test_provider_service() -> ProviderCredentialsServiceImpl {
         let db_pool = setup_test_database();
-        ProviderServiceImpl::new(db_pool)
+        ProviderCredentialsServiceImpl::new(db_pool)
     }
 
     #[test]
