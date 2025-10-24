@@ -1,9 +1,10 @@
-use actix_web::{web, HttpResponse, Result};
+use actix_web::{web, HttpRequest, HttpResponse, Result};
 use langdb_core::credentials::construct_key_id;
 use langdb_core::credentials::KeyStorage;
 use langdb_core::metadata::models::session::DbSession;
 use langdb_core::types::metadata::project::Project;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionResponse {
@@ -34,23 +35,33 @@ pub fn get_api_url() -> String {
 pub async fn track_session(
     session: web::Data<DbSession>,
     request: web::Json<TrackSessionRequest>,
+    req: HttpRequest,
 ) -> Result<HttpResponse> {
+    // Extract all headers from the incoming request
+    let mut headers = HashMap::new();
+    for (key, value) in req.headers().iter() {
+        if let Ok(value_str) = value.to_str() {
+            headers.insert(key.to_string(), value_str.to_string());
+        }
+    }
+
     tokio::spawn(async move {
         let client = reqwest::Client::new();
-        let _ = client
+        let mut reqwest_request = client
             .post(format!("{}/session/track", get_api_url()))
             .json(&TrackSessionApiRequest {
                 session_id: session.id.clone(),
                 email: request.into_inner().email.clone(),
-            })
-            .send()
-            .await
-            .map_err(|e| {
-                actix_web::error::ErrorInternalServerError(format!(
-                    "Failed to start session: {}",
-                    e
-                ))
             });
+
+        // Forward all headers to the external API call
+        for (key, value) in headers {
+            reqwest_request = reqwest_request.header(&key, &value);
+        }
+
+        let _ = reqwest_request.send().await.map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!("Failed to start session: {}", e))
+        });
     });
 
     Ok(HttpResponse::Ok().finish())
