@@ -60,14 +60,17 @@ pub struct ServeArgs {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Sync models from API to database
-    Sync,
-    /// Sync providers from API to database
-    SyncProviders,
-    /// List all available models
-    List,
     /// Start the API server (default if no command specified)
     Serve(ServeArgs),
-    /// Login to the API server
-    Login,
+    /// List all available models
+    List,
+    /// Sync models and/or providers from API to database
+    Sync {
+        /// Sync only models
+        #[arg(long)]
+        models: bool,
+        /// Sync only providers
+        #[arg(long)]
+        providers: bool,
+    },
 }

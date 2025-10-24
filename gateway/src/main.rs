@@ -63,10 +63,11 @@ pub struct Credentials {
 }
 
 pub const LOGO: &str = r#"
-▗▄▄▄▖▗▖   ▗▖    ▗▄▖ ▗▄▄▖  ▗▄▖ 
-▐▌   ▐▌   ▐▌   ▐▌ ▐▌▐▌ ▐▌▐▌ ▐▌
-▐▛▀▀▘▐▌   ▐▌   ▐▌ ▐▌▐▛▀▚▖▐▛▀▜▌
-▐▙▄▄▖▐▙▄▄▖▐▙▄▄▖▝▚▄▞▘▐▌ ▐▌▐▌ ▐▌
+        _     _                    
+ __   _| |   | |    ___  _ __ __ _ 
+ \ \ / / |   | |   / _ \| '__/ _` |
+  \ V /| |___| |__| (_) | | | (_| |
+   \_/ |_____|_____\___/|_|  \__,_|
 "#;
 
 embed_assets!("dist", compress = true);
@@ -102,19 +103,25 @@ async fn main() -> Result<(), CliError> {
         .command
         .unwrap_or(cli::Commands::Serve(cli::ServeArgs::default()))
     {
-        cli::Commands::Login => session::login().await,
-        cli::Commands::Sync => {
+        cli::Commands::Sync { models, providers } => {
             tracing::init_tracing(project_trace_senders.inner().clone());
-            info!("Syncing models from API to database...");
-            let models = run::models::fetch_and_store_models(db_pool.clone()).await?;
-            info!("Successfully synced {} models to database", models.len());
-            Ok(())
-        }
-        cli::Commands::SyncProviders => {
-            tracing::init_tracing(project_trace_senders.inner().clone());
-            info!("Syncing providers from API to database...");
-            run::providers::sync_providers(db_pool.clone()).await?;
-            info!("Successfully synced providers to database");
+            
+            // If no specific flags are provided, sync both
+            let sync_models = models || (!models && !providers);
+            let sync_providers = providers || (!models && !providers);
+            
+            if sync_models {
+                info!("Syncing models from API to database...");
+                let models = run::models::fetch_and_store_models(db_pool.clone()).await?;
+                info!("Successfully synced {} models to database", models.len());
+            }
+            
+            if sync_providers {
+                info!("Syncing providers from API to database...");
+                run::providers::sync_providers(db_pool.clone()).await?;
+                info!("Successfully synced providers to database");
+            }
+            
             Ok(())
         }
         cli::Commands::List => {
