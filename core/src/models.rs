@@ -320,9 +320,20 @@ pub struct ModelMetadataWithEndpoints {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct EndpointPricing {
+    pub per_input_token: f64,
+    pub per_output_token: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub per_cached_input_token: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub per_cached_input_write_token: Option<f64>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Endpoint {
     pub provider: InferenceProvider,
     pub available: bool,
+    pub pricing: Option<EndpointPricing>,
 }
 
 impl Default for ModelMetadata {

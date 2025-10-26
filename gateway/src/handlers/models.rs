@@ -4,8 +4,9 @@ use langdb_core::metadata::services::model::ModelService;
 use langdb_core::metadata::services::provider_credentials::{
     ProviderCredentialsService, ProviderCredentialsServiceImpl,
 };
-use langdb_core::models::{Endpoint, ModelMetadata, ModelMetadataWithEndpoints};
+use langdb_core::models::{Endpoint, EndpointPricing, ModelMetadata, ModelMetadataWithEndpoints};
 use langdb_core::types::metadata::project::Project;
+use langdb_core::types::provider::ModelPrice;
 use langdb_core::GatewayApiError;
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -71,8 +72,8 @@ fn group_models_by_name_with_endpoints(
     let mut grouped: HashMap<String, Vec<ModelMetadata>> = HashMap::new();
 
     // Group models by their model name
-    for model in models {
-        grouped.entry(model.model.clone()).or_default().push(model);
+    for model in &models {
+        grouped.entry(model.model.clone()).or_default().push(model.clone());
     }
 
     // Create provider credentials service to check availability
@@ -93,13 +94,29 @@ fn group_models_by_name_with_endpoints(
     tracing::info!("provider_credentials_map: {:?}", provider_credentials_map);
 
     // Convert grouped models to ModelMetadataWithEndpoints
-    grouped
-        .into_values()
-        .map(|model_instances| {
-            // Use the first model instance as the base (they should all have the same core properties)
+    // Preserve database order by iterating through original models
+    let mut result: Vec<ModelMetadataWithEndpoints> = Vec::new();
+    let mut processed_models: std::collections::HashSet<String> = std::collections::HashSet::new();
+    
+    for model in models {
+        if processed_models.contains(&model.model) {
+            continue; // Skip if we already processed this model name
+        }
+        
+        // Get all instances of this model
+        if let Some(model_instances) = grouped.get(&model.model) {
+            // Sort model instances by cost (cheapest first)
+            let mut model_instances = model_instances.clone();
+            model_instances.sort_by(|a, b| {
+                let a_cost = a.price.per_input_token();
+                let b_cost = b.price.per_input_token();
+                a_cost.partial_cmp(&b_cost).unwrap_or(std::cmp::Ordering::Equal)
+            });
+
+            // Use the first (cheapest) model instance as the base
             let base_model = model_instances[0].clone();
 
-            // Create endpoints from all instances with availability based on pre-fetched credentials
+            // Create endpoints from all instances with availability and pricing
             let endpoints: Vec<Endpoint> = model_instances
                 .iter()
                 .map(|model| {
@@ -111,17 +128,39 @@ fn group_models_by_name_with_endpoints(
                         .copied()
                         .unwrap_or(false);
 
+                    // Extract pricing from model
+                    let pricing = match &model.price {
+                        ModelPrice::Completion(price) => Some(EndpointPricing {
+                            per_input_token: price.per_input_token,
+                            per_output_token: price.per_output_token,
+                            per_cached_input_token: price.per_cached_input_token,
+                            per_cached_input_write_token: price.per_cached_input_write_token,
+                        }),
+                        ModelPrice::Embedding(price) => Some(EndpointPricing {
+                            per_input_token: price.per_input_token,
+                            per_output_token: 0.0,
+                            per_cached_input_token: None,
+                            per_cached_input_write_token: None,
+                        }),
+                        ModelPrice::ImageGeneration(_) => None,
+                    };
+
                     Endpoint {
                         provider: model.inference_provider.clone(),
                         available: has_credentials,
+                        pricing,
                     }
                 })
                 .collect();
 
-            ModelMetadataWithEndpoints {
+            result.push(ModelMetadataWithEndpoints {
                 model: base_model,
                 endpoints,
-            }
-        })
-        .collect()
+            });
+            
+            processed_models.insert(model.model.clone());
+        }
+    }
+
+    result
 }
