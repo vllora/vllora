@@ -255,7 +255,6 @@ impl ThreadService {
         offset: i64,
     ) -> Result<Vec<ThreadSpanQueryResult>, DatabaseError> {
         let mut conn = self.db_pool.get()?;
-
         let query_sql = Self::build_thread_span_query(Some("?"), true);
         sql_query(&query_sql)
             .bind::<diesel::sql_types::Text, _>(project_id) // attribute.title subquery
@@ -364,8 +363,14 @@ impl ThreadService {
         FROM (
             SELECT
                 thread_id,
-                MIN(CASE WHEN parent_span_id IS NULL THEN start_time_us END) as start_time_us,
-                MAX(CASE WHEN parent_span_id IS NULL THEN finish_time_us END) as finish_time_us,
+                COALESCE(
+                    MIN(CASE WHEN parent_span_id IS NULL THEN start_time_us END),
+                    MIN(start_time_us)
+                ) as start_time_us,
+                COALESCE(
+                    MAX(CASE WHEN parent_span_id IS NULL THEN finish_time_us END),
+                    MAX(finish_time_us)
+                ) as finish_time_us,
                 GROUP_CONCAT(DISTINCT CASE WHEN parent_span_id IS NULL THEN run_id END) as run_ids,
                 GROUP_CONCAT(DISTINCT json_extract(attribute, '$.model_name')) as input_models,
                 SUM(CAST(json_extract(attribute, '$.cost') AS REAL)) as cost,
