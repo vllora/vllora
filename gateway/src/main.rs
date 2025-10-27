@@ -192,12 +192,24 @@ async fn main() -> Result<(), CliError> {
                 let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", ui_port)).await;
                 match listener {
                     Ok(listener) => {
+                        // Open UI in browser after server starts
+                        let ui_url = format!("http://localhost:{}", ui_port);
+                        println!("🌐 UI available at: {}", ui_url);
+                        
+                        // Try to open in browser, but don't fail if it doesn't work
+                        if let Err(e) = open::that(&ui_url) {
+                            println!("⚠ Could not open browser automatically: {}", e);
+                            println!("   Please open {} manually", ui_url);
+                        } else {
+                            println!("🚀 Opening UI in your default browser...");
+                        }
+                        
                         axum::serve(listener, router.into_make_service())
                             .await
                             .unwrap();
                     }
                     Err(e) => {
-                        eprintln!("Failed to bind frontend server to port 8084: {e}");
+                        eprintln!("Failed to bind frontend server to port {}: {e}", ui_port);
                     }
                 }
             });
