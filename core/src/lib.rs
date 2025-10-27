@@ -81,8 +81,8 @@ impl actix_web::error::ResponseError for GatewayApiError {
         tracing::error!("API error: {:?}", self);
 
         let span = Span::current();
-        span.record("error", &self.to_string());
-        
+        span.record("error", self.to_string());
+
         match self {
             GatewayApiError::GatewayError(e) => e.error_response(),
             e => {

@@ -52,19 +52,25 @@ pub async fn seed_models(db_pool: &DbPool) -> Result<(), run::models::ModelsLoad
 
     if models.is_empty() {
         info!("Loading embedded models data...");
-        
+
         // Load from embedded JSON data first for instant availability
         match load_embedded_models(db_pool.clone()).await {
             Ok(embedded_count) => {
-                info!("✓ Successfully loaded {} models from embedded data", embedded_count);
-                
+                info!(
+                    "✓ Successfully loaded {} models from embedded data",
+                    embedded_count
+                );
+
                 // Spawn background task to fetch fresh models from API
                 let db_pool_clone = db_pool.clone();
                 tokio::spawn(async move {
                     match run::models::fetch_and_store_models(db_pool_clone).await {
                         Ok(_fresh_models) => {}
                         Err(e) => {
-                            info!("⚠ Background update failed: {}. Continuing with embedded data.", e);
+                            info!(
+                                "⚠ Background update failed: {}. Continuing with embedded data.",
+                                e
+                            );
                         }
                     }
                 });
@@ -72,7 +78,7 @@ pub async fn seed_models(db_pool: &DbPool) -> Result<(), run::models::ModelsLoad
             Err(e) => {
                 warn!("⚠ Warning: Failed to load embedded models: {}", e);
                 warn!("  Falling back to API sync...");
-                
+
                 // Fallback to API sync
                 match run::models::fetch_and_store_models(db_pool.clone()).await {
                     Ok(synced_models) => {
@@ -98,17 +104,20 @@ pub async fn seed_models(db_pool: &DbPool) -> Result<(), run::models::ModelsLoad
 /// Loads models from embedded JSON data into the database
 async fn load_embedded_models(db_pool: DbPool) -> Result<usize, run::models::ModelsLoadError> {
     use crate::MODELS_DATA_JSON;
-    
+
     // Parse embedded JSON
-    let models: Vec<langdb_core::models::ModelMetadata> = run::models::load_models_from_json(MODELS_DATA_JSON)?;
-    
+    let models: Vec<langdb_core::models::ModelMetadata> =
+        run::models::load_models_from_json(MODELS_DATA_JSON)?;
+
     // Convert to DbNewModel and insert into database
-    let db_models: Vec<langdb_core::metadata::models::model::DbNewModel> = 
-        models.iter().map(|m| langdb_core::metadata::models::model::DbNewModel::from(m.clone())).collect();
-    
+    let db_models: Vec<langdb_core::metadata::models::model::DbNewModel> = models
+        .iter()
+        .map(|m| langdb_core::metadata::models::model::DbNewModel::from(m.clone()))
+        .collect();
+
     let model_service = langdb_core::metadata::services::model::ModelServiceImpl::new(db_pool);
     model_service.insert_many(db_models)?;
-    
+
     Ok(models.len())
 }
 

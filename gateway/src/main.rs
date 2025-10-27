@@ -144,7 +144,11 @@ async fn main() -> Result<(), CliError> {
             info!("Generating models JSON file: {}", output);
             let output_path = std::path::Path::new(&output);
             let models = run::models::fetch_and_save_models_json(output_path).await?;
-            info!("Successfully generated {} models to {}", models.len(), output);
+            info!(
+                "Successfully generated {} models to {}",
+                models.len(),
+                output
+            );
             Ok(())
         }
         cli::Commands::Serve(serve_args) => {
@@ -195,7 +199,7 @@ async fn main() -> Result<(), CliError> {
                         // Open UI in browser after server starts
                         let ui_url = format!("http://localhost:{}", ui_port);
                         println!("🌐 UI available at: {}", ui_url);
-                        
+
                         // Try to open in browser, but don't fail if it doesn't work
                         if let Err(e) = open::that(&ui_url) {
                             println!("⚠ Could not open browser automatically: {}", e);
@@ -203,7 +207,7 @@ async fn main() -> Result<(), CliError> {
                         } else {
                             println!("🚀 Opening UI in your default browser...");
                         }
-                        
+
                         axum::serve(listener, router.into_make_service())
                             .await
                             .unwrap();

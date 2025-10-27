@@ -14,13 +14,13 @@ use uuid::Uuid;
 #[derive(Debug, thiserror::Error)]
 pub enum ModelsLoadError {
     #[error("Failed to fetch models: {0}")]
-    FetchError(#[from] reqwest::Error),
+    Fetch(#[from] reqwest::Error),
     #[error("Database error: {0}")]
-    DatabaseError(#[from] DatabaseError),
+    Database(#[from] DatabaseError),
     #[error("IO error: {0}")]
-    IoError(#[from] std::io::Error),
+    IO(#[from] std::io::Error),
     #[error("JSON serialization error: {0}")]
-    JsonError(#[from] serde_json::Error),
+    Json(#[from] serde_json::Error),
 }
 
 pub async fn fetch_and_store_models(
@@ -96,7 +96,9 @@ pub async fn fetch_and_store_models(
 }
 
 /// Fetches models from API and saves them as JSON to a file
-pub async fn fetch_and_save_models_json(output_path: &Path) -> Result<Vec<ModelMetadata>, ModelsLoadError> {
+pub async fn fetch_and_save_models_json(
+    output_path: &Path,
+) -> Result<Vec<ModelMetadata>, ModelsLoadError> {
     let langdb_api_url = std::env::var("LANGDB_API_URL")
         .ok()
         .unwrap_or(LANGDB_API_URL.to_string())
@@ -115,10 +117,14 @@ pub async fn fetch_and_save_models_json(output_path: &Path) -> Result<Vec<ModelM
 
     // Serialize to JSON and save to file
     let json_content = serde_json::to_string_pretty(&models)?;
-    
+
     fs::write(output_path, json_content)?;
 
-    println!("Successfully saved {} models to {}", models.len(), output_path.display());
+    println!(
+        "Successfully saved {} models to {}",
+        models.len(),
+        output_path.display()
+    );
     Ok(models)
 }
 

@@ -352,10 +352,6 @@ impl TraceService for TraceServiceImpl {
         for resource in request.into_inner().resource_spans {
             for scope in resource.scope_spans {
                 for span in scope.spans {
-                    // tracing::info!("end received span: {:?}", span.name);
-                    // for event in &span.events {
-                    // tracing::info!("event: {:?}", event.name);
-                    // }
                     let kind = match span.kind() {
                         otel_span::SpanKind::Unspecified => SpanKind::Internal,
                         otel_span::SpanKind::Internal => SpanKind::Internal,
