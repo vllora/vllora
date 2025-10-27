@@ -87,14 +87,10 @@ fn group_models_by_name_with_endpoints(
         .list_providers(project_id)
         .unwrap_or_default();
 
-    tracing::info!("provider_credentials_map: {:?}", provider_credentials_map);
-
     let provider_credentials_map = provider_credentials_map
         .into_iter()
         .map(|provider_info| (provider_info.name, provider_info.has_credentials))
         .collect::<HashMap<String, bool>>();
-
-    tracing::info!("provider_credentials_map: {:?}", provider_credentials_map);
 
     // Convert grouped models to ModelMetadataWithEndpoints
     // Preserve database order by iterating through original models
