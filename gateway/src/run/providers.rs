@@ -49,7 +49,7 @@ pub async fn fetch_and_store_providers(
         .unwrap_or(LANGDB_API_URL.to_string())
         .replace("/v1", "");
 
-    tracing::info!("Fetching providers from LangDB API: {langdb_api_url}/providers");
+    tracing::info!("Updating providers");
 
     let client = reqwest::Client::new();
     let mut providers: Vec<LangDBProvider> = client
@@ -95,7 +95,7 @@ pub async fn fetch_and_store_providers(
     }
 
     tracing::info!(
-        "Successfully processed {} providers from LangDB API (inserted {} new ones)",
+        "Successfully processed {} providers (inserted {} new ones)",
         providers.len(),
         inserted_count
     );
@@ -131,10 +131,7 @@ pub async fn sync_providers(db_pool: DbPool) -> Result<(), ProvidersLoadError> {
     // Try to fetch from API first
     match fetch_and_store_providers(db_pool.clone()).await {
         Ok(providers) => {
-            tracing::info!(
-                "Successfully synced {} providers from LangDB API",
-                providers.len()
-            );
+            tracing::info!("Successfully synced {} providers", providers.len());
         }
         Err(e) => {
             tracing::warn!("Failed to sync providers from API: {}.", e);

@@ -116,7 +116,7 @@ impl ApiServer {
         println!("\x1b[33m  -H \x1b[32m\"Content-Type: application/json\"\x1b[33m \\\x1b[0m");
         println!("\x1b[33m  -d\x1b[0m \x1b[32m'{{");
         println!("    \"model\": \"gpt-4o-mini\",");
-        println!("    \"messages\": [{{\"role\": \"user\", \"content\": \"Hello Ellora!\"}}]");
+        println!("    \"messages\": [{{\"role\": \"user\", \"content\": \"Hello vLLora!\"}}]");
         println!("  }}'\x1b[0m");
         println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 

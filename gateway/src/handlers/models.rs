@@ -73,7 +73,10 @@ fn group_models_by_name_with_endpoints(
 
     // Group models by their model name
     for model in &models {
-        grouped.entry(model.model.clone()).or_default().push(model.clone());
+        grouped
+            .entry(model.model.clone())
+            .or_default()
+            .push(model.clone());
     }
 
     // Create provider credentials service to check availability
@@ -97,12 +100,12 @@ fn group_models_by_name_with_endpoints(
     // Preserve database order by iterating through original models
     let mut result: Vec<ModelMetadataWithEndpoints> = Vec::new();
     let mut processed_models: std::collections::HashSet<String> = std::collections::HashSet::new();
-    
+
     for model in models {
         if processed_models.contains(&model.model) {
             continue; // Skip if we already processed this model name
         }
-        
+
         // Get all instances of this model
         if let Some(model_instances) = grouped.get(&model.model) {
             // Sort model instances by cost (cheapest first)
@@ -110,7 +113,9 @@ fn group_models_by_name_with_endpoints(
             model_instances.sort_by(|a, b| {
                 let a_cost = a.price.per_input_token();
                 let b_cost = b.price.per_input_token();
-                a_cost.partial_cmp(&b_cost).unwrap_or(std::cmp::Ordering::Equal)
+                a_cost
+                    .partial_cmp(&b_cost)
+                    .unwrap_or(std::cmp::Ordering::Equal)
             });
 
             // Use the first (cheapest) model instance as the base
@@ -157,7 +162,7 @@ fn group_models_by_name_with_endpoints(
                 model: base_model,
                 endpoints,
             });
-            
+
             processed_models.insert(model.model.clone());
         }
     }
