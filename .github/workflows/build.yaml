@@ -183,10 +183,9 @@ jobs:
           MAC_ARM_SHA: ${{ steps.shas.outputs.mac_arm }}
         run: |
           VERSION="${TAG#v}"
-          BASE_VERSION="${VERSION%-*}"
 
           # Update version line
-          sed -i -E 's/^(\s*version\s*").*(")/\1'"$BASE_VERSION"'\2/' Formula/ellora.rb
+          sed -i -E 's/^(\s*version\s*").*(")/\1'"$VERSION"'\2/' Formula/vllora.rb
 
           # Update URLs and corresponding sha256 lines
           awk -v tag="$TAG" -v linux_sha="$LINUX_SHA" -v mac_x64_sha="$MAC_X64_SHA" -v mac_arm_sha="$MAC_ARM_SHA" '
@@ -217,13 +216,13 @@ jobs:
               }
               print
             }
-          ' Formula/ellora.rb > Formula/ellora.rb.new
-          mv Formula/ellora.rb.new Formula/ellora.rb
+          ' Formula/vllora.rb > Formula/vllora.rb.new
+          mv Formula/vllora.rb.new Formula/vllora.rb
 
-          echo "=== Full Formula/ellora.rb Output ==="
-          cat Formula/ellora.rb
+          echo "=== Full Formula/vllora.rb Output ==="
+          cat Formula/vllora.rb
           echo "===================================="
           
           echo "=== Preview of changes ==="
-          grep -nE 'version|ai-gateway-(macos|linux).*|sha256' Formula/ellora.rb || true
+          grep -nE 'version|ai-gateway-(macos|linux).*|sha256' Formula/vllora.rb || true
           echo "========================="
