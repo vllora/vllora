@@ -94,16 +94,12 @@ fn replace_env_vars(content: String) -> Result<String, ConfigError> {
 
 impl Config {
     pub fn load<P: AsRef<Path>>(config_path: P) -> Result<Self, ConfigError> {
-        tracing::info!("Loading config from: {}", config_path.as_ref().display());
         match std::fs::read_to_string(config_path) {
             Ok(content) => {
                 let content = replace_env_vars(content)?;
                 Ok(serde_yaml::from_str(&content)?)
             }
-            Err(e) => {
-                tracing::warn!("Failed to read config: {}. Using default config.", e);
-                Ok(Self::default())
-            }
+            Err(_e) => Ok(Self::default()),
         }
     }
 
