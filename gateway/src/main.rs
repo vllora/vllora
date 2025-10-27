@@ -72,6 +72,9 @@ pub const LOGO: &str = r#"
 
 embed_assets!("dist", compress = true);
 
+// Embed models data JSON for fast startup
+const MODELS_DATA_JSON: &str = include_str!("../models_data.json");
+
 #[actix_web::main]
 async fn main() -> Result<(), CliError> {
     dotenv::dotenv().ok();
@@ -135,6 +138,13 @@ async fn main() -> Result<(), CliError> {
                 db_models.into_iter().map(|m| m.into()).collect();
 
             run::table::pretty_print_models(models);
+            Ok(())
+        }
+        cli::Commands::GenerateModelsJson { output } => {
+            info!("Generating models JSON file: {}", output);
+            let output_path = std::path::Path::new(&output);
+            let models = run::models::fetch_and_save_models_json(output_path).await?;
+            info!("Successfully generated {} models to {}", models.len(), output);
             Ok(())
         }
         cli::Commands::Serve(serve_args) => {

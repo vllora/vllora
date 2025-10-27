@@ -7,6 +7,8 @@ use langdb_core::types::LANGDB_API_URL;
 use reqwest;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::fs;
+use std::path::Path;
 use uuid::Uuid;
 
 #[derive(Debug, thiserror::Error)]
@@ -15,6 +17,10 @@ pub enum ModelsLoadError {
     FetchError(#[from] reqwest::Error),
     #[error("Database error: {0}")]
     DatabaseError(#[from] DatabaseError),
+    #[error("IO error: {0}")]
+    IoError(#[from] std::io::Error),
+    #[error("JSON serialization error: {0}")]
+    JsonError(#[from] serde_json::Error),
 }
 
 pub async fn fetch_and_store_models(
@@ -86,5 +92,38 @@ pub async fn fetch_and_store_models(
         model_service.mark_models_as_deleted(models_to_delete)?;
     }
 
+    Ok(models)
+}
+
+/// Fetches models from API and saves them as JSON to a file
+pub async fn fetch_and_save_models_json(output_path: &Path) -> Result<Vec<ModelMetadata>, ModelsLoadError> {
+    let langdb_api_url = std::env::var("LANGDB_API_URL")
+        .ok()
+        .unwrap_or(LANGDB_API_URL.to_string())
+        .replace("/v1", "");
+
+    // Fetch models from API
+    let client = reqwest::Client::new();
+    let models: Vec<ModelMetadata> = client
+        .get(format!(
+            "{langdb_api_url}/pricing?include_parameters=true&include_benchmark=true"
+        ))
+        .send()
+        .await?
+        .json()
+        .await?;
+
+    // Serialize to JSON and save to file
+    let json_content = serde_json::to_string_pretty(&models)?;
+    
+    fs::write(output_path, json_content)?;
+
+    println!("Successfully saved {} models to {}", models.len(), output_path.display());
+    Ok(models)
+}
+
+/// Loads models from embedded JSON data
+pub fn load_models_from_json(json_content: &str) -> Result<Vec<ModelMetadata>, ModelsLoadError> {
+    let models: Vec<ModelMetadata> = serde_json::from_str(json_content)?;
     Ok(models)
 }
