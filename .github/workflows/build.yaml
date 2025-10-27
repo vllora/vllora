@@ -220,17 +220,10 @@ jobs:
           ' Formula/ellora.rb > Formula/ellora.rb.new
           mv Formula/ellora.rb.new Formula/ellora.rb
 
-          echo "Preview of updated Formula/ellora.rb"
+          echo "=== Full Formula/ellora.rb Output ==="
+          cat Formula/ellora.rb
+          echo "===================================="
+          
+          echo "=== Preview of changes ==="
           grep -nE 'version|ai-gateway-(macos|linux).*|sha256' Formula/ellora.rb || true
-
-      - name: Commit and push changes
-        env:
-          TAG: ${{ github.ref_name }}
-        run: |
-          if git diff --quiet; then
-            echo "No changes to commit."
-            exit 0
-          fi
-          git add Formula/ellora.rb
-          git commit -m "chore(homebrew): update formula for $TAG"
-          git push
+          echo "========================="
