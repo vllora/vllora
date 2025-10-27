@@ -49,8 +49,6 @@ pub async fn fetch_and_store_providers(
         .unwrap_or(LANGDB_API_URL.to_string())
         .replace("/v1", "");
 
-    tracing::info!("Updating providers");
-
     let client = reqwest::Client::new();
     let mut providers: Vec<LangDBProvider> = client
         .get(format!("{langdb_api_url}/providers"))
