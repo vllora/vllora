@@ -26,6 +26,7 @@ use actix_web::HttpResponse;
 use executor::chat_completion::routed_executor::RoutedExecutorError;
 use serde_json::json;
 use thiserror::Error;
+use tracing::Span;
 
 pub use dashmap;
 
@@ -78,6 +79,10 @@ impl GatewayApiError {
 impl actix_web::error::ResponseError for GatewayApiError {
     fn error_response(&self) -> HttpResponse {
         tracing::error!("API error: {:?}", self);
+
+        let span = Span::current();
+        span.record("error", &self.to_string());
+        
         match self {
             GatewayApiError::GatewayError(e) => e.error_response(),
             e => {
