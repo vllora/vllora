@@ -83,10 +83,16 @@ impl ProviderCredentialsService for ProviderCredentialsServiceImpl {
     ) -> Result<Option<DbProviderCredentials>, DatabaseError> {
         let mut conn = self.db_pool.get()?;
 
-        let query = provider_credentials
+        let mut query = provider_credentials
             .filter(pc::provider_name.eq(provider_name_param))
-            .filter(pc::project_id.eq(project_id_param))
-            .filter(pc::is_active.eq(1));
+            .filter(pc::is_active.eq(1))
+            .into_boxed();
+
+        if let Some(project_id) = project_id_param {
+            query = query.filter(pc::project_id.eq(project_id));
+        } else {
+            query = query.filter(pc::project_id.is_null());
+        }
 
         Ok(query.first(&mut conn).optional()?)
     }
@@ -95,12 +101,19 @@ impl ProviderCredentialsService for ProviderCredentialsServiceImpl {
         let mut conn = self.db_pool.get()?;
 
         // First, check if a record already exists for this provider/project combination
-        let existing: Option<DbProviderCredentials> = provider_credentials
+        let existing_query = provider_credentials
             .filter(pc::provider_name.eq(&provider.provider_name))
             .filter(pc::project_id.eq(&provider.project_id))
             .filter(pc::is_active.eq(1))
-            .first(&mut conn)
-            .optional()?;
+            .into_boxed();
+
+        let query = if let Some(project_id) = &provider.project_id {
+            existing_query.filter(pc::project_id.eq(project_id))
+        } else {
+            existing_query.filter(pc::project_id.is_null())
+        };
+
+        let existing: Option<DbProviderCredentials> = query.first(&mut conn).optional()?;
 
         if let Some(existing) = existing {
             // Update existing record
@@ -131,13 +144,19 @@ impl ProviderCredentialsService for ProviderCredentialsServiceImpl {
     ) -> Result<(), DatabaseError> {
         let mut conn = self.db_pool.get()?;
 
-        let query = provider_credentials
-            .filter(pc::provider_name.eq(provider_name_param))
-            .filter(pc::project_id.eq(project_id_param));
+        let query = provider_credentials.filter(pc::provider_name.eq(provider_name_param));
 
-        diesel::update(query).set(&update).execute(&mut conn)?;
-
-        Ok(())
+        if let Some(project_id) = project_id_param {
+            Ok(diesel::update(query.filter(pc::project_id.eq(project_id)))
+                .set(&update)
+                .execute(&mut conn)
+                .map(|_| ())?)
+        } else {
+            Ok(diesel::update(query.filter(pc::project_id.is_null()))
+                .set(&update)
+                .execute(&mut conn)
+                .map(|_| ())?)
+        }
     }
 
     fn delete_provider(
@@ -147,16 +166,24 @@ impl ProviderCredentialsService for ProviderCredentialsServiceImpl {
     ) -> Result<(), DatabaseError> {
         let mut conn = self.db_pool.get()?;
 
-        // Soft delete by setting is_active to 0
-        let query = provider_credentials
-            .filter(pc::provider_name.eq(provider_name_param))
-            .filter(pc::project_id.eq(project_id_param));
-
-        diesel::update(query)
+        Ok(match project_id_param {
+            Some(project_id) => diesel::update(
+                provider_credentials
+                    .filter(pc::provider_name.eq(provider_name_param))
+                    .filter(pc::project_id.eq(project_id)),
+            )
             .set(pc::is_active.eq(0))
-            .execute(&mut conn)?;
-
-        Ok(())
+            .execute(&mut conn)
+            .map(|_| ()),
+            None => diesel::update(
+                provider_credentials
+                    .filter(pc::provider_name.eq(provider_name_param))
+                    .filter(pc::project_id.is_null()),
+            )
+            .set(pc::is_active.eq(0))
+            .execute(&mut conn)
+            .map(|_| ()),
+        }?)
     }
 
     fn list_providers(
@@ -207,13 +234,19 @@ impl ProviderCredentialsService for ProviderCredentialsServiceImpl {
     ) -> Result<bool, DatabaseError> {
         let mut conn = self.db_pool.get()?;
 
-        Ok(provider_credentials
+        let query = provider_credentials
             .select(count(pc::id))
             .filter(pc::provider_name.eq(provider_name_param))
-            .filter(pc::project_id.eq(project_id_param))
             .filter(pc::is_active.eq(1))
-            .first::<i64>(&mut conn)?
-            > 0)
+            .into_boxed();
+
+        let q = if let Some(project_id) = project_id_param {
+            query.filter(pc::project_id.eq(project_id))
+        } else {
+            query.filter(pc::project_id.is_null())
+        };
+
+        Ok(q.first::<i64>(&mut conn)? > 0)
     }
 
     fn get_all_provider_credentials(
@@ -492,7 +525,8 @@ mod tests {
 
         // List project providers
         let project_providers = service.list_providers(Some("project-123")).unwrap();
-        assert_eq!(project_providers.len(), 1);
-        assert_eq!(project_providers[0].name, "anthropic");
+        assert_eq!(project_providers.len(), 2);
+        assert_eq!(project_providers[0].name, "openai");
+        assert_eq!(project_providers[1].name, "anthropic");
     }
 }
