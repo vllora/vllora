@@ -22,6 +22,9 @@ jobs:
     name: Build for Linux
     timeout-minutes: 60
     runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        target: [x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu]
 
     steps:
       - uses: actions/checkout@v3
@@ -36,26 +39,28 @@ jobs:
           libpq5 \
           libpq-dev \
           clang \
-          cmake
+          cmake \
+          gcc-aarch64-linux-gnu
        
       - name: Install stable
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: stable
+          target: ${{ matrix.target }}
       
       - uses: Swatinem/rust-cache@v2
         with:
-          key: linux-x86_64
+          key: ${{ matrix.target }}
       
       - name: Build Gateway project
-        run: cargo build --release --bin ai-gateway
+        run: cargo build --release --target ${{ matrix.target }} --bin ai-gateway
           
       - name: Upload AI Gateway artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ai-gateway-linux-x86_64
-          path: target/release/ai-gateway
+          name: ai-gateway-linux-${{ matrix.target == 'aarch64-unknown-linux-gnu' && 'aarch64' || 'x86_64' }}
+          path: target/${{ matrix.target }}/release/ai-gateway
           retention-days: 30
 
   build-macos:
@@ -120,6 +125,7 @@ jobs:
         run: |
           mkdir -p release
           cp artifacts/ai-gateway-linux-x86_64/ai-gateway release/ai-gateway-linux-x86_64
+          cp artifacts/ai-gateway-linux-aarch64/ai-gateway release/ai-gateway-linux-aarch64
           cp artifacts/ai-gateway-macos-x86_64/ai-gateway release/ai-gateway-macos-x86_64
           cp artifacts/ai-gateway-macos-aarch64/ai-gateway release/ai-gateway-macos-aarch64
           chmod +x release/*
@@ -134,6 +140,7 @@ jobs:
           generate_release_notes: true
           files: |
             release/ai-gateway-linux-x86_64
+            release/ai-gateway-linux-aarch64
             release/ai-gateway-macos-x86_64
             release/ai-gateway-macos-aarch64
         env:
@@ -168,17 +175,20 @@ jobs:
       - name: Compute checksums
         id: shas
         run: |
-          LINUX_SHA=$(sha256sum release/ai-gateway-linux-x86_64 | awk '{print $1}')
+          LINUX_X64_SHA=$(sha256sum release/ai-gateway-linux-x86_64 | awk '{print $1}')
+          LINUX_ARM_SHA=$(sha256sum release/ai-gateway-linux-aarch64 | awk '{print $1}')
           MAC_X64_SHA=$(sha256sum release/ai-gateway-macos-x86_64 | awk '{print $1}')
           MAC_ARM_SHA=$(sha256sum release/ai-gateway-macos-aarch64 | awk '{print $1}')
-          echo "linux=$LINUX_SHA" >> $GITHUB_OUTPUT
+          echo "linux_x64=$LINUX_X64_SHA" >> $GITHUB_OUTPUT
+          echo "linux_arm=$LINUX_ARM_SHA" >> $GITHUB_OUTPUT
           echo "mac_x64=$MAC_X64_SHA" >> $GITHUB_OUTPUT
           echo "mac_arm=$MAC_ARM_SHA" >> $GITHUB_OUTPUT
 
       - name: Update Homebrew formula file
         env:
           TAG: ${{ github.ref_name }}
-          LINUX_SHA: ${{ steps.shas.outputs.linux }}
+          LINUX_X64_SHA: ${{ steps.shas.outputs.linux_x64 }}
+          LINUX_ARM_SHA: ${{ steps.shas.outputs.linux_arm }}
           MAC_X64_SHA: ${{ steps.shas.outputs.mac_x64 }}
           MAC_ARM_SHA: ${{ steps.shas.outputs.mac_arm }}
         run: |
@@ -188,7 +198,7 @@ jobs:
           sed -i -E 's/^(\s*version\s*").*(")/\1'"$VERSION"'\2/' Formula/vllora.rb
 
           # Update URLs and corresponding sha256 lines
-          awk -v tag="$TAG" -v linux_sha="$LINUX_SHA" -v mac_x64_sha="$MAC_X64_SHA" -v mac_arm_sha="$MAC_ARM_SHA" '
+          awk -v tag="$TAG" -v linux_x64_sha="$LINUX_X64_SHA" -v linux_arm_sha="$LINUX_ARM_SHA" -v mac_x64_sha="$MAC_X64_SHA" -v mac_arm_sha="$MAC_ARM_SHA" '
             BEGIN { next_sha="" }
             {
               if ($0 ~ /ai-gateway-macos-aarch64/ && $0 ~ /url "/) {
@@ -201,15 +211,21 @@ jobs:
                 print
                 next_sha="MAC_X64"
                 next
+              } else if ($0 ~ /ai-gateway-linux-aarch64/ && $0 ~ /url "/) {
+                sub(/download\/[^"]+\/ai-gateway-linux-aarch64/, "download/" tag "/ai-gateway-linux-aarch64")
+                print
+                next_sha="LINUX_ARM"
+                next
               } else if ($0 ~ /ai-gateway-linux-x86_64/ && $0 ~ /url "/) {
                 sub(/download\/[^"]+\/ai-gateway-linux-x86_64/, "download/" tag "/ai-gateway-linux-x86_64")
                 print
-                next_sha="LINUX"
+                next_sha="LINUX_X64"
                 next
               } else if (next_sha != "" && $0 ~ /^\s*sha256 "/) {
                 if (next_sha == "MAC_ARM") { sub(/sha256 ".*"/, "sha256 \"" mac_arm_sha "\"") }
                 if (next_sha == "MAC_X64") { sub(/sha256 ".*"/, "sha256 \"" mac_x64_sha "\"") }
-                if (next_sha == "LINUX")   { sub(/sha256 ".*"/, "sha256 \"" linux_sha "\"") }
+                if (next_sha == "LINUX_ARM") { sub(/sha256 ".*"/, "sha256 \"" linux_arm_sha "\"") }
+                if (next_sha == "LINUX_X64") { sub(/sha256 ".*"/, "sha256 \"" linux_x64_sha "\"") }
                 print
                 next_sha=""
                 next
