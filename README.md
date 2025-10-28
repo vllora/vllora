@@ -2,10 +2,11 @@
 
 <img src="assets/images/logos/logo_dark.svg" width="200px" alt="vLLora Logo">
 
-## vLLora
 #### Lightweight, Real-time Debugging for AI Agents
 
 Debug your AI agents with precision. vLLora provides real-time observability and tracing for AI agent interactions, helping you understand exactly what's happening under the hood.
+
+![vLLora Demo](https://raw.githubusercontent.com/vllora/vllora/feat/oss-refactor/assets/gifs/traces.gif)
 
 [![GitHub stars](https://img.shields.io/github/stars/vLLora/vLLora?style=social)](https://github.com/vLLora/vLLora)
 
