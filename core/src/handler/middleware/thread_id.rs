@@ -74,10 +74,10 @@ where
             if let Some(additional_context) = additional_context {
                 additional_context
                     .0
-                    .insert("langdb.thread_id".to_string(), thread_id);
+                    .insert("vllora.thread_id".to_string(), thread_id);
             } else {
                 let mut additional_context = HashMap::new();
-                additional_context.insert("langdb.thread_id".to_string(), thread_id);
+                additional_context.insert("vllora.thread_id".to_string(), thread_id);
                 req.extensions_mut()
                     .insert(AdditionalContext::new(additional_context));
             }

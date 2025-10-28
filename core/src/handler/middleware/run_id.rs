@@ -101,10 +101,10 @@ where
                 if let Some(additional_context) = additional_context {
                     additional_context
                         .0
-                        .insert("langdb.run_id".to_string(), run_id);
+                        .insert("vllora.run_id".to_string(), run_id);
                 } else {
                     let mut additional_context = HashMap::new();
-                    additional_context.insert("langdb.run_id".to_string(), run_id);
+                    additional_context.insert("vllora.run_id".to_string(), run_id);
                     extensions_mut.insert(AdditionalContext::new(additional_context));
                 }
             }

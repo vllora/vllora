@@ -32,11 +32,11 @@ pub fn init_tracing(project_trace_senders: Arc<ProjectTraceMap>) {
 
     let provider = SdkTracerProvider::builder()
         .with_span_processor(BaggageSpanProcessor::new([
-            "langdb.run_id",
-            "langdb.thread_id",
-            "langdb.label",
-            "langdb.tenant",
-            "langdb.project_id",
+            "vllora.run_id",
+            "vllora.thread_id",
+            "vllora.label",
+            "vllora.tenant",
+            "vllora.project_id",
         ]))
         .with_simple_exporter(project_trace_span_exporter)
         .with_batch_exporter(otlp_exporter)

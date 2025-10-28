@@ -71,7 +71,7 @@ impl Default for HttpConfig {
     fn default() -> Self {
         Self {
             host: "0.0.0.0".to_string(),
-            port: 8080,
+            port: 9090,
             cors_allowed_origins: vec!["*".to_string()],
         }
     }

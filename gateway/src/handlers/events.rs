@@ -77,13 +77,13 @@ pub async fn send_events(
         .map(|custom_event| {
             let run_id = custom_event
                 .attributes
-                .get("langdb.run_id")
+                .get("vllora.run_id")
                 .unwrap_or_default()
                 .as_str()
                 .map(|s| s.to_string());
             let thread_id = custom_event
                 .attributes
-                .get("langdb.thread_id")
+                .get("vllora.thread_id")
                 .unwrap_or_default()
                 .as_str()
                 .map(|s| s.to_string());

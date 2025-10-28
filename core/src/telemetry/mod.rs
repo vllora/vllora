@@ -291,23 +291,23 @@ pub fn map_span(span: SpanData) -> Option<Span> {
         .collect();
 
     let tenant_id = attributes
-        .remove("langdb.tenant")
+        .remove("vllora.tenant")
         .and_then(|v| Some(v.as_str()?.to_owned()));
 
     let project_id = attributes
-        .remove("langdb.project_id")
+        .remove("vllora.project_id")
         .and_then(|v| Some(v.as_str()?.to_owned()));
 
     let thread_id = attributes
-        .remove("langdb.thread_id")
+        .remove("vllora.thread_id")
         .and_then(|v| Some(v.as_str()?.to_owned()));
 
     let run_id = attributes
-        .remove("langdb.run_id")
+        .remove("vllora.run_id")
         .and_then(|v| Some(v.as_str()?.to_owned()));
 
     let label = attributes
-        .remove("langdb.label")
+        .remove("vllora.label")
         .and_then(|v| Some(v.as_str()?.to_owned()));
 
     if !attributes.contains_key("label") {
@@ -407,7 +407,7 @@ impl TraceService for TraceServiceImpl {
                         .collect();
 
                     let tenant_id = attributes
-                        .remove("langdb.tenant")
+                        .remove("vllora.tenant")
                         .and_then(|v| Some(v.as_str()?.to_owned()))
                         .or(tenant_from_header.as_ref().map(|v| v.0.clone()));
 
@@ -422,20 +422,20 @@ impl TraceService for TraceServiceImpl {
                     }
 
                     let project_id = attributes
-                        .remove("langdb.project_id")
+                        .remove("vllora.project_id")
                         .and_then(|v| Some(v.as_str()?.to_owned()))
                         .or(tenant_from_header.as_ref().map(|v| v.1.clone()));
 
                     let thread_id = attributes
-                        .remove("langdb.thread_id")
+                        .remove("vllora.thread_id")
                         .and_then(|v| Some(v.as_str()?.to_owned()));
 
                     let run_id = attributes
-                        .remove("langdb.run_id")
+                        .remove("vllora.run_id")
                         .and_then(|v| Some(v.as_str()?.to_owned()));
 
                     let label = attributes
-                        .remove("langdb.label")
+                        .remove("vllora.label")
                         .and_then(|v| Some(v.as_str()?.to_owned()));
 
                     if !attributes.contains_key("label") {
@@ -450,7 +450,7 @@ impl TraceService for TraceServiceImpl {
                         tags = serde_json::from_str(&s).ok().unwrap_or_default();
                     }
 
-                    let is_client = attributes.get("langdb.client_name").is_some();
+                    let is_client = attributes.get("vllora.client_name").is_some();
 
                     let span = Span {
                         trace_id,
@@ -585,8 +585,8 @@ where
                 let project_slug = tenant.project_slug.clone();
 
                 let mut key_values = vec![
-                    KeyValue::new("langdb.tenant", tenant_name),
-                    KeyValue::new("langdb.project_id", project_slug),
+                    KeyValue::new("vllora.tenant", tenant_name),
+                    KeyValue::new("vllora.project_id", project_slug),
                 ];
 
                 let run_id = req
@@ -595,9 +595,9 @@ where
                     .and_then(|v| v.to_str().ok().map(|v| v.to_string()));
 
                 if let Some(run_id) = run_id.as_ref() {
-                    key_values.push(KeyValue::new("langdb.run_id", run_id.clone()));
+                    key_values.push(KeyValue::new("vllora.run_id", run_id.clone()));
                 } else {
-                    key_values.push(KeyValue::new("langdb.run_id", Uuid::new_v4().to_string()));
+                    key_values.push(KeyValue::new("vllora.run_id", Uuid::new_v4().to_string()));
                 }
 
                 let label = req
@@ -606,7 +606,7 @@ where
                     .and_then(|v| v.to_str().ok().map(|v| v.to_string()));
 
                 if let Some(label) = label.as_ref() {
-                    key_values.push(KeyValue::new("langdb.label", label.clone()));
+                    key_values.push(KeyValue::new("vllora.label", label.clone()));
                 }
 
                 let additional_context = req.extensions().get::<AdditionalContext>().cloned();

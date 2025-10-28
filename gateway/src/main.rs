@@ -184,7 +184,7 @@ async fn main() -> Result<(), CliError> {
                 // Handler for serving VITE_BACKEND_PORT environment variable as plain text or JSON
                 let vite_backend_port_handler = move || async move {
                     axum::Json(
-                        serde_json::json!({ "VITE_BACKEND_PORT": backend_port, "version": env!("CARGO_PKG_VERSION") }),
+                        serde_json::json!({ "VITE_BACKEND_PORT": backend_port, "VERSION": env!("CARGO_PKG_VERSION") }),
                     )
                 };
 

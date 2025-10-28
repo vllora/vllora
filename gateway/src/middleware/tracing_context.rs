@@ -61,8 +61,8 @@ where
         }
 
         let mut key_values = vec![
-            KeyValue::new("langdb.tenant", "default".to_string()),
-            KeyValue::new("langdb.project_id", project_slug.unwrap_or_default()),
+            KeyValue::new("vllora.tenant", "default".to_string()),
+            KeyValue::new("vllora.project_id", project_slug.unwrap_or_default()),
         ];
 
         let label = req
@@ -71,7 +71,7 @@ where
             .and_then(|v| v.to_str().ok().map(|v| v.to_string()));
 
         if let Some(label) = label.as_ref() {
-            key_values.push(KeyValue::new("langdb.label", label.clone()));
+            key_values.push(KeyValue::new("vllora.label", label.clone()));
         }
 
         let additional_context = req.extensions().get::<AdditionalContext>().cloned();
