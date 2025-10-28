@@ -20,7 +20,9 @@ use actix_web::{
 use futures::{future::try_join, Future, TryFutureExt};
 use langdb_core::credentials::KeyStorage;
 use langdb_core::credentials::ProviderKeyResolver;
+#[cfg(feature = "clickhouse")]
 use langdb_core::database::clickhouse::ClickhouseHttp;
+#[cfg(feature = "clickhouse")]
 use langdb_core::database::DatabaseTransportClone;
 use langdb_core::events::broadcast_channel_manager::BroadcastChannelManager;
 use langdb_core::events::callback_handler::GatewayCallbackHandlerFn;
@@ -41,6 +43,7 @@ use langdb_core::metadata::project_trace::ProjectTraceTenantResolver;
 use langdb_core::metadata::services::model::ModelService;
 use langdb_core::metadata::services::model::ModelServiceImpl;
 use langdb_core::metadata::services::project::ProjectServiceImpl;
+#[cfg(feature = "clickhouse")]
 use langdb_core::telemetry::database::DatabaseSpanWritter;
 use langdb_core::telemetry::database::SqliteTraceWriterTransport;
 use langdb_core::telemetry::SpanWriterTransport;
@@ -183,14 +186,25 @@ impl ApiServer {
         .run()
         .map_err(ServerError::Actix);
 
-        let writer = match server_config.config.clickhouse {
-            Some(c) => {
-                let client = ClickhouseHttp::root().with_url(&c.url).clone_box();
-                Box::new(DatabaseSpanWritter::new(client)) as Box<dyn SpanWriterTransport>
+        let writer = {
+            #[cfg(feature = "clickhouse")]
+            {
+                match server_config.config.clickhouse {
+                    Some(c) => {
+                        let client = ClickhouseHttp::root().with_url(&c.url).clone_box();
+                        Box::new(DatabaseSpanWritter::new(client)) as Box<dyn SpanWriterTransport>
+                    }
+                    None => Box::new(SqliteTraceWriterTransport::new(Arc::new(
+                        server_config.db_pool.clone(),
+                    ))) as Box<dyn SpanWriterTransport>,
+                }
             }
-            None => Box::new(SqliteTraceWriterTransport::new(Arc::new(
-                server_config.db_pool.clone(),
-            ))) as Box<dyn SpanWriterTransport>,
+            #[cfg(not(feature = "clickhouse"))]
+            {
+                Box::new(SqliteTraceWriterTransport::new(Arc::new(
+                    server_config.db_pool.clone(),
+                ))) as Box<dyn SpanWriterTransport>
+            }
         };
 
         let project_service = ProjectServiceImpl::new(server_config.db_pool.clone());

@@ -1,4 +1,3 @@
-#[cfg(feature = "database")]
 pub mod database;
 pub mod events;
 
@@ -66,6 +65,27 @@ pub trait SpanWriterTransport: Send + Sync {
         columns: &[&str],
         body: Vec<Vec<Value>>,
     ) -> GatewayResult<String>;
+}
+
+/// A no-op implementation of SpanWriterTransport that discards all data
+pub struct NoOpSpanWriter;
+
+impl NoOpSpanWriter {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait::async_trait]
+impl SpanWriterTransport for NoOpSpanWriter {
+    async fn insert_values(
+        &self,
+        _table_name: &str,
+        _columns: &[&str],
+        _body: Vec<Vec<Value>>,
+    ) -> GatewayResult<String> {
+        Ok("no-op".to_string())
+    }
 }
 
 pub(crate) struct SpanWriter {

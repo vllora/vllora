@@ -1,5 +1,4 @@
 pub mod credentials;
-#[cfg(feature = "database")]
 pub mod database;
 pub mod embed_mod;
 pub mod error;

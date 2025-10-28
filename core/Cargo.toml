@@ -100,7 +100,7 @@ opentelemetry-semantic-conventions = "0.30.0"
 actix-http = "3.11.1"
 
 [features]
-default = ["database"]
-database = ["dep:openssh", "dep:clickhouse", "dep:tokio-util"]
+default = []
+clickhouse = ["dep:openssh", "dep:clickhouse", "dep:tokio-util"]
 postgres = []
 sqlite = []
