@@ -56,7 +56,7 @@ pub struct UiConfig {
 
 impl Default for UiConfig {
     fn default() -> Self {
-        Self { port: 8084 }
+        Self { port: 9091 }
     }
 }
 
