@@ -53,7 +53,11 @@ curl http://localhost:8080/v1/chat/completions \
 
 **Real-time Tracing** - Monitor AI agent interactions as they happen with live observability of calls, tool interactions, and agent workflow. See exactly what your agents are doing in real-time.
 
+![Real-time Tracing](https://raw.githubusercontent.com/vllora/vllora/feat/oss-refactor/assets/images/traces-vllora.png)
+
 **MCP Support** - Full support for Model Context Protocol (MCP) servers, enabling seamless integration with external tools by connecting with MCP Servers through HTTP and SSE
+
+![MCP Configuration](https://raw.githubusercontent.com/vllora/vllora/feat/oss-refactor/assets/images/mcp-config.png)
 
 ## Development
 
