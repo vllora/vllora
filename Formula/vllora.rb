@@ -13,8 +13,8 @@ class Vllora < Formula
   end
   on_linux do
     if Hardware::CPU.arm?
-      # url "https://github.com/vllora/vllora/releases/download/v0.4.0-prerelease-10/ai-gateway-linux-aarch64"
-      # sha256 "placeholder_linux_arm_sha256"  # Will be updated by CI
+      url "https://github.com/vllora/vllora/releases/download/v0.4.0-prerelease-10/ai-gateway-linux-aarch64"
+      sha256 "placeholder_linux_arm_sha256"  # Will be updated by CI
     else
       url "https://github.com/vllora/vllora/releases/download/v0.4.0-prerelease-10/ai-gateway-linux-x86_64"
       sha256 "63c4bc1600ed1c3fdb600d82cb64e481a9b8d2832aa33f1420902b91fcee790a"  # Run: shasum -a 256 ai-gateway-x86_64
@@ -22,11 +22,11 @@ class Vllora < Formula
   end
   def install
     if OS.mac?
-      # if Hardware::CPU.arm?
-      #   bin.install "ai-gateway-macos-aarch64" => "vllora"
-      # else
+      if Hardware::CPU.arm?
+        bin.install "ai-gateway-macos-aarch64" => "vllora"
+      else
         bin.install "ai-gateway-macos-x86_64" => "vllora"
-      # end
+      end
     elsif OS.linux?
       if Hardware::CPU.arm?
         bin.install "ai-gateway-linux-aarch64" => "vllora"

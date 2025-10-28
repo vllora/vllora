@@ -348,10 +348,14 @@ impl ProviderCredentialsServiceImpl {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::metadata::models::project::NewProjectDTO;
     use crate::metadata::models::provider_credentials::NewProviderCredentialsDTO;
     use crate::metadata::models::provider_credentials::UpdateProviderCredentialsDTO;
+    use crate::metadata::services::project::ProjectService;
+    use crate::metadata::services::project::ProjectServiceImpl;
     use crate::metadata::test_utils::setup_test_database;
     use crate::types::credentials::{ApiKeyCredentials, Credentials};
+    use uuid::Uuid;
 
     fn create_test_provider_service() -> ProviderCredentialsServiceImpl {
         let db_pool = setup_test_database();
@@ -389,6 +393,20 @@ mod tests {
     fn test_save_and_get_project_specific_credentials() {
         let service = create_test_provider_service();
 
+        let project_service = ProjectServiceImpl::new(service.db_pool.clone());
+        let project = project_service
+            .create(
+                NewProjectDTO {
+                    name: "Test Project".to_string(),
+                    description: Some("Test Project Description".to_string()),
+                    settings: None,
+                    private_model_prices: None,
+                    usage_limit: None,
+                },
+                Uuid::new_v4(),
+            )
+            .unwrap();
+
         let credentials = Credentials::ApiKey(ApiKeyCredentials {
             api_key: "sk-project123".to_string(),
         });
@@ -397,19 +415,19 @@ mod tests {
             provider_name: "anthropic".to_string(),
             provider_type: "api_key".to_string(),
             credentials,
-            project_id: Some("project-123".to_string()),
+            project_id: Some(project.id.to_string()),
         };
 
         let insert = dto.to_db_insert().unwrap();
         service.save_provider(insert).unwrap();
 
         let retrieved = service
-            .get_provider_credentials("anthropic", Some("project-123"))
+            .get_provider_credentials("anthropic", Some(&project.id.to_string()))
             .unwrap()
             .unwrap();
 
         assert_eq!(retrieved.provider_name, "anthropic");
-        assert_eq!(retrieved.project_id, Some("project-123".to_string()));
+        assert_eq!(retrieved.project_id, Some(project.id.to_string()));
         assert_eq!(retrieved.is_global(), false);
     }
 
@@ -492,6 +510,20 @@ mod tests {
     fn test_list_providers() {
         let service = create_test_provider_service();
 
+        let project_service = ProjectServiceImpl::new(service.db_pool.clone());
+        let project = project_service
+            .create(
+                NewProjectDTO {
+                    name: "Test Project".to_string(),
+                    description: Some("Test Project Description".to_string()),
+                    settings: None,
+                    private_model_prices: None,
+                    usage_limit: None,
+                },
+                Uuid::new_v4(),
+            )
+            .unwrap();
+
         // Save some credentials
         let credentials1 = Credentials::ApiKey(ApiKeyCredentials {
             api_key: "sk-openai".to_string(),
@@ -512,7 +544,7 @@ mod tests {
             provider_name: "anthropic".to_string(),
             provider_type: "api_key".to_string(),
             credentials: credentials2,
-            project_id: Some("project-123".to_string()),
+            project_id: Some(project.id.to_string()),
         };
 
         service.save_provider(dto1.to_db_insert().unwrap()).unwrap();
@@ -524,7 +556,9 @@ mod tests {
         assert_eq!(global_providers[0].name, "openai");
 
         // List project providers
-        let project_providers = service.list_providers(Some("project-123")).unwrap();
+        let project_providers = service
+            .list_providers(Some(&project.id.to_string()))
+            .unwrap();
         assert_eq!(project_providers.len(), 2);
         assert_eq!(project_providers[0].name, "openai");
         assert_eq!(project_providers[1].name, "anthropic");
