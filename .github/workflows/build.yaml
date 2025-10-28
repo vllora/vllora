@@ -46,7 +46,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ui-dist
-          path: ui/dist
+          path: dist
           retention-days: 7
 
   build-linux:
@@ -67,7 +67,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ui-dist
-          path: ui/dist
+          path: dist
 
       - name: Install base dependencies
         run: |
@@ -131,7 +131,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ui-dist
-          path: ui/dist
+          path: dist
       
       - name: Install dependencies
         run: |
