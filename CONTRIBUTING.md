@@ -1,6 +1,6 @@
 # Contributing
 
-Thank you for your interest in contributing to LangDB AI Gateway! We welcome contributions from the community and are excited to have you on board.
+Thank you for your interest in contributing to vLLora! We welcome contributions from the community and are excited to have you on board.
 
 ## Table of Contents
 
@@ -25,12 +25,12 @@ This project and everyone participating in it is governed by our Code of Conduct
 1. Fork the repository on GitHub
 2. Clone your fork locally:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/ai-gateway.git
-   cd ai-gateway
+   git clone https://github.com/YOUR_USERNAME/vllora.git
+   cd vllora
    ```
 3. Add the upstream repository as a remote:
    ```bash
-   git remote add upstream https://github.com/langdb/ai-gateway.git
+   git remote add upstream https://github.com/vllora/vllora.git
    ```
 
 ## Development Setup
@@ -45,18 +45,23 @@ This project and everyone participating in it is governed by our Code of Conduct
 
 1. Create a `.env` file with necessary API keys:
    ```env
-   LANGDB_OPENAI_API_KEY=your-openai-key-here
+   OPENAI_API_KEY=your-openai-key-here
    RUST_LOG=debug
    ```
 
 2. Build the project:
    ```bash
-   RUSTFLAGS="--cfg tracing_unstable --cfg aws_sdk_unstable" cargo build
+   cargo build --release
    ```
 
 3. Run tests:
    ```bash
    cargo test
+   ```
+
+4. Start the development server:
+   ```bash
+   cargo run serve
    ```
 
 ## Making Changes
@@ -103,14 +108,14 @@ When reporting issues, please include:
 - Expected vs actual behavior
 - Version information:
   - Rust version
-  - AI Gateway version
+  - vLLora version
   - Operating system
   - Any relevant configuration
 
 ## License
 
-By contributing to LangDB AI Gateway, you agree that your contributions will be licensed under its project license.
+By contributing to vLLora, you agree that your contributions will be licensed under its project license.
 
 ---
 
-Thank you for contributing to LangDB AI Gateway! Your efforts help make this project better for everyone.
+Thank you for contributing to vLLora! Your efforts help make this debugging tool better for everyone.
