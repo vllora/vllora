@@ -88,7 +88,6 @@ rand = "0.9"
 diesel = { version = "2.3.1", features = [
   "chrono",
   "sqlite",
-  "postgres",
   "serde_json",
   "r2d2",
   "uuid",
@@ -102,5 +101,5 @@ actix-http = "3.11.1"
 [features]
 default = []
 clickhouse = ["dep:openssh", "dep:clickhouse", "dep:tokio-util"]
-postgres = []
+postgres = ["diesel/postgres"]
 sqlite = []

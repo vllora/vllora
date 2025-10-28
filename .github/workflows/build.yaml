@@ -54,6 +54,9 @@ jobs:
           key: ${{ matrix.target }}
       
       - name: Build Gateway project
+        env:
+          CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
         run: cargo build --release --target ${{ matrix.target }} --bin ai-gateway
           
       - name: Upload AI Gateway artifact
