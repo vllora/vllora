@@ -70,7 +70,7 @@ pub const LOGO: &str = r#"
    \_/ |_____|_____\___/|_|  \__,_|
 "#;
 
-embed_assets!("ui/dist", compress = true);
+embed_assets!("dist", compress = true);
 
 // Embed models data JSON for fast startup
 const MODELS_DATA_JSON: &str = include_str!("../models_data.json");
@@ -188,7 +188,7 @@ async fn main() -> Result<(), CliError> {
                     )
                 };
 
-                let index = embed_asset!("ui/dist/index.html");
+                let index = embed_asset!("ui_dist/index.html");
                 let router = static_router()
                     .route("/api/env", get(vite_backend_port_handler))
                     .fallback(index);
