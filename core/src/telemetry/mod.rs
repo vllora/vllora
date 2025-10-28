@@ -70,6 +70,12 @@ pub trait SpanWriterTransport: Send + Sync {
 /// A no-op implementation of SpanWriterTransport that discards all data
 pub struct NoOpSpanWriter;
 
+impl Default for NoOpSpanWriter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NoOpSpanWriter {
     pub fn new() -> Self {
         Self
