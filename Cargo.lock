@@ -255,6 +255,7 @@ dependencies = [
  "futures-util",
  "langdb_core",
  "langdb_guardrails",
+ "libsqlite3-sys",
  "minijinja",
  "open",
  "opentelemetry",
@@ -2634,6 +2635,7 @@ dependencies = [
  "jsonwebtoken",
  "langdb_clickhouse",
  "langdb_clust",
+ "libsqlite3-sys",
  "minijinja",
  "openssh",
  "opentelemetry",
@@ -2734,10 +2736,11 @@ dependencies = [
 
 [[package]]
 name = "libsqlite3-sys"
-version = "0.35.0"
+version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "133c182a6a2c87864fe97778797e46c7e999672690dc9fa3ee8e241aa4a9c13f"
+checksum = "cf4e226dcd58b4be396f7bd3c20da8fdee2911400705297ba7d2d7cc2c30f716"
 dependencies = [
+ "cc",
  "pkg-config",
  "vcpkg",
 ]

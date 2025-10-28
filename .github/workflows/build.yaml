@@ -44,12 +44,7 @@ jobs:
       - name: Setup cross-compilation for ARM64
         if: matrix.target == 'aarch64-unknown-linux-gnu'
         run: |
-          sudo dpkg --add-architecture arm64 || true && \
-          sudo apt-get update && \
-          sudo apt-get install -y \
-          gcc-aarch64-linux-gnu \
-          libsqlite3-dev:arm64 \
-          libsqlite3-0:arm64
+          sudo apt-get install -y gcc-aarch64-linux-gnu
        
       - name: Install stable
         uses: actions-rs/toolchain@v1
