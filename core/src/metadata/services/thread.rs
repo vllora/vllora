@@ -392,11 +392,20 @@ impl ThreadService {
                             WHERE t_inner.thread_id = main_traces.thread_id
                                 AND t_inner.project_id = ?
                                 AND t_inner.operation_name = 'api_invoke'
+                                AND (
+                                    json_extract(value, '$.role') != 'user'
+                                    OR (
+                                        json_type(value, '$.content') = 'text'
+                                        AND json_extract(value, '$.content') NOT LIKE '[%'
+                                        AND json_extract(value, '$.content') NOT LIKE '{{%'
+                                    )
+                                )
                             ORDER BY
                                 t_inner.start_time_us ASC,
                                 CASE WHEN json_extract(value, '$.role') = 'user' THEN 0 ELSE 1 END
                             LIMIT 1
                         )
+                        
                     )
                 ) as title
             FROM traces as main_traces
