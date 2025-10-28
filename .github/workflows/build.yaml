@@ -24,7 +24,8 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        target: [x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu]
+        # target: [x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu]
+        target: [x86_64-unknown-linux-gnu]
 
     steps:
       - uses: actions/checkout@v3
@@ -125,7 +126,7 @@ jobs:
         run: |
           mkdir -p release
           cp artifacts/ai-gateway-linux-x86_64/ai-gateway release/ai-gateway-linux-x86_64
-          cp artifacts/ai-gateway-linux-aarch64/ai-gateway release/ai-gateway-linux-aarch64
+          # cp artifacts/ai-gateway-linux-aarch64/ai-gateway release/ai-gateway-linux-aarch64
           cp artifacts/ai-gateway-macos-x86_64/ai-gateway release/ai-gateway-macos-x86_64
           cp artifacts/ai-gateway-macos-aarch64/ai-gateway release/ai-gateway-macos-aarch64
           chmod +x release/*
@@ -140,7 +141,7 @@ jobs:
           generate_release_notes: true
           files: |
             release/ai-gateway-linux-x86_64
-            release/ai-gateway-linux-aarch64
+            # release/ai-gateway-linux-aarch64
             release/ai-gateway-macos-x86_64
             release/ai-gateway-macos-aarch64
         env:
@@ -176,7 +177,7 @@ jobs:
         id: shas
         run: |
           LINUX_X64_SHA=$(sha256sum release/ai-gateway-linux-x86_64 | awk '{print $1}')
-          LINUX_ARM_SHA=$(sha256sum release/ai-gateway-linux-aarch64 | awk '{print $1}')
+          # LINUX_ARM_SHA=$(sha256sum release/ai-gateway-linux-aarch64 | awk '{print $1}')
           MAC_X64_SHA=$(sha256sum release/ai-gateway-macos-x86_64 | awk '{print $1}')
           MAC_ARM_SHA=$(sha256sum release/ai-gateway-macos-aarch64 | awk '{print $1}')
           echo "linux_x64=$LINUX_X64_SHA" >> $GITHUB_OUTPUT
@@ -188,7 +189,7 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
           LINUX_X64_SHA: ${{ steps.shas.outputs.linux_x64 }}
-          LINUX_ARM_SHA: ${{ steps.shas.outputs.linux_arm }}
+          # LINUX_ARM_SHA: ${{ steps.shas.outputs.linux_arm }}
           MAC_X64_SHA: ${{ steps.shas.outputs.mac_x64 }}
           MAC_ARM_SHA: ${{ steps.shas.outputs.mac_arm }}
         run: |
@@ -198,7 +199,8 @@ jobs:
           sed -i -E 's/^(\s*version\s*").*(")/\1'"$VERSION"'\2/' Formula/vllora.rb
 
           # Update URLs and corresponding sha256 lines
-          awk -v tag="$TAG" -v linux_x64_sha="$LINUX_X64_SHA" -v linux_arm_sha="$LINUX_ARM_SHA" -v mac_x64_sha="$MAC_X64_SHA" -v mac_arm_sha="$MAC_ARM_SHA" '
+          # awk -v tag="$TAG" -v linux_x64_sha="$LINUX_X64_SHA" -v linux_arm_sha="$LINUX_ARM_SHA" -v mac_x64_sha="$MAC_X64_SHA" -v mac_arm_sha="$MAC_ARM_SHA" '
+          awk -v tag="$TAG" -v linux_x64_sha="$LINUX_X64_SHA" -v mac_x64_sha="$MAC_X64_SHA" -v mac_arm_sha="$MAC_ARM_SHA" '
             BEGIN { next_sha="" }
             {
               if ($0 ~ /ai-gateway-macos-aarch64/ && $0 ~ /url "/) {
@@ -224,7 +226,7 @@ jobs:
               } else if (next_sha != "" && $0 ~ /^\s*sha256 "/) {
                 if (next_sha == "MAC_ARM") { sub(/sha256 ".*"/, "sha256 \"" mac_arm_sha "\"") }
                 if (next_sha == "MAC_X64") { sub(/sha256 ".*"/, "sha256 \"" mac_x64_sha "\"") }
-                if (next_sha == "LINUX_ARM") { sub(/sha256 ".*"/, "sha256 \"" linux_arm_sha "\"") }
+                # if (next_sha == "LINUX_ARM") { sub(/sha256 ".*"/, "sha256 \"" linux_arm_sha "\"") }
                 if (next_sha == "LINUX_X64") { sub(/sha256 ".*"/, "sha256 \"" linux_x64_sha "\"") }
                 print
                 next_sha=""
