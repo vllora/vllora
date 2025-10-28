@@ -218,7 +218,6 @@ impl GroupService for GroupServiceImpl {
             ORDER BY time_bucket DESC
             LIMIT ? OFFSET ?",
             bucket_size_us, bucket_size_us, filter_clause);
-        tracing::info!("SQL Query: {}", sql_query_str);
         let results = sql_query(&sql_query_str)
             .bind::<diesel::sql_types::BigInt, _>(query.limit)
             .bind::<diesel::sql_types::BigInt, _>(query.offset)

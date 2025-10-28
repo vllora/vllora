@@ -1,7 +1,7 @@
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Result};
 use langdb_core::metadata::models::project::DbProject;
 use langdb_core::metadata::pool::DbPool;
-use langdb_core::metadata::services::group::{GroupService, GroupServiceImpl, ListGroupQuery, TypeFilter};
+use langdb_core::metadata::services::group::{GroupService, GroupServiceImpl, GroupUsageInformation, ListGroupQuery, TypeFilter};
 use langdb_core::metadata::services::trace::{TraceService, TraceServiceImpl};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -37,6 +37,55 @@ pub struct Pagination {
     pub offset: i64,
     pub limit: i64,
     pub total: i64,
+}
+
+/// Response struct for group information with properly typed array fields
+#[derive(Debug, Serialize)]
+pub struct GroupResponse {
+    pub time_bucket: i64,
+    pub thread_ids: Vec<String>,
+    pub trace_ids: Vec<String>,
+    pub run_ids: Vec<String>,
+    pub root_span_ids: Vec<String>,
+    pub request_models: Vec<String>,
+    pub used_models: Vec<String>,
+    pub llm_calls: i64,
+    pub cost: f64,
+    pub input_tokens: Option<i64>,
+    pub output_tokens: Option<i64>,
+    pub start_time_us: i64,
+    pub finish_time_us: i64,
+    pub errors: Vec<String>,
+}
+
+impl From<GroupUsageInformation> for GroupResponse {
+    fn from(group: GroupUsageInformation) -> Self {
+        // Parse JSON string fields into proper arrays
+        let thread_ids: Vec<String> = serde_json::from_str(&group.thread_ids_json).unwrap_or_default();
+        let trace_ids: Vec<String> = serde_json::from_str(&group.trace_ids_json).unwrap_or_default();
+        let run_ids: Vec<String> = serde_json::from_str(&group.run_ids_json).unwrap_or_default();
+        let root_span_ids: Vec<String> = serde_json::from_str(&group.root_span_ids_json).unwrap_or_default();
+        let request_models: Vec<String> = serde_json::from_str(&group.request_models_json).unwrap_or_default();
+        let used_models: Vec<String> = serde_json::from_str(&group.used_models_json).unwrap_or_default();
+        let errors: Vec<String> = serde_json::from_str(&group.errors_json).unwrap_or_default();
+
+        Self {
+            time_bucket: group.time_bucket,
+            thread_ids,
+            trace_ids,
+            run_ids,
+            root_span_ids,
+            request_models,
+            used_models,
+            llm_calls: group.llm_calls,
+            cost: group.cost,
+            input_tokens: group.input_tokens,
+            output_tokens: group.output_tokens,
+            start_time_us: group.start_time_us,
+            finish_time_us: group.finish_time_us,
+            errors,
+        }
+    }
 }
 
 /// GET /group - List root spans grouped by time buckets
@@ -87,13 +136,19 @@ pub async fn list_root_group(
     let groups = group_service.list_root_group(list_query.clone())?;
     let total = group_service.count_root_group(list_query)?;
 
+    // Transform GroupUsageInformation into GroupResponse with properly typed arrays
+    let group_responses: Vec<GroupResponse> = groups
+        .into_iter()
+        .map(|g| g.into())
+        .collect();
+
     let result = PaginatedResult {
         pagination: Pagination {
             offset: query.offset.unwrap_or(0),
             limit: query.limit.unwrap_or(100),
             total,
         },
-        data: groups,
+        data: group_responses,
     };
 
     Ok(HttpResponse::Ok().json(result))
