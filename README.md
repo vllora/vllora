@@ -4,28 +4,13 @@
 
 #### Lightweight, Real-time Debugging for AI Agents
 
-Debug your AI agents with precision. vLLora provides real-time observability and tracing for AI agent interactions, helping you understand exactly what's happening under the hood.
+Debug your AI agents with vLLora. vLLora provides real-time observability and tracing for AI agent interactions, helping you understand exactly what's happening under the hood.
 
 ![vLLora Demo](https://raw.githubusercontent.com/vllora/vllora/feat/oss-refactor/assets/gifs/traces.gif)
 
 [![GitHub stars](https://img.shields.io/github/stars/vLLora/vLLora?style=social)](https://github.com/vLLora/vLLora)
 
 </div>
-
-### Key Features
-
-🔍 **Real-time Debugging**
-- Live observability of AI agent calls and tool interactions
-- Inspect tool calls and responses in real-time
-- Debug agent decision-making processes
-- Track tool usage patterns and performance
-- Instant visibility into agent behavior patterns
-
-
-⚡ **Lightweight Performance**
-- Built in Rust for maximum speed and reliability
-- Minimal resource footprint
-- Zero-configuration debugging setup
 
 ## Installation
 
@@ -38,29 +23,19 @@ brew tap vllora/vllora
 brew install vllora
 ```
 
-### Build from Source
-
-```bash
-git clone https://github.com/vllora/vllora.git
-cd vLLora
-cargo build --release
-```
-
-The binary will be available at `target/release/vlora`.
-
 ## Quick Start
 
 Start the debugging server:
 
 ```bash
-vllora serve
+vllora
 ```
 
 The server will start on `http://localhost:8080` and the UI will be available at `http://localhost:8084`. 
 
 vLLora uses OpenAI-compatible chat completions API, so when your AI agents make calls through vLLora, it automatically collects traces and debugging information for every interaction.
 
-### Test Your Setup
+### Test Send your First Request
 
 1. **Configure API Keys**: Visit `http://localhost:8084` to configure your AI provider API keys through the UI
 2. **Make a request** to see debugging in action:
@@ -74,25 +49,33 @@ curl http://localhost:8080/v1/chat/completions \
   }'
 ```
 
-## Observability
+## Features
 
-vLLora provides real-time debugging and tracing for your AI agent interactions. All traces and debugging information are available through the web UI at `http://localhost:8084`.
+**Real-time Tracing** - Monitor AI agent interactions as they happen with live observability of calls, tool interactions, and agent workflow. See exactly what your agents are doing in real-time.
 
-## API Endpoints
+![Real-time Tracing](https://raw.githubusercontent.com/vllora/vllora/feat/oss-refactor/assets/images/traces-vllora.png)
 
-vLLora provides debugging endpoints compatible with OpenAI's API format:
+**MCP Support** - Full support for Model Context Protocol (MCP) servers, enabling seamless integration with external tools by connecting with MCP Servers through HTTP and SSE
 
-- `POST /v1/chat/completions` - Chat completions with tracing
-- `GET /v1/models` - List available models
-- `POST /v1/embeddings` - Generate embeddings with tracing
+![MCP Configuration](https://raw.githubusercontent.com/vllora/vllora/feat/oss-refactor/assets/images/mcp-config.png)
 
 ## Development
 
 To get started with development:
 
-1. Clone the repository
-2. Run `cargo build` to compile
-3. Run `cargo test` to run tests
+1. **Clone the repository**:
+```bash
+git clone https://github.com/vllora/vllora.git
+cd vLLora
+cargo build --release
+```
+
+The binary will be available at `target/release/vlora`.
+
+2. **Run tests**:
+```bash
+cargo test
+```
 
 ## Contributing
 

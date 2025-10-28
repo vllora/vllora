@@ -18,8 +18,40 @@ permissions:
   contents: write # This is required for actions/checkout
 
 jobs:
+  build-ui:
+    name: Build UI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Build UI
+        run: |
+          cd ui
+          pnpm install
+          pnpm run build
+
+      - name: Upload UI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-dist
+          path: dist
+          retention-days: 7
+
   build-linux:
     name: Build for Linux
+    needs: build-ui
     timeout-minutes: 60
     runs-on: ubuntu-22.04
     strategy:
@@ -28,6 +60,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
+        with:
+          submodules: true
+
+      - name: Download UI artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ui-dist
+          path: dist
 
       - name: Install base dependencies
         run: |
@@ -75,6 +115,7 @@ jobs:
 
   build-macos:
     name: Build for macOS
+    needs: build-ui
     timeout-minutes: 60
     runs-on: macos-latest
     strategy:
@@ -83,6 +124,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
+        with:
+          submodules: true
+
+      - name: Download UI artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ui-dist
+          path: dist
       
       - name: Install dependencies
         run: |
@@ -125,6 +174,8 @@ jobs:
     
     steps:
       - uses: actions/checkout@v3
+        with:
+          submodules: true
       
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -167,6 +218,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: true
 
       - name: Set up Git user
         run: |
