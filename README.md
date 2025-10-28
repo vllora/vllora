@@ -31,17 +31,17 @@ Start the debugging server:
 vllora
 ```
 
-The server will start on `http://localhost:8080` and the UI will be available at `http://localhost:8084`. 
+The server will start on `http://localhost:9090` and the UI will be available at `http://localhost:9091`. 
 
 vLLora uses OpenAI-compatible chat completions API, so when your AI agents make calls through vLLora, it automatically collects traces and debugging information for every interaction.
 
 ### Test Send your First Request
 
-1. **Configure API Keys**: Visit `http://localhost:8084` to configure your AI provider API keys through the UI
+1. **Configure API Keys**: Visit `http://localhost:9091` to configure your AI provider API keys through the UI
 2. **Make a request** to see debugging in action:
 
 ```bash
-curl http://localhost:8080/v1/chat/completions \
+curl http://localhost:9090/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "gpt-4o-mini",
