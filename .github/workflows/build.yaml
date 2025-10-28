@@ -24,8 +24,7 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        # target: [x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu]
-        target: [x86_64-unknown-linux-gnu]
+        target: [x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu]
 
     steps:
       - uses: actions/checkout@v3

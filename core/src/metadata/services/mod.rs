@@ -1,5 +1,4 @@
 pub mod mcp_config;
-pub mod message;
 pub mod model;
 pub mod project;
 pub mod provider_credentials;
