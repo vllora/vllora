@@ -16,40 +16,6 @@ create table projects
     private_model_prices text
 );
 
-create table threads
-(
-    id                   text     default (lower(hex(randomblob(16)))) not null
-        primary key,
-    user_id              text,
-    title                text,
-    model_name           text,
-    created_at           text     default (datetime('now'))             not null,
-    tenant_id            text,
-    project_id           text,
-    is_public            integer  default 0                             not null,
-    description          text,
-    keywords             text     default '[]'
-);
-
-create table messages
-(
-    id                   text     default (lower(hex(randomblob(16)))) not null
-        primary key,
-    model_name           text,
-    type                 text,
-    thread_id            text,
-    user_id              text,
-    content_type         text,
-    content              text,
-    content_array        text     default '[]',
-    tool_call_id         text,
-    tool_calls           text,
-    tenant_id            text,
-    project_id           text,
-    created_at           text     default (datetime('now'))             not null,
-    foreign key (thread_id) references threads(id)
-);
-
 -- Your SQL goes here
 CREATE TABLE traces (
     trace_id TEXT NOT NULL,
@@ -67,7 +33,6 @@ CREATE TABLE traces (
 
 -- Create indexes for common query patterns
 CREATE INDEX idx_traces_trace_id ON traces(trace_id);
-CREATE INDEX idx_traces_thread_id ON traces(thread_id);
 CREATE INDEX idx_traces_run_id ON traces(run_id);
 CREATE INDEX idx_traces_project_id ON traces(project_id);
 CREATE INDEX idx_traces_start_time_us ON traces(start_time_us);
