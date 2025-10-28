@@ -109,7 +109,7 @@ pub async fn send_events(
                 Operation::Agent => {
                     let name = custom_event
                         .attributes
-                        .get("langdb.agent_name")
+                        .get("vllora.agent_name")
                         .unwrap_or_default()
                         .as_str()
                         .map(|s| s.to_string());
@@ -125,7 +125,7 @@ pub async fn send_events(
                 Operation::Task => {
                     let name = custom_event
                         .attributes
-                        .get("langdb.task_name")
+                        .get("vllora.task_name")
                         .unwrap_or_default()
                         .as_str()
                         .map(|s| s.to_string());
@@ -141,7 +141,7 @@ pub async fn send_events(
                 Operation::Tool => {
                     let tool_name = custom_event
                         .attributes
-                        .get("langdb.tool_name")
+                        .get("vllora.tool_name")
                         .unwrap_or_default()
                         .as_str()
                         .map(|s| s.to_string())
