@@ -72,6 +72,12 @@ pub trait GroupService {
         limit: i64,
         offset: i64,
     ) -> Result<Vec<crate::metadata::models::trace::DbTrace>, DatabaseError>;
+    fn count_by_time_bucket(
+        &self,
+        time_bucket: i64,
+        bucket_size_seconds: i64,
+        project_id: Option<&str>,
+    ) -> Result<i64, DatabaseError>;
 }
 
 pub struct GroupServiceImpl {
@@ -170,7 +176,7 @@ impl GroupService for GroupServiceImpl {
         let bucket_size_us = query.bucket_size_seconds * 1_000_000;
 
         // This query groups spans by time buckets based on start_time_us
-        // Only considers root spans (parent_span_id IS NULL)
+        // Only considers spans that have at least run_id OR thread_id
         let sql_query_str = format!("SELECT
               time_bucket,
               COALESCE(json_group_array(DISTINCT thread_id) FILTER (WHERE thread_id IS NOT NULL), '[]') as thread_ids_json,
@@ -205,14 +211,14 @@ impl GroupService for GroupServiceImpl {
                 finish_time_us,
                 json_extract(attribute, '$.error') as error_msg
               FROM traces
-              WHERE parent_span_id IS NULL
+              WHERE (run_id IS NOT NULL OR thread_id IS NOT NULL)
                 {}
             )
             GROUP BY time_bucket
             ORDER BY time_bucket DESC
             LIMIT ? OFFSET ?",
             bucket_size_us, bucket_size_us, filter_clause);
-
+        tracing::info!("SQL Query: {}", sql_query_str);
         let results = sql_query(&sql_query_str)
             .bind::<diesel::sql_types::BigInt, _>(query.limit)
             .bind::<diesel::sql_types::BigInt, _>(query.offset)
@@ -240,7 +246,7 @@ impl GroupService for GroupServiceImpl {
         let sql_query_str = format!(
             "SELECT COUNT(DISTINCT (start_time_us / {}) * {}) as count
             FROM traces
-            WHERE parent_span_id IS NULL
+            WHERE (run_id IS NOT NULL OR thread_id IS NOT NULL)
               {}",
             bucket_size_us, bucket_size_us, filter_clause
         );
@@ -271,10 +277,12 @@ impl GroupService for GroupServiceImpl {
         let bucket_start = time_bucket;
         let bucket_end = time_bucket + bucket_size_us;
 
+        // Fetch ALL spans (not just root spans) in this time bucket
+        // But exclude spans that have NEITHER run_id NOR thread_id
         let mut query = traces::table
-            .filter(traces::parent_span_id.is_null())
             .filter(traces::start_time_us.ge(bucket_start))
             .filter(traces::start_time_us.lt(bucket_end))
+            .filter(traces::run_id.is_not_null().or(traces::thread_id.is_not_null()))
             .into_boxed();
 
         // Apply project_id filter if provided
@@ -290,5 +298,44 @@ impl GroupService for GroupServiceImpl {
             .map_err(DatabaseError::QueryError)?;
 
         Ok(results)
+    }
+
+    fn count_by_time_bucket(
+        &self,
+        time_bucket: i64,
+        bucket_size_seconds: i64,
+        project_id: Option<&str>,
+    ) -> Result<i64, DatabaseError> {
+        use crate::metadata::schema::traces;
+        use diesel::dsl::count_star;
+
+        let mut conn = self.db_pool.get()?;
+
+        // Convert bucket size from seconds to microseconds
+        let bucket_size_us = bucket_size_seconds * 1_000_000;
+
+        // Calculate the time range for this bucket
+        let bucket_start = time_bucket;
+        let bucket_end = time_bucket + bucket_size_us;
+
+        // Count all spans (not just root spans) in this time bucket
+        // But exclude spans that have NEITHER run_id NOR thread_id
+        let mut query = traces::table
+            .filter(traces::start_time_us.ge(bucket_start))
+            .filter(traces::start_time_us.lt(bucket_end))
+            .filter(traces::run_id.is_not_null().or(traces::thread_id.is_not_null()))
+            .into_boxed();
+
+        // Apply project_id filter if provided
+        if let Some(project_id) = project_id {
+            query = query.filter(traces::project_id.eq(project_id));
+        }
+
+        let count = query
+            .select(count_star())
+            .first::<i64>(&mut conn)
+            .map_err(DatabaseError::QueryError)?;
+
+        Ok(count)
     }
 }

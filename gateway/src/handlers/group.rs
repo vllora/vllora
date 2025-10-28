@@ -2,7 +2,7 @@ use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Result};
 use langdb_core::metadata::models::project::DbProject;
 use langdb_core::metadata::pool::DbPool;
 use langdb_core::metadata::services::group::{GroupService, GroupServiceImpl, ListGroupQuery, TypeFilter};
-use langdb_core::metadata::services::trace::{ListTracesQuery, TraceService, TraceServiceImpl};
+use langdb_core::metadata::services::trace::{TraceService, TraceServiceImpl};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -192,31 +192,10 @@ pub async fn get_spans_by_group(
                 })
                 .collect();
 
-            // Get total count for this time bucket
-            let bucket_size_us = bucket_size_seconds * 1_000_000;
-            let bucket_start = *time_bucket;
-            let bucket_end = bucket_start + bucket_size_us;
-
-            let count_query = ListTracesQuery {
-                project_id: project_id.clone(),
-                run_ids: None,
-                thread_ids: None,
-                operation_names: None,
-                parent_span_ids: None,
-                filter_null_thread: false,
-                filter_null_run: false,
-                filter_null_operation: false,
-                filter_null_parent: true, // Only count root spans
-                filter_not_null_thread: false,
-                filter_not_null_run: false,
-                filter_not_null_operation: false,
-                filter_not_null_parent: false,
-                start_time_min: Some(bucket_start),
-                start_time_max: Some(bucket_end),
-                limit: 1,
-                offset: 0,
-            };
-            let total = trace_service.count(count_query).unwrap_or(0);
+            // Get total count for this time bucket with the same filter
+            let total = group_service
+                .count_by_time_bucket(*time_bucket, bucket_size_seconds, project_id.as_deref())
+                .unwrap_or(0);
 
             let result = PaginatedResult {
                 pagination: Pagination {
