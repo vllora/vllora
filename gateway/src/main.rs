@@ -188,7 +188,7 @@ async fn main() -> Result<(), CliError> {
                     )
                 };
 
-                let index = embed_asset!("ui_dist/index.html");
+                let index = embed_asset!("dist/index.html");
                 let router = static_router()
                     .route("/api/env", get(vite_backend_port_handler))
                     .fallback(index);
