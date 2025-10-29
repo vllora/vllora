@@ -1,8 +1,8 @@
 use diesel::{sql_query, RunQueryDsl};
-use langdb_core::metadata::models::session::DbSession;
-use langdb_core::{metadata::pool::DbPool, types::LANGDB_API_URL};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use vllora_core::metadata::models::session::DbSession;
+use vllora_core::{metadata::pool::DbPool, types::LANGDB_API_URL};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Credentials {

@@ -1,14 +1,14 @@
 use crate::cli;
 use crate::session::Credentials;
-use langdb_core::executor::ProvidersConfig;
-use langdb_core::handler::middleware::rate_limit::RateLimiting;
-use langdb_core::types::credentials::ApiKeyCredentials;
-use langdb_core::types::guardrails::Guard;
 use minijinja::Environment;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 use thiserror::Error;
+use vllora_core::executor::ProvidersConfig;
+use vllora_core::handler::middleware::rate_limit::RateLimiting;
+use vllora_core::types::credentials::ApiKeyCredentials;
+use vllora_core::types::guardrails::Guard;
 
 #[derive(Debug, Error)]
 pub enum ConfigError {

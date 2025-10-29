@@ -1,12 +1,12 @@
-use langdb_core::metadata::error::DatabaseError;
-use langdb_core::metadata::models::project::NewProjectDTO;
-use langdb_core::metadata::pool::DbPool;
-use langdb_core::metadata::services::model::{ModelService, ModelServiceImpl};
-use langdb_core::metadata::services::project::{ProjectService, ProjectServiceImpl};
-use langdb_core::metadata::services::providers::{ProviderService, ProviderServiceImpl};
 use tracing::info;
 use tracing::warn;
 use uuid::Uuid;
+use vllora_core::metadata::error::DatabaseError;
+use vllora_core::metadata::models::project::NewProjectDTO;
+use vllora_core::metadata::pool::DbPool;
+use vllora_core::metadata::services::model::{ModelService, ModelServiceImpl};
+use vllora_core::metadata::services::project::{ProjectService, ProjectServiceImpl};
+use vllora_core::metadata::services::providers::{ProviderService, ProviderServiceImpl};
 
 use crate::run;
 
@@ -106,16 +106,16 @@ async fn load_embedded_models(db_pool: DbPool) -> Result<usize, run::models::Mod
     use crate::MODELS_DATA_JSON;
 
     // Parse embedded JSON
-    let models: Vec<langdb_core::models::ModelMetadata> =
+    let models: Vec<vllora_core::models::ModelMetadata> =
         run::models::load_models_from_json(MODELS_DATA_JSON)?;
 
     // Convert to DbNewModel and insert into database
-    let db_models: Vec<langdb_core::metadata::models::model::DbNewModel> = models
+    let db_models: Vec<vllora_core::metadata::models::model::DbNewModel> = models
         .iter()
-        .map(|m| langdb_core::metadata::models::model::DbNewModel::from(m.clone()))
+        .map(|m| vllora_core::metadata::models::model::DbNewModel::from(m.clone()))
         .collect();
 
-    let model_service = langdb_core::metadata::services::model::ModelServiceImpl::new(db_pool);
+    let model_service = vllora_core::metadata::services::model::ModelServiceImpl::new(db_pool);
     model_service.insert_many(db_models)?;
 
     Ok(models.len())

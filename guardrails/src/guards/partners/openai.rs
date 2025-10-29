@@ -3,7 +3,8 @@ use async_openai::{
     types::{CreateModerationRequest, ModerationContentPart, ModerationImageUrl, ModerationInput},
     Client,
 };
-use langdb_core::{
+use tracing::Span;
+use vllora_core::{
     model::error::AuthorizationError,
     types::{
         credentials::ApiKeyCredentials,
@@ -14,7 +15,6 @@ use langdb_core::{
         },
     },
 };
-use tracing::Span;
 
 pub struct OpenaiGuardrailPartner {
     api_key: String,

@@ -1,5 +1,5 @@
-use langdb_core::{models::ModelMetadata, types::provider::ModelPrice};
 use prettytable::{row, Table};
+use vllora_core::{models::ModelMetadata, types::provider::ModelPrice};
 
 pub fn pretty_print_models(models: Vec<ModelMetadata>) {
     let mut table = Table::new();

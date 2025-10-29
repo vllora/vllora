@@ -1,11 +1,11 @@
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Result};
-use langdb_core::metadata::models::project::DbProject;
-use langdb_core::metadata::pool::DbPool;
-use langdb_core::metadata::services::trace::{ListTracesQuery, TraceService, TraceServiceImpl};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
+use vllora_core::metadata::models::project::DbProject;
+use vllora_core::metadata::pool::DbPool;
+use vllora_core::metadata::services::trace::{ListTracesQuery, TraceService, TraceServiceImpl};
 
 #[derive(Deserialize)]
 pub struct ListSpansQueryParams {

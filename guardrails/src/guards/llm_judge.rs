@@ -1,7 +1,10 @@
-use langdb_core::types::guardrails::GuardModel;
-use langdb_core::types::guardrails::{evaluator::Evaluator, Guard, GuardResult};
+use vllora_core::types::guardrails::GuardModel;
+use vllora_core::types::guardrails::{evaluator::Evaluator, Guard, GuardResult};
 
-use langdb_core::{
+use serde_json::Value;
+use std::collections::HashMap;
+use tokio::sync::mpsc;
+use vllora_core::{
     error::GatewayError,
     llm_gateway::message_mapper::MessageMapper,
     model::ModelInstance,
@@ -10,9 +13,6 @@ use langdb_core::{
         threads::Message,
     },
 };
-use serde_json::Value;
-use std::collections::HashMap;
-use tokio::sync::mpsc;
 
 use super::config::{default_suffix, load_prompts_from_yaml};
 

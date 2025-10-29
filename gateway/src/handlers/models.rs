@@ -1,15 +1,15 @@
 use actix_web::{web, HttpResponse, Result};
-use langdb_core::metadata::pool::DbPool;
-use langdb_core::metadata::services::model::ModelService;
-use langdb_core::metadata::services::provider_credentials::{
-    ProviderCredentialsService, ProviderCredentialsServiceImpl,
-};
-use langdb_core::models::{Endpoint, EndpointPricing, ModelMetadata, ModelMetadataWithEndpoints};
-use langdb_core::types::metadata::project::Project;
-use langdb_core::types::provider::ModelPrice;
-use langdb_core::GatewayApiError;
 use serde::Deserialize;
 use std::collections::HashMap;
+use vllora_core::metadata::pool::DbPool;
+use vllora_core::metadata::services::model::ModelService;
+use vllora_core::metadata::services::provider_credentials::{
+    ProviderCredentialsService, ProviderCredentialsServiceImpl,
+};
+use vllora_core::models::{Endpoint, EndpointPricing, ModelMetadata, ModelMetadataWithEndpoints};
+use vllora_core::types::metadata::project::Project;
+use vllora_core::types::provider::ModelPrice;
+use vllora_core::GatewayApiError;
 
 #[derive(Deserialize)]
 pub struct PricingQueryParams {

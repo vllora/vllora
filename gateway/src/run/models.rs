@@ -1,15 +1,15 @@
-use langdb_core::metadata::error::DatabaseError;
-use langdb_core::metadata::models::model::DbNewModel;
-use langdb_core::metadata::pool::DbPool;
-use langdb_core::metadata::services::model::{ModelService, ModelServiceImpl};
-use langdb_core::models::ModelMetadata;
-use langdb_core::types::LANGDB_API_URL;
 use reqwest;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 use uuid::Uuid;
+use vllora_core::metadata::error::DatabaseError;
+use vllora_core::metadata::models::model::DbNewModel;
+use vllora_core::metadata::pool::DbPool;
+use vllora_core::metadata::services::model::{ModelService, ModelServiceImpl};
+use vllora_core::models::ModelMetadata;
+use vllora_core::types::LANGDB_API_URL;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ModelsLoadError {

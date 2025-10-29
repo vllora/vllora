@@ -1,14 +1,14 @@
 use actix_web::{web, HttpResponse, Result};
-use langdb_core::credentials::KeyStorage;
-use langdb_core::credentials::ProviderCredentialsId;
-use langdb_core::metadata::pool::DbPool;
-use langdb_core::metadata::services::providers::{
+use serde::{Deserialize, Serialize};
+use vllora_core::credentials::KeyStorage;
+use vllora_core::credentials::ProviderCredentialsId;
+use vllora_core::metadata::pool::DbPool;
+use vllora_core::metadata::services::providers::{
     ProviderInfo as ProvidersProviderInfo, ProviderService as ProvidersService,
     ProviderServiceImpl as ProvidersServiceImpl,
 };
-use langdb_core::types::credentials::Credentials;
-use langdb_core::types::metadata::project::Project;
-use serde::{Deserialize, Serialize};
+use vllora_core::types::credentials::Credentials;
+use vllora_core::types::metadata::project::Project;
 
 use crate::ok_json;
 

@@ -5,11 +5,11 @@ use axum::routing::get;
 use clap::Parser;
 use config::{Config, ConfigError};
 use http::ApiServer;
-use langdb_core::metadata::error::DatabaseError;
-use langdb_core::metadata::services::model::ModelServiceImpl;
-use langdb_core::{error::GatewayError, usage::InMemoryStorage};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use vllora_core::metadata::error::DatabaseError;
+use vllora_core::metadata::services::model::ModelServiceImpl;
+use vllora_core::{error::GatewayError, usage::InMemoryStorage};
 
 mod callback_handler;
 mod cli;
@@ -25,10 +25,10 @@ mod seed;
 mod session;
 mod tracing;
 mod usage;
-use langdb_core::events::broadcast_channel_manager::BroadcastChannelManager;
 use static_serve::embed_asset;
 use static_serve::embed_assets;
 use tokio::sync::Mutex;
+use vllora_core::events::broadcast_channel_manager::BroadcastChannelManager;
 
 #[derive(Error, Debug)]
 pub enum CliError {
@@ -85,7 +85,7 @@ async fn main() -> Result<(), CliError> {
 
     let db_pool = get_db_pool()?;
 
-    langdb_core::metadata::utils::init_db(&db_pool);
+    vllora_core::metadata::utils::init_db(&db_pool);
     let session = session::fetch_session_id(db_pool.clone()).await;
 
     // Ping session once in background (non-blocking)
@@ -94,7 +94,7 @@ async fn main() -> Result<(), CliError> {
     let project_trace_senders = Arc::new(BroadcastChannelManager::new(Default::default()));
 
     let project_trace_senders_cleanup = Arc::clone(&project_trace_senders);
-    langdb_core::events::broadcast_channel_manager::start_cleanup_task(
+    vllora_core::events::broadcast_channel_manager::start_cleanup_task(
         (*project_trace_senders_cleanup).clone(),
     );
 
@@ -127,14 +127,14 @@ async fn main() -> Result<(), CliError> {
         }
         cli::Commands::List => {
             // Query models from database
-            use langdb_core::metadata::services::model::ModelService;
+            use vllora_core::metadata::services::model::ModelService;
             let model_service = ModelServiceImpl::new(db_pool.clone());
             let db_models = model_service.list(None)?;
 
             info!("Found {} models in database\n", db_models.len());
 
             // Convert DbModel to ModelMetadata and display as table
-            let models: Vec<langdb_core::models::ModelMetadata> =
+            let models: Vec<vllora_core::models::ModelMetadata> =
                 db_models.into_iter().map(|m| m.into()).collect();
 
             run::table::pretty_print_models(models);
@@ -235,14 +235,14 @@ async fn main() -> Result<(), CliError> {
     }
 }
 
-fn get_db_pool() -> Result<langdb_core::metadata::pool::DbPool, CliError> {
+fn get_db_pool() -> Result<vllora_core::metadata::pool::DbPool, CliError> {
     let home_dir = std::env::var("HOME").unwrap_or_else(|_| "~".to_string());
     let vllora_dir = format!("{home_dir}/.vllora");
     std::fs::create_dir_all(&vllora_dir).unwrap_or_default();
     let vllora_db_file = format!("{vllora_dir}/vllora.sqlite");
-    let db_pool = langdb_core::metadata::pool::establish_connection(vllora_db_file, 10);
+    let db_pool = vllora_core::metadata::pool::establish_connection(vllora_db_file, 10);
 
-    langdb_core::metadata::utils::init_db(&db_pool);
+    vllora_core::metadata::utils::init_db(&db_pool);
 
     Ok(db_pool)
 }

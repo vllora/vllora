@@ -2,18 +2,18 @@ use std::collections::HashMap;
 
 use crate::guards::config::load_guards_from_yaml;
 use crate::guards::llm_judge::LlmJudgeEvaluator;
-use langdb_core::model::types::ModelEvent;
-use langdb_core::model::types::ModelFinishReason;
-use langdb_core::model::ModelInstance;
-use langdb_core::types::gateway::ChatCompletionMessageWithFinishReason;
-use langdb_core::types::gateway::{
+use serde_json::Value;
+use vllora_core::model::types::ModelEvent;
+use vllora_core::model::types::ModelFinishReason;
+use vllora_core::model::ModelInstance;
+use vllora_core::types::gateway::ChatCompletionMessageWithFinishReason;
+use vllora_core::types::gateway::{
     ChatCompletionContent, ChatCompletionMessage, ChatCompletionRequest,
 };
-use langdb_core::types::guardrails::evaluator::Evaluator;
-use langdb_core::types::guardrails::{Guard, GuardAction, GuardStage};
-use langdb_core::types::threads::Message;
-use langdb_core::GatewayResult;
-use serde_json::Value;
+use vllora_core::types::guardrails::evaluator::Evaluator;
+use vllora_core::types::guardrails::{Guard, GuardAction, GuardStage};
+use vllora_core::types::threads::Message;
+use vllora_core::GatewayResult;
 
 use super::llm_judge::GuardModelInstanceFactory;
 
@@ -131,13 +131,13 @@ async fn test_guard_evaluation() {
     let toxic_result = toxic_evaluator.evaluate(&toxic_text.0.messages, toxicity_guard);
     let safe_result = safe_evaluator.evaluate(&safe_text.0.messages, toxicity_guard);
 
-    if let langdb_core::types::guardrails::GuardResult::Boolean { passed, .. } =
+    if let vllora_core::types::guardrails::GuardResult::Boolean { passed, .. } =
         toxic_result.await.unwrap()
     {
         assert!(!passed, "Toxic text should not pass");
     }
 
-    if let langdb_core::types::guardrails::GuardResult::Boolean { passed, .. } =
+    if let vllora_core::types::guardrails::GuardResult::Boolean { passed, .. } =
         safe_result.await.unwrap()
     {
         assert!(passed, "Safe text should pass");
@@ -159,13 +159,13 @@ async fn test_guard_evaluation() {
     let non_competitor_result =
         non_competitor_evaluator.evaluate(&non_competitor_text.0.messages, competitor_guard);
 
-    if let langdb_core::types::guardrails::GuardResult::Text { passed, .. } =
+    if let vllora_core::types::guardrails::GuardResult::Text { passed, .. } =
         competitor_result.await.unwrap()
     {
         assert!(!passed, "Text with competitor should not pass");
     }
 
-    if let langdb_core::types::guardrails::GuardResult::Boolean { passed, .. } =
+    if let vllora_core::types::guardrails::GuardResult::Boolean { passed, .. } =
         non_competitor_result.await.unwrap()
     {
         assert!(passed, "Text without competitor should pass");
@@ -185,13 +185,13 @@ async fn test_guard_evaluation() {
     let pii_result = pii_evaluator.evaluate(&pii_text.0.messages, pii_guard);
     let non_pii_result = non_pii_evaluator.evaluate(&non_pii_text.0.messages, pii_guard);
 
-    if let langdb_core::types::guardrails::GuardResult::Text { passed, .. } =
+    if let vllora_core::types::guardrails::GuardResult::Text { passed, .. } =
         pii_result.await.unwrap()
     {
         assert!(!passed, "Text with PII should not pass");
     }
 
-    if let langdb_core::types::guardrails::GuardResult::Boolean { passed, .. } =
+    if let vllora_core::types::guardrails::GuardResult::Boolean { passed, .. } =
         non_pii_result.await.unwrap()
     {
         assert!(passed, "Text without PII should pass");

@@ -1,6 +1,6 @@
-use langdb_core::types::gateway::ChatCompletionMessage;
+use vllora_core::types::gateway::ChatCompletionMessage;
 
-use langdb_core::types::guardrails::{
+use vllora_core::types::guardrails::{
     evaluator::Evaluator, DatasetLoader, Guard, GuardExample, GuardResult,
 };
 
@@ -21,7 +21,7 @@ impl Evaluator for DatasetEvaluator {
         {
             let text = self.messages_to_text(messages)?;
             match dataset {
-                langdb_core::types::guardrails::DatasetSource::Examples { examples } => {
+                vllora_core::types::guardrails::DatasetSource::Examples { examples } => {
                     // Simple similarity check (in a real implementation, this would use embeddings)
                     let mut best_match = None;
                     let mut best_score = 0.0;
@@ -48,7 +48,7 @@ impl Evaluator for DatasetEvaluator {
                         confidence: Some(1.0 - best_score),
                     })
                 }
-                langdb_core::types::guardrails::DatasetSource::Source { source } => {
+                vllora_core::types::guardrails::DatasetSource::Source { source } => {
                     // Load dataset from source
                     match self.loader.load(source).await {
                         Ok(examples) => {
@@ -81,7 +81,7 @@ impl Evaluator for DatasetEvaluator {
                         Err(e) => Err(format!("Error loading dataset: {e}")),
                     }
                 }
-                langdb_core::types::guardrails::DatasetSource::Managed { .. } => {
+                vllora_core::types::guardrails::DatasetSource::Managed { .. } => {
                     unimplemented!("Managed datasets are not yet supported. Please use a cloud solution instead.")
                 }
             }

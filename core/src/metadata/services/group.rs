@@ -281,7 +281,11 @@ impl GroupService for GroupServiceImpl {
         let mut query = traces::table
             .filter(traces::start_time_us.ge(bucket_start))
             .filter(traces::start_time_us.lt(bucket_end))
-            .filter(traces::run_id.is_not_null().or(traces::thread_id.is_not_null()))
+            .filter(
+                traces::run_id
+                    .is_not_null()
+                    .or(traces::thread_id.is_not_null()),
+            )
             .into_boxed();
 
         // Apply project_id filter if provided
@@ -322,7 +326,11 @@ impl GroupService for GroupServiceImpl {
         let mut query = traces::table
             .filter(traces::start_time_us.ge(bucket_start))
             .filter(traces::start_time_us.lt(bucket_end))
-            .filter(traces::run_id.is_not_null().or(traces::thread_id.is_not_null()))
+            .filter(
+                traces::run_id
+                    .is_not_null()
+                    .or(traces::thread_id.is_not_null()),
+            )
             .into_boxed();
 
         // Apply project_id filter if provided

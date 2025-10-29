@@ -18,46 +18,46 @@ use actix_web::{
     App, HttpServer,
 };
 use futures::{future::try_join, Future, TryFutureExt};
-use langdb_core::credentials::KeyStorage;
-use langdb_core::credentials::ProviderKeyResolver;
-#[cfg(feature = "clickhouse")]
-use langdb_core::database::clickhouse::ClickhouseHttp;
-#[cfg(feature = "clickhouse")]
-use langdb_core::database::DatabaseTransportClone;
-use langdb_core::events::broadcast_channel_manager::BroadcastChannelManager;
-use langdb_core::events::callback_handler::GatewayCallbackHandlerFn;
-use langdb_core::events::ui_broadcaster::EventsSendersContainer;
-use langdb_core::events::ui_broadcaster::EventsUIBroadcaster;
-use langdb_core::executor::ProvidersConfig;
-use langdb_core::handler::chat::create_chat_completion;
-use langdb_core::handler::embedding::embeddings_handler;
-use langdb_core::handler::image::create_image;
-use langdb_core::handler::middleware::actix_otel::ActixOtelMiddleware;
-use langdb_core::handler::middleware::rate_limit::{RateLimitMiddleware, RateLimiting};
-use langdb_core::handler::middleware::run_id::RunId;
-use langdb_core::handler::middleware::thread_id::ThreadId;
-use langdb_core::handler::{CallbackHandlerFn, LimitCheckWrapper};
-use langdb_core::metadata::models::session::DbSession;
-use langdb_core::metadata::pool::DbPool;
-use langdb_core::metadata::project_trace::ProjectTraceTenantResolver;
-use langdb_core::metadata::services::model::ModelService;
-use langdb_core::metadata::services::model::ModelServiceImpl;
-use langdb_core::metadata::services::project::ProjectServiceImpl;
-#[cfg(feature = "clickhouse")]
-use langdb_core::telemetry::database::DatabaseSpanWritter;
-use langdb_core::telemetry::database::SqliteTraceWriterTransport;
-use langdb_core::telemetry::SpanWriterTransport;
-use langdb_core::telemetry::{TraceServiceImpl, TraceServiceServer};
-use langdb_core::types::gateway::CostCalculator;
-use langdb_core::types::guardrails::service::GuardrailsEvaluator;
-use langdb_core::types::guardrails::Guard;
-use langdb_core::usage::InMemoryStorage;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::signal;
 use tokio::sync::Mutex;
+use vllora_core::credentials::KeyStorage;
+use vllora_core::credentials::ProviderKeyResolver;
+#[cfg(feature = "clickhouse")]
+use vllora_core::database::clickhouse::ClickhouseHttp;
+#[cfg(feature = "clickhouse")]
+use vllora_core::database::DatabaseTransportClone;
+use vllora_core::events::broadcast_channel_manager::BroadcastChannelManager;
+use vllora_core::events::callback_handler::GatewayCallbackHandlerFn;
+use vllora_core::events::ui_broadcaster::EventsSendersContainer;
+use vllora_core::events::ui_broadcaster::EventsUIBroadcaster;
+use vllora_core::executor::ProvidersConfig;
+use vllora_core::handler::chat::create_chat_completion;
+use vllora_core::handler::embedding::embeddings_handler;
+use vllora_core::handler::image::create_image;
+use vllora_core::handler::middleware::actix_otel::ActixOtelMiddleware;
+use vllora_core::handler::middleware::rate_limit::{RateLimitMiddleware, RateLimiting};
+use vllora_core::handler::middleware::run_id::RunId;
+use vllora_core::handler::middleware::thread_id::ThreadId;
+use vllora_core::handler::{CallbackHandlerFn, LimitCheckWrapper};
+use vllora_core::metadata::models::session::DbSession;
+use vllora_core::metadata::pool::DbPool;
+use vllora_core::metadata::project_trace::ProjectTraceTenantResolver;
+use vllora_core::metadata::services::model::ModelService;
+use vllora_core::metadata::services::model::ModelServiceImpl;
+use vllora_core::metadata::services::project::ProjectServiceImpl;
+#[cfg(feature = "clickhouse")]
+use vllora_core::telemetry::database::DatabaseSpanWritter;
+use vllora_core::telemetry::database::SqliteTraceWriterTransport;
+use vllora_core::telemetry::SpanWriterTransport;
+use vllora_core::telemetry::{TraceServiceImpl, TraceServiceServer};
+use vllora_core::types::gateway::CostCalculator;
+use vllora_core::types::guardrails::service::GuardrailsEvaluator;
+use vllora_core::types::guardrails::Guard;
+use vllora_core::usage::InMemoryStorage;
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 #[serde(crate = "serde")]
@@ -331,7 +331,7 @@ impl ApiServer {
                 web::scope("/events")
                     .route(
                         "",
-                        web::get().to(langdb_core::handler::events::stream_events),
+                        web::get().to(vllora_core::handler::events::stream_events),
                     )
                     .route("", web::post().to(events::send_events)),
             )

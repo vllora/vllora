@@ -1,13 +1,13 @@
 use actix_web::body::EitherBody;
 use actix_web::dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform};
 use actix_web::{web, Error, HttpMessage, HttpResponse};
-use langdb_core::metadata::pool::DbPool;
-use langdb_core::metadata::services::project::{ProjectService, ProjectServiceImpl};
 use std::future::{ready, Future, Ready};
 use std::pin::Pin;
 use std::rc::Rc;
 use tracing::error;
 use uuid::Uuid;
+use vllora_core::metadata::pool::DbPool;
+use vllora_core::metadata::services::project::{ProjectService, ProjectServiceImpl};
 
 pub const PROJECT_HEADER: &str = "X-Project-Id";
 
@@ -123,7 +123,7 @@ where
                     req.extensions_mut().insert(p.clone());
                     // Store lightweight GatewayTenant for telemetry (core crate)
                     req.extensions_mut()
-                        .insert(langdb_core::types::GatewayTenant {
+                        .insert(vllora_core::types::GatewayTenant {
                             name: "default".to_string(),
                             project_slug: p.slug.clone(),
                         });

@@ -253,8 +253,6 @@ dependencies = [
  "dotenv",
  "futures",
  "futures-util",
- "langdb_core",
- "langdb_guardrails",
  "libsqlite3-sys",
  "minijinja",
  "open",
@@ -275,6 +273,8 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "vllora_core",
+ "vllora_guardrails",
 ]
 
 [[package]]
@@ -2606,88 +2606,6 @@ dependencies = [
  "serde-json-fmt",
  "serde_json",
  "thiserror 2.0.16",
-]
-
-[[package]]
-name = "langdb_core"
-version = "0.3.2"
-dependencies = [
- "actix-http",
- "actix-web",
- "async-openai-compat",
- "async-trait",
- "aws-config",
- "aws-credential-types",
- "aws-sdk-bedrock",
- "aws-sdk-bedrockruntime",
- "aws-smithy-runtime-api",
- "aws-smithy-types",
- "base64 0.22.1",
- "bytemuck",
- "bytes",
- "chrono",
- "dashmap",
- "diesel",
- "diesel_migrations",
- "either",
- "futures",
- "indexmap 2.11.4",
- "jsonwebtoken",
- "langdb_clickhouse",
- "langdb_clust",
- "libsqlite3-sys",
- "minijinja",
- "openssh",
- "opentelemetry",
- "opentelemetry-proto",
- "opentelemetry-semantic-conventions",
- "opentelemetry_sdk",
- "parking_lot",
- "r2d2",
- "rand 0.9.2",
- "regex",
- "reqwest",
- "reqwest-eventsource",
- "rmcp",
- "rmcp-macros",
- "secrecy",
- "serde",
- "serde_json",
- "serde_tuple",
- "serde_with",
- "thiserror 2.0.16",
- "tokio",
- "tokio-stream",
- "tokio-util",
- "tonic",
- "tracing",
- "tracing-futures",
- "tracing-opentelemetry",
- "tracing-subscriber",
- "uuid",
- "validator",
- "valuable",
-]
-
-[[package]]
-name = "langdb_guardrails"
-version = "0.3.2"
-dependencies = [
- "async-openai-compat",
- "async-trait",
- "chrono",
- "jsonschema",
- "langdb_core",
- "lazy_static",
- "regex",
- "serde",
- "serde_json",
- "serde_yaml",
- "tokio",
- "tracing",
- "tracing-futures",
- "tracing-subscriber",
- "valuable",
 ]
 
 [[package]]
@@ -5122,6 +5040,88 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
+
+[[package]]
+name = "vllora_core"
+version = "0.3.2"
+dependencies = [
+ "actix-http",
+ "actix-web",
+ "async-openai-compat",
+ "async-trait",
+ "aws-config",
+ "aws-credential-types",
+ "aws-sdk-bedrock",
+ "aws-sdk-bedrockruntime",
+ "aws-smithy-runtime-api",
+ "aws-smithy-types",
+ "base64 0.22.1",
+ "bytemuck",
+ "bytes",
+ "chrono",
+ "dashmap",
+ "diesel",
+ "diesel_migrations",
+ "either",
+ "futures",
+ "indexmap 2.11.4",
+ "jsonwebtoken",
+ "langdb_clickhouse",
+ "langdb_clust",
+ "libsqlite3-sys",
+ "minijinja",
+ "openssh",
+ "opentelemetry",
+ "opentelemetry-proto",
+ "opentelemetry-semantic-conventions",
+ "opentelemetry_sdk",
+ "parking_lot",
+ "r2d2",
+ "rand 0.9.2",
+ "regex",
+ "reqwest",
+ "reqwest-eventsource",
+ "rmcp",
+ "rmcp-macros",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "serde_tuple",
+ "serde_with",
+ "thiserror 2.0.16",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "tonic",
+ "tracing",
+ "tracing-futures",
+ "tracing-opentelemetry",
+ "tracing-subscriber",
+ "uuid",
+ "validator",
+ "valuable",
+]
+
+[[package]]
+name = "vllora_guardrails"
+version = "0.3.2"
+dependencies = [
+ "async-openai-compat",
+ "async-trait",
+ "chrono",
+ "jsonschema",
+ "lazy_static",
+ "regex",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tokio",
+ "tracing",
+ "tracing-futures",
+ "tracing-subscriber",
+ "valuable",
+ "vllora_core",
+]
 
 [[package]]
 name = "vsimd"

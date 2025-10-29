@@ -1,10 +1,10 @@
 use actix_web::{web, HttpRequest, HttpResponse, Result};
-use langdb_core::credentials::construct_key_id;
-use langdb_core::credentials::KeyStorage;
-use langdb_core::metadata::models::session::DbSession;
-use langdb_core::types::metadata::project::Project;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use vllora_core::credentials::construct_key_id;
+use vllora_core::credentials::KeyStorage;
+use vllora_core::metadata::models::session::DbSession;
+use vllora_core::types::metadata::project::Project;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionResponse {
@@ -29,7 +29,7 @@ pub struct TrackSessionApiRequest {
 
 pub fn get_api_url() -> String {
     std::env::var("LANGDB_API_URL")
-        .unwrap_or_else(|_| langdb_core::types::LANGDB_API_URL.to_string())
+        .unwrap_or_else(|_| vllora_core::types::LANGDB_API_URL.to_string())
 }
 
 pub async fn track_session(

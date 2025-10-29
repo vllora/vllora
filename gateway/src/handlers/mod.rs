@@ -11,11 +11,11 @@ pub mod threads;
 pub mod traces;
 use actix_web::{web, HttpResponse};
 use chrono::NaiveTime;
-use langdb_core::handler::models::ChatModelsResponse;
-use langdb_core::metadata::services::model::ModelService;
-use langdb_core::models::ModelMetadata;
-use langdb_core::types::gateway::ChatModel;
-use langdb_core::GatewayApiError;
+use vllora_core::handler::models::ChatModelsResponse;
+use vllora_core::metadata::services::model::ModelService;
+use vllora_core::models::ModelMetadata;
+use vllora_core::types::gateway::ChatModel;
+use vllora_core::GatewayApiError;
 
 /// Macro to convert a Result<T, E> into Result<HttpResponse>
 ///

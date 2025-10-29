@@ -1,5 +1,5 @@
 [package]
-name = "langdb_core"
+name = "vllora_core"
 version = "0.3.2"
 edition = "2021"
 authors = ["LangDB Team<api@langdb.ai>"]
@@ -12,7 +12,7 @@ keywords = ["llm", "openai", "anthropic", "gemini", "mcp"]
 categories = ["web-programming", "network-programming"]
 
 [lib]
-name = "langdb_core"
+name = "vllora_core"
 path = "src/lib.rs"
 
 [dependencies]

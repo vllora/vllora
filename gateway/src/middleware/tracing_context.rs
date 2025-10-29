@@ -3,14 +3,14 @@ use actix_web::{
     HttpMessage,
 };
 use futures::future::LocalBoxFuture;
-use langdb_core::telemetry::AdditionalContext;
-use langdb_core::telemetry::HeaderExtractor;
-use langdb_core::types::metadata::project::Project;
 use opentelemetry::{
     baggage::BaggageExt, propagation::TextMapPropagator, trace::FutureExt, Context, KeyValue,
 };
 use opentelemetry_sdk::propagation::TraceContextPropagator;
 use std::future::Ready;
+use vllora_core::telemetry::AdditionalContext;
+use vllora_core::telemetry::HeaderExtractor;
+use vllora_core::types::metadata::project::Project;
 
 pub struct TracingContext;
 impl<S, B> Transform<S, ServiceRequest> for TracingContext

@@ -1,12 +1,12 @@
-use langdb_core::telemetry::events::{self, BaggageSpanProcessor};
-use langdb_core::telemetry::ProjectTraceMap;
-use langdb_core::telemetry::ProjectTraceSpanExporter;
 use opentelemetry::trace::TracerProvider as _;
 use opentelemetry_sdk::trace::SdkTracerProvider;
 use std::sync::Arc;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Layer, Registry};
+use vllora_core::telemetry::events::{self, BaggageSpanProcessor};
+use vllora_core::telemetry::ProjectTraceMap;
+use vllora_core::telemetry::ProjectTraceSpanExporter;
 
 pub fn init_tracing(project_trace_senders: Arc<ProjectTraceMap>) {
     let log_level = std::env::var("RUST_LOG").unwrap_or("info".to_string());

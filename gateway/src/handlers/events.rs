@@ -1,10 +1,10 @@
 use actix_web::{web, HttpResponse, Result};
-use langdb_core::events::string_to_span_id;
-use langdb_core::events::ui_broadcaster::EventsUIBroadcaster;
-use langdb_core::events::CustomEventType;
-use langdb_core::events::{Event, EventRunContext};
-use langdb_core::types::metadata::project::Project;
 use serde::{Deserialize, Serialize};
+use vllora_core::events::string_to_span_id;
+use vllora_core::events::ui_broadcaster::EventsUIBroadcaster;
+use vllora_core::events::CustomEventType;
+use vllora_core::events::{Event, EventRunContext};
+use vllora_core::types::metadata::project::Project;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CustomEvent {

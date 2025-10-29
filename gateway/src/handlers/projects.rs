@@ -1,10 +1,10 @@
 use actix_web::{web, HttpRequest, HttpResponse, Result};
-use langdb_core::metadata::models::project::NewProjectDTO;
-use langdb_core::metadata::pool::DbPool;
-use langdb_core::metadata::services::project::{ProjectService, ProjectServiceImpl};
-use langdb_core::types::metadata::project::Project;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use vllora_core::metadata::models::project::NewProjectDTO;
+use vllora_core::metadata::pool::DbPool;
+use vllora_core::metadata::services::project::{ProjectService, ProjectServiceImpl};
+use vllora_core::types::metadata::project::Project;
 
 use crate::ok_json;
 
@@ -107,7 +107,7 @@ pub async fn update_project(
     let owner_id = Uuid::nil();
 
     // Convert UpdateProjectRequest to UpdateProjectDTO
-    let update_data = langdb_core::metadata::models::project::UpdateProjectDTO {
+    let update_data = vllora_core::metadata::models::project::UpdateProjectDTO {
         name: req.name.clone(),
         description: req.description.clone(),
         settings: req.settings.clone(),

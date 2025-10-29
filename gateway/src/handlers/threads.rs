@@ -1,9 +1,9 @@
 use actix_web::{web, HttpResponse, Result};
-use langdb_core::metadata::pool::DbPool;
-use langdb_core::metadata::services::thread::ThreadService;
-use langdb_core::types::metadata::project::Project;
-use langdb_core::types::threads::{MessageThread, PageOptions, PageOrderType};
 use serde::{Deserialize, Serialize};
+use vllora_core::metadata::pool::DbPool;
+use vllora_core::metadata::services::thread::ThreadService;
+use vllora_core::types::metadata::project::Project;
+use vllora_core::types::threads::{MessageThread, PageOptions, PageOrderType};
 
 /// Extract the first N words from a text string
 fn extract_first_n_words(text: &str, n: usize) -> String {

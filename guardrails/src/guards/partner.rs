@@ -1,7 +1,7 @@
-use langdb_core::types::guardrails::partner::GuardPartner;
-use langdb_core::types::guardrails::{evaluator::Evaluator, Guard, GuardResult};
+use vllora_core::types::guardrails::partner::GuardPartner;
+use vllora_core::types::guardrails::{evaluator::Evaluator, Guard, GuardResult};
 
-use langdb_core::{model::ModelInstance, types::gateway::ChatCompletionMessage};
+use vllora_core::{model::ModelInstance, types::gateway::ChatCompletionMessage};
 
 #[async_trait::async_trait]
 pub trait GuardModelInstanceFactory: Send + Sync {

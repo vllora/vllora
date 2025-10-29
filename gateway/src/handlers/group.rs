@@ -1,12 +1,14 @@
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Result};
-use langdb_core::metadata::models::project::DbProject;
-use langdb_core::metadata::pool::DbPool;
-use langdb_core::metadata::services::group::{GroupService, GroupServiceImpl, GroupUsageInformation, ListGroupQuery, TypeFilter};
-use langdb_core::metadata::services::trace::{TraceService, TraceServiceImpl};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
+use vllora_core::metadata::models::project::DbProject;
+use vllora_core::metadata::pool::DbPool;
+use vllora_core::metadata::services::group::{
+    GroupService, GroupServiceImpl, GroupUsageInformation, ListGroupQuery, TypeFilter,
+};
+use vllora_core::metadata::services::trace::{TraceService, TraceServiceImpl};
 
 #[derive(Deserialize)]
 pub struct ListGroupQueryParams {
@@ -61,12 +63,17 @@ pub struct GroupResponse {
 impl From<GroupUsageInformation> for GroupResponse {
     fn from(group: GroupUsageInformation) -> Self {
         // Parse JSON string fields into proper arrays
-        let thread_ids: Vec<String> = serde_json::from_str(&group.thread_ids_json).unwrap_or_default();
-        let trace_ids: Vec<String> = serde_json::from_str(&group.trace_ids_json).unwrap_or_default();
+        let thread_ids: Vec<String> =
+            serde_json::from_str(&group.thread_ids_json).unwrap_or_default();
+        let trace_ids: Vec<String> =
+            serde_json::from_str(&group.trace_ids_json).unwrap_or_default();
         let run_ids: Vec<String> = serde_json::from_str(&group.run_ids_json).unwrap_or_default();
-        let root_span_ids: Vec<String> = serde_json::from_str(&group.root_span_ids_json).unwrap_or_default();
-        let request_models: Vec<String> = serde_json::from_str(&group.request_models_json).unwrap_or_default();
-        let used_models: Vec<String> = serde_json::from_str(&group.used_models_json).unwrap_or_default();
+        let root_span_ids: Vec<String> =
+            serde_json::from_str(&group.root_span_ids_json).unwrap_or_default();
+        let request_models: Vec<String> =
+            serde_json::from_str(&group.request_models_json).unwrap_or_default();
+        let used_models: Vec<String> =
+            serde_json::from_str(&group.used_models_json).unwrap_or_default();
         let errors: Vec<String> = serde_json::from_str(&group.errors_json).unwrap_or_default();
 
         Self {
@@ -109,7 +116,8 @@ pub async fn list_root_group(
     query: web::Query<ListGroupQueryParams>,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
-    let group_service: GroupServiceImpl = GroupServiceImpl::new(Arc::new(db_pool.get_ref().clone()));
+    let group_service: GroupServiceImpl =
+        GroupServiceImpl::new(Arc::new(db_pool.get_ref().clone()));
 
     // Extract project_id from extensions (set by ProjectMiddleware)
     let project_id = req.extensions().get::<DbProject>().map(|p| p.slug.clone());
@@ -137,10 +145,7 @@ pub async fn list_root_group(
     let total = group_service.count_root_group(list_query)?;
 
     // Transform GroupUsageInformation into GroupResponse with properly typed arrays
-    let group_responses: Vec<GroupResponse> = groups
-        .into_iter()
-        .map(|g| g.into())
-        .collect();
+    let group_responses: Vec<GroupResponse> = groups.into_iter().map(|g| g.into()).collect();
 
     let result = PaginatedResult {
         pagination: Pagination {

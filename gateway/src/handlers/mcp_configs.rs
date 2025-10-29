@@ -1,14 +1,14 @@
 use actix_web::{web, HttpRequest, HttpResponse, Result};
-use langdb_core::metadata::pool::DbPool;
-use langdb_core::metadata::services::mcp_config::McpConfigService;
-use langdb_core::model::mcp::get_tools;
-use langdb_core::rmcp::model::Tool;
-use langdb_core::types::mcp::McpConfig;
-use langdb_core::types::GatewayTenant;
-use langdb_core::GatewayApiError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+use vllora_core::metadata::pool::DbPool;
+use vllora_core::metadata::services::mcp_config::McpConfigService;
+use vllora_core::model::mcp::get_tools;
+use vllora_core::rmcp::model::Tool;
+use vllora_core::types::mcp::McpConfig;
+use vllora_core::types::GatewayTenant;
+use vllora_core::GatewayApiError;
 
 #[derive(Deserialize)]
 pub struct CreateMcpConfigRequest {
@@ -37,8 +37,8 @@ pub struct McpConfigListResponse {
     pub configs: Vec<McpConfigResponse>,
 }
 
-impl From<langdb_core::metadata::models::mcp_config::DbMcpConfig> for McpConfigResponse {
-    fn from(db_config: langdb_core::metadata::models::mcp_config::DbMcpConfig) -> Self {
+impl From<vllora_core::metadata::models::mcp_config::DbMcpConfig> for McpConfigResponse {
+    fn from(db_config: vllora_core::metadata::models::mcp_config::DbMcpConfig) -> Self {
         let config = db_config.to_mcp_config().unwrap_or_default();
         let tools = db_config
             .get_tools()

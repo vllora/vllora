@@ -16,8 +16,8 @@ name = "ai-gateway"
 path = "src/main.rs"
 
 [dependencies]
-langdb_core = { path = "../core", version = "0.3.2", features = ["sqlite"], default-features = false }
-langdb_guardrails = { path = "../guardrails", version = "0.3.2" }
+vllora_core = { path = "../core", version = "0.3.2", features = ["sqlite"], default-features = false }
+vllora_guardrails = { path = "../guardrails", version = "0.3.2" }
 
 tokio = { workspace = true }
 serde = { workspace = true }
@@ -60,4 +60,4 @@ libsqlite3-sys = { version = "0.27.0", features = ["bundled"] }
 
 [features]
 default = []
-clickhouse = ["langdb_core/clickhouse"]
+clickhouse = ["vllora_core/clickhouse"]
