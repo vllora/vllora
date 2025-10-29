@@ -1,8 +1,13 @@
 -- Your SQL goes here
 create table projects
 (
-    id                   text     default (lower(hex(randomblob(16)))) not null
-        primary key,
+    id TEXT PRIMARY KEY DEFAULT (
+        lower(hex(randomblob(4))) || '-' ||
+        lower(hex(randomblob(2))) || '-' ||
+        lower(hex(randomblob(2))) || '-' ||
+        lower(hex(randomblob(2))) || '-' ||
+        lower(hex(randomblob(6)))
+    ) NOT NULL,
     name                 text                                   not null,
     description          text,
     created_at           text     default (datetime('now'))      not null,
@@ -44,7 +49,13 @@ CREATE INDEX idx_traces_child_lookup ON traces(trace_id, parent_span_id, operati
 
 -- Your SQL goes here
 CREATE TABLE models (
-    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))) NOT NULL,
+    id TEXT PRIMARY KEY DEFAULT (
+        lower(hex(randomblob(4))) || '-' ||
+        lower(hex(randomblob(2))) || '-' ||
+        lower(hex(randomblob(2))) || '-' ||
+        lower(hex(randomblob(2))) || '-' ||
+        lower(hex(randomblob(6)))
+    ) NOT NULL,
     model_name TEXT NOT NULL,
     description TEXT,
     provider_name TEXT NOT NULL,
@@ -78,7 +89,13 @@ CREATE TABLE models (
 
 -- Add provider_credentials table for storing API keys and credentials
 CREATE TABLE provider_credentials (
-    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))) NOT NULL,
+    id TEXT PRIMARY KEY DEFAULT (
+        lower(hex(randomblob(4))) || '-' ||
+        lower(hex(randomblob(2))) || '-' ||
+        lower(hex(randomblob(2))) || '-' ||
+        lower(hex(randomblob(2))) || '-' ||
+        lower(hex(randomblob(6)))
+    ) NOT NULL,
     provider_name TEXT NOT NULL,
     provider_type TEXT NOT NULL,
     credentials TEXT NOT NULL, -- JSON serialized credentials
@@ -90,7 +107,13 @@ CREATE TABLE provider_credentials (
 );
 
 CREATE TABLE providers (
-    id TEXT PRIMARY KEY NOT NULL,
+    id TEXT PRIMARY KEY DEFAULT (
+        lower(hex(randomblob(4))) || '-' ||
+        lower(hex(randomblob(2))) || '-' ||
+        lower(hex(randomblob(2))) || '-' ||
+        lower(hex(randomblob(2))) || '-' ||
+        lower(hex(randomblob(6)))
+    ) NOT NULL,
     provider_name TEXT NOT NULL UNIQUE,
     description TEXT,
     endpoint TEXT,
@@ -103,7 +126,13 @@ CREATE TABLE providers (
 );
 
 CREATE TABLE mcp_configs (
-    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))) NOT NULL,
+    id TEXT PRIMARY KEY DEFAULT (
+        lower(hex(randomblob(4))) || '-' ||
+        lower(hex(randomblob(2))) || '-' ||
+        lower(hex(randomblob(2))) || '-' ||
+        lower(hex(randomblob(2))) || '-' ||
+        lower(hex(randomblob(6)))
+    ) NOT NULL,
     company_slug TEXT NOT NULL,
     config TEXT NOT NULL,
     tools TEXT NOT NULL,
