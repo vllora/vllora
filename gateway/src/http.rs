@@ -2,7 +2,7 @@ use crate::callback_handler::init_callback_handler;
 use crate::config::{load_langdb_proxy_config, Config};
 use crate::cost::GatewayCostCalculator;
 use crate::guardrails::GuardrailsService;
-use crate::handlers::{spans, threads};
+use crate::handlers::{group, spans, threads};
 
 use crate::handlers::{events, mcp_configs, models, projects, providers, runs, session, traces};
 use crate::limit::GatewayLimitChecker;
@@ -354,6 +354,11 @@ impl ApiServer {
                 web::scope("/runs")
                     .route("", web::get().to(runs::list_root_runs))
                     .route("/{run_id}", web::get().to(traces::get_spans_by_run)),
+            )
+            .service(
+                web::scope("/group")
+                    .route("", web::get().to(group::list_root_group))
+                    .route("/{time_bucket}", web::get().to(group::get_spans_by_group)),
             )
             .service(
                 web::scope("/session")

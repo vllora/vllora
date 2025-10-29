@@ -1,4 +1,5 @@
 pub mod events;
+pub mod group;
 pub mod mcp_configs;
 pub mod models;
 pub mod projects;
@@ -8,7 +9,6 @@ pub mod session;
 pub mod spans;
 pub mod threads;
 pub mod traces;
-
 use actix_web::{web, HttpResponse};
 use chrono::NaiveTime;
 use langdb_core::handler::models::ChatModelsResponse;
