@@ -89,7 +89,7 @@ async fn main() -> Result<(), CliError> {
     let session = session::fetch_session_id(db_pool.clone()).await;
 
     // Ping session once in background (non-blocking)
-    session::ping_session(session.id.clone());
+    session::check_version(session.id.clone());
 
     let project_trace_senders = Arc::new(BroadcastChannelManager::new(Default::default()));
 

@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use vllora_core::metadata::models::session::DbSession;
 use vllora_core::{metadata::pool::DbPool, types::LANGDB_API_URL};
+use reqwest::header::{HeaderMap, HeaderValue};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Credentials {
@@ -31,12 +32,53 @@ pub async fn fetch_session_id(pool: DbPool) -> DbSession {
     }
 }
 
-pub fn ping_session(session_id: String) {
+pub fn check_version(session_id: String) {
     tokio::spawn(async move {
+        let version = env!("CARGO_PKG_VERSION");
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "X-vllora-version",
+            HeaderValue::from_str(&format!("{version}")).unwrap(),
+        );
+
+        if let Some(latest) = fetch_latest_release_version().await {
+            if let Ok(v) = HeaderValue::from_str(&latest) {
+                headers.insert("X-vllora-latest", v);
+            }
+
+            if version != latest {
+                println!("New version available: {latest}. Your version is outdated. Please update to the latest version");
+                println!("Do upgrade with \x1b[32mbrew upgrade vllora\x1b[0m");
+            }
+        }
+
+        
         let client = reqwest::Client::new();
-        client
+        let _ = client
             .get(format!("{}/session/ping/{}", get_api_url(), session_id))
+            .headers(headers)
             .send()
-            .await
+            .await;
     });
+}
+
+async fn fetch_latest_release_version() -> Option<String> {
+    #[derive(Deserialize)]
+    struct Release { tag_name: String }
+
+    let client = reqwest::Client::builder()
+        .user_agent(format!("vllora/{}", env!("CARGO_PKG_VERSION")))
+        .build()
+        .ok()?;
+
+    let response = client
+        .get("https://api.github.com/repos/vllora/vllora/releases/latest")
+        .send()
+        .await
+        .ok()?;
+
+    if !response.status().is_success() { return None; }
+
+    let release: Release = response.json().await.ok()?;
+    Some(release.tag_name)
 }
