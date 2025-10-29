@@ -308,16 +308,18 @@ let group_responses: Vec<GroupResponse> = groups.into_iter().map(|g| g.into()).c
 
 ```
 TracesPageContext (State Management)
-    ├── TabSelectionHeader (UI Controls)
-    │   └── GroupingSelector (ToggleGroup: Run | 1h | 2h | 3h | 6h | 12h | 24h)
-    │
-    └── TracesContent
-        ├── (When groupByMode === "run")
-        │   └── RunTableRow (Display individual runs)
+    └── TracesPageContent
+        ├── GroupingSelector (Two separate controls)
+        │   ├── View Toggle: Run | Bucket
+        │   └── Bucket Size Toggle: 5min | 15min | 1hr | 3hr | 1day (shown when Bucket selected)
         │
-        └── (When groupByMode === "bucket")
-            └── GroupTableRow (Display time-bucketed groups)
-                └── TimelineContent (Display all spans in bucket)
+        └── RunTable (Container that delegates to sub-components)
+            ├── (When groupByMode === "run")
+            │   └── RunTableView → RunTableRow (Display individual runs as table)
+            │
+            └── (When groupByMode === "bucket")
+                └── GroupCardGrid → GroupCard (Display time-bucketed groups as cards)
+                    └── TimelineContent (Display all spans in bucket)
 ```
 
 #### State Management
@@ -329,57 +331,54 @@ TracesPageContext (State Management)
 // Grouping mode: "run" or "bucket"
 const [groupByMode, setGroupByMode] = useState<"run" | "bucket">("run");
 
-// Bucket size in seconds (3600, 7200, 10800, 21600, 43200, 86400)
-const [bucketSize, setBucketSize] = useState<number>(3600);
+// Bucket size in seconds (300, 900, 3600, 10800, 86400)
+const [bucketSize, setBucketSize] = useState<number>(300);
 
 // Currently opened groups (by time_bucket)
 const [openGroups, setOpenGroups] = useState<{ time_bucket: number; tab: string }[]>([]);
 
-// Cached spans for each time bucket
-const [groupSpansMap, setGroupSpansMap] = useState<Record<number, Span[]>>({});
-
 // Loading state for each time bucket
 const [loadingGroupsByTimeBucket, setLoadingGroupsByTimeBucket] = useState<Set<number>>(new Set());
+
+// Computed value: Groups spans by time bucket (not state!)
+const groupSpansMap = useMemo(() => {
+  const bucket_size_us = bucketSize * 1_000_000;
+  return flattenSpans.reduce((acc, span) => {
+    if (span.start_time_us) {
+      const timeBucket = Math.floor(span.start_time_us / bucket_size_us) * bucket_size_us;
+      if (!acc[timeBucket]) {
+        acc[timeBucket] = [];
+      }
+      acc[timeBucket].push(span);
+    }
+    return acc;
+  }, {} as Record<number, Span[]>);
+}, [flattenSpans, bucketSize]);
 ```
 
 **Key Functions:**
 
-1. **loadGroupSpans(timeBucket: number)** - Critical function with important implementation details
+1. **loadSpansByBucketGroup(timeBucket: number)** - Loads spans for a specific time bucket
 
 ```typescript
-// Refs to track latest state values (prevents stale closure reads)
-const groupSpansMapRef = useRef<Record<number, Span[]>>({});
+// Ref to track loading state (prevents stale closure reads)
 const loadingGroupsByTimeBucketRef = useRef<Set<number>>(new Set());
 
-// Sync refs with state
-useEffect(() => {
-  groupSpansMapRef.current = groupSpansMap;
-}, [groupSpansMap]);
-
+// Sync ref with state
 useEffect(() => {
   loadingGroupsByTimeBucketRef.current = loadingGroupsByTimeBucket;
 }, [loadingGroupsByTimeBucket]);
 
-const loadGroupSpans = useCallback(async (timeBucket: number) => {
-  // CRITICAL: Use refs in guard checks to avoid stale closure reads
-  // If we used state directly, the callback would capture old values
+const loadSpansByBucketGroup = useCallback(async (timeBucket: number) => {
+  // CRITICAL: Use ref in guard check to avoid stale closure reads
   if (loadingGroupsByTimeBucketRef.current.has(timeBucket)) {
-    console.log('Already loading group:', timeBucket);
     return;
   }
 
-  // CRITICAL: Check existence in object, not array length
-  // Empty arrays are valid cached data, checking .length > 0 would retry unnecessarily
-  if (timeBucket in groupSpansMapRef.current) {
-    console.log('Group already loaded:', timeBucket);
-    return;
-  }
-
-  console.log('Loading group spans for bucket:', timeBucket);
   setLoadingGroupsByTimeBucket(prev => new Set(prev).add(timeBucket));
 
   try {
-    const response = await fetchGroupSpans({
+    const response = await fetchSpansByBucketGroup({
       timeBucket,
       projectId,
       bucketSize,
@@ -387,14 +386,12 @@ const loadGroupSpans = useCallback(async (timeBucket: number) => {
       offset: 0,
     });
 
-    // Store ALL spans (root + children) directly from the backend
-    setGroupSpansMap(prev => ({
-      ...prev,
-      [timeBucket]: response.data,
-    }));
+    // Add spans to flattenSpans - groupSpansMap will auto-update via useMemo
+    updateBySpansArray(response.data);
   } catch (error: any) {
-    console.error('Failed to load group spans:', error);
-    // Don't cache errors - allow retry
+    toast.error("Failed to load group spans", {
+      description: error.message || "An error occurred while loading group spans",
+    });
   } finally {
     setLoadingGroupsByTimeBucket(prev => {
       const newSet = new Set(prev);
@@ -402,33 +399,110 @@ const loadGroupSpans = useCallback(async (timeBucket: number) => {
       return newSet;
     });
   }
-}, [projectId, bucketSize]); // CRITICAL: Only projectId and bucketSize as dependencies
-// DO NOT add groupSpansMap or loadingGroupsByTimeBucket - causes infinite loops
-// We use refs for guard checks instead
+}, [projectId, bucketSize, flattenSpans]);
 ```
 
-**Critical Implementation Details:**
+**Key Architectural Changes:**
 
-⚠️ **Common Pitfall #1: Infinite Loop from useCallback Dependencies**
-- **Problem**: Adding `groupSpansMap` or `loadingGroupsByTimeBucket` to useCallback deps causes infinite loops
-- **Why**: Every state change recreates the callback, which triggers useEffect in GroupTableRow, which calls the new callback, which updates state...
-- **Solution**: Use refs for guard checks, only include `projectId` and `bucketSize` in deps
+✅ **groupSpansMap is computed, not state**
+- Previously: `setGroupSpansMap(prev => ({ ...prev, [timeBucket]: response.data }))`
+- Now: Add to `flattenSpans`, `groupSpansMap` recomputes automatically via `useMemo`
+- Benefit: Single source of truth, no synchronization bugs
 
-⚠️ **Common Pitfall #2: Empty Array Check**
-- **Problem**: Checking `groupSpansMap[timeBucket]?.length > 0` causes retries for empty buckets
-- **Why**: Empty bucket (no spans) is valid cached data, but length check treats it as uncached
-- **Solution**: Use `timeBucket in groupSpansMapRef.current` to check key existence
+✅ **Uses updateBySpansArray from useWrapperHook**
+- Consistent pattern with run mode
+- Handles upsert logic (update existing, insert new)
+- Reusable across different contexts
 
-⚠️ **Common Pitfall #3: Stale Closure Reads**
-- **Problem**: Guard checks read stale state values captured in closure
-- **Why**: useCallback captures values at creation time, not call time
-- **Solution**: Use refs which always point to current state values
+✅ **No duplicate data**
+- All spans live in `flattenSpans`
+- `groupSpansMap` is just a view/grouping of that data
+- Changes to `flattenSpans` automatically reflect in `groupSpansMap`
 
-**Why This Matters:**
-- Centralized in context enables future real-time event integration
-- Real-time events can update `groupSpansMap` directly
-- No need for prop drilling or complex state lifting
-- Single source of truth for span data
+2. **refreshSingleBucket(timeBucket: number)** - Refreshes bucket metadata from backend
+
+```typescript
+const refreshSingleBucket = useCallback(async (timeBucket: number) => {
+  try {
+    const updatedBucket = await fetchSingleBucket({
+      timeBucket,
+      projectId,
+      bucketSize,
+    });
+
+    if (updatedBucket) {
+      setGroups(prev => prev.map(g =>
+        g.time_bucket === timeBucket ? updatedBucket : g
+      ));
+      console.log('Refreshed bucket stats for:', timeBucket);
+    }
+  } catch (error) {
+    console.error('Failed to refresh bucket stats:', error);
+  }
+}, [projectId, bucketSize, setGroups]);
+```
+
+**Use Case:**
+- Called when a run finishes (`RunFinished` or `RunError` events)
+- Fetches updated aggregated stats (cost, tokens, errors) from backend
+- Updates only the specific bucket in the groups list
+
+**Why Backend Fetch Instead of Manual Calculation:**
+- ✅ Backend has authoritative aggregated stats via SQL
+- ✅ No duplication of aggregation logic
+- ✅ Handles edge cases (concurrent runs, partial data)
+- ❌ Previously: Calculated stats manually from `groupSpansMap` (removed)
+
+**Real-time Flow:**
+1. Span event arrives → Added to `flattenSpans`
+2. Run completes → Call `refreshSingleBucket(timeBucket)`
+3. Backend re-aggregates all spans in that bucket
+4. Frontend receives updated stats and displays them
+
+#### Detail Span - No Override Needed
+
+**Location:** [ui/src/contexts/TracesPageContext.tsx](../ui/src/contexts/TracesPageContext.tsx)
+
+The `detailSpan` from `useWrapperHook` works for both run and bucket modes without any override:
+
+```typescript
+// Get detailSpan directly from useWrapperHook
+const {
+  detailSpan,  // Searches flattenSpans - works for both modes!
+  detailSpanId,
+  setDetailSpanId,
+  flattenSpans,
+  // ... other values
+} = useWrapperHook({ projectId });
+
+// No override needed - just return it directly
+return {
+  // ... other values
+  detailSpan,  // Works in both run and bucket modes
+};
+```
+
+**Why No Override is Needed:**
+
+✅ **groupSpansMap is computed from flattenSpans**
+- `groupSpansMap = useMemo(() => flattenSpans.reduce(...))`
+- All spans in `groupSpansMap` **must exist** in `flattenSpans` first
+- `detailSpan` searches `flattenSpans` and finds everything
+
+✅ **Single source of truth**
+- Run mode spans: Live in `flattenSpans`
+- Bucket mode spans: Also live in `flattenSpans`
+- `groupSpansMap`: Just a computed grouping/view of `flattenSpans`
+
+**Previous Architecture (Removed in refactoring):**
+- ❌ `groupSpansMap` was separate state: `useState<Record<number, Span[]>>({})`
+- ❌ Required `detailSpanOverride` to search both `flattenSpans` and `groupSpansMap`
+- ❌ Duplicate data, synchronization bugs possible
+
+**Current Architecture (Simple & Clean):**
+- ✅ `groupSpansMap` is computed: `useMemo(() => flattenSpans.reduce(...))`
+- ✅ No override needed - single search location
+- ✅ Impossible to have data mismatch between the two
 
 #### API Service Layer
 
@@ -476,7 +550,14 @@ export interface FetchGroupSpansParams {
 export async function listGroups(params: ListGroupsParams): Promise<PaginatedResponse<GroupDTO>>
 
 // Fetch all spans in a specific time bucket
-export async function fetchGroupSpans(params: FetchGroupSpansParams): Promise<PaginatedResponse<Span>>
+export async function fetchSpansByBucketGroup(params: FetchGroupSpansParams): Promise<PaginatedResponse<Span>>
+
+// Fetch metadata for a single bucket (for refreshing stats)
+export async function fetchSingleBucket(params: {
+  timeBucket: number;
+  projectId: string;
+  bucketSize: number;
+}): Promise<GroupDTO | null>
 ```
 
 #### Pagination Hook
@@ -517,153 +598,208 @@ export function useGroupsPagination({
 
 **Location:** [ui/src/components/traces/GroupingSelector.tsx](../ui/src/components/traces/GroupingSelector.tsx)
 
-Flat toggle group for selecting grouping mode:
+Two separate toggle controls for mode and bucket size selection:
 
 ```typescript
 const BUCKET_OPTIONS = [
-  { value: '300', label: '5m' },
-  { value: '600', label: '10m' },
-  { value: '1200', label: '20m' },
-  { value: '1800', label: '30m' },
-  { value: '3600', label: '1h' },
-  { value: '7200', label: '2h' },
-  { value: '10800', label: '3h' },
-  { value: '21600', label: '6h' },
-  { value: '43200', label: '12h' },
-  { value: '86400', label: '24h' },
+  { value: 300, label: '5min' },
+  { value: 900, label: '15min' },
+  { value: 3600, label: '1hr' },
+  { value: 10800, label: '3hr' },
+  { value: 86400, label: '1day' },
 ];
 
-<ToggleGroup type="single" value={currentValue} onValueChange={handleValueChange}>
-  <ToggleGroupItem value="run">Run</ToggleGroupItem>
-  {BUCKET_OPTIONS.map(option => (
-    <ToggleGroupItem key={option.value} value={option.value}>
-      {option.label}
-    </ToggleGroupItem>
-  ))}
-</ToggleGroup>
+// View mode toggle
+<div className="inline-flex items-center gap-3">
+  <span className="text-sm font-medium text-muted-foreground">View:</span>
+  <ToggleGroup type="single" value={groupByMode} onValueChange={onGroupByModeChange}>
+    <ToggleGroupItem value="run">Run</ToggleGroupItem>
+    <ToggleGroupItem value="bucket">Bucket</ToggleGroupItem>
+  </ToggleGroup>
+</div>
+
+// Bucket size toggle (only shown when bucket mode is selected)
+{groupByMode === 'bucket' && (
+  <div className="inline-flex items-center gap-3">
+    <span className="text-sm font-medium text-muted-foreground">Bucket size:</span>
+    <ToggleGroup type="single" value={String(bucketSize)} onValueChange={onBucketSizeChange}>
+      {BUCKET_OPTIONS.map((option) => (
+        <ToggleGroupItem key={option.value} value={String(option.value)}>
+          {option.label}
+        </ToggleGroupItem>
+      ))}
+    </ToggleGroup>
+  </div>
+)}
 ```
 
-##### 2. RunTableHeader
-
-**Location:** [ui/src/pages/chat/traces/run-table-header.tsx](../ui/src/pages/chat/traces/run-table-header.tsx)
-
-Displays the table header with columns for trace information. The header adapts based on the current grouping mode:
-
 **Key Features:**
-- Dynamically changes first column label based on mode:
-  - **Run Mode**: Shows "Run ID"
-  - **Bucket Mode**: Shows "Time Bucket"
-- Uses different grid layouts for optimal column widths:
-  - Run mode: 100px for Run ID column
-  - Bucket mode: 180px for Time Bucket column (wider to accommodate timestamps)
+- Progressive disclosure: Bucket size toggle only appears when "Bucket" mode is selected
+- Cleaner options: Reduced from 10 options to 5 commonly-used time ranges
+- Better UX: Separate controls make the mode/size relationship clearer
+
+##### 2. RunTable - Container Component
+
+**Location:** [ui/src/pages/chat/traces/run-table.tsx](../ui/src/pages/chat/traces/run-table.tsx)
+
+Main container that handles loading/error states and delegates rendering to mode-specific sub-components:
 
 **Implementation:**
 ```typescript
-interface RunTableHeaderProps {
-  mode?: 'run' | 'bucket';
-}
+export function RunTable() {
+  const {
+    groupByMode,
+    runs, groups,
+    // ... loading states
+  } = TracesPageConsumer();
 
-export function RunTableHeader({ mode = 'run' }: RunTableHeaderProps) {
-  const gridColumns = mode === 'run' ? RUN_TABLE_GRID_COLUMNS : GROUP_TABLE_GRID_COLUMNS;
+  // ... loading/error/empty state handling
 
   return (
-    <div style={{ gridTemplateColumns: gridColumns }}>
-      <div>{/* Expand/collapse column */}</div>
-      <div>{mode === 'run' ? 'Run ID' : 'Time Bucket'}</div>
-      <div>Provider</div>
-      {/* ... other columns: Cost, Input, Output, Time, Duration, Errors */}
+    <div className="flex-1 w-full h-full overflow-auto">
+      {groupByMode === 'run' ? (
+        <RunTableView
+          runs={runs}
+          hasMore={hasMore}
+          loadingMore={loadingMore}
+          onLoadMore={loadMore}
+          observerRef={observerTarget}
+        />
+      ) : (
+        <GroupCardGrid
+          groups={groups}
+          hasMore={hasMore}
+          loadingMore={loadingMore}
+          onLoadMore={loadMore}
+          observerRef={observerTarget}
+        />
+      )}
     </div>
   );
 }
 ```
 
-##### 3. Table Layout Configuration
+##### 3. RunTableView - Table Display for Run Mode
 
-**Location:** [ui/src/pages/chat/traces/table-layout.ts](../ui/src/pages/chat/traces/table-layout.ts)
+**Location:** [ui/src/pages/chat/traces/run-table-view.tsx](../ui/src/pages/chat/traces/run-table-view.tsx)
 
-Defines consistent grid column widths for the table:
-
-```typescript
-// For Run mode - narrower first column (100px)
-export const RUN_TABLE_GRID_COLUMNS = '50px 100px 120px 120px 100px 100px 160px 150px 100px';
-
-// For Bucket mode - wider first column (180px) to display full timestamps
-export const GROUP_TABLE_GRID_COLUMNS = '50px 180px 120px 120px 100px 100px 160px 150px 100px';
-```
-
-**Column Breakdown:**
-1. 50px - Expand/collapse button
-2. 100px/180px - Run ID or Time Bucket (changes based on mode)
-3. 120px - Provider/Models
-4. 120px - Cost
-5. 100px - Input tokens
-6. 100px - Output tokens
-7. 160px - Time
-8. 150px - Duration
-9. 100px - Errors
-
-##### 4. GroupTableRow
-
-**Location:** [ui/src/pages/chat/traces/group-table-row.tsx](../ui/src/pages/chat/traces/group-table-row.tsx)
-
-Displays a single time bucket group and its spans:
+Displays runs as a traditional table with sticky header:
 
 **Key Features:**
-- Collapsible accordion UI
-- Displays timestamp in Time Bucket column (no trace count shown)
-- Shows aggregated statistics (cost, tokens, models, errors)
-- Auto-loads spans when expanded
-- Shows all spans (root + children) in a unified timeline
-- Uses `GROUP_TABLE_GRID_COLUMNS` for wider timestamp column
+- Table layout with sticky header
+- Uses `RunTableHeader` and `RunTableRow` components
+- Pagination support with "Load More" button
+
+##### 4. GroupCardGrid - Card Display for Bucket Mode
+
+**Location:** [ui/src/pages/chat/traces/group-card-grid.tsx](../ui/src/pages/chat/traces/group-card-grid.tsx)
+
+Displays time buckets as cards instead of table rows:
+
+**Key Features:**
+- Card-based layout (no table structure)
+- No header row (each card has inline labels)
+- Better visual separation between buckets
+- Responsive grid layout
 
 **Implementation:**
 ```typescript
-export const GroupTableRow: React.FC<GroupTableRowProps> = ({ group }) => {
+export function GroupCardGrid({ groups, hasMore, loadingMore, onLoadMore, observerRef }) {
+  return (
+    <div className="px-6 py-4">
+      <div className="grid grid-cols-1 gap-4">
+        {groups.map((group, index) => (
+          <GroupCard key={group.time_bucket} group={group} index={index} />
+        ))}
+        {/* Load More button */}
+      </div>
+    </div>
+  );
+}
+```
+
+##### 5. GroupCard - Individual Bucket Card
+
+**Location:** [ui/src/pages/chat/traces/group-card.tsx](../ui/src/pages/chat/traces/group-card.tsx)
+
+Displays a single time bucket as a card with collapsible content:
+
+**Key Features:**
+- Card UI with rounded borders and shadows
+- Compact single-row layout with time on left, stats on right
+- Smart time display:
+  - Today: Just shows time (e.g., "1:10 PM")
+  - Yesterday: Shows "Yesterday, 1:10 PM"
+  - This year: Shows date without year (e.g., "Oct 29, 1:10 PM")
+  - Previous years: Shows full date with year
+- Fixed-width grid columns for consistent alignment across cards
+- Inline labels (Provider, Cost, Input, Output, Duration, Status)
+- Status badges with icons (success ✓ or error ⚠️ with count)
+- Auto-loads spans when expanded
+- Shows all spans in unified timeline
+
+**Grid Layout:**
+```typescript
+const CARD_STATS_GRID = 'auto 100px 100px 100px 100px 80px';
+// Provider | Cost | Input | Output | Duration | Status
+```
+
+**Implementation:**
+```typescript
+export const GroupCard: React.FC<GroupCardProps> = ({ group, index }) => {
   const {
     openGroups,
     setOpenGroups,
     loadGroupSpans,
     groupSpansMap,
     loadingGroupsByTimeBucket,
-    // ... other context values
   } = TracesPageConsumer();
 
   const timeBucket = group.time_bucket;
   const isOpen = openGroups.some(g => g.time_bucket === timeBucket);
-
-  // All spans (root + children) are fetched directly from backend
   const allSpans = groupSpansMap[timeBucket] || [];
-  const isLoadingSpans = loadingGroupsByTimeBucket.has(timeBucket);
 
-  // Auto-load spans when group is expanded
+  // Auto-load spans when card is expanded
   useEffect(() => {
     if (isOpen && allSpans.length === 0 && !isLoadingSpans) {
       loadGroupSpans(timeBucket);
     }
-  }, [isOpen, timeBucket, loadGroupSpans, allSpans.length, isLoadingSpans]);
+  }, [isOpen, timeBucket]);
 
-  // Render with wider grid layout for bucket mode
   return (
-    <div style={{ gridTemplateColumns: GROUP_TABLE_GRID_COLUMNS }}>
-      {/* Time Bucket display - shows only timestamp, no trace count */}
-      <div>
-        <span>{formatTimestamp(group.time_bucket)}</span>
+    <motion.div className="rounded-lg border border-border bg-[#0a0a0a]">
+      {/* Card header with time and stats */}
+      <div onClick={toggleAccordion} className="cursor-pointer p-4">
+        <div className="flex items-center justify-between gap-6">
+          {/* Left: Expand button + time */}
+          <div className="flex items-center gap-3 flex-1">
+            <ChevronIcon />
+            <div>
+              <h3>{formatSmartTime(timeBucket)}</h3>
+              <span className="text-xs text-muted-foreground">{timeAgo}</span>
+            </div>
+          </div>
+
+          {/* Right: Stats grid */}
+          <div className="grid items-center gap-4" style={{ gridTemplateColumns: CARD_STATS_GRID }}>
+            {/* Provider, Cost, Input, Output, Duration, Status with inline labels */}
+          </div>
+        </div>
       </div>
-      {/* ... other columns */}
 
       {/* Expanded content */}
       {isOpen && <TimelineContent spansByRunId={allSpans} {...otherProps} />}
-    </div>
+    </motion.div>
   );
 };
 ```
 
-**Simplified Logic:**
-- Uses `GROUP_TABLE_GRID_COLUMNS` for wider timestamp display
-- No trace count displayed (cleaner UI)
-- No need to merge spans from `runMap`
-- No need to loop through `run_ids`
-- All spans come directly from `groupSpansMap[timeBucket]`
+**Why Cards Instead of Table Rows:**
+- Better visual separation between time buckets
+- More scannable with inline labels
+- Cleaner UI without needing a header row
+- Fixed column widths ensure alignment across cards
+- Works better with animations and transitions
 
 ---
 
@@ -672,12 +808,15 @@ export const GroupTableRow: React.FC<GroupTableRowProps> = ({ group }) => {
 ### 1. User Selects Bucket Mode
 
 ```
-User clicks "5m" in GroupingSelector (or any bucket: 5m, 10m, 20m, 30m, 1h, 2h, 3h, 6h, 12h, 24h)
-    ↓
-GroupingSelector.onValueChange('300')  // 5 minutes = 300 seconds
+User clicks "Bucket" in View toggle
     ↓
 TracesPageContext.setGroupByMode('bucket')
-TracesPageContext.setBucketSize(300)
+    ↓
+Bucket size selector appears (default: 5min/300s)
+    ↓
+User selects bucket size (5min, 15min, 1hr, 3hr, or 1day)
+    ↓
+TracesPageContext.setBucketSize(300)  // 5 minutes = 300 seconds
     ↓
 useGroupsPagination hook triggers refetch
     ↓
@@ -685,31 +824,31 @@ API: GET /group?bucketSize=300&limit=20&offset=0
     ↓
 Backend returns list of groups with aggregated stats
     ↓
-Groups displayed in UI as GroupTableRow components
+Groups displayed in UI as GroupCard components (card layout)
 ```
 
 ### 2. User Expands a Group
 
 ```
-User clicks on a GroupTableRow
+User clicks on a GroupCard
     ↓
-GroupTableRow.toggleAccordion()
+GroupCard.toggleAccordion()
     ↓
 setOpenGroups([{ time_bucket: 1737100800000000, tab: 'trace' }])
     ↓
-GroupTableRow.useEffect detects isOpen = true
+GroupCard.useEffect detects isOpen = true
     ↓
 TracesPageContext.loadGroupSpans(1737100800000000)
     ↓
 Check cache and loading state
     ↓
-API: GET /group/1737100800000000?bucketSize=3600&limit=100&offset=0
+API: GET /group/1737100800000000?bucketSize=300&limit=100&offset=0
     ↓
 Backend returns ALL spans (root + children) in that time bucket
     ↓
 Cache all spans in groupSpansMap[1737100800000000]
     ↓
-GroupTableRow.allSpans updates (directly from groupSpansMap)
+GroupCard.allSpans updates (directly from groupSpansMap)
     ↓
 TimelineContent renders all spans in unified timeline
 ```
@@ -723,13 +862,15 @@ TimelineContent renders all spans in unified timeline
 groupByMode === "run"
   → useRunsPagination hook active
   → Fetches individual runs
-  → Displays RunTableRow components
+  → Displays RunTableView → RunTableRow components (table layout)
+  → Bucket size selector hidden
 
 // Bucket Mode
 groupByMode === "bucket"
   → useGroupsPagination hook active
   → Fetches time-bucketed groups
-  → Displays GroupTableRow components
+  → Displays GroupCardGrid → GroupCard components (card layout)
+  → Bucket size selector visible
 ```
 
 ---
@@ -848,27 +989,151 @@ impl From<GroupUsageInformation> for GroupResponse {
 
 ---
 
-## Future Enhancements
+## Real-time Event Integration
 
-### Real-time Event Integration
+The trace grouping feature fully supports real-time events in both run mode and bucket mode.
 
-With the centralized `loadGroupSpans` architecture, real-time events can update groups:
+**Location:** [ui/src/contexts/TracesPageContext.tsx:162-237](../ui/src/contexts/TracesPageContext.tsx)
+
+### Implementation
 
 ```typescript
-// Hypothetical real-time event handler
-socket.on('new_span', (span: Span) => {
-  // Calculate which bucket this span belongs to
-  const bucketStart = Math.floor(span.start_time_us / (bucketSize * 1_000_000)) * (bucketSize * 1_000_000);
+const handleEvent = useCallback((event: ProjectEventUnion) => {
+  if (event.run_id) {
+    // Run mode: Update flattenSpans and run metrics
+    if (groupByMode === 'run') {
+      // ... existing run mode logic
+    }
+    // Bucket mode: Calculate bucket and update groupSpansMap
+    else if (groupByMode === 'bucket') {
+      // Process event to extract span
+      const currentSpans = flattenSpans;
+      const updatedSpans = processEvent(currentSpans, event);
+      const newSpan = updatedSpans.find(s => !currentSpans.find(cs => cs.span_id === s.span_id));
 
-  // Update the groupSpansMap
-  setGroupSpansMap(prev => ({
-    ...prev,
-    [bucketStart]: [...(prev[bucketStart] || []), span]
-  }));
+      if (newSpan && newSpan.start_time_us) {
+        // Calculate which bucket this span belongs to
+        const bucket_size_us = bucketSize * 1_000_000;
+        const timeBucket = Math.floor(newSpan.start_time_us / bucket_size_us) * bucket_size_us;
 
-  // Trigger re-render of affected GroupTableRow
-});
+        // Check if this bucket exists in the groups list
+        const bucketExists = groups.some(g => g.time_bucket === timeBucket);
+
+        // If bucket doesn't exist, refresh groups to show it (auto-discovery)
+        if (!bucketExists) {
+          console.log('New bucket detected, refreshing groups list:', timeBucket);
+          setTimeout(() => {
+            refreshGroups();
+          }, 50);
+        }
+
+        // Check if this bucket is currently opened
+        const isOpen = openGroups.some(g => g.time_bucket === timeBucket);
+
+        if (isOpen) {
+          // Add or update span in the opened bucket
+          setGroupSpansMap(prev => {
+            const existingSpans = prev[timeBucket] || [];
+            // Check if span already exists (update it)
+            if (existingSpans.some(s => s.span_id === newSpan.span_id)) {
+              return {
+                ...prev,
+                [timeBucket]: existingSpans.map(s =>
+                  s.span_id === newSpan.span_id ? newSpan : s
+                ),
+              };
+            }
+            // Add new span
+            return {
+              ...prev,
+              [timeBucket]: [...existingSpans, newSpan],
+            };
+          });
+        }
+
+        // Update flattenSpans for any components that need it
+        setFlattenSpans(updatedSpans);
+      }
+
+      // Refresh groups list when run finishes to update aggregated stats
+      if (event.type === 'RunFinished' || event.type === 'RunError') {
+        setTimeout(() => {
+          refreshGroups();
+        }, 100);
+      }
+    }
+  }
+}, [groupByMode, flattenSpans, bucketSize, openGroups, refreshGroups, ...]);
 ```
+
+### How It Works
+
+**When a new span event arrives:**
+
+1. **Calculate Time Bucket**
+   - Extract `start_time_us` from the span
+   - Calculate: `timeBucket = floor(start_time_us / bucket_size_us) * bucket_size_us`
+   - This determines which bucket the span belongs to
+
+2. **Auto-Create and Open Optimistic Bucket**
+   - Check if this bucket exists in the `groups` list
+   - If not found: **Create optimistic bucket** with initial data from the span
+   - Cannot refresh from DB yet because span hasn't been committed
+   - Bucket appears immediately with placeholder stats (0 cost, no tokens)
+   - Sorted and inserted in correct position (desc by time_bucket)
+   - **Auto-opens the bucket** so user sees the real-time span immediately
+
+3. **Check if Bucket is Open**
+   - Look in `openGroups` array to see if this bucket is currently expanded
+   - Only update `groupSpansMap` if the bucket is visible to the user
+
+4. **Update or Insert Span**
+   - If span already exists (by `span_id`): **Update** it (handles span updates)
+   - If span is new: **Insert** it into the bucket's span array
+   - This triggers a re-render of `GroupTableRow` and `TimelineContent`
+
+5. **Update Bucket Stats on Run Completion**
+   - When `RunFinished` or `RunError` events arrive
+   - Calculate accurate stats from spans in `groupSpansMap[timeBucket]`
+   - Update only the specific bucket (not whole list)
+   - Aggregates: thread_ids, trace_ids, run_ids, root_span_ids, cost, tokens, errors
+   - This ensures the group row shows accurate totals without DB query
+
+### Key Benefits
+
+✅ **Instant Bucket Creation & Auto-Open**: New buckets appear and expand immediately
+✅ **Zero DB Queries on Completion**: Stats calculated from in-memory spans
+✅ **Efficient**: Only updates opened buckets and specific bucket stats
+✅ **No Duplicates**: Checks for existing spans before adding
+✅ **Handles Updates**: Updates existing spans when they change (e.g., span finishes)
+✅ **Accurate Aggregation**: Bucket stats updated from actual spans
+✅ **Best-in-Class UX**: New spans visible immediately, zero waiting
+
+### Testing Real-time Events
+
+To test real-time event handling in bucket mode:
+
+**Test 1: New Bucket Auto-Creation**
+1. Open the application in bucket mode (e.g., select "1h")
+2. Trigger a trace event for a time period that doesn't have a bucket yet
+3. **Expected**: New bucket appears immediately in the list (sorted correctly)
+4. **Expected**: Bucket is auto-opened and shows the timeline
+5. **Expected**: Span appears in the timeline in real-time
+
+**Test 2: Existing Bucket Updates**
+1. Open the application in bucket mode
+2. Expand an existing time bucket group
+3. Trigger trace events that fall into that bucket's time range
+4. **Expected**: New spans appear in the timeline automatically
+5. **Expected**: When run finishes, group row updates stats (cost, tokens, errors)
+
+**Test 3: Stats Accuracy**
+1. Watch a bucket as spans arrive in real-time
+2. When the run finishes, check the bucket row
+3. **Expected**: Cost, tokens, and errors match the sum of all spans shown
+4. **Expected**: No extra DB queries were made (check network tab)
+
+## Future Enhancements
 
 ### Dynamic Bucket Size
 
@@ -901,13 +1166,20 @@ curl "http://localhost:8080/group/1737100800000000?bucketSize=3600&limit=100"
 ### Frontend Tests
 
 1. Test mode switching (Run ↔ Bucket modes)
-   - Verify table header label changes from "Run ID" to "Time Bucket"
-   - Verify column width changes (100px → 180px) when switching modes
-2. Test different bucket sizes (5m, 10m, 20m, 30m, 1h, 2h, 3h, 6h, 12h, 24h)
-3. Test group expansion and span loading
+   - Verify UI changes from table (RunTableView) to cards (GroupCardGrid)
+   - Verify bucket size selector appears/disappears when switching modes
+   - Verify progressive disclosure (bucket size only shown in bucket mode)
+2. Test different bucket sizes (5min, 15min, 1hr, 3hr, 1day)
+3. Test group expansion and span loading in cards
 4. Test pagination with large datasets
 5. Test empty states (no groups, no spans)
-6. Verify timestamp display in Time Bucket column (no trace count shown)
+6. Verify smart time display in cards:
+   - Today: Shows only time (e.g., "1:10 PM")
+   - Yesterday: Shows "Yesterday, 1:10 PM"
+   - This year: Shows date without year
+   - Previous years: Shows full date with year
+7. Verify card stats alignment across multiple cards
+8. Test status badges (success icon vs error icon with count)
 
 ---
 
@@ -935,19 +1207,21 @@ curl "http://localhost:8080/group/1737100800000000?bucketSize=3600&limit=100"
 2. `useGroupsPagination` dependency array includes `bucketSize`
 3. API calls include correct `bucketSize` parameter
 
-### Issue: Table header shows "Run ID" in bucket mode (or vice versa)
+### Issue: Cards not displaying in bucket mode
 
 **Check:**
-1. Verify `RunTableHeader` receives `mode={groupByMode}` prop
-2. Verify prop is passed from `RunTable` component
-3. Check React DevTools to see actual prop value
+1. Verify `groupByMode === 'bucket'` in TracesPageContext
+2. Check that `GroupCardGrid` component is being rendered (not `RunTableView`)
+3. Verify `groups` array has data
+4. Check browser console for component errors
 
-### Issue: Time Bucket column too narrow, timestamp truncated
+### Issue: Card stats not aligning across multiple cards
 
 **Check:**
-1. Verify `GroupTableRow` uses `GROUP_TABLE_GRID_COLUMNS` (not `RUN_TABLE_GRID_COLUMNS`)
-2. Verify `RunTableHeader` selects `GROUP_TABLE_GRID_COLUMNS` when `mode === 'bucket'`
-3. Check browser DevTools computed styles for `gridTemplateColumns`
+1. Verify `CARD_STATS_GRID` constant is defined and used consistently
+2. Check that all GroupCard components use the same grid template
+3. Inspect gridTemplateColumns in browser DevTools
+4. Ensure no cards have custom overrides
 
 ---
 
@@ -988,6 +1262,28 @@ curl "http://localhost:8080/group/1737100800000000?bucketSize=3600&limit=100"
 14. TimelineContent renders unified timeline
 ```
 
+**Real-time span event arrives (bucket mode):**
+```
+1. Real-time event received (e.g., SpanCreated, SpanUpdated)
+2. handleEvent extracts span from event
+3. Calculate timeBucket = floor(start_time_us / bucket_size_us) * bucket_size_us
+4. Check: Does this bucket exist in groups list?
+5a. If NO: Create optimistic bucket with placeholder stats
+    → Bucket appears immediately in UI (sorted correctly)
+    → Auto-open the bucket (add to openGroups)
+    → User sees new bucket expanded, ready to show spans
+5b. If YES: Continue
+6. Check: Is this bucket currently opened?
+7a. If YES: Add/update span in groupSpansMap[timeBucket]
+    → Timeline automatically re-renders with new span
+7b. If NO: Skip (don't process unopened buckets)
+    (Note: New buckets from step 5a are auto-opened, so will hit 7a)
+8. Update flattenSpans for compatibility
+9. If RunFinished/RunError: Calculate stats from groupSpansMap[timeBucket]
+    → Update specific bucket (thread_ids, cost, tokens, errors)
+    → No DB query needed!
+```
+
 ### Common Implementation Errors and Fixes
 
 **Error: Infinite API calls to `/group/{time_bucket}`**
@@ -1020,23 +1316,34 @@ curl "http://localhost:8080/group/1737100800000000?bucketSize=3600&limit=100"
 - **Fix**: TimelineContent now handles multiple runs with composite `runId`
 - **Location**: [ui/src/components/chat/traces/components/TimelineContent.tsx:34-46](../ui/src/components/chat/traces/components/TimelineContent.tsx)
 
+**Error: SpanDetailPanel doesn't show in bucket mode**
+- **Symptom**: Clicking on a span in bucket mode doesn't open the detail panel
+- **Root Cause**: `detailSpan` is computed from `flattenSpans` only, but bucket mode uses `groupSpansMap`
+- **Fix**: Override `detailSpan` to search both `flattenSpans` and `groupSpansMap`
+- **Location**: [ui/src/contexts/TracesPageContext.tsx:98-116](../ui/src/contexts/TracesPageContext.tsx)
+- **How to verify**: Click on any span in a time bucket, detail panel should appear with span info
+
 ### How to Add New Bucket Size Option
 
 1. Update `BucketSize` type in TracesPageContext.tsx:
 ```typescript
-export type BucketSize = 300 | 600 | /* new value */ | 3600 | ...
+export type BucketSize = 300 | 900 | 3600 | /* new value */ | 10800 | 86400;
 ```
 
 2. Add option to BUCKET_OPTIONS in GroupingSelector.tsx:
 ```typescript
 const BUCKET_OPTIONS = [
-  { value: '900', label: '15m' },  // New option
-  { value: '3600', label: '1h' },
-  // ...
+  { value: 300, label: '5min' },
+  { value: 900, label: '15min' },
+  { value: 1800, label: '30min' },  // New option
+  { value: 3600, label: '1hr' },
+  { value: 10800, label: '3hr' },
+  { value: 86400, label: '1day' },
 ];
 ```
 
 3. No backend changes needed - bucket size is a parameter
+4. Consider UI space - too many options can make the toggle group crowded
 
 ### How to Debug SQL Queries
 
