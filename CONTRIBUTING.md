@@ -55,7 +55,7 @@ This project and everyone participating in it is governed by our Code of Conduct
 
 3. Start the development server:
    ```bash
-   cargo run serve
+   cargo run
    ```
 
 ## Making Changes

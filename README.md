@@ -4,17 +4,15 @@
 
 #### Lightweight, Real-time Debugging for AI Agents
 
-Debug your AI agents with vLLora. vLLora provides real-time observability and tracing for AI agent interactions, helping you understand exactly what's happening under the hood.
+Debug your Agents in Real Time. Trace, analyze, and optimize instantly. Seamless with LangChain, Google ADK, OpenAI, and all major frameworks.
 
-![vLLora Demo](https://raw.githubusercontent.com/vllora/vllora/main/assets/gifs/traces.gif)
 
-[![GitHub stars](https://img.shields.io/github/stars/vLLora/vLLora?style=social)](https://github.com/vLLora/vLLora)
+
 
 </div>
 
-## Installation
 
-### Using Homebrew (Recommended)
+## Using Homebrew (Recommended)
 
 First, install [Homebrew](https://brew.sh) if you haven't already, then:
 
@@ -23,17 +21,24 @@ brew tap vllora/vllora
 brew install vllora
 ```
 
-## Quick Start
 
-Start the debugging server:
+### Start the vLLora:
 
 ```bash
 vllora
 ```
 
-The server will start on `http://localhost:9090` and the UI will be available at `http://localhost:9091`. 
+> The server will start on `http://localhost:9090` and the UI will be available at `http://localhost:9091`. 
 
-vLLora uses OpenAI-compatible chat completions API, so when your AI agents make calls through vLLora, it automatically collects traces and debugging information for every interaction.
+vLLora uses OpenAI-compatible chat completions API, so when your AI agents make calls through vLLora, it automatically collects traces and debugging information for every 
+interaction.
+
+<div align="center">
+
+![vLLora Demo](https://raw.githubusercontent.com/vllora/vllora/main/assets/gifs/traces.gif)
+
+
+</div>
 
 ### Test Send your First Request
 
