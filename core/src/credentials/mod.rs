@@ -49,16 +49,16 @@ pub struct ProviderCredentialsId {
     project_slug: String,
     provider_name: String,
     #[allow(dead_code)]
-    company_slug: String,
+    tenant_name: String,
 }
 
 impl ProviderCredentialsId {
-    pub fn new(company_slug: String, provider_name: String, project_slug: String) -> Self {
+    pub fn new(tenant_name: String, provider_name: String, project_slug: String) -> Self {
         Self {
-            value: format!("{company_slug}_{provider_name}_{project_slug}"),
+            value: format!("{tenant_name}_{provider_name}_{project_slug}"),
             project_slug,
             provider_name,
-            company_slug,
+            tenant_name,
         }
     }
 
@@ -77,12 +77,12 @@ impl ProviderCredentialsId {
 
 /// Helper function to construct a key ID for provider credentials
 pub fn construct_key_id(
-    company_slug: &str,
+    tenant_name: &str,
     provider_name: &str,
     project_slug: &str,
 ) -> ProviderCredentialsId {
     ProviderCredentialsId::new(
-        company_slug.to_string(),
+        tenant_name.to_string(),
         provider_name.to_string(),
         project_slug.to_string(),
     )
