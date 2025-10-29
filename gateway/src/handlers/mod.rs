@@ -10,6 +10,7 @@ pub mod threads;
 pub mod traces;
 
 use actix_web::{web, HttpResponse};
+use chrono::NaiveTime;
 use langdb_core::handler::models::ChatModelsResponse;
 use langdb_core::metadata::services::model::ModelService;
 use langdb_core::models::ModelMetadata;
@@ -57,7 +58,12 @@ pub async fn list_models_from_db(
             .map(|v| ChatModel {
                 id: v.qualified_model_name(),
                 object: "model".to_string(),
-                created: 1686935002,
+                created: v
+                    .release_date
+                    .unwrap_or(chrono::Utc::now().date_naive())
+                    .and_time(NaiveTime::from_hms_opt(0, 0, 0).expect("Invalid time"))
+                    .and_utc()
+                    .timestamp(),
                 owned_by: v.model_provider.to_string(),
             })
             .collect(),

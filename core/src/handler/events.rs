@@ -46,7 +46,7 @@ pub async fn stream_events(
         // Wait for the channel to be closed (client disconnected)
         tx_cleanup.closed().await;
 
-        tracing::info!("Client disconnected from events stream: {}", channel_id);
+        tracing::debug!("Client disconnected from events stream: {}", channel_id);
 
         // Small delay to allow other disconnections to happen
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
@@ -57,7 +57,7 @@ pub async fn stream_events(
             .inner()
             .get(&project_slug_cleanup)
         {
-            tracing::info!("Sender receiver count: {}", sender.receiver_count());
+            tracing::debug!("Sender receiver count: {}", sender.receiver_count());
         }
     });
 

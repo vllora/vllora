@@ -9,7 +9,7 @@ use rmcp::ServiceError;
 use tracing::debug;
 
 use crate::mcp::transport::McpTransport;
-use crate::types::gateway::{McpDefinition, McpTool, McpTransportType, ServerTools, ToolsFilter};
+use crate::types::gateway::{McpDefinition, McpTool, ServerTools, ToolsFilter};
 
 #[derive(Debug, thiserror::Error)]
 pub enum McpServerError {
@@ -139,17 +139,8 @@ pub async fn execute_mcp_tool(
     def: &McpDefinition,
     tool: &rmcp::model::Tool,
     inputs: HashMap<String, serde_json::Value>,
-    mut meta: Option<serde_json::Value>,
+    meta: Option<serde_json::Value>,
 ) -> Result<String, McpServerError> {
-    if let McpTransportType::InMemory { .. } = def.r#type {
-        if def.server_name() == "websearch" {
-            if let Ok(var) = std::env::var("TAVILY_API_KEY") {
-                meta = Some(serde_json::json!({"env_vars": {
-                    "TAVILY_API_KEY": var
-                }}));
-            }
-        }
-    }
     let name = tool.name.clone();
 
     let client = McpTransport::new(def.clone()).get().await?;

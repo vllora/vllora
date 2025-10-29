@@ -45,40 +45,46 @@ impl SqliteTraceWriterTransport {
         }
     }
 
-    fn convert_row_to_trace(&self, row: &[Value]) -> Result<DbNewTrace, String> {
+    fn convert_row_to_trace(&self, columns: &[Value]) -> Result<DbNewTrace, String> {
         // Row format from SpanWriter.process():
         // [trace_id, span_id, parent_span_id, operation_name, start_time_us, finish_time_us,
         //  finish_date, kind, attribute, tenant_id, project_id, thread_id, tags, run_id]
 
-        if row.len() < 14 {
-            return Err(format!("Expected 14 columns, got {}", row.len()));
+        if columns.len() < 14 {
+            return Err(format!("Expected 14 columns, got {}", columns.len()));
         }
 
-        let trace_id = row[0].as_str().ok_or("trace_id not a string")?.to_string();
-        let span_id = row[1].as_u64().ok_or("span_id not a number")?.to_string();
+        let trace_id = columns[0]
+            .as_str()
+            .ok_or("trace_id not a string")?
+            .to_string();
+        let span_id = columns[1]
+            .as_u64()
+            .ok_or("span_id not a number")?
+            .to_string();
 
-        let parent_span_id = if row[2].is_null() {
+        let parent_span_id = if columns[2].is_null() {
             None
         } else {
             Some(
-                row[2]
+                columns[2]
                     .as_u64()
                     .ok_or("parent_span_id not a number")?
                     .to_string(),
             )
         };
 
-        let operation_name = row[3]
+        let operation_name = columns[3]
             .as_str()
             .ok_or("operation_name not a string")?
             .to_string();
-        let start_time_us = row[4].as_i64().ok_or("start_time_us not a number")?;
-        let finish_time_us = row[5].as_i64().ok_or("finish_time_us not a number")?;
-        // row[6] is finish_date (not used in SQLite schema)
-        // row[7] is kind (not used in SQLite schema)
+        let start_time_us = columns[4].as_i64().ok_or("start_time_us not a number")?;
+        let finish_time_us = columns[5].as_i64().ok_or("finish_time_us not a number")?;
+        // columns[6] is finish_date (not used in SQLite schema)
+        // columns[7] is kind (not used in SQLite schema)
 
-        let attribute = if row[8].is_object() {
-            row[8]
+        let attribute = if columns[8].is_object() {
+            columns[8]
                 .as_object()
                 .ok_or("attribute not an object")?
                 .iter()
@@ -88,45 +94,42 @@ impl SqliteTraceWriterTransport {
             HashMap::new()
         };
 
-        // row[9] is tenant_id (not used in SQLite schema)
+        // columns[9] is tenant_id (not used in SQLite schema)
 
-        let project_id = if row[10].is_null() {
+        let project_id = if columns[10].is_null() {
             None
         } else {
             Some(
-                row[10]
+                columns[10]
                     .as_str()
                     .ok_or("project_id not a string")?
                     .to_string(),
             )
         };
 
-        let thread_id = if row[11].is_null() {
+        let thread_id = if columns[11].is_null() {
             None
         } else {
             Some(
-                row[11]
+                columns[11]
                     .as_str()
                     .ok_or("thread_id not a string")?
                     .to_string(),
             )
         };
 
-        tracing::debug!(
-            "Converting row for trace {}: thread_id={:?}",
-            trace_id,
-            thread_id
-        );
+        // columns[12] is tags (not used in SQLite schema)
 
-        // row[12] is tags (not used in SQLite schema)
-
-        let run_id = if row[13].is_null() {
+        let run_id = if columns[13].is_null() {
             None
         } else {
-            Some(row[13].as_str().ok_or("run_id not a string")?.to_string())
+            Some(
+                columns[13]
+                    .as_str()
+                    .ok_or("run_id not a string")?
+                    .to_string(),
+            )
         };
-
-        tracing::debug!("Converting row for trace {}: run_id={:?}", trace_id, run_id);
 
         DbNewTrace::new(
             trace_id,

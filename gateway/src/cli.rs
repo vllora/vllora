@@ -74,6 +74,7 @@ pub enum Commands {
         providers: bool,
     },
     /// Generate models JSON file for embedding
+    #[command(hide = true)]
     GenerateModelsJson {
         /// Output file path (default: models_data.json)
         #[arg(short, long, default_value = "models_data.json")]

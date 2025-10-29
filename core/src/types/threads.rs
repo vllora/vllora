@@ -7,11 +7,8 @@ use serde_tuple::Serialize_tuple;
 use serde_with::serde_as;
 
 use super::{gateway::ToolCall, message::MessageType};
-use crate::metadata::error::DatabaseError;
 use crate::types::gateway::CacheControl;
 use crate::types::gateway::CompletionModelUsage;
-use crate::types::project_settings::ProjectSettings;
-use async_trait::async_trait;
 
 #[derive(Clone, Debug)]
 pub struct CompletionsRunId(String);
@@ -453,42 +450,6 @@ pub struct PageOptions {
 pub enum PageOrderType {
     Asc,
     Desc,
-}
-
-#[async_trait]
-pub trait ThreadEntity: Send + Sync {
-    fn get_tenant_name(&self) -> String;
-
-    async fn get_thread_by_id(&self, thread_id: String) -> Result<MessageThread, DatabaseError>;
-
-    async fn create_thread(&self, thread: MessageThread) -> Result<(), DatabaseError>;
-
-    async fn get_messages_by_thread_id(
-        &self,
-        thread_id: String,
-        page_options: PageOptions,
-    ) -> Result<Vec<MessageWithId>, DatabaseError>;
-
-    async fn get_messages_with_metrics_by_thread_id(
-        &self,
-        thread_id: String,
-        page_options: PageOptions,
-    ) -> Result<Vec<MessageWithMetrics>, DatabaseError>;
-
-    async fn insert_messages_bulk(
-        &self,
-        messages: Vec<Message>,
-        project_id: String,
-        project_settings: Option<ProjectSettings>,
-    ) -> Result<Vec<InsertMessageResult>, DatabaseError>;
-
-    async fn insert_message(
-        &self,
-        message: Message,
-        project_id: String,
-        project_settings: Option<ProjectSettings>,
-        message_id: Option<String>,
-    ) -> Result<Option<InsertMessageResult>, DatabaseError>;
 }
 
 #[cfg(test)]
