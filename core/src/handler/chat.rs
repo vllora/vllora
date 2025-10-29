@@ -261,4 +261,7 @@ pub async fn create_chat_completion(
         .execute(&executor_context, memory_storage, None, Some(&thread_id))
         .instrument(span.clone())
         .await
+        .inspect_err(|e| {
+            span.record("error", e.to_string());
+        })
 }
