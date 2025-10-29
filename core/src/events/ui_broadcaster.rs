@@ -32,7 +32,7 @@ impl EventsUIBroadcaster {
         let sender_inner = sender.clone();
         let channel_id = channel_id.to_string();
 
-        tokio::spawn(async move {
+        tokio::spawn(async move {   
             loop {
                 tokio::select! {
                     span = traces_receiver.recv() => {

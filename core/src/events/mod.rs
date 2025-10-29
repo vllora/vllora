@@ -408,12 +408,6 @@ pub fn map_cloud_event_to_agui_events(value: &GatewayEvent) -> Vec<Event> {
                             role: "assistant".to_string(),
                             timestamp,
                         },
-                        // Event::Custom {
-                        //     run_context: value.into(),
-                        //     name: "model_start".to_string(),
-                        //     value: model_value,
-                        //     timestamp,
-                        // },
                     ]
                 }
                 ModelEventType::LlmFirstToken(_) => {
