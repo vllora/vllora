@@ -211,7 +211,7 @@ jobs:
     name: Update Homebrew formula
     needs: create-release
     if: startsWith(github.ref, 'refs/tags/')
-    uses: ${{ github.repository_owner }}/homebrew-ellora/.github/workflows/update-formula.yml@main
+    uses: vllora/homebrew-vllora/.github/workflows/update-formula.yml@main
     with:
       tag: ${{ github.ref_name }}
       source_repo: ${{ github.repository }}
