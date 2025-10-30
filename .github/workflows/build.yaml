@@ -210,97 +210,10 @@ jobs:
   update-homebrew-formula:
     name: Update Homebrew formula
     needs: create-release
-    runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          submodules: true
-
-      - name: Set up Git user
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-      - name: Download release assets
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
-        run: |
-          mkdir -p release
-          gh release download "$TAG" -D release --pattern "vllora-*"
-          ls -lh release
-
-      - name: Compute checksums
-        id: shas
-        run: |
-          LINUX_X64_SHA=$(sha256sum release/vllora-linux-x86_64 | awk '{print $1}')
-          LINUX_ARM_SHA=$(sha256sum release/vllora-linux-aarch64 | awk '{print $1}')
-          MAC_X64_SHA=$(sha256sum release/vllora-macos-x86_64 | awk '{print $1}')
-          MAC_ARM_SHA=$(sha256sum release/vllora-macos-aarch64 | awk '{print $1}')
-          echo "linux_x64=$LINUX_X64_SHA" >> $GITHUB_OUTPUT
-          echo "linux_arm=$LINUX_ARM_SHA" >> $GITHUB_OUTPUT
-          echo "mac_x64=$MAC_X64_SHA" >> $GITHUB_OUTPUT
-          echo "mac_arm=$MAC_ARM_SHA" >> $GITHUB_OUTPUT
-
-      - name: Update Homebrew formula file
-        env:
-          TAG: ${{ github.ref_name }}
-          LINUX_X64_SHA: ${{ steps.shas.outputs.linux_x64 }}
-          LINUX_ARM_SHA: ${{ steps.shas.outputs.linux_arm }}
-          MAC_X64_SHA: ${{ steps.shas.outputs.mac_x64 }}
-          MAC_ARM_SHA: ${{ steps.shas.outputs.mac_arm }}
-        run: |
-          VERSION="${TAG#v}"
-
-          # Update version line
-          sed -i -E 's/^(\s*version\s*").*(")/\1'"$VERSION"'\2/' Formula/vllora.rb
-
-          # Update URLs and corresponding sha256 lines
-          awk -v tag="$TAG" -v linux_x64_sha="$LINUX_X64_SHA" -v linux_arm_sha="$LINUX_ARM_SHA" -v mac_x64_sha="$MAC_X64_SHA" -v mac_arm_sha="$MAC_ARM_SHA" '
-            BEGIN { next_sha="" }
-            {
-              if ($0 ~ /vllora-macos-aarch64/ && $0 ~ /url "/) {
-                sub(/download\/[^"]+\/vllora-macos-aarch64/, "download/" tag "/vllora-macos-aarch64")
-                print
-                next_sha="MAC_ARM"
-                next
-              } else if ($0 ~ /vllora-macos-x86_64/ && $0 ~ /url "/) {
-                sub(/download\/[^"]+\/vllora-macos-x86_64/, "download/" tag "/vllora-macos-x86_64")
-                print
-                next_sha="MAC_X64"
-                next
-              } else if ($0 ~ /vllora-linux-aarch64/ && $0 ~ /url "/) {
-                sub(/download\/[^"]+\/vllora-linux-aarch64/, "download/" tag "/vllora-linux-aarch64")
-                print
-                next_sha="LINUX_ARM"
-                next
-              } else if ($0 ~ /vllora-linux-x86_64/ && $0 ~ /url "/) {
-                sub(/download\/[^"]+\/vllora-linux-x86_64/, "download/" tag "/vllora-linux-x86_64")
-                print
-                next_sha="LINUX_X64"
-                next
-              } else if (next_sha != "" && $0 ~ /^\s*sha256 "/) {
-                if (next_sha == "MAC_ARM") { sub(/sha256 ".*"/, "sha256 \"" mac_arm_sha "\"") }
-                if (next_sha == "MAC_X64") { sub(/sha256 ".*"/, "sha256 \"" mac_x64_sha "\"") }
-                if (next_sha == "LINUX_ARM") { sub(/sha256 ".*"/, "sha256 \"" linux_arm_sha "\"") }
-                if (next_sha == "LINUX_X64") { sub(/sha256 ".*"/, "sha256 \"" linux_x64_sha "\"") }
-                print
-                next_sha=""
-                next
-              }
-              print
-            }
-          ' Formula/vllora.rb > Formula/vllora.rb.new
-          mv Formula/vllora.rb.new Formula/vllora.rb
-
-          echo "=== Full Formula/vllora.rb Output ==="
-          cat Formula/vllora.rb
-          echo "===================================="
-          
-          echo "=== Preview of changes ==="
-          grep -nE 'version|vllora-(macos|linux).*|sha256' Formula/vllora.rb || true
-          echo "========================="
+    uses: ${{ github.repository_owner }}/homebrew-ellora/.github/workflows/update-formula.yml@main
+    with:
+      tag: ${{ github.ref_name }}
+      source_repo: ${{ github.repository }}
+    secrets:
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
