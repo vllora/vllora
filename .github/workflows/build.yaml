@@ -215,5 +215,6 @@ jobs:
     with:
       tag: ${{ github.ref_name }}
       source_repo: ${{ github.repository }}
+      target_branch: main
     secrets:
       HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
