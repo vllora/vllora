@@ -399,7 +399,6 @@ impl<C: Config> OpenAIModel<C> {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip_all)]
     async fn process_stream(
         &self,
         mut stream: impl Stream<Item = Result<CreateChatCompletionStreamResponse, OpenAIError>> + Unpin,
@@ -741,7 +740,6 @@ impl<C: Config> OpenAIModel<C> {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip_all)]
     async fn execute(
         &self,
         input_messages: Vec<ChatCompletionRequestMessage>,
@@ -960,7 +958,6 @@ impl<C: Config> OpenAIModel<C> {
         }
     }
 
-    #[tracing::instrument(skip_all)]
     async fn execute_stream(
         &self,
         input_messages: Vec<ChatCompletionRequestMessage>,
@@ -984,7 +981,6 @@ impl<C: Config> OpenAIModel<C> {
 
             match self
                 .execute_stream_inner(span.clone(), input_messages.clone(), tx, tags.clone())
-                .instrument(span.clone())
                 .await
             {
                 Ok(InnerExecutionResult::Finish(_)) => {
