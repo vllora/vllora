@@ -111,7 +111,7 @@ where
             if !is_remote_context {
                 // If the context is local, we need to start a new span for the run
                 let span = tracing::info_span!(
-                    target: "langdb::user_tracing::run",
+                    target: "vllora::user_tracing::run",
                     "run",
                 )
                 .clone();
@@ -145,7 +145,7 @@ where
 
             async {
                 let span = tracing::info_span!(
-                    target: "langdb::user_tracing::cloud_api",
+                    target: "vllora::user_tracing::cloud_api",
                     "cloud_api_invoke",
                     http.request.method = req.method().to_string(),
                     http.request.path = req.path().to_string(),

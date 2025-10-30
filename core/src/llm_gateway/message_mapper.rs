@@ -78,7 +78,7 @@ impl MessageMapper {
         Ok(prompt_messages)
     }
 
-    pub fn map_completions_message_to_langdb_message(
+    pub fn map_completions_message_to_vllora_message(
         message: &ChatCompletionMessage,
         model_name: &str,
         user: &str,

@@ -342,7 +342,7 @@ impl Default for ModelMetadata {
             model: "".to_string(),
             model_provider: "".to_string(),
             inference_provider: InferenceProvider {
-                provider: InferenceModelProvider::Proxy("langdb".to_string()),
+                provider: InferenceModelProvider::Proxy("vllora".to_string()),
                 model_name: "".to_string(),
                 endpoint: None,
             },

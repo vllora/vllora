@@ -239,7 +239,7 @@ fn get_db_pool() -> Result<vllora_core::metadata::pool::DbPool, CliError> {
     let home_dir = std::env::var("HOME").unwrap_or_else(|_| "~".to_string());
     let vllora_dir = format!("{home_dir}/.vllora");
     std::fs::create_dir_all(&vllora_dir).unwrap_or_default();
-    let vllora_db_file = format!("{vllora_dir}/vllora.sqlite");
+    let vllora_db_file = format!("{vllora_dir}/vllora.db");
     let db_pool = vllora_core::metadata::pool::establish_connection(vllora_db_file, 10);
 
     vllora_core::metadata::utils::init_db(&db_pool);

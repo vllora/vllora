@@ -27,7 +27,7 @@ pub async fn create_image(
     let llm_model = find_model_by_full_name(&request.model, models_service.as_ref().as_ref())?;
 
     let span = Span::or_current(tracing::info_span!(
-        target: "langdb::user_tracing::api_invoke",
+        target: "vllora::user_tracing::api_invoke",
         "api_invoke",
         request = tracing::field::Empty,
         response = tracing::field::Empty,

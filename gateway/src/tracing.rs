@@ -45,7 +45,7 @@ pub fn init_tracing(project_trace_senders: Arc<ProjectTraceMap>) {
     let tracer = provider.tracer("langdb-ai-gateway");
     opentelemetry::global::set_tracer_provider(provider);
 
-    let otel_layer = events::layer("langdb::user_tracing", LevelFilter::INFO, tracer);
+    let otel_layer = events::layer("vllora::user_tracing", LevelFilter::INFO, tracer);
     Registry::default()
         .with(builder)
         .with(otel_layer)

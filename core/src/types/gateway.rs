@@ -225,7 +225,7 @@ impl McpTransportType {
 }
 
 fn default_in_memory_name() -> String {
-    "langdb".to_string()
+    "vllora".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

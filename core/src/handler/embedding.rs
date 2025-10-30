@@ -30,7 +30,7 @@ pub async fn embeddings_handler(
     let key_credentials = req.extensions().get::<Credentials>().cloned();
 
     let span = Span::or_current(tracing::info_span!(
-        target: "langdb::user_tracing::api_invoke",
+        target: "vllora::user_tracing::api_invoke",
         "api_invoke",
         request = tracing::field::Empty,
         response = tracing::field::Empty,

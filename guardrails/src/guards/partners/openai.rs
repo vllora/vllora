@@ -25,7 +25,7 @@ impl OpenaiGuardrailPartner {
         let api_key = if let Some(credentials) = credentials {
             credentials.api_key.clone()
         } else {
-            std::env::var("LANGDB_OPENAI_API_KEY")
+            std::env::var("VLLORA_OPENAI_API_KEY")
                 .map_err(|_| GuardPartnerError::InvalidApiKey(AuthorizationError::InvalidApiKey))?
         };
         Ok(Self { api_key })

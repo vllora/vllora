@@ -57,7 +57,7 @@ pub fn find_model_by_full_name(
     }
 }
 
-// extract langdb-tags from headers, shoule be sth like this: tag1=value1&tag2=value2 => result should be a Map<String, String>
+// extract vllora-tags from headers, shoule be sth like this: tag1=value1&tag2=value2 => result should be a Map<String, String>
 pub fn extract_tags(req: &HttpRequest) -> Result<HashMap<String, String>, GatewayError> {
     Ok(match req.headers().get("x-tags") {
         Some(value) => {

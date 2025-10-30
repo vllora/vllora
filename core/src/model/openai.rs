@@ -59,10 +59,10 @@ pub type StreamExecutionResult = (
 
 macro_rules! target {
     () => {
-        "langdb::user_tracing::models::openai"
+        "vllora::user_tracing::models::openai"
     };
     ($subtgt:literal) => {
-        concat!("langdb::user_tracing::models::openai::", $subtgt)
+        concat!("vllora::user_tracing::models::openai::", $subtgt)
     };
 }
 
@@ -85,7 +85,7 @@ pub fn openai_client(
     let api_key = if let Some(credentials) = credentials {
         credentials.api_key.clone()
     } else {
-        std::env::var("LANGDB_OPENAI_API_KEY").map_err(|_| AuthorizationError::InvalidApiKey)?
+        std::env::var("VLLORA_OPENAI_API_KEY").map_err(|_| AuthorizationError::InvalidApiKey)?
     };
 
     let mut config = OpenAIConfig::new();
@@ -161,7 +161,7 @@ impl OpenAIModel<OpenAIConfig> {
             tools: Arc::new(tools),
             credentials_ident: credentials
                 .map(|_c| CredentialsIdent::Own)
-                .unwrap_or(CredentialsIdent::Langdb),
+                .unwrap_or(CredentialsIdent::Vllora),
         })
     }
 }
@@ -183,7 +183,7 @@ impl OpenAIModel<AzureConfig> {
             let api_key = if let Some(credentials) = credentials {
                 credentials.api_key.clone()
             } else {
-                std::env::var("LANGDB_OPENAI_API_KEY")
+                std::env::var("VLLORA_OPENAI_API_KEY")
                     .map_err(|_| AuthorizationError::InvalidApiKey)?
             };
             azure_openai_client(api_key, endpoint, &params.model.clone().unwrap_or_default())
@@ -201,7 +201,7 @@ impl OpenAIModel<AzureConfig> {
             tools: Arc::new(tools),
             credentials_ident: credentials
                 .map(|_c| CredentialsIdent::Own)
-                .unwrap_or(CredentialsIdent::Langdb),
+                .unwrap_or(CredentialsIdent::Vllora),
         })
     }
 

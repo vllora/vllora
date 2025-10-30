@@ -17,10 +17,10 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 // macro_rules! target {
 //     () => {
-//         "langdb::user_tracing::models"
+//         "vllora::user_tracing::models"
 //     };
 //     ($subtgt:literal) => {
-//         concat!("langdb::user_tracing::models::", $subtgt)
+//         concat!("vllora::user_tracing::models::", $subtgt)
 //     };
 // }
 

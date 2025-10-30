@@ -31,7 +31,7 @@ impl Evaluator for TracedGuard {
         guard: &Guard,
     ) -> Result<GuardResult, String> {
         let span = info_span!(
-            target: "langdb::user_tracing::guard",
+            target: "vllora::user_tracing::guard",
             SPAN_GUARD_EVAULATION,
             id = guard.id(),
             label = guard.name(),

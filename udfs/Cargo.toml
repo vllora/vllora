@@ -27,7 +27,7 @@ uuid = "1.18.1"
 
 [[bin]]
 path = "src/main.rs"
-name = "langdb_udf"
+name = "vllora_udf"
 
 [dev-dependencies]
 mockall = "0.13"

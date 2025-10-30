@@ -107,7 +107,7 @@ impl Evaluator for LlmJudgeEvaluator {
             let guard_messages = guard_messages
                 .iter()
                 .map(|message| {
-                    MessageMapper::map_completions_message_to_langdb_message(
+                    MessageMapper::map_completions_message_to_vllora_message(
                         message,
                         &model.model,
                         "judge",

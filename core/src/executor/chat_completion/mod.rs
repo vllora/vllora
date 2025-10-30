@@ -114,7 +114,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
     let mut messages = vec![];
 
     for message in &request.messages {
-        messages.push(MessageMapper::map_completions_message_to_langdb_message(
+        messages.push(MessageMapper::map_completions_message_to_vllora_message(
             message,
             &request.model,
             &user.to_string(),
@@ -269,9 +269,9 @@ pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Cl
     )?;
 
     let credentials_ident = if llm_model.inference_provider.provider
-        == InferenceModelProvider::Proxy("langdb".to_string())
+        == InferenceModelProvider::Proxy("vllora".to_string())
     {
-        CredentialsIdent::Langdb
+        CredentialsIdent::Vllora
     } else {
         CredentialsIdent::Own
     };

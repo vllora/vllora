@@ -23,10 +23,10 @@ use valuable::Valuable;
 
 macro_rules! target {
     () => {
-        "langdb::user_tracing::models::openai"
+        "vllora::user_tracing::models::openai"
     };
     ($subtgt:literal) => {
-        concat!("langdb::user_tracing::models::openai::", $subtgt)
+        concat!("vllora::user_tracing::models::openai::", $subtgt)
     };
 }
 
@@ -60,7 +60,7 @@ impl OpenAIEmbed {
 
         let credentials_ident = credentials
             .map(|_c| CredentialsIdent::Own)
-            .unwrap_or(CredentialsIdent::Langdb);
+            .unwrap_or(CredentialsIdent::Vllora);
 
         Ok(Self {
             params,

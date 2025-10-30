@@ -197,7 +197,7 @@ pub async fn create_chat_completion(
     can_execute_llm_for_request(&req).await?;
 
     let span = Span::or_current(tracing::info_span!(
-        target: "langdb::user_tracing::api_invoke",
+        target: "vllora::user_tracing::api_invoke",
         "api_invoke",
         request = tracing::field::Empty,
         response = tracing::field::Empty,
@@ -231,7 +231,7 @@ pub async fn create_chat_completion(
     let cost_calculator = cost_calculator.into_inner();
     let (_handle, callback_handler_fn) = prepare_request(
         &callback_handler.get_ref().clone(),
-        "langdb",
+        "vllora",
         &project_slug,
         vec![],
         Some(run_id.value()),

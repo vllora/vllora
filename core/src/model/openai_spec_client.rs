@@ -15,7 +15,7 @@ pub fn openai_spec_client(
         config = config.with_api_key(credentials.api_key.clone());
     } else {
         let key_name = format!(
-            "LANGDB_{provider_name}_API_KEY",
+            "VLLORA_{provider_name}_API_KEY",
             provider_name = provider_name.to_uppercase()
         );
         if let Ok(api_key) = std::env::var(&key_name) {

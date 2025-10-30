@@ -1,9 +1,9 @@
 use diesel::{sql_query, RunQueryDsl};
+use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use vllora_core::metadata::models::session::DbSession;
 use vllora_core::{metadata::pool::DbPool, types::LANGDB_API_URL};
-use reqwest::header::{HeaderMap, HeaderValue};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Credentials {
@@ -36,10 +36,7 @@ pub fn check_version(session_id: String) {
     tokio::spawn(async move {
         let version = env!("CARGO_PKG_VERSION");
         let mut headers = HeaderMap::new();
-        headers.insert(
-            "X-vllora-version",
-            HeaderValue::from_str(&format!("{version}")).unwrap(),
-        );
+        headers.insert("X-vllora-version", HeaderValue::from_str(version).unwrap());
 
         if let Some(latest) = fetch_latest_release_version().await {
             if let Ok(v) = HeaderValue::from_str(&latest) {
@@ -52,7 +49,6 @@ pub fn check_version(session_id: String) {
             }
         }
 
-        
         let client = reqwest::Client::new();
         let _ = client
             .get(format!("{}/session/ping/{}", get_api_url(), session_id))
@@ -64,7 +60,9 @@ pub fn check_version(session_id: String) {
 
 async fn fetch_latest_release_version() -> Option<String> {
     #[derive(Deserialize)]
-    struct Release { tag_name: String }
+    struct Release {
+        tag_name: String,
+    }
 
     let client = reqwest::Client::builder()
         .user_agent(format!("vllora/{}", env!("CARGO_PKG_VERSION")))
@@ -77,7 +75,9 @@ async fn fetch_latest_release_version() -> Option<String> {
         .await
         .ok()?;
 
-    if !response.status().is_success() { return None; }
+    if !response.status().is_success() {
+        return None;
+    }
 
     let release: Release = response.json().await.ok()?;
     Some(release.tag_name)

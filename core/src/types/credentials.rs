@@ -15,9 +15,7 @@ pub enum Credentials {
     },
     Aws(BedrockCredentials),
     Vertex(Box<VertexCredentials>),
-    // Hosted LangDB AWS
-    // #[serde(other)]
-    LangDb,
+    Vllora,
 }
 
 impl Credentials {

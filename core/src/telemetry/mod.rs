@@ -159,7 +159,7 @@ impl SpanWriter {
         let result = self
             .transport
             .insert_values(
-                "langdb.traces",
+                "vllora.traces",
                 &[
                     "trace_id",
                     "span_id",

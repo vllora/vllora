@@ -391,7 +391,7 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
         let (tx, mut rx) = channel::<Option<ModelEvent>>(outer_tx.max_capacity());
 
         let span = info_span!(
-            target: "langdb::user_tracing::models",
+            target: "vllora::user_tracing::models",
             parent: self.router_span.clone(),
             SPAN_MODEL_CALL,
             input = &input_str,
@@ -563,7 +563,7 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
         let cost_calculator = self.executor_context.cost_calculator.clone();
 
         let span = info_span!(
-            target: "langdb::user_tracing::models",
+            target: "vllora::user_tracing::models",
             parent: self.router_span.clone(),
             SPAN_MODEL_CALL,
             input = &input_str,
@@ -679,7 +679,7 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
 }
 
 pub fn credentials_identifier(model_params: &CompletionModelParams) -> CredentialsIdent {
-    let langdb_creds = match &model_params.engine {
+    let vllora_creds = match &model_params.engine {
         CompletionEngineParams::Bedrock { credentials, .. } => credentials.is_none(),
         CompletionEngineParams::OpenAi { credentials, .. } => credentials.is_none(),
         CompletionEngineParams::Anthropic { credentials, .. } => credentials.is_none(),
@@ -687,8 +687,8 @@ pub fn credentials_identifier(model_params: &CompletionModelParams) -> Credentia
         CompletionEngineParams::Proxy { credentials, .. } => credentials.is_none(),
     };
 
-    if langdb_creds {
-        CredentialsIdent::Langdb
+    if vllora_creds {
+        CredentialsIdent::Vllora
     } else {
         CredentialsIdent::Own
     }
@@ -696,14 +696,14 @@ pub fn credentials_identifier(model_params: &CompletionModelParams) -> Credentia
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum CredentialsIdent {
-    Langdb,
+    Vllora,
     Own,
 }
 
 impl Display for CredentialsIdent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CredentialsIdent::Langdb => write!(f, "langdb"),
+            CredentialsIdent::Vllora => write!(f, "vllora"),
             CredentialsIdent::Own => write!(f, "own"),
         }
     }

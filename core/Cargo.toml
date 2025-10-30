@@ -2,11 +2,11 @@
 name = "vllora_core"
 version = "0.3.2"
 edition = "2021"
-authors = ["LangDB Team<api@langdb.ai>"]
-description = "AI gateway Core for LangDB AI Gateway."
+authors = ["Vllora Team<api@vllora.dev>"]
+description = "AI gateway Core for Vllora."
 license = "Apache-2.0"
-repository = "https://github.com/langdb/ai-gateway"
-documentation = "https://docs.langdb.ai"
+repository = "https://github.com/vllora/vllora"
+documentation = "https://docs.vllora.dev"
 readme = "../README.md"
 keywords = ["llm", "openai", "anthropic", "gemini", "mcp"]
 categories = ["web-programming", "network-programming"]

@@ -35,7 +35,7 @@ macro_rules! create_model_span {
 macro_rules! create_thread_span {
     ($tags:expr) => {{
         tracing::info_span!(
-            target: "langdb::user_tracing::api_invoke",
+            target: "vllora::user_tracing::api_invoke",
             SPAN_API_INVOKE,
             request = tracing::field::Empty,
             response = tracing::field::Empty,

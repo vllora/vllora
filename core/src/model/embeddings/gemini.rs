@@ -31,10 +31,10 @@ use crate::{
 
 macro_rules! target {
     () => {
-        "langdb::user_tracing::models::gemini"
+        "vllora::user_tracing::models::gemini"
     };
     ($subtgt:literal) => {
-        concat!("langdb::user_tracing::models::gemini::", $subtgt)
+        concat!("vllora::user_tracing::models::gemini::", $subtgt)
     };
 }
 
@@ -50,7 +50,7 @@ impl GeminiEmbeddings {
             client,
             credentials_ident: credentials
                 .map(|_c| CredentialsIdent::Own)
-                .unwrap_or(CredentialsIdent::Langdb),
+                .unwrap_or(CredentialsIdent::Vllora),
         })
     }
 

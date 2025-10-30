@@ -56,7 +56,7 @@ impl OpenAIImageGeneration {
         Ok(OpenAIImageGeneration {
             credentials_ident: credentials
                 .map(|_c| CredentialsIdent::Own)
-                .unwrap_or(CredentialsIdent::Langdb),
+                .unwrap_or(CredentialsIdent::Vllora),
             client: client.unwrap_or(openai_client(credentials, endpoint)?),
         })
     }
@@ -127,7 +127,7 @@ impl ImageGenerationModelInstance for OpenAIImageGeneration {
         tags: HashMap<String, String>,
     ) -> GatewayResult<ImagesResponse> {
         let input = serde_json::to_string(request)?;
-        let call_span = tracing::info_span!(target: "langdb::user_tracing::models::openai::image_generation", SPAN_OPENAI, input = input, output = field::Empty, error = field::Empty, usage = field::Empty, ttft = field::Empty, tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value());
+        let call_span = tracing::info_span!(target: "vllora::user_tracing::models::openai::image_generation", SPAN_OPENAI, input = input, output = field::Empty, error = field::Empty, usage = field::Empty, ttft = field::Empty, tags = JsonValue(&serde_json::to_value(tags.clone()).unwrap_or_default()).as_value());
 
         let size = self.map_size(request.size.as_ref());
 

@@ -23,13 +23,13 @@ target_dir = ${ROOT_DIR}/target/$(1)/${PROFILE_DIR}
 
 # Local build targets
 build_local: udf_local
-	cp $(call target_dir,${X86_CONTAINER_TARGET})/langdb_udf \
-	docker/clickhouse/user_scripts/langdb_udf
+	cp $(call target_dir,${X86_CONTAINER_TARGET})/vllora_udf \
+	docker/clickhouse/user_scripts/vllora_udf
 
 udf_local: ${TMPDIR}
 	cargo zigbuild --profile ${PROFILE} \
 		--target ${X86_CONTAINER_TARGET} \
-		--bin langdb_udf
+		--bin vllora_udf
 
 gateway_local: ${TMPDIR}
 	cargo zigbuild --profile ${PROFILE} \
@@ -40,7 +40,7 @@ gateway_local: ${TMPDIR}
 udf_mac_m1: ${TMPDIR}
 	cargo build --profile ${PROFILE} \
 		--target ${MAC_M1_TARGET} \
-		--bin langdb_udf
+		--bin vllora_udf
 
 gateway_mac_m1: ${TMPDIR}
 	cargo build --profile ${PROFILE} \
@@ -54,16 +54,16 @@ build_udfs: ${TMPDIR}
 	cargo zigbuild --profile ${PROFILE} \
 		--target ${X86_CONTAINER_TARGET} \
 		--target ${ARM_CONTAINER_TARGET} \
-		--bin langdb_udf
+		--bin vllora_udf
 
 build_udfs_all_platforms: ${TMPDIR}
 	cargo zigbuild --profile ${PROFILE} \
 		--target ${X86_CONTAINER_TARGET} \
 		--target ${ARM_CONTAINER_TARGET} \
-		--bin langdb_udf
+		--bin vllora_udf
 	cargo build --profile ${PROFILE} \
 		--target ${MAC_M1_TARGET} \
-		--bin langdb_udf
+		--bin vllora_udf
 
 build_gateways: ${TMPDIR}
 	cargo zigbuild --profile ${PROFILE} \

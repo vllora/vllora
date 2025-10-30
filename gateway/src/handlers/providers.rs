@@ -56,8 +56,6 @@ pub async fn update_provider(
     // Check if provider already exists
     let existing_provider = storage.get_key(provider_credentials_id.clone()).await;
 
-    tracing::error!("Existing_provider: {:?}", existing_provider);
-
     match existing_provider {
         Ok(Some(_)) => {
             match storage

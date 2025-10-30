@@ -74,6 +74,7 @@ impl DbProvider {
             "deepseek" => "api_key".to_string(),
             "fireworksai" => "api_key".to_string(),
             "langdb" => "langdb".to_string(),
+            "vllora" => "vllora".to_string(),
             _ => "api_key".to_string(), // Default to api_key for unknown providers
         }
     }

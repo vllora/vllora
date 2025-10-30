@@ -331,6 +331,7 @@ fn get_provider_type(provider_name: &str) -> String {
         "bedrock" => "aws".to_string(),
         "vertex-ai" => "vertex".to_string(),
         "langdb" => "langdb".to_string(),
+        "vllora" => "vllora".to_string(),
         _ => "api_key".to_string(), // Default to api_key for unknown providers
     }
 }

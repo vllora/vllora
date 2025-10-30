@@ -297,8 +297,8 @@ pub fn default_include_history() -> bool {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MessageThreadWithTitle {
-    pub id: String,    // UUID
-    pub title: String, // Corresponding LangDB model
+    pub id: String, // UUID
+    pub title: String,
     pub created_at: String,
     pub updated_at: String,
     #[serde(alias = "used_models")]

@@ -72,10 +72,10 @@ pub struct BedrockEmbeddings {
 
 macro_rules! target {
     () => {
-        "langdb::user_tracing::models::bedrock"
+        "vllora::user_tracing::models::bedrock"
     };
     ($subtgt:literal) => {
-        concat!("langdb::user_tracing::models::bedrock::", $subtgt)
+        concat!("vllora::user_tracing::models::bedrock::", $subtgt)
     };
 }
 
@@ -86,7 +86,7 @@ impl BedrockEmbeddings {
             client,
             credentials_ident: credentials
                 .map(|_c| CredentialsIdent::Own)
-                .unwrap_or(CredentialsIdent::Langdb),
+                .unwrap_or(CredentialsIdent::Vllora),
         })
     }
 

@@ -141,15 +141,15 @@ impl TracedEmbeddingsModelDefinition {
         match &self.model_params.engine {
             EmbeddingsEngineParams::OpenAi { credentials, .. } => match &credentials {
                 Some(_) => CredentialsIdent::Own,
-                None => CredentialsIdent::Langdb,
+                None => CredentialsIdent::Vllora,
             },
             EmbeddingsEngineParams::Gemini { credentials, .. } => match &credentials {
                 Some(_) => CredentialsIdent::Own,
-                None => CredentialsIdent::Langdb,
+                None => CredentialsIdent::Vllora,
             },
             EmbeddingsEngineParams::Bedrock { credentials, .. } => match &credentials {
                 Some(_) => CredentialsIdent::Own,
-                None => CredentialsIdent::Langdb,
+                None => CredentialsIdent::Vllora,
             },
         }
     }
@@ -185,7 +185,7 @@ impl<Inner: EmbeddingsModelInstance> EmbeddingsModelInstance for TracedEmbedding
 
         let (tx, mut rx) = channel::<Option<ModelEvent>>(outer_tx.max_capacity());
         let span = info_span!(
-            target: "langdb::user_tracing::models", SPAN_MODEL_CALL,
+            target: "vllora::user_tracing::models", SPAN_MODEL_CALL,
             input = &request_str,
             model = model_str,
             model_name = self.definition.name.clone(),
