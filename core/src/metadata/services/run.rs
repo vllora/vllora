@@ -260,7 +260,6 @@ impl RunService for RunServiceImpl {
               SELECT DISTINCT run_id
               FROM traces
               WHERE run_id IS NOT NULL
-                AND parent_span_id IS NULL
                 {}
             )
             GROUP BY run_id
