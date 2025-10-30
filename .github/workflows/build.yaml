@@ -216,5 +216,6 @@ jobs:
       tag: ${{ github.ref_name }}
       source_repo: ${{ github.repository }}
       target_branch: main
+      tap_repo: vllora/homebrew-vllora
     secrets:
       HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
