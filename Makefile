@@ -34,7 +34,7 @@ udf_local: ${TMPDIR}
 gateway_local: ${TMPDIR}
 	cargo zigbuild --profile ${PROFILE} \
 		--target ${X86_CONTAINER_TARGET} \
-		--bin ai-gateway
+		--bin vllora
 
 # Mac M1 build targets
 udf_mac_m1: ${TMPDIR}
@@ -45,7 +45,7 @@ udf_mac_m1: ${TMPDIR}
 gateway_mac_m1: ${TMPDIR}
 	cargo build --profile ${PROFILE} \
 		--target ${MAC_M1_TARGET} \
-		--bin ai-gateway
+		--bin vllora
 
 # Multi-architecture build targets
 build_all: build_udfs build_gateways
@@ -69,16 +69,16 @@ build_gateways: ${TMPDIR}
 	cargo zigbuild --profile ${PROFILE} \
 		--target ${X86_CONTAINER_TARGET} \
 		--target ${ARM_CONTAINER_TARGET} \
-		--bin ai-gateway
+		--bin vllora
 
 build_gateways_all_platforms: ${TMPDIR}
 	cargo zigbuild --profile ${PROFILE} \
 		--target ${X86_CONTAINER_TARGET} \
 		--target ${ARM_CONTAINER_TARGET} \
-		--bin ai-gateway
+		--bin vllora
 	cargo build --profile ${PROFILE} \
 		--target ${MAC_M1_TARGET} \
-		--bin ai-gateway
+		--bin vllora
 
 ${TMPDIR}:
 	mkdir -p ${TMPDIR}

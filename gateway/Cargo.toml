@@ -1,5 +1,5 @@
 [package]
-name = "ai-gateway"
+name = "vllora"
 version = "0.3.2"
 authors = ["Vllora Team<api@vllora.dev>"]
 description = "AI gateway for managing and routing LLM requests - Govern, Secure, and Optimize your AI Traffic."
@@ -10,10 +10,10 @@ readme = "../README.md"
 keywords = ["llm", "openai", "anthropic", "gemini", "mcp"]
 categories = ["web-programming", "network-programming"]
 edition = "2021"
-default-run = "ai-gateway"
+default-run = "vllora"
 
 [[bin]]
-name = "ai-gateway"
+name = "vllora"
 path = "src/main.rs"
 
 [dependencies]

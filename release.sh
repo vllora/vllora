@@ -32,8 +32,8 @@ if [ "$1" = "--publish" ]; then
     echo "Preparing release artifacts..."
     cp target/x86_64-unknown-linux-gnu/release/vllora_udf $TEMP_DIR/vllora_udf-x86_64
     cp target/aarch64-unknown-linux-gnu/release/vllora_udf $TEMP_DIR/vllora_udf-aarch64
-    cp target/x86_64-unknown-linux-gnu/release/ai-gateway $TEMP_DIR/ai-gateway-x86_64
-    cp target/aarch64-unknown-linux-gnu/release/ai-gateway $TEMP_DIR/ai-gateway-aarch64
+    cp target/x86_64-unknown-linux-gnu/release/vllora $TEMP_DIR/vllora-x86_64
+    cp target/aarch64-unknown-linux-gnu/release/vllora $TEMP_DIR/vllora-aarch64
 
     # Create GitHub release and upload assets
     echo "Creating GitHub release..."
@@ -42,8 +42,8 @@ if [ "$1" = "--publish" ]; then
         --notes-file CHANGELOG.md \
         $TEMP_DIR/vllora_udf-x86_64 \
         $TEMP_DIR/vllora_udf-aarch64 \
-        $TEMP_DIR/ai-gateway-x86_64 \
-        $TEMP_DIR/ai-gateway-aarch64
+        $TEMP_DIR/vllora-x86_64 \
+        $TEMP_DIR/vllora-aarch64
 
     # Cleanup
     rm -rf $TEMP_DIR

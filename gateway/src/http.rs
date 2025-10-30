@@ -102,9 +102,9 @@ impl ApiServer {
         // Add documentation and community links
         println!("\n📚 Where the cool kids hang out:");
         println!(
-            "   🔍 Read the docs (if you're into that): \x1b[36mhttps://docs.langdb.ai\x1b[0m"
+            "   🔍 Read the docs (if you're into that): \x1b[36mhttps://docs.vllora.dev\x1b[0m"
         );
-        println!("   ⭐ Drop us a star: \x1b[36mhttps://github.com/langdb/ai-gateway\x1b[0m");
+        println!("   ⭐ Drop us a star: \x1b[36mhttps://github.com/vllora/vllora\x1b[0m");
         println!(
             "   🎮 Join our Slack (we have memes): \x1b[36mhttps://join.slack.com/t/langdbcommunity/shared_invite/zt-2haf5kj6a-d7NX6TFJUPX45w~Ag4dzlg\x1b[0m"
         );

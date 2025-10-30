@@ -240,44 +240,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ai-gateway"
-version = "0.3.2"
-dependencies = [
- "actix-cors",
- "actix-web",
- "async-trait",
- "axum",
- "chrono",
- "clap",
- "diesel",
- "dotenv",
- "futures",
- "futures-util",
- "libsqlite3-sys",
- "minijinja",
- "open",
- "opentelemetry",
- "opentelemetry-otlp",
- "opentelemetry_sdk",
- "prettytable-rs",
- "reqwest",
- "serde",
- "serde_json",
- "serde_yaml",
- "static-serve",
- "static-serve-macro",
- "thiserror 2.0.16",
- "tokio",
- "tokio-stream",
- "tonic",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "vllora_core",
- "vllora_guardrails",
-]
-
-[[package]]
 name = "alloc-no-stdlib"
 version = "2.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5040,6 +5002,44 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
+
+[[package]]
+name = "vllora"
+version = "0.3.2"
+dependencies = [
+ "actix-cors",
+ "actix-web",
+ "async-trait",
+ "axum",
+ "chrono",
+ "clap",
+ "diesel",
+ "dotenv",
+ "futures",
+ "futures-util",
+ "libsqlite3-sys",
+ "minijinja",
+ "open",
+ "opentelemetry",
+ "opentelemetry-otlp",
+ "opentelemetry_sdk",
+ "prettytable-rs",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "static-serve",
+ "static-serve-macro",
+ "thiserror 2.0.16",
+ "tokio",
+ "tokio-stream",
+ "tonic",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "vllora_core",
+ "vllora_guardrails",
+]
 
 [[package]]
 name = "vllora_core"

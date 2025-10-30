@@ -104,13 +104,13 @@ jobs:
           PKG_CONFIG_ALLOW_CROSS: 1
           PKG_CONFIG_PATH_aarch64_unknown_linux_gnu: /usr/lib/aarch64-linux-gnu/pkgconfig
           RUSTFLAGS_aarch64_unknown_linux_gnu: "-L /usr/lib/aarch64-linux-gnu"
-        run: cargo build --release --target ${{ matrix.target }} --bin ai-gateway
+        run: cargo build --release --target ${{ matrix.target }} --bin vllora
           
       - name: Upload AI Gateway artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ai-gateway-linux-${{ matrix.target == 'aarch64-unknown-linux-gnu' && 'aarch64' || 'x86_64' }}
-          path: target/${{ matrix.target }}/release/ai-gateway
+          name: vllora-linux-${{ matrix.target == 'aarch64-unknown-linux-gnu' && 'aarch64' || 'x86_64' }}
+          path: target/${{ matrix.target }}/release/vllora
           retention-days: 30
 
   build-macos:
@@ -157,13 +157,13 @@ jobs:
       - name: Build Gateway project
         env:
           PQ_LIB_STATIC: "1"
-        run: cargo build --release --target ${{ matrix.target }} --bin ai-gateway
+        run: cargo build --release --target ${{ matrix.target }} --bin vllora
           
       - name: Upload AI Gateway artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ai-gateway-macos-${{ matrix.target == 'aarch64-apple-darwin' && 'aarch64' || 'x86_64' }}
-          path: target/${{ matrix.target }}/release/ai-gateway
+          name: vllora-macos-${{ matrix.target == 'aarch64-apple-darwin' && 'aarch64' || 'x86_64' }}
+          path: target/${{ matrix.target }}/release/vllora
           retention-days: 30
 
   create-release:
@@ -185,10 +185,10 @@ jobs:
       - name: Prepare release binaries
         run: |
           mkdir -p release
-          cp artifacts/ai-gateway-linux-x86_64/ai-gateway release/ai-gateway-linux-x86_64
-          cp artifacts/ai-gateway-linux-aarch64/ai-gateway release/ai-gateway-linux-aarch64
-          cp artifacts/ai-gateway-macos-x86_64/ai-gateway release/ai-gateway-macos-x86_64
-          cp artifacts/ai-gateway-macos-aarch64/ai-gateway release/ai-gateway-macos-aarch64
+          cp artifacts/vllora-linux-x86_64/vllora release/vllora-linux-x86_64
+          cp artifacts/vllora-linux-aarch64/vllora release/vllora-linux-aarch64
+          cp artifacts/vllora-macos-x86_64/vllora release/vllora-macos-x86_64
+          cp artifacts/vllora-macos-aarch64/vllora release/vllora-macos-aarch64
           chmod +x release/*
           ls -lh release/
       
@@ -200,10 +200,10 @@ jobs:
           prerelease: ${{ contains(github.ref_name, '-prerelease') }}
           generate_release_notes: true
           files: |
-            release/ai-gateway-linux-x86_64
-            release/ai-gateway-linux-aarch64
-            release/ai-gateway-macos-x86_64
-            release/ai-gateway-macos-aarch64
+            release/vllora-linux-x86_64
+            release/vllora-linux-aarch64
+            release/vllora-macos-x86_64
+            release/vllora-macos-aarch64
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
             
@@ -231,16 +231,16 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           mkdir -p release
-          gh release download "$TAG" -D release --pattern "ai-gateway-*"
+          gh release download "$TAG" -D release --pattern "vllora-*"
           ls -lh release
 
       - name: Compute checksums
         id: shas
         run: |
-          LINUX_X64_SHA=$(sha256sum release/ai-gateway-linux-x86_64 | awk '{print $1}')
-          LINUX_ARM_SHA=$(sha256sum release/ai-gateway-linux-aarch64 | awk '{print $1}')
-          MAC_X64_SHA=$(sha256sum release/ai-gateway-macos-x86_64 | awk '{print $1}')
-          MAC_ARM_SHA=$(sha256sum release/ai-gateway-macos-aarch64 | awk '{print $1}')
+          LINUX_X64_SHA=$(sha256sum release/vllora-linux-x86_64 | awk '{print $1}')
+          LINUX_ARM_SHA=$(sha256sum release/vllora-linux-aarch64 | awk '{print $1}')
+          MAC_X64_SHA=$(sha256sum release/vllora-macos-x86_64 | awk '{print $1}')
+          MAC_ARM_SHA=$(sha256sum release/vllora-macos-aarch64 | awk '{print $1}')
           echo "linux_x64=$LINUX_X64_SHA" >> $GITHUB_OUTPUT
           echo "linux_arm=$LINUX_ARM_SHA" >> $GITHUB_OUTPUT
           echo "mac_x64=$MAC_X64_SHA" >> $GITHUB_OUTPUT
@@ -263,23 +263,23 @@ jobs:
           awk -v tag="$TAG" -v linux_x64_sha="$LINUX_X64_SHA" -v linux_arm_sha="$LINUX_ARM_SHA" -v mac_x64_sha="$MAC_X64_SHA" -v mac_arm_sha="$MAC_ARM_SHA" '
             BEGIN { next_sha="" }
             {
-              if ($0 ~ /ai-gateway-macos-aarch64/ && $0 ~ /url "/) {
-                sub(/download\/[^"]+\/ai-gateway-macos-aarch64/, "download/" tag "/ai-gateway-macos-aarch64")
+              if ($0 ~ /vllora-macos-aarch64/ && $0 ~ /url "/) {
+                sub(/download\/[^"]+\/vllora-macos-aarch64/, "download/" tag "/vllora-macos-aarch64")
                 print
                 next_sha="MAC_ARM"
                 next
-              } else if ($0 ~ /ai-gateway-macos-x86_64/ && $0 ~ /url "/) {
-                sub(/download\/[^"]+\/ai-gateway-macos-x86_64/, "download/" tag "/ai-gateway-macos-x86_64")
+              } else if ($0 ~ /vllora-macos-x86_64/ && $0 ~ /url "/) {
+                sub(/download\/[^"]+\/vllora-macos-x86_64/, "download/" tag "/vllora-macos-x86_64")
                 print
                 next_sha="MAC_X64"
                 next
-              } else if ($0 ~ /ai-gateway-linux-aarch64/ && $0 ~ /url "/) {
-                sub(/download\/[^"]+\/ai-gateway-linux-aarch64/, "download/" tag "/ai-gateway-linux-aarch64")
+              } else if ($0 ~ /vllora-linux-aarch64/ && $0 ~ /url "/) {
+                sub(/download\/[^"]+\/vllora-linux-aarch64/, "download/" tag "/vllora-linux-aarch64")
                 print
                 next_sha="LINUX_ARM"
                 next
-              } else if ($0 ~ /ai-gateway-linux-x86_64/ && $0 ~ /url "/) {
-                sub(/download\/[^"]+\/ai-gateway-linux-x86_64/, "download/" tag "/ai-gateway-linux-x86_64")
+              } else if ($0 ~ /vllora-linux-x86_64/ && $0 ~ /url "/) {
+                sub(/download\/[^"]+\/vllora-linux-x86_64/, "download/" tag "/vllora-linux-x86_64")
                 print
                 next_sha="LINUX_X64"
                 next
@@ -302,5 +302,5 @@ jobs:
           echo "===================================="
           
           echo "=== Preview of changes ==="
-          grep -nE 'version|ai-gateway-(macos|linux).*|sha256' Formula/vllora.rb || true
+          grep -nE 'version|vllora-(macos|linux).*|sha256' Formula/vllora.rb || true
           echo "========================="
