@@ -219,3 +219,19 @@ jobs:
       tap_repo: vllora/homebrew-vllora
     secrets:
       HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+  notify-slack:
+    name: Slack Notification
+    needs: update-homebrew-formula
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify Slack
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_CHANNEL: engineering
+          SLACK_COLOR: ${{ job.status }}
+          SLACK_ICON: https://github.com/vllora.png?size=48
+          SLACK_MESSAGE: "Release ${{ github.ref_name }} updated formula in tap vllora/homebrew-vllora :rocket:"
+          SLACK_TITLE: New brew release available
+          SLACK_USERNAME: vllora-bot
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
