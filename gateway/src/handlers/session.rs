@@ -54,14 +54,26 @@ pub async fn track_session(
                 email: request.into_inner().email.clone(),
             });
 
-        // Forward all headers to the external API call
+        // Forward part of the headers to the external API call
         for (key, value) in headers {
-            reqwest_request = reqwest_request.header(&key, &value);
+            if key.starts_with("x-") || key == "User-Agent" {
+                reqwest_request = reqwest_request.header(&key, &value);
+            }
         }
 
-        let _ = reqwest_request.send().await.map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!("Failed to start session: {}", e))
-        });
+        tracing::debug!("Sending request to start session");
+
+        match reqwest_request.send().await {
+            Ok(response) => {
+                let status = response.status();
+                if status != 200 {
+                    tracing::error!("Failed to start session: {}", status);
+                }
+            }
+            Err(e) => {
+                tracing::error!("Failed to start session: {}", e);
+            }
+        }
     });
 
     Ok(HttpResponse::Ok().finish())
