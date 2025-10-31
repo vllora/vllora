@@ -8,49 +8,6 @@ if [ -z "$1" ]; then
     exit 1
 fi
 
-# Handle publish mode
-if [ "$1" = "--publish" ]; then
-    if [ -z "$2" ]; then
-        echo "Please provide version number for publish"
-        exit 1
-    fi
-    NEW_VERSION=$2
-
-    # Build the artifacts
-    echo "Building artifacts..."
-    make build_udfs
-    make build_gateways
-
-    # Create git tag
-    echo "Creating git tag v$NEW_VERSION..."
-    git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
-    git push origin "v$NEW_VERSION"
-    # Create temporary directory for release assets
-    TEMP_DIR=$(mktemp -d)
-
-    # Copy and rename binaries for different architectures
-    echo "Preparing release artifacts..."
-    cp target/x86_64-unknown-linux-gnu/release/vllora_udf $TEMP_DIR/vllora_udf-x86_64
-    cp target/aarch64-unknown-linux-gnu/release/vllora_udf $TEMP_DIR/vllora_udf-aarch64
-    cp target/x86_64-unknown-linux-gnu/release/vllora $TEMP_DIR/vllora-x86_64
-    cp target/aarch64-unknown-linux-gnu/release/vllora $TEMP_DIR/vllora-aarch64
-
-    # Create GitHub release and upload assets
-    echo "Creating GitHub release..."
-    gh release create $NEW_VERSION \
-        --title "Release $NEW_VERSION" \
-        --notes-file CHANGELOG.md \
-        $TEMP_DIR/vllora_udf-x86_64 \
-        $TEMP_DIR/vllora_udf-aarch64 \
-        $TEMP_DIR/vllora-x86_64 \
-        $TEMP_DIR/vllora-aarch64
-
-    # Cleanup
-    rm -rf $TEMP_DIR
-    echo "Release process completed successfully!"
-    exit 0
-fi
-
 VERSION_TYPE=$1
 
 # Get current version from core/Cargo.toml
@@ -81,7 +38,6 @@ esac
 # Update version in Cargo.toml files
 echo "Updating version to $NEW_VERSION in Cargo.toml files..."
 (cd core && cargo set-version $NEW_VERSION)
-(cd udfs && cargo set-version $NEW_VERSION)
 (cd gateway && cargo set-version $NEW_VERSION)
 (cd guardrails && cargo set-version $NEW_VERSION)
 
@@ -99,7 +55,7 @@ npx standard-version --release-as "$NEW_VERSION" --tag-prefix "" --skip.tag true
 echo "Creating PR for version bump..."
 BRANCH_NAME="release/v$NEW_VERSION"
 git checkout -b $BRANCH_NAME
-git add CHANGELOG.md core/Cargo.toml udfs/Cargo.toml gateway/Cargo.toml guardrails/Cargo.toml
+git add CHANGELOG.md core/Cargo.toml gateway/Cargo.toml guardrails/Cargo.toml
 git commit -m "chore: release v$NEW_VERSION"
 git push origin $BRANCH_NAME
 
@@ -110,5 +66,4 @@ gh pr create \
     --head $BRANCH_NAME
 
 echo "PR created. Please merge the PR before continuing with the release."
-echo "After PR is merged, run: ./release.sh --publish $NEW_VERSION"
 

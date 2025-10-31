@@ -69,14 +69,14 @@ opentelemetry-proto = { version = "0.30.0", features = [
   "trace",
   "with-serde",
 ] }
-rmcp = { version = "0.8.2", default-features = true, features = [
+rmcp = { version = "0.8.3", default-features = true, features = [
   "reqwest",
   "client",
   "server",
   "transport-streamable-http-client-reqwest",
   "transport-sse-client-reqwest"
 ] }
-rmcp-macros = { version = "0.8.2", default-features = true}
+rmcp-macros = { version = "0.8.3", default-features = true}
 parking_lot = "0.12.4"
 rand = "0.9"
 
