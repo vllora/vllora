@@ -1,6 +1,6 @@
 [package]
 name = "vllora_core"
-version = "0.3.2"
+version = "0.0.1"
 edition = "2021"
 authors = ["Vllora Team<api@vllora.dev>"]
 description = "AI gateway Core for Vllora."

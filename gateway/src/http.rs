@@ -98,9 +98,8 @@ impl ApiServer {
         );
         println!("   ⭐ Drop us a star: \x1b[36mhttps://github.com/vllora/vllora\x1b[0m");
         println!(
-            "   🎮 Join our Slack (we have memes): \x1b[36mhttps://join.slack.com/t/langdbcommunity/shared_invite/zt-2haf5kj6a-d7NX6TFJUPX45w~Ag4dzlg\x1b[0m"
+            "   🎮 Join our Slack (we have memes): \x1b[36mhttps://join.slack.com/t/vllora/shared_invite/zt-2haf5kj6a-d7NX6TFJUPX45w~Ag4dzlg\x1b[0m"
         );
-        println!("   🐦 Latest updates on X: \x1b[36mhttps://x.com/LangdbAi\x1b[0m");
 
         println!("\n⚡Quick Start ⚡");
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
