@@ -51,19 +51,13 @@ fi
 echo "Generating CHANGELOG..."
 npx standard-version --release-as "$NEW_VERSION" --tag-prefix "" --skip.tag true
 
-# Create and push PR for version bump and CHANGELOG
-echo "Creating PR for version bump..."
-BRANCH_NAME="release/v$NEW_VERSION"
-git checkout -b $BRANCH_NAME
 git add CHANGELOG.md core/Cargo.toml gateway/Cargo.toml guardrails/Cargo.toml
 git commit -m "chore: release v$NEW_VERSION"
-git push origin $BRANCH_NAME
+git push origin main
 
 gh pr create \
     --title "Release v$NEW_VERSION" \
     --body "Automated PR for version v$NEW_VERSION release" \
     --base main \
-    --head $BRANCH_NAME
-
-echo "PR created. Please merge the PR before continuing with the release."
+    --head main
 
