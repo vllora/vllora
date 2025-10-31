@@ -1,11 +1,10 @@
 use crate::callback_handler::init_callback_handler;
-use crate::config::{load_langdb_proxy_config, Config};
+use crate::config::Config;
 use crate::cost::GatewayCostCalculator;
 use crate::guardrails::GuardrailsService;
 use crate::handlers::{group, spans, threads};
 
 use crate::handlers::{events, mcp_configs, models, projects, providers, runs, session, traces};
-use crate::limit::GatewayLimitChecker;
 use crate::middleware::project::ProjectMiddleware;
 use crate::middleware::trace_logger::TraceLogger;
 use crate::middleware::tracing_context::TracingContext;
@@ -26,31 +25,24 @@ use tokio::signal;
 use tokio::sync::Mutex;
 use vllora_core::credentials::KeyStorage;
 use vllora_core::credentials::ProviderKeyResolver;
-#[cfg(feature = "clickhouse")]
-use vllora_core::database::clickhouse::ClickhouseHttp;
-#[cfg(feature = "clickhouse")]
-use vllora_core::database::DatabaseTransportClone;
 use vllora_core::events::broadcast_channel_manager::BroadcastChannelManager;
 use vllora_core::events::callback_handler::GatewayCallbackHandlerFn;
 use vllora_core::events::ui_broadcaster::EventsSendersContainer;
 use vllora_core::events::ui_broadcaster::EventsUIBroadcaster;
-use vllora_core::executor::ProvidersConfig;
 use vllora_core::handler::chat::create_chat_completion;
 use vllora_core::handler::embedding::embeddings_handler;
 use vllora_core::handler::image::create_image;
 use vllora_core::handler::middleware::actix_otel::ActixOtelMiddleware;
-use vllora_core::handler::middleware::rate_limit::{RateLimitMiddleware, RateLimiting};
+use vllora_core::handler::middleware::rate_limit::RateLimitMiddleware;
 use vllora_core::handler::middleware::run_id::RunId;
 use vllora_core::handler::middleware::thread_id::ThreadId;
-use vllora_core::handler::{CallbackHandlerFn, LimitCheckWrapper};
+use vllora_core::handler::CallbackHandlerFn;
 use vllora_core::metadata::models::session::DbSession;
 use vllora_core::metadata::pool::DbPool;
 use vllora_core::metadata::project_trace::ProjectTraceTenantResolver;
 use vllora_core::metadata::services::model::ModelService;
 use vllora_core::metadata::services::model::ModelServiceImpl;
 use vllora_core::metadata::services::project::ProjectServiceImpl;
-#[cfg(feature = "clickhouse")]
-use vllora_core::telemetry::database::DatabaseSpanWritter;
 use vllora_core::telemetry::database::SqliteTraceWriterTransport;
 use vllora_core::telemetry::SpanWriterTransport;
 use vllora_core::telemetry::{TraceServiceImpl, TraceServiceServer};
@@ -102,7 +94,7 @@ impl ApiServer {
         // Add documentation and community links
         println!("\n📚 Where the cool kids hang out:");
         println!(
-            "   🔍 Read the docs (if you're into that): \x1b[36mhttps://docs.vllora.dev\x1b[0m"
+            "   🔍 Read the docs (if you're into that): \x1b[36mhttps://vllora.dev/docs\x1b[0m"
         );
         println!("   ⭐ Drop us a star: \x1b[36mhttps://github.com/vllora/vllora\x1b[0m");
         println!(
@@ -150,22 +142,6 @@ impl ApiServer {
 
         let project_traces_senders = project_trace_senders.clone();
         let server = HttpServer::new(move || {
-            let limit_checker = if let Some(storage) = storage.clone() {
-                match &server_config_for_closure.config.cost_control {
-                    Some(cc) => {
-                        let checker = GatewayLimitChecker::new(storage, cc.clone());
-                        Some(LimitCheckWrapper {
-                            checkers: vec![Arc::new(Mutex::new(checker))],
-                        })
-                    }
-                    None => None,
-                }
-            } else {
-                None
-            };
-
-            let providers_config = load_langdb_proxy_config(server_config.config.providers.clone());
-
             let cors = Self::get_cors(CorsOptions::Permissive);
             Self::create_app_entry(
                 cors,
@@ -173,9 +149,6 @@ impl ApiServer {
                 server_config.config.guards.clone(),
                 callback.clone(),
                 cost_calculator.clone(),
-                limit_checker.clone(),
-                server_config.config.rate_limit.clone(),
-                providers_config,
                 server_config_for_closure.db_pool.clone(),
                 events_senders_container.clone(),
                 project_traces_senders.clone(),
@@ -186,26 +159,9 @@ impl ApiServer {
         .run()
         .map_err(ServerError::Actix);
 
-        let writer = {
-            #[cfg(feature = "clickhouse")]
-            {
-                match server_config.config.clickhouse {
-                    Some(c) => {
-                        let client = ClickhouseHttp::root().with_url(&c.url).clone_box();
-                        Box::new(DatabaseSpanWritter::new(client)) as Box<dyn SpanWriterTransport>
-                    }
-                    None => Box::new(SqliteTraceWriterTransport::new(Arc::new(
-                        server_config.db_pool.clone(),
-                    ))) as Box<dyn SpanWriterTransport>,
-                }
-            }
-            #[cfg(not(feature = "clickhouse"))]
-            {
-                Box::new(SqliteTraceWriterTransport::new(Arc::new(
-                    server_config.db_pool.clone(),
-                ))) as Box<dyn SpanWriterTransport>
-            }
-        };
+        let writer = Box::new(SqliteTraceWriterTransport::new(Arc::new(
+            server_config.db_pool.clone(),
+        ))) as Box<dyn SpanWriterTransport>;
 
         let project_service = ProjectServiceImpl::new(server_config.db_pool.clone());
         let trace_service = TraceServiceServer::new(TraceServiceImpl::new(
@@ -234,9 +190,6 @@ impl ApiServer {
         guards: Option<HashMap<String, Guard>>,
         callback: CallbackHandlerFn,
         cost_calculator: GatewayCostCalculator,
-        limit_checker: Option<LimitCheckWrapper>,
-        rate_limit: Option<RateLimiting>,
-        providers: Option<ProvidersConfig>,
         db_pool: DbPool,
         events_senders_container: Arc<EventsSendersContainer>,
         project_trace_senders: Arc<BroadcastChannelManager>,
@@ -255,10 +208,6 @@ impl ApiServer {
         let mut service = Self::attach_gateway_routes(web::scope("/v1"));
         if let Some(in_memory_storage) = in_memory_storage {
             service = service.app_data(in_memory_storage);
-        }
-
-        if let Some(providers) = &providers {
-            service = service.app_data(providers.clone());
         }
 
         let guardrails_service = Box::new(GuardrailsService::new(guards.unwrap_or_default()))
@@ -285,12 +234,10 @@ impl ApiServer {
             .service(
                 service
                     .app_data(Data::new(model_service))
-                    .app_data(limit_checker)
                     .app_data(Data::new(callback))
                     .app_data(Data::new(
                         Box::new(cost_calculator) as Box<dyn CostCalculator>
                     ))
-                    .app_data(rate_limit)
                     .app_data(Data::new(guardrails_service))
                     .wrap(ActixOtelMiddleware)
                     .wrap(TracingContext)

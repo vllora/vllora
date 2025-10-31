@@ -1,7 +1,6 @@
 pub mod aws;
 pub mod cache;
 pub mod credentials;
-pub mod db_connection;
 pub mod embed;
 pub mod engine;
 pub mod gateway;
