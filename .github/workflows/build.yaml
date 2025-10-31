@@ -46,7 +46,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ui-dist
-          path: dist
+          path: ui/dist
           retention-days: 7
 
   build-linux:
