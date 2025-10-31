@@ -2,16 +2,16 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::model::error::ModelError;
-use langdb_open::OpenAISpecModel;
 use openai::OpenAIImageGeneration;
 use serde::Serialize;
 use serde_json::Value;
 use tracing::info_span;
 use tracing_futures::Instrument;
 use valuable::Valuable;
+use vllora_open::OpenAISpecModel;
 
-use crate::events::{JsonValue, RecordResult, SPAN_MODEL_CALL};
 use crate::model::types::ModelEventType;
+use crate::telemetry::events::{JsonValue, RecordResult, SPAN_MODEL_CALL};
 use crate::types::engine::{ImageGenerationEngineParams, ImageGenerationModelDefinition};
 use crate::types::gateway::{CostCalculator, CreateImageRequest, ImageGenerationModelUsage, Usage};
 use crate::types::image::ImagesResponse;
@@ -21,8 +21,8 @@ use super::types::ModelEvent;
 use super::CredentialsIdent;
 use tokio::sync::mpsc::channel;
 
-pub mod langdb_open;
 pub mod openai;
+pub mod vllora_open;
 
 #[async_trait::async_trait]
 pub trait ImageGenerationModelInstance: Sync + Send {
@@ -54,7 +54,7 @@ fn initialize_image_generation_model_instance(
             definition: definition.clone(),
             cost_calculator: cost_calculator.clone(),
         })),
-        ImageGenerationEngineParams::LangdbOpen { credentials, .. } => {
+        ImageGenerationEngineParams::VlloraOpen { credentials, .. } => {
             Ok(Box::new(TracedImageGenerationModel {
                 inner: OpenAISpecModel::new(
                     credentials.clone().as_ref(),
@@ -103,7 +103,7 @@ impl TracedImageGenerationModelDefinition {
             } => {
                 credentials.take();
             }
-            ImageGenerationEngineParams::LangdbOpen {
+            ImageGenerationEngineParams::VlloraOpen {
                 ref mut credentials,
                 ..
             } => {
@@ -118,11 +118,11 @@ impl TracedImageGenerationModelDefinition {
         match &self.model_params.engine {
             ImageGenerationEngineParams::OpenAi { credentials, .. } => match &credentials {
                 Some(_) => CredentialsIdent::Own,
-                None => CredentialsIdent::Langdb,
+                None => CredentialsIdent::Vllora,
             },
-            ImageGenerationEngineParams::LangdbOpen { credentials, .. } => match &credentials {
+            ImageGenerationEngineParams::VlloraOpen { credentials, .. } => match &credentials {
                 Some(_) => CredentialsIdent::Own,
-                None => CredentialsIdent::Langdb,
+                None => CredentialsIdent::Vllora,
             },
         }
     }
@@ -160,7 +160,7 @@ impl<Inner: ImageGenerationModelInstance> ImageGenerationModelInstance
 
         let (tx, mut rx) = channel::<Option<ModelEvent>>(outer_tx.max_capacity());
         let span = info_span!(
-            target: "langdb::user_tracing::models", SPAN_MODEL_CALL,
+            target: "vllora::user_tracing::models", SPAN_MODEL_CALL,
             input = &request_str,
             model = model_str,
             provider_name = provider_name,

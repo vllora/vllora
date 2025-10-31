@@ -4,15 +4,15 @@ use super::types::{
 };
 use super::{CredentialsIdent, ModelInstance};
 use crate::error::GatewayError;
-use crate::events::{self, JsonValue, RecordResult, SPAN_BEDROCK};
 use crate::model::error::{BedrockError, ModelFinishError};
 use crate::model::handler::handle_tool_call;
 use crate::model::types::LLMFirstToken;
 use crate::model::DEFAULT_MAX_RETRIES;
-use crate::model::{ModelProviderInstance, Tool as LangdbTool};
+use crate::model::{ModelProviderInstance, Tool as VlloraTool};
 use crate::models::{
     InferenceProvider, Limits, ModelCapability, ModelIOFormats, ModelMetadata, ModelType,
 };
+use crate::telemetry::events::{self, JsonValue, RecordResult, SPAN_BEDROCK};
 use crate::types::aws::{get_shared_config, get_user_shared_config};
 use crate::types::credentials::BedrockCredentials;
 use crate::types::engine::{BedrockModelParams, ExecutionOptions, Prompt};
@@ -61,10 +61,10 @@ const DEFAULT_REGION: &str = "us-east-1";
 
 macro_rules! target {
     () => {
-        "langdb::user_tracing::models::bedrock"
+        "vllora::user_tracing::models::bedrock"
     };
     ($subtgt:literal) => {
-        concat!("langdb::user_tracing::models::bedrock::", $subtgt)
+        concat!("vllora::user_tracing::models::bedrock::", $subtgt)
     };
 }
 
@@ -82,7 +82,7 @@ pub struct BedrockModel {
     pub execution_options: ExecutionOptions,
     prompt: Prompt,
     params: BedrockModelParams,
-    pub tools: Arc<HashMap<String, Box<dyn LangdbTool>>>,
+    pub tools: Arc<HashMap<String, Box<dyn VlloraTool>>>,
     pub model_name: String,
     pub credentials_ident: CredentialsIdent,
 }
@@ -133,7 +133,7 @@ impl BedrockModel {
         execution_options: ExecutionOptions,
         credentials: Option<&BedrockCredentials>,
         prompt: Prompt,
-        tools: HashMap<String, Box<dyn LangdbTool>>,
+        tools: HashMap<String, Box<dyn VlloraTool>>,
     ) -> Result<Self, ModelError> {
         let client = bedrock_client(credentials).await?;
 
@@ -148,7 +148,7 @@ impl BedrockModel {
             model_name: model_id,
             credentials_ident: credentials
                 .map(|_c| CredentialsIdent::Own)
-                .unwrap_or(CredentialsIdent::Langdb),
+                .unwrap_or(CredentialsIdent::Vllora),
         })
     }
 
@@ -314,7 +314,7 @@ impl BedrockModel {
     }
     async fn handle_tool_calls(
         tool_uses: Vec<ToolUseBlock>,
-        tools: &HashMap<String, Box<dyn LangdbTool>>,
+        tools: &HashMap<String, Box<dyn VlloraTool>>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
     ) -> GatewayResult<Message> {

@@ -1,4 +1,5 @@
 use crate::executor::embeddings::handle_embeddings;
+use crate::metadata::services::model::ModelService;
 use crate::types::credentials::Credentials;
 use crate::types::embed::EmbeddingResult;
 use actix_web::{web, HttpResponse};
@@ -10,27 +11,26 @@ use crate::types::gateway::{
     CostCalculator, CreateEmbeddingRequest, CreateEmbeddingResponse, EmbeddingData, EmbeddingUsage,
 };
 
+use crate::handler::extract_tags;
 use crate::handler::CallbackHandlerFn;
-use crate::handler::{extract_tags, AvailableModels};
 use crate::GatewayApiError;
 
 use super::{can_execute_llm_for_request, find_model_by_full_name};
 
 pub async fn embeddings_handler(
     request: web::Json<CreateEmbeddingRequest>,
-    models: web::Data<AvailableModels>,
+    models_service: web::Data<Box<dyn ModelService>>,
     callback_handler: web::Data<CallbackHandlerFn>,
     req: HttpRequest,
     cost_calculator: web::Data<Box<dyn CostCalculator>>,
 ) -> Result<HttpResponse, GatewayApiError> {
     can_execute_llm_for_request(&req).await?;
     let request = request.into_inner();
-    let available_models = models.into_inner();
-    let llm_model = find_model_by_full_name(&request.model, &available_models.0)?;
+    let llm_model = find_model_by_full_name(&request.model, models_service.as_ref().as_ref())?;
     let key_credentials = req.extensions().get::<Credentials>().cloned();
 
     let span = Span::or_current(tracing::info_span!(
-        target: "langdb::user_tracing::api_invoke",
+        target: "vllora::user_tracing::api_invoke",
         "api_invoke",
         request = tracing::field::Empty,
         response = tracing::field::Empty,

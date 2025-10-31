@@ -1,8 +1,15 @@
 use crate::executor::chat_completion::basic_executor::BasicCacheContext;
 use crate::executor::context::ExecutorContext;
-use crate::handler::chat::map_sso_event;
+use crate::handler::chat::SSOChatEvent;
+use crate::models::InferenceProvider;
+use crate::models::ModelMetadata;
 use crate::routing::metrics::InMemoryMetricsRepository;
 use crate::routing::RoutingStrategy;
+use crate::types::gateway::ChatCompletionChunk;
+use crate::types::gateway::ChatCompletionChunkChoice;
+use crate::types::gateway::ChatCompletionDelta;
+use crate::types::gateway::ChatCompletionUsage;
+use crate::types::provider::InferenceModelProvider;
 use crate::usage::InMemoryStorage;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -17,7 +24,6 @@ use actix_web::HttpResponse;
 use bytes::Bytes;
 use either::Either::{Left, Right};
 use futures::StreamExt;
-use futures::TryStreamExt;
 
 use crate::executor::chat_completion::StreamCacheContext;
 use thiserror::Error;
@@ -32,8 +38,8 @@ use crate::routing::LlmRouter;
 use crate::telemetry::trace_id_uuid;
 use crate::GatewayApiError;
 
-use crate::events::JsonValue;
-use crate::events::SPAN_REQUEST_ROUTING;
+use crate::telemetry::events::JsonValue;
+use crate::telemetry::events::SPAN_REQUEST_ROUTING;
 use tracing::field;
 use valuable::Valuable;
 
@@ -62,6 +68,7 @@ impl RoutedExecutor {
         executor_context: &ExecutorContext,
         memory_storage: Option<Arc<Mutex<InMemoryStorage>>>,
         project_id: Option<&uuid::Uuid>,
+        thread_id: Option<&String>,
     ) -> Result<HttpResponse, GatewayApiError> {
         let span = Span::current();
 
@@ -92,7 +99,7 @@ impl RoutedExecutor {
                 span.record("router_name", &router_name);
 
                 let span = tracing::info_span!(
-                    target: "langdb::user_tracing::request_routing",
+                    target: "vllora::user_tracing::request_routing",
                     SPAN_REQUEST_ROUTING,
                     router_name = router_name,
                     before = JsonValue(&serde_json::to_value(&request.request)?).as_value(),
@@ -142,7 +149,8 @@ impl RoutedExecutor {
                     }
                 }
             } else {
-                let result = Self::execute_request(&request, executor_context, project_id).await;
+                let result =
+                    Self::execute_request(&request, executor_context, project_id, thread_id).await;
 
                 match result {
                     Ok(response) => return Ok(response),
@@ -167,6 +175,7 @@ impl RoutedExecutor {
         request: &ChatCompletionRequestWithTools<RoutingStrategy>,
         executor_context: &ExecutorContext,
         project_id: Option<&uuid::Uuid>,
+        thread_id: Option<&String>,
     ) -> Result<HttpResponse, GatewayApiError> {
         let span = tracing::Span::current();
         span.record("request", &serde_json::to_string(&request)?);
@@ -174,10 +183,32 @@ impl RoutedExecutor {
 
         let model_name = request.request.model.clone();
 
-        let llm_model = executor_context
+        let llm_model = match executor_context
             .model_metadata_factory
             .get_model_metadata(&request.request.model, false, false, project_id)
-            .await?;
+            .await
+        {
+            Ok(model) => model,
+            Err(GatewayApiError::GatewayError(GatewayError::ModelError(_))) => {
+                let model_name = request.request.model.clone();
+                let model_parts = model_name.split('/').collect::<Vec<&str>>();
+                let provider = model_parts.first().expect("Provider should not be empty");
+                let model = model_parts.last().expect("Model should not be empty");
+                //Proxying model call without details
+                ModelMetadata {
+                    model: model.to_string(),
+                    inference_provider: InferenceProvider {
+                        provider: InferenceModelProvider::from(provider.to_string()),
+                        model_name: model.to_string(),
+                        endpoint: None,
+                    },
+                    ..Default::default()
+                }
+            }
+            Err(e) => {
+                return Err(e);
+            }
+        };
         let response = execute(
             request,
             executor_context,
@@ -190,7 +221,7 @@ impl RoutedExecutor {
         .await?;
 
         let mut response_builder = HttpResponse::Ok();
-        let builder = response_builder
+        let builder: &mut actix_web::HttpResponseBuilder = response_builder
             .insert_header(("X-Trace-Id", trace_id_uuid(trace_id).to_string()))
             .insert_header(("X-Model-Name", model_name.clone()))
             .insert_header((
@@ -198,11 +229,13 @@ impl RoutedExecutor {
                 llm_model.inference_provider.provider.to_string(),
             ));
 
+        if let Some(thread_id) = thread_id {
+            builder.insert_header(("X-Thread-Id", thread_id.to_string()));
+        }
+
         match response {
             Left(result_stream) => {
-                let stream = result_stream?.map_err(|e| {
-                    GatewayApiError::GatewayError(GatewayError::CustomError(e.to_string()))
-                });
+                let stream = result_stream?;
 
                 // Pin the stream to heap
                 let mut stream = Box::pin(stream);
@@ -225,7 +258,7 @@ impl RoutedExecutor {
                     .chain(stream)
                     .then(move |delta| {
                         let model_name = model_name.clone();
-                        async move { map_sso_event(delta, model_name) }
+                        async move { Self::map_sso_event(delta, model_name) }
                     })
                     .chain(futures::stream::once(async {
                         Ok::<_, GatewayApiError>(Bytes::from("data: [DONE]\n\n"))
@@ -255,5 +288,97 @@ impl RoutedExecutor {
 
         serde_json::from_value(request_value)
             .map_err(RoutedExecutorError::FailedToDeserializeRequestResult)
+    }
+
+    pub fn map_sso_event(
+        delta: Result<SSOChatEvent, GatewayApiError>,
+        model_name: String,
+    ) -> Result<Bytes, GatewayApiError> {
+        let model_name = model_name.clone();
+        let chunks = match delta {
+            Ok((None, usage, Some(finish_reason))) => {
+                let mut chunks = vec![];
+                chunks.push(ChatCompletionChunk {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    object: "chat.completion.chunk".to_string(),
+                    created: chrono::Utc::now().timestamp(),
+                    model: model_name.clone(),
+                    choices: vec![ChatCompletionChunkChoice {
+                        index: 0,
+                        delta: ChatCompletionDelta {
+                            content: None,
+                            role: None,
+                            tool_calls: None,
+                        },
+                        finish_reason: Some(finish_reason.clone()),
+                        logprobs: None,
+                    }],
+                    usage: None,
+                });
+
+                if let Some(u) = &usage {
+                    chunks.push(ChatCompletionChunk {
+                        id: uuid::Uuid::new_v4().to_string(),
+                        object: "chat.completion.chunk".to_string(),
+                        created: chrono::Utc::now().timestamp(),
+                        model: model_name.clone(),
+                        choices: vec![],
+                        usage: Some(ChatCompletionUsage {
+                            prompt_tokens: u.input_tokens as i32,
+                            completion_tokens: u.output_tokens as i32,
+                            total_tokens: u.total_tokens as i32,
+                            prompt_tokens_details: u.prompt_tokens_details.clone(),
+                            completion_tokens_details: u.completion_tokens_details.clone(),
+                            cost: 0.0,
+                        }),
+                    });
+                }
+
+                Ok(chunks)
+            }
+            Ok((delta, _, finish_reason)) => {
+                let chunk = ChatCompletionChunk {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    object: "chat.completion.chunk".to_string(),
+                    created: chrono::Utc::now().timestamp(),
+                    model: model_name.clone(),
+                    choices: delta.as_ref().map_or(vec![], |d| {
+                        vec![ChatCompletionChunkChoice {
+                            index: 0,
+                            delta: d.clone(),
+                            finish_reason,
+                            logprobs: None,
+                        }]
+                    }),
+                    usage: None,
+                };
+
+                Ok(vec![chunk])
+            }
+            Err(e) => Err(e),
+        };
+
+        let mut result_combined = String::new();
+        match chunks {
+            Ok(chunks) => {
+                for c in chunks {
+                    let json_str = serde_json::to_string(&c).unwrap_or_else(|e| {
+                        format!("{{\"error\": \"Failed to serialize chunk: {e}\"}}")
+                    });
+
+                    result_combined.push_str(&format!("data: {json_str}\n\n"));
+                }
+            }
+            Err(e) => {
+                let result = serde_json::to_string(&HashMap::from([("error", e.to_string())]))
+                    .unwrap_or_else(|e| {
+                        format!("{{\"error\": \"Failed to serialize chunk: {e}\"}}")
+                    });
+
+                result_combined.push_str(&format!("data: {result}\n\n"));
+            }
+        }
+
+        Ok(Bytes::from(result_combined))
     }
 }

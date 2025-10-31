@@ -2,7 +2,7 @@
 *
 
 # Then explicitly allow only the release binary
-!target/x86_64-unknown-linux-gnu/release/ai-gateway
+!target/x86_64-unknown-linux-gnu/release/vllora
 
 # Explicitly ignore source code and config files (for clarity)
 src/

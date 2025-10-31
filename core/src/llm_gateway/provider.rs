@@ -209,7 +209,7 @@ impl Provider {
                     endpoint: custom_endpoint,
                 })
             }
-            InferenceModelProvider::Proxy(_) => Ok(ImageGenerationEngineParams::LangdbOpen {
+            InferenceModelProvider::Proxy(_) => Ok(ImageGenerationEngineParams::VlloraOpen {
                 credentials: credentials.and_then(|cred| match cred {
                     Credentials::ApiKey(key) => Some(key.clone()),
                     _ => None,

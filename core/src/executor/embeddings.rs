@@ -61,7 +61,7 @@ pub async fn handle_embeddings(
         price: llm_model.price.clone(),
         credentials_ident: match key_credentials {
             Some(_) => CredentialsIdent::Own,
-            _ => CredentialsIdent::Langdb,
+            _ => CredentialsIdent::Vllora,
         },
     };
 

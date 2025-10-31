@@ -78,7 +78,7 @@ impl MessageMapper {
         Ok(prompt_messages)
     }
 
-    pub fn map_completions_message_to_langdb_message(
+    pub fn map_completions_message_to_vllora_message(
         message: &ChatCompletionMessage,
         model_name: &str,
         user: &str,
@@ -173,6 +173,7 @@ impl MessageMapper {
             r#type: Self::map_role_to_message_type(message.role.as_str()),
             tool_calls: message.tool_calls.clone(),
             tool_call_id: message.tool_call_id.clone(),
+            created_at: None,
         })
     }
 

@@ -1,18 +1,18 @@
 [package]
-name = "langdb_core"
+name = "vllora_core"
 version = "0.3.2"
 edition = "2021"
-authors = ["LangDB Team<api@langdb.ai>"]
-description = "AI gateway Core for LangDB AI Gateway."
+authors = ["Vllora Team<api@vllora.dev>"]
+description = "AI gateway Core for Vllora."
 license = "Apache-2.0"
-repository = "https://github.com/langdb/ai-gateway"
-documentation = "https://docs.langdb.ai"
+repository = "https://github.com/vllora/vllora"
+documentation = "https://docs.vllora.dev"
 readme = "../README.md"
 keywords = ["llm", "openai", "anthropic", "gemini", "mcp"]
 categories = ["web-programming", "network-programming"]
 
 [lib]
-name = "langdb_core"
+name = "vllora_core"
 path = "src/lib.rs"
 
 [dependencies]
@@ -74,17 +74,33 @@ clickhouse = { version = "0.11.6", package = "langdb_clickhouse", features = [
   "uuid",
 ], optional = true }
 tokio-util = { version = "0.7.16", optional = true }
-rmcp = { version = "0.6.4", default-features = true, features = [
+rmcp = { version = "0.8.2", default-features = true, features = [
   "reqwest",
   "client",
   "server",
   "transport-streamable-http-client-reqwest",
   "transport-sse-client-reqwest"
 ] }
-rmcp-macros = { version = "0.6.4", default-features = true}
+rmcp-macros = { version = "0.8.2", default-features = true}
 parking_lot = "0.12.4"
 rand = "0.9"
 
+diesel = { version = "2.3.1", features = [
+  "chrono",
+  "sqlite",
+  "serde_json",
+  "r2d2",
+  "uuid",
+  "numeric",
+] }
+libsqlite3-sys = { version = "0.27.0", features = ["bundled"] }
+diesel_migrations = { version = "2.3.0", features = ["sqlite"] }
+r2d2 = "0.8.10"
+opentelemetry-semantic-conventions = "0.30.0"
+actix-http = "3.11.1"
+
 [features]
-default = ["database"]
-database = ["dep:openssh", "dep:clickhouse", "dep:tokio-util"]
+default = []
+clickhouse = ["dep:openssh", "dep:clickhouse", "dep:tokio-util"]
+postgres = ["diesel/postgres"]
+sqlite = []

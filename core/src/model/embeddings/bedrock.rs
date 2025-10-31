@@ -1,10 +1,10 @@
 use super::CredentialsIdent;
-use crate::events::{JsonValue, SPAN_BEDROCK};
 use crate::model::bedrock::bedrock_client;
 use crate::model::error::ModelError;
 use crate::model::types::{
     LLMFinishEvent, LLMStartEvent, ModelEvent, ModelEventType, ModelFinishReason,
 };
+use crate::telemetry::events::{JsonValue, SPAN_BEDROCK};
 use crate::types::credentials::BedrockCredentials;
 use crate::types::embed::EmbeddingResult;
 use crate::types::gateway::{CompletionModelUsage, CreateEmbeddingRequest, Input};
@@ -72,10 +72,10 @@ pub struct BedrockEmbeddings {
 
 macro_rules! target {
     () => {
-        "langdb::user_tracing::models::bedrock"
+        "vllora::user_tracing::models::bedrock"
     };
     ($subtgt:literal) => {
-        concat!("langdb::user_tracing::models::bedrock::", $subtgt)
+        concat!("vllora::user_tracing::models::bedrock::", $subtgt)
     };
 }
 
@@ -86,7 +86,7 @@ impl BedrockEmbeddings {
             client,
             credentials_ident: credentials
                 .map(|_c| CredentialsIdent::Own)
-                .unwrap_or(CredentialsIdent::Langdb),
+                .unwrap_or(CredentialsIdent::Vllora),
         })
     }
 

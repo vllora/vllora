@@ -1,9 +1,9 @@
-name: Build AI Gateway
+name: Build Vllora
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - 'v*'
 
   workflow_dispatch:
 
@@ -18,14 +18,58 @@ permissions:
   contents: write # This is required for actions/checkout
 
 jobs:
-  build:
+  build-ui:
+    name: Build UI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Build UI
+        run: |
+          cd ui
+          pnpm install
+          pnpm run build
+
+      - name: Upload UI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-dist
+          path: dist
+          retention-days: 7
+
+  build-linux:
+    name: Build for Linux
+    needs: build-ui
     timeout-minutes: 60
     runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        target: [x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu]
 
     steps:
       - uses: actions/checkout@v3
+        with:
+          submodules: true
 
-      - name: Install dependencies
+      - name: Download UI artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ui-dist
+          path: dist
+
+      - name: Install base dependencies
         run: |
           sudo apt-get update && \
           sudo apt-get install -y \
@@ -36,23 +80,142 @@ jobs:
           libpq-dev \
           clang \
           cmake
+      
+      - name: Setup cross-compilation for ARM64
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get install -y gcc-aarch64-linux-gnu
        
       - name: Install stable
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: stable
+          target: ${{ matrix.target }}
       
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
       
       - name: Build Gateway project
-        run: |
-          cargo build --release
+        env:
+          CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+          PKG_CONFIG_ALLOW_CROSS: 1
+          PKG_CONFIG_PATH_aarch64_unknown_linux_gnu: /usr/lib/aarch64-linux-gnu/pkgconfig
+          RUSTFLAGS_aarch64_unknown_linux_gnu: "-L /usr/lib/aarch64-linux-gnu"
+        run: cargo build --release --target ${{ matrix.target }} --bin vllora
           
       - name: Upload AI Gateway artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ai-gateway-binary
-          path: target/release/ai-gateway
+          name: vllora-linux-${{ matrix.target == 'aarch64-unknown-linux-gnu' && 'aarch64' || 'x86_64' }}
+          path: target/${{ matrix.target }}/release/vllora
           retention-days: 30
+
+  build-macos:
+    name: Build for macOS
+    needs: build-ui
+    timeout-minutes: 60
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        target: [x86_64-apple-darwin, aarch64-apple-darwin]
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+
+      - name: Download UI artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ui-dist
+          path: dist
+      
+      - name: Install dependencies
+        run: |
+          brew install postgresql sqlite3
+       
+      - name: Set library paths
+        run: |
+          echo "LIBRARY_PATH=$(brew --prefix)/lib:$LIBRARY_PATH" >> $GITHUB_ENV
+          echo "CPATH=$(brew --prefix)/include:$CPATH" >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH=$(brew --prefix)/lib/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
+       
+      - name: Install stable
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          target: ${{ matrix.target }}
+      
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      
+      - name: Build Gateway project
+        env:
+          PQ_LIB_STATIC: "1"
+        run: cargo build --release --target ${{ matrix.target }} --bin vllora
+          
+      - name: Upload AI Gateway artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vllora-macos-${{ matrix.target == 'aarch64-apple-darwin' && 'aarch64' || 'x86_64' }}
+          path: target/${{ matrix.target }}/release/vllora
+          retention-days: 30
+
+  create-release:
+    name: Create Release
+    needs: [build-linux, build-macos]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      
+      - name: Prepare release binaries
+        run: |
+          mkdir -p release
+          cp artifacts/vllora-linux-x86_64/vllora release/vllora-linux-x86_64
+          cp artifacts/vllora-linux-aarch64/vllora release/vllora-linux-aarch64
+          cp artifacts/vllora-macos-x86_64/vllora release/vllora-macos-x86_64
+          cp artifacts/vllora-macos-aarch64/vllora release/vllora-macos-aarch64
+          chmod +x release/*
+          ls -lh release/
+      
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: ${{ contains(github.ref_name, '-prerelease') && format('Prerelease {0}', github.ref_name) || format('Release {0}', github.ref_name) }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-prerelease') }}
+          generate_release_notes: true
+          files: |
+            release/vllora-linux-x86_64
+            release/vllora-linux-aarch64
+            release/vllora-macos-x86_64
+            release/vllora-macos-aarch64
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
             
+  update-homebrew-formula:
+    name: Update Homebrew formula
+    needs: create-release
+    if: startsWith(github.ref, 'refs/tags/')
+    uses: vllora/homebrew-vllora/.github/workflows/update-formula.yml@main
+    with:
+      tag: ${{ github.ref_name }}
+      source_repo: ${{ github.repository }}
+      target_branch: main
+      tap_repo: vllora/homebrew-vllora
+    secrets:
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}

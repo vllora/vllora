@@ -15,9 +15,7 @@ pub enum Credentials {
     },
     Aws(BedrockCredentials),
     Vertex(Box<VertexCredentials>),
-    // Hosted LangDB AWS
-    // #[serde(other)]
-    LangDb,
+    Vllora,
 }
 
 impl Credentials {
@@ -30,6 +28,14 @@ impl Credentials {
             })),
             _ => None,
         }
+    }
+}
+
+impl Default for Credentials {
+    fn default() -> Self {
+        Credentials::ApiKey(ApiKeyCredentials {
+            api_key: String::new(),
+        })
     }
 }
 

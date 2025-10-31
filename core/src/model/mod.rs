@@ -1,13 +1,16 @@
-use crate::events::{JsonValue, RecordResult, SPAN_MODEL_CALL};
+use crate::events::CustomEventType;
 use crate::executor::context::ExecutorContext;
+use crate::metadata::services::model::ModelService;
 use crate::model::bedrock::BedrockModel;
 use crate::model::cached::CachedModel;
 use crate::model::error::ModelError;
+use crate::model::types::CustomEvent;
+use crate::telemetry::events::{JsonValue, RecordResult, SPAN_MODEL_CALL};
 use crate::types::engine::{CompletionEngineParams, CompletionModelParams};
 use crate::types::engine::{CompletionModelDefinition, ModelTools, ModelType};
 use crate::types::gateway::{
     ChatCompletionContent, ChatCompletionMessage, ChatCompletionMessageWithFinishReason,
-    ContentType, Extra, GuardOrName, GuardWithParameters, Usage,
+    CompletionModelUsage, ContentType, Extra, GuardOrName, GuardWithParameters, Usage,
 };
 use crate::types::guardrails::service::GuardrailsEvaluator;
 use crate::types::guardrails::{GuardError, GuardResult, GuardStage};
@@ -24,6 +27,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::fmt::Display;
+use std::sync::Arc;
 use tokio::sync::mpsc::{self, channel};
 use tools::Tool;
 use tracing::{info_span, Instrument};
@@ -387,7 +391,7 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
         let (tx, mut rx) = channel::<Option<ModelEvent>>(outer_tx.max_capacity());
 
         let span = info_span!(
-            target: "langdb::user_tracing::models",
+            target: "vllora::user_tracing::models",
             parent: self.router_span.clone(),
             SPAN_MODEL_CALL,
             input = &input_str,
@@ -419,11 +423,23 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
         .instrument(span.clone())
         .await?;
 
+        outer_tx
+            .send(Some(ModelEvent::new(
+                &span,
+                ModelEventType::Custom(CustomEvent::new(CustomEventType::SpanStart {
+                    operation_name: "model_call".to_string(),
+                    attributes: serde_json::json!({}),
+                })),
+            )))
+            .await?;
+
         let cost_calculator = self.executor_context.cost_calculator.clone();
         let price = self.definition.db_model.price.clone();
         tokio::spawn(
             async move {
                 let mut start_time = None;
+                let mut usage = CompletionModelUsage::default();
+                let mut total_cost = 0.0;
                 while let Some(Some(msg)) = rx.recv().await {
                     match &msg.event {
                         ModelEventType::LlmStart(_) => {
@@ -444,7 +460,9 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
                                     )
                                     .await
                                 {
-                                    Ok(c) => {
+                                    Ok(mut c) => {
+                                        total_cost += c.cost;
+                                        c.cost = total_cost;
                                         current_span
                                             .record("cost", serde_json::to_string(&c).unwrap());
                                     }
@@ -457,6 +475,7 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
                                     }
                                 };
 
+                                usage.add_usage(u);
                                 current_span.record("usage", serde_json::to_string(u).unwrap());
                             }
                         }
@@ -544,7 +563,7 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
         let cost_calculator = self.executor_context.cost_calculator.clone();
 
         let span = info_span!(
-            target: "langdb::user_tracing::models",
+            target: "vllora::user_tracing::models",
             parent: self.router_span.clone(),
             SPAN_MODEL_CALL,
             input = &input_str,
@@ -576,13 +595,24 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
         .instrument(span.clone())
         .await?;
 
+        outer_tx
+            .send(Some(ModelEvent::new(
+                &span,
+                ModelEventType::Custom(CustomEvent::new(CustomEventType::SpanStart {
+                    operation_name: "model_call".to_string(),
+                    attributes: serde_json::json!({}),
+                })),
+            )))
+            .await?;
+
         async {
             let (tx, mut rx) = channel(outer_tx.max_capacity());
             let mut output = String::new();
             let mut start_time = None;
             let result = join(
                 self.inner
-                    .stream(input_vars, tx, previous_messages, tags.clone()),
+                    .stream(input_vars, tx, previous_messages, tags.clone())
+                    .instrument(span.clone()),
                 async {
                     while let Some(Some(msg)) = rx.recv().await {
                         match &msg.event {
@@ -649,7 +679,7 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
 }
 
 pub fn credentials_identifier(model_params: &CompletionModelParams) -> CredentialsIdent {
-    let langdb_creds = match &model_params.engine {
+    let vllora_creds = match &model_params.engine {
         CompletionEngineParams::Bedrock { credentials, .. } => credentials.is_none(),
         CompletionEngineParams::OpenAi { credentials, .. } => credentials.is_none(),
         CompletionEngineParams::Anthropic { credentials, .. } => credentials.is_none(),
@@ -657,8 +687,8 @@ pub fn credentials_identifier(model_params: &CompletionModelParams) -> Credentia
         CompletionEngineParams::Proxy { credentials, .. } => credentials.is_none(),
     };
 
-    if langdb_creds {
-        CredentialsIdent::Langdb
+    if vllora_creds {
+        CredentialsIdent::Vllora
     } else {
         CredentialsIdent::Own
     }
@@ -666,14 +696,14 @@ pub fn credentials_identifier(model_params: &CompletionModelParams) -> Credentia
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum CredentialsIdent {
-    Langdb,
+    Vllora,
     Own,
 }
 
 impl Display for CredentialsIdent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CredentialsIdent::Langdb => write!(f, "langdb"),
+            CredentialsIdent::Vllora => write!(f, "vllora"),
             CredentialsIdent::Own => write!(f, "own"),
         }
     }
@@ -753,14 +783,12 @@ pub trait ModelMetadataFactory: Send + Sync {
 }
 
 pub struct DefaultModelMetadataFactory {
-    models: Vec<ModelMetadata>,
+    service: Arc<Box<dyn ModelService>>,
 }
 
 impl DefaultModelMetadataFactory {
-    pub fn new(models: &[ModelMetadata]) -> Self {
-        Self {
-            models: models.to_vec(),
-        }
+    pub fn new(service: Arc<Box<dyn ModelService>>) -> Self {
+        Self { service }
     }
 }
 
@@ -775,21 +803,14 @@ impl ModelMetadataFactory for DefaultModelMetadataFactory {
         _include_benchmark: bool,
         _project_id: Option<&uuid::Uuid>,
     ) -> Result<ModelMetadata, GatewayApiError> {
-        find_model_by_full_name(model_name, &self.models)
+        find_model_by_full_name(model_name, self.service.as_ref().as_ref())
     }
 
     async fn get_cheapest_model_metadata(
         &self,
-        model_names: &[String],
+        _model_names: &[String],
     ) -> Result<ModelMetadata, GatewayApiError> {
-        let models = self
-            .models
-            .clone()
-            .into_iter()
-            .filter(|m| model_names.contains(&m.model.clone()))
-            .collect::<Vec<ModelMetadata>>();
-
-        get_cheapest_model_metadata(&models)
+        unimplemented!()
     }
 
     async fn get_models_by_name(

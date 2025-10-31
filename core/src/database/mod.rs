@@ -1,6 +1,8 @@
+#[cfg(feature = "clickhouse")]
 pub mod clickhouse;
 pub mod error;
 pub mod executor;
+#[cfg(feature = "clickhouse")]
 pub mod ssh_tunnel;
 pub mod user;
 
@@ -11,6 +13,7 @@ use serde_json::Value;
 use std::fmt::Debug;
 use std::pin::Pin;
 
+#[cfg(feature = "clickhouse")]
 const MAX_LIMIT: i32 = 10000;
 
 type Result<T> = std::result::Result<T, QueryError>;

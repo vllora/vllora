@@ -1,14 +1,14 @@
 use crate::cli;
 use crate::session::Credentials;
-use langdb_core::executor::ProvidersConfig;
-use langdb_core::handler::middleware::rate_limit::RateLimiting;
-use langdb_core::types::credentials::ApiKeyCredentials;
-use langdb_core::types::guardrails::Guard;
 use minijinja::Environment;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 use thiserror::Error;
+use vllora_core::executor::ProvidersConfig;
+use vllora_core::handler::middleware::rate_limit::RateLimiting;
+use vllora_core::types::credentials::ApiKeyCredentials;
+use vllora_core::types::guardrails::Guard;
 
 #[derive(Debug, Error)]
 pub enum ConfigError {
@@ -36,6 +36,8 @@ pub struct Config {
     #[serde(default)]
     pub http: HttpConfig,
     #[serde(default)]
+    pub ui: UiConfig,
+    #[serde(default)]
     pub clickhouse: Option<ClickhouseConfig>,
     #[serde(default)]
     pub cost_control: Option<CostControl>,
@@ -45,6 +47,17 @@ pub struct Config {
     pub providers: Option<ProvidersConfig>,
     #[serde(default)]
     pub guards: Option<HashMap<String, Guard>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct UiConfig {
+    pub port: u16,
+}
+
+impl Default for UiConfig {
+    fn default() -> Self {
+        Self { port: 9091 }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -58,7 +71,7 @@ impl Default for HttpConfig {
     fn default() -> Self {
         Self {
             host: "0.0.0.0".to_string(),
-            port: 8080,
+            port: 9090,
             cors_allowed_origins: vec!["*".to_string()],
         }
     }
@@ -81,16 +94,12 @@ fn replace_env_vars(content: String) -> Result<String, ConfigError> {
 
 impl Config {
     pub fn load<P: AsRef<Path>>(config_path: P) -> Result<Self, ConfigError> {
-        tracing::info!("Loading config from: {}", config_path.as_ref().display());
         match std::fs::read_to_string(config_path) {
             Ok(content) => {
                 let content = replace_env_vars(content)?;
                 Ok(serde_yaml::from_str(&content)?)
             }
-            Err(e) => {
-                tracing::warn!("Failed to read config: {}. Using default config.", e);
-                Ok(Self::default())
-            }
+            Err(_e) => Ok(Self::default()),
         }
     }
 
@@ -103,6 +112,12 @@ impl Config {
             if let Some(port) = args.port {
                 self.http.port = port;
             }
+
+            // Apply UI config overrides
+            if let Some(port) = args.ui_port {
+                self.ui.port = port;
+            }
+
             if let Some(cors) = &args.cors_origins {
                 self.http.cors_allowed_origins =
                     cors.split(',').map(|s| s.trim().to_string()).collect();

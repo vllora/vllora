@@ -1,5 +1,5 @@
-#[cfg(feature = "database")]
 pub mod database;
+pub mod events;
 
 use crate::types::GatewayTenant;
 use std::collections::HashMap;
@@ -31,6 +31,7 @@ use opentelemetry_proto::tonic::{
     trace::v1::span as otel_span,
 };
 use opentelemetry_sdk::propagation::TraceContextPropagator;
+use opentelemetry_sdk::trace::SpanData;
 use serde::{Serialize, Serializer};
 use serde_json::Value;
 use tokio::select;
@@ -56,16 +57,6 @@ pub trait TraceTenantResolver: Send + Sync + std::fmt::Debug {
     async fn get_tenant_id(&self, metadata: &MetadataMap) -> Option<(String, String)>;
 }
 
-#[derive(Debug)]
-pub struct DummyTraceTenantResolver;
-
-#[async_trait::async_trait]
-impl TraceTenantResolver for DummyTraceTenantResolver {
-    async fn get_tenant_id(&self, _metadata: &MetadataMap) -> Option<(String, String)> {
-        None
-    }
-}
-
 #[async_trait::async_trait]
 pub trait SpanWriterTransport: Send + Sync {
     async fn insert_values(
@@ -74,6 +65,33 @@ pub trait SpanWriterTransport: Send + Sync {
         columns: &[&str],
         body: Vec<Vec<Value>>,
     ) -> GatewayResult<String>;
+}
+
+/// A no-op implementation of SpanWriterTransport that discards all data
+pub struct NoOpSpanWriter;
+
+impl Default for NoOpSpanWriter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl NoOpSpanWriter {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait::async_trait]
+impl SpanWriterTransport for NoOpSpanWriter {
+    async fn insert_values(
+        &self,
+        _table_name: &str,
+        _columns: &[&str],
+        _body: Vec<Vec<Value>>,
+    ) -> GatewayResult<String> {
+        Ok("no-op".to_string())
+    }
 }
 
 pub(crate) struct SpanWriter {
@@ -141,7 +159,7 @@ impl SpanWriter {
         let result = self
             .transport
             .insert_values(
-                "langdb.traces",
+                "vllora.traces",
                 &[
                     "trace_id",
                     "span_id",
@@ -193,16 +211,16 @@ impl SpanWriter {
 
 #[derive(Debug)]
 pub struct TraceServiceImpl {
-    pub(crate) project_trace_senders: Arc<ProjectTraceMap>,
     pub(crate) writer_sender: mpsc::Sender<Span>,
     pub(crate) tenant_resolver: Box<dyn TraceTenantResolver>,
+    pub(crate) project_trace_senders: Arc<ProjectTraceMap>,
 }
 
 impl TraceServiceImpl {
     pub fn new(
-        project_trace_senders: Arc<ProjectTraceMap>,
         transport: Box<dyn SpanWriterTransport>,
         tenant_resolver: Box<dyn TraceTenantResolver>,
+        project_trace_senders: Arc<ProjectTraceMap>,
     ) -> Self {
         let (sender, receiver) = mpsc::channel(1000);
         let writer = SpanWriter {
@@ -213,9 +231,9 @@ impl TraceServiceImpl {
         };
         tokio::spawn(writer.run());
         Self {
-            project_trace_senders,
             writer_sender: sender,
             tenant_resolver,
+            project_trace_senders,
         }
     }
 }
@@ -244,6 +262,95 @@ pub(crate) fn serialize_any_value(value: AnyValue) -> serde_json::Value {
             .into(),
         any_value::Value::BytesValue(bytes) => bytes.into(),
     }
+}
+
+const DEFAULT_SPAN_ID: SpanId = SpanId::from_bytes([0; 8]);
+
+pub fn map_span(span: SpanData) -> Option<Span> {
+    let kind = match span.span_kind {
+        opentelemetry::trace::SpanKind::Internal => SpanKind::Internal,
+        opentelemetry::trace::SpanKind::Server => SpanKind::Server,
+        opentelemetry::trace::SpanKind::Client => SpanKind::Client,
+        opentelemetry::trace::SpanKind::Producer => SpanKind::Producer,
+        opentelemetry::trace::SpanKind::Consumer => SpanKind::Consumer,
+    };
+
+    let trace_id = span.span_context.trace_id();
+    let span_id = span.span_context.span_id();
+    let parent_span_id = match span.parent_span_id {
+        parent_span_id if parent_span_id != DEFAULT_SPAN_ID => {
+            Some(SpanId::from_bytes(parent_span_id.to_bytes()))
+        }
+        _ => None,
+    };
+
+    let mut attributes: serde_json::Map<String, Value> = span
+        .attributes
+        .into_iter()
+        .map(|attr| (attr.key.to_string(), serialize_any_value(attr.value.into())))
+        .collect();
+
+    let tenant_id = attributes
+        .remove("vllora.tenant")
+        .and_then(|v| Some(v.as_str()?.to_owned()));
+
+    let project_id = attributes
+        .remove("vllora.project_id")
+        .and_then(|v| Some(v.as_str()?.to_owned()));
+
+    let thread_id = attributes
+        .remove("vllora.thread_id")
+        .and_then(|v| Some(v.as_str()?.to_owned()));
+
+    let run_id = attributes
+        .remove("vllora.run_id")
+        .and_then(|v| Some(v.as_str()?.to_owned()));
+
+    let label = attributes
+        .remove("vllora.label")
+        .and_then(|v| Some(v.as_str()?.to_owned()));
+
+    if !attributes.contains_key("label") {
+        if let Some(label) = label {
+            attributes.insert("label".to_string(), label.into());
+        }
+    }
+
+    let tags_value = attributes.remove("tags");
+    let mut tags: serde_json::Map<String, Value> = Default::default();
+    if let Some(Value::String(s)) = tags_value {
+        tags = serde_json::from_str(&s).ok().unwrap_or_default();
+    }
+
+    // Convert SystemTime to unix nanoseconds
+    let start_time_unix_nano = span
+        .start_time
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("Time went backwards")
+        .as_nanos() as u64;
+    let end_time_unix_nano = span
+        .end_time
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("Time went backwards")
+        .as_nanos() as u64;
+
+    let span = Span {
+        trace_id,
+        span_id,
+        parent_span_id,
+        operation_name: span.name.to_string(),
+        start_time_unix_nano,
+        end_time_unix_nano,
+        kind,
+        attributes,
+        tenant_id,
+        project_id: project_id.clone(),
+        thread_id,
+        tags,
+        run_id,
+    };
+
+    Some(span)
 }
 
 #[tonic::async_trait]
@@ -288,13 +395,6 @@ impl TraceService for TraceServiceImpl {
                         Some(SpanId::from_bytes(try_!(span.parent_span_id.try_into())))
                     };
 
-                    tracing::debug!(target: "otel",
-                        "Span name {}({}) <- {:?}",
-                        span.name,
-                        span_id,
-                        parent_span_id,
-                    );
-
                     let mut attributes: serde_json::Map<String, Value> = span
                         .attributes
                         .into_iter()
@@ -307,7 +407,7 @@ impl TraceService for TraceServiceImpl {
                         .collect();
 
                     let tenant_id = attributes
-                        .remove("langdb.tenant")
+                        .remove("vllora.tenant")
                         .and_then(|v| Some(v.as_str()?.to_owned()))
                         .or(tenant_from_header.as_ref().map(|v| v.0.clone()));
 
@@ -322,20 +422,20 @@ impl TraceService for TraceServiceImpl {
                     }
 
                     let project_id = attributes
-                        .remove("langdb.project_id")
+                        .remove("vllora.project_id")
                         .and_then(|v| Some(v.as_str()?.to_owned()))
                         .or(tenant_from_header.as_ref().map(|v| v.1.clone()));
 
                     let thread_id = attributes
-                        .remove("langdb.thread_id")
+                        .remove("vllora.thread_id")
                         .and_then(|v| Some(v.as_str()?.to_owned()));
 
                     let run_id = attributes
-                        .remove("langdb.run_id")
+                        .remove("vllora.run_id")
                         .and_then(|v| Some(v.as_str()?.to_owned()));
 
                     let label = attributes
-                        .remove("langdb.label")
+                        .remove("vllora.label")
                         .and_then(|v| Some(v.as_str()?.to_owned()));
 
                     if !attributes.contains_key("label") {
@@ -349,6 +449,8 @@ impl TraceService for TraceServiceImpl {
                     if let Some(Value::String(s)) = tags_value {
                         tags = serde_json::from_str(&s).ok().unwrap_or_default();
                     }
+
+                    let is_client = attributes.get("vllora.client_name").is_some();
 
                     let span = Span {
                         trace_id,
@@ -366,12 +468,16 @@ impl TraceService for TraceServiceImpl {
                         run_id,
                     };
 
-                    if let Some(project_id) = project_id.as_ref() {
-                        if let Some(sender) = self.project_trace_senders.get(project_id).as_deref()
-                        {
-                            let _result = sender.send(span.clone());
+                    if is_client {
+                        if let Some(project_id) = project_id.as_ref() {
+                            if let Some(sender) =
+                                self.project_trace_senders.get(project_id).as_deref()
+                            {
+                                let _result = sender.send(span.clone());
+                            }
                         }
                     }
+
                     self.writer_sender.send(span).await.unwrap();
                 }
             }
@@ -479,8 +585,8 @@ where
                 let project_slug = tenant.project_slug.clone();
 
                 let mut key_values = vec![
-                    KeyValue::new("langdb.tenant", tenant_name),
-                    KeyValue::new("langdb.project_id", project_slug),
+                    KeyValue::new("vllora.tenant", tenant_name),
+                    KeyValue::new("vllora.project_id", project_slug),
                 ];
 
                 let run_id = req
@@ -489,9 +595,9 @@ where
                     .and_then(|v| v.to_str().ok().map(|v| v.to_string()));
 
                 if let Some(run_id) = run_id.as_ref() {
-                    key_values.push(KeyValue::new("langdb.run_id", run_id.clone()));
+                    key_values.push(KeyValue::new("vllora.run_id", run_id.clone()));
                 } else {
-                    key_values.push(KeyValue::new("langdb.run_id", Uuid::new_v4().to_string()));
+                    key_values.push(KeyValue::new("vllora.run_id", Uuid::new_v4().to_string()));
                 }
 
                 let label = req
@@ -500,7 +606,7 @@ where
                     .and_then(|v| v.to_str().ok().map(|v| v.to_string()));
 
                 if let Some(label) = label.as_ref() {
-                    key_values.push(KeyValue::new("langdb.label", label.clone()));
+                    key_values.push(KeyValue::new("vllora.label", label.clone()));
                 }
 
                 let additional_context = req.extensions().get::<AdditionalContext>().cloned();
@@ -533,5 +639,38 @@ impl Extractor for HeaderExtractor<'_> {
 
     fn keys(&self) -> Vec<&str> {
         self.0.keys().map(|header| header.as_str()).collect()
+    }
+}
+
+pub struct ProjectTraceSpanExporter {
+    project_trace_senders: Arc<ProjectTraceMap>,
+}
+
+impl ProjectTraceSpanExporter {
+    pub fn new(project_trace_senders: Arc<ProjectTraceMap>) -> Self {
+        Self {
+            project_trace_senders,
+        }
+    }
+}
+
+impl std::fmt::Debug for ProjectTraceSpanExporter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProjectTraceSpanExporter").finish()
+    }
+}
+
+impl opentelemetry_sdk::trace::SpanExporter for ProjectTraceSpanExporter {
+    async fn export(&self, batch: Vec<SpanData>) -> opentelemetry_sdk::error::OTelSdkResult {
+        for span in batch {
+            if let Some(span) = map_span(span) {
+                if let Some(project_id) = span.project_id.as_ref() {
+                    if let Some(sender) = self.project_trace_senders.get(project_id).as_deref() {
+                        let _result = sender.send(span.clone());
+                    }
+                }
+            }
+        }
+        opentelemetry_sdk::error::OTelSdkResult::Ok(())
     }
 }

@@ -1,34 +1,34 @@
 use std::collections::HashMap;
 
-use langdb_core::executor::chat_completion::resolve_model_instance;
-use langdb_core::executor::context::ExecutorContext;
-use langdb_core::model::ModelInstance;
-use langdb_core::routing::RoutingStrategy;
-use langdb_core::types::engine::ModelTools;
-use langdb_core::types::gateway::ChatCompletionMessage;
-use langdb_core::types::gateway::ChatCompletionRequest;
-use langdb_core::types::gateway::ChatCompletionRequestWithTools;
-use langdb_core::types::gateway::DynamicRouter;
-use langdb_core::types::guardrails::evaluator::Evaluator;
-use langdb_core::types::guardrails::service::GuardrailsEvaluator;
-use langdb_core::types::guardrails::Guard;
-use langdb_core::types::guardrails::GuardAction;
-use langdb_core::types::guardrails::GuardResult;
-use langdb_core::types::guardrails::GuardStage;
-use langdb_core::types::guardrails::GuardTemplate;
-use langdb_guardrails::guards::config::load_guard_templates;
-use langdb_guardrails::guards::llm_judge::GuardModelInstanceFactory;
-use langdb_guardrails::guards::partner::PartnerEvaluator;
-use langdb_guardrails::guards::partners::openai::OpenaiGuardrailPartner;
-use langdb_guardrails::guards::traced::TracedGuard;
-use langdb_guardrails::guards::DatasetEvaluator;
-use langdb_guardrails::guards::FileDatasetLoader;
-use langdb_guardrails::guards::LlmJudgeEvaluator;
-use langdb_guardrails::guards::RegexEvaluator;
-use langdb_guardrails::guards::SchemaEvaluator;
-use langdb_guardrails::guards::WordCountEvaluator;
 use serde_json::{Map, Value};
 use tracing::Span;
+use vllora_core::executor::chat_completion::resolve_model_instance;
+use vllora_core::executor::context::ExecutorContext;
+use vllora_core::model::ModelInstance;
+use vllora_core::routing::RoutingStrategy;
+use vllora_core::types::engine::ModelTools;
+use vllora_core::types::gateway::ChatCompletionMessage;
+use vllora_core::types::gateway::ChatCompletionRequest;
+use vllora_core::types::gateway::ChatCompletionRequestWithTools;
+use vllora_core::types::gateway::DynamicRouter;
+use vllora_core::types::guardrails::evaluator::Evaluator;
+use vllora_core::types::guardrails::service::GuardrailsEvaluator;
+use vllora_core::types::guardrails::Guard;
+use vllora_core::types::guardrails::GuardAction;
+use vllora_core::types::guardrails::GuardResult;
+use vllora_core::types::guardrails::GuardStage;
+use vllora_core::types::guardrails::GuardTemplate;
+use vllora_guardrails::guards::config::load_guard_templates;
+use vllora_guardrails::guards::llm_judge::GuardModelInstanceFactory;
+use vllora_guardrails::guards::partner::PartnerEvaluator;
+use vllora_guardrails::guards::partners::openai::OpenaiGuardrailPartner;
+use vllora_guardrails::guards::traced::TracedGuard;
+use vllora_guardrails::guards::DatasetEvaluator;
+use vllora_guardrails::guards::FileDatasetLoader;
+use vllora_guardrails::guards::LlmJudgeEvaluator;
+use vllora_guardrails::guards::RegexEvaluator;
+use vllora_guardrails::guards::SchemaEvaluator;
+use vllora_guardrails::guards::WordCountEvaluator;
 
 pub struct GuardModelFactory {
     executor_context: ExecutorContext,
@@ -70,6 +70,7 @@ impl GuardModelInstanceFactory for GuardModelFactory {
             None,
             None,
             &llm_model,
+            None,
         )
         .await
         .expect("Failed to resolve model instance");

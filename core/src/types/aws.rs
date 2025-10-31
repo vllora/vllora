@@ -13,7 +13,7 @@ pub async fn get_user_shared_config(credentials: AwsIAMCredentials) -> aws_confi
         credentials.access_secret,
         None,              // optional session token
         None,              // optional expiration time
-        "langdb-provider", // optional provider name
+        "vllora-provider", // optional provider name
     );
     let shared_config =
         aws_config::defaults(aws_config::BehaviorVersion::latest()).region(region.clone());
@@ -33,7 +33,7 @@ pub async fn get_shared_config(region: Option<Region>) -> aws_config::ConfigLoad
         Err(_) => match std::env::var("AWS_ASSUME_ROLE_ARN") {
             Ok(role) => {
                 let provider = AssumeRoleProvider::builder(role)
-                    .session_name("textract-session")
+                    .session_name("vllora-session")
                     .build()
                     .await;
 

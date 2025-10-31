@@ -1,4 +1,3 @@
-use crate::events::{JsonValue, RecordResult, SPAN_OPENAI};
 use crate::model::error::ModelError;
 use crate::model::openai::openai_client;
 use crate::model::types::LLMFinishEvent;
@@ -6,6 +5,7 @@ use crate::model::types::ModelEvent;
 use crate::model::types::ModelEventType;
 use crate::model::types::ModelFinishReason;
 use crate::model::CredentialsIdent;
+use crate::telemetry::events::{JsonValue, RecordResult, SPAN_OPENAI};
 use crate::types::credentials::ApiKeyCredentials;
 use crate::types::embed::OpenAiEmbeddingParams;
 use crate::types::gateway::CompletionModelUsage;
@@ -23,10 +23,10 @@ use valuable::Valuable;
 
 macro_rules! target {
     () => {
-        "langdb::user_tracing::models::openai"
+        "vllora::user_tracing::models::openai"
     };
     ($subtgt:literal) => {
-        concat!("langdb::user_tracing::models::openai::", $subtgt)
+        concat!("vllora::user_tracing::models::openai::", $subtgt)
     };
 }
 
@@ -60,7 +60,7 @@ impl OpenAIEmbed {
 
         let credentials_ident = credentials
             .map(|_c| CredentialsIdent::Own)
-            .unwrap_or(CredentialsIdent::Langdb);
+            .unwrap_or(CredentialsIdent::Vllora);
 
         Ok(Self {
             params,

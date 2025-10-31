@@ -225,7 +225,7 @@ impl McpTransportType {
 }
 
 fn default_in_memory_name() -> String {
-    "langdb".to_string()
+    "vllora".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -539,6 +539,40 @@ pub struct CompletionModelUsage {
     pub is_cache_used: bool,
 }
 
+impl CompletionModelUsage {
+    pub fn add_usage(&mut self, other: &Self) {
+        self.input_tokens += other.input_tokens;
+        self.output_tokens += other.output_tokens;
+        self.total_tokens += other.total_tokens;
+        self.prompt_tokens_details = match (
+            self.prompt_tokens_details.as_ref(),
+            other.prompt_tokens_details.as_ref(),
+        ) {
+            (Some(p1), Some(p2)) => {
+                let mut p1 = p1.clone();
+                p1.add_usage(p2);
+                Some(p1)
+            }
+            (Some(p), None) => Some(p.clone()),
+            (None, Some(p)) => Some(p.clone()),
+            (None, None) => None,
+        };
+        self.completion_tokens_details = match (
+            self.completion_tokens_details.as_ref(),
+            other.completion_tokens_details.as_ref(),
+        ) {
+            (Some(c1), Some(c2)) => {
+                let mut c1 = c1.clone();
+                c1.add_usage(c2);
+                Some(c1)
+            }
+            (Some(c), None) => Some(c.clone()),
+            (None, Some(c)) => Some(c.clone()),
+            (None, None) => None,
+        };
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct ImageGenerationModelUsage {
     pub quality: String,
@@ -565,6 +599,12 @@ impl PromptTokensDetails {
             cache_creation_tokens: cache_creation_tokens.unwrap_or(0),
             audio_tokens: audio_tokens.unwrap_or(0),
         }
+    }
+
+    pub fn add_usage(&mut self, other: &Self) {
+        self.cached_tokens += other.cached_tokens;
+        self.cache_creation_tokens += other.cache_creation_tokens;
+        self.audio_tokens += other.audio_tokens;
     }
 
     pub fn cached_tokens(&self) -> u32 {
@@ -601,6 +641,13 @@ impl CompletionTokensDetails {
             reasoning_tokens: reasoning_tokens.unwrap_or(0),
             rejected_prediction_tokens: rejected_prediction_tokens.unwrap_or(0),
         }
+    }
+
+    pub fn add_usage(&mut self, other: &Self) {
+        self.accepted_prediction_tokens += other.accepted_prediction_tokens;
+        self.audio_tokens += other.audio_tokens;
+        self.reasoning_tokens += other.reasoning_tokens;
+        self.rejected_prediction_tokens += other.rejected_prediction_tokens;
     }
 }
 

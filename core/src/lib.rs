@@ -1,4 +1,4 @@
-#[cfg(feature = "database")]
+pub mod credentials;
 pub mod database;
 pub mod embed_mod;
 pub mod error;
@@ -7,6 +7,8 @@ pub mod executor;
 pub mod handler;
 pub mod http;
 pub mod llm_gateway;
+pub mod mcp;
+pub mod metadata;
 pub mod model;
 pub mod models;
 pub mod pricing;
@@ -23,6 +25,7 @@ use actix_web::HttpResponse;
 use executor::chat_completion::routed_executor::RoutedExecutorError;
 use serde_json::json;
 use thiserror::Error;
+use tracing::Span;
 
 pub use dashmap;
 
@@ -75,6 +78,10 @@ impl GatewayApiError {
 impl actix_web::error::ResponseError for GatewayApiError {
     fn error_response(&self) -> HttpResponse {
         tracing::error!("API error: {:?}", self);
+
+        let span = Span::current();
+        span.record("error", self.to_string());
+
         match self {
             GatewayApiError::GatewayError(e) => e.error_response(),
             e => {

@@ -1,7 +1,10 @@
-use langdb_core::types::guardrails::GuardModel;
-use langdb_core::types::guardrails::{evaluator::Evaluator, Guard, GuardResult};
+use vllora_core::types::guardrails::GuardModel;
+use vllora_core::types::guardrails::{evaluator::Evaluator, Guard, GuardResult};
 
-use langdb_core::{
+use serde_json::Value;
+use std::collections::HashMap;
+use tokio::sync::mpsc;
+use vllora_core::{
     error::GatewayError,
     llm_gateway::message_mapper::MessageMapper,
     model::ModelInstance,
@@ -10,9 +13,6 @@ use langdb_core::{
         threads::Message,
     },
 };
-use serde_json::Value;
-use std::collections::HashMap;
-use tokio::sync::mpsc;
 
 use super::config::{default_suffix, load_prompts_from_yaml};
 
@@ -107,7 +107,7 @@ impl Evaluator for LlmJudgeEvaluator {
             let guard_messages = guard_messages
                 .iter()
                 .map(|message| {
-                    MessageMapper::map_completions_message_to_langdb_message(
+                    MessageMapper::map_completions_message_to_vllora_message(
                         message,
                         &model.model,
                         "judge",

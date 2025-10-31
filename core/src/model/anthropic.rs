@@ -6,13 +6,13 @@ use super::types::{
 };
 use super::{CredentialsIdent, ModelInstance};
 use crate::error::GatewayError;
-use crate::events::JsonValue;
-use crate::events::SPAN_ANTHROPIC;
-use crate::events::{self, RecordResult};
 use crate::model::error::{AnthropicError, ModelFinishError};
 use crate::model::handler::handle_tool_call;
 use crate::model::types::LLMFirstToken;
 use crate::model::{async_trait, DEFAULT_MAX_RETRIES};
+use crate::telemetry::events::JsonValue;
+use crate::telemetry::events::SPAN_ANTHROPIC;
+use crate::telemetry::events::{self, RecordResult};
 use crate::types::credentials::ApiKeyCredentials;
 use crate::types::engine::{AnthropicModelParams, ExecutionOptions, Prompt};
 use crate::types::gateway::{
@@ -43,10 +43,10 @@ use valuable::Valuable;
 
 macro_rules! target {
     () => {
-        "langdb::user_tracing::models::anthropic"
+        "vllora::user_tracing::models::anthropic"
     };
     ($subtgt:literal) => {
-        concat!("langdb::user_tracing::models::anthropic::", $subtgt)
+        concat!("vllora::user_tracing::models::anthropic::", $subtgt)
     };
 }
 
@@ -65,7 +65,7 @@ pub fn anthropic_client(
     let api_key = if let Some(credentials) = credentials {
         credentials.api_key.clone()
     } else {
-        std::env::var("LANGDB_ANTHROPIC_API_KEY").map_err(|_| AuthorizationError::InvalidApiKey)?
+        std::env::var("VLLORA_ANTHROPIC_API_KEY").map_err(|_| AuthorizationError::InvalidApiKey)?
     };
     let client = Client::from_api_key(clust::ApiKey::new(api_key));
     Ok(client)
@@ -112,7 +112,7 @@ impl AnthropicModel {
             tools: Arc::new(tools),
             credentials_ident: credentials
                 .map(|_c| CredentialsIdent::Own)
-                .unwrap_or(CredentialsIdent::Langdb),
+                .unwrap_or(CredentialsIdent::Vllora),
         })
     }
 
