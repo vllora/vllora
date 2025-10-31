@@ -43,23 +43,17 @@ This project and everyone participating in it is governed by our Code of Conduct
 
 ### Local Development
 
-1. Create a `.env` file with necessary API keys:
-   ```env
-   OPENAI_API_KEY=your-openai-key-here
-   RUST_LOG=debug
-   ```
-
-2. Build the project:
+1. Build the project:
    ```bash
    cargo build --release
    ```
 
-3. Run tests:
+2. Run tests:
    ```bash
    cargo test
    ```
 
-4. Start the development server:
+3. Start the development server:
    ```bash
    cargo run serve
    ```
