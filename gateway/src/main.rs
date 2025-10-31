@@ -18,7 +18,6 @@ mod cost;
 mod guardrails;
 mod handlers;
 mod http;
-mod limit;
 mod middleware;
 mod run;
 mod seed;

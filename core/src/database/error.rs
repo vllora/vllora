@@ -1,22 +1,13 @@
 use thiserror::Error;
 
-#[cfg(feature = "clickhouse")]
-use super::ssh_tunnel::SshTunnelError;
 use std::error::Error;
-#[cfg(feature = "clickhouse")]
-use tokio_util::codec::LinesCodecError;
 
 #[derive(Debug, Error)]
 pub enum QueryError {
     #[error("Row not found")]
     RowNotFound,
-    #[error("Error executing query: {0}")]
-    ClickhouseError(String),
     #[error("Transport error: {0}")]
     TransportError(Box<dyn Error + Send + Sync>),
-    #[cfg(feature = "clickhouse")]
-    #[error("Ssh tunnel error : {0:?}")]
-    SshConnectionError(#[from] SshTunnelError),
     #[error("RequestError: {0}")]
     RequestError(#[from] reqwest::Error),
 }
@@ -26,9 +17,6 @@ pub enum QueryError {
 pub enum ConnectionError {
     #[error("TcpConnection failed: {0:?}")]
     TcpConnection(#[from] std::io::Error),
-    #[cfg(feature = "clickhouse")]
-    #[error("SessionCreation failed: {0:?}")]
-    SshFailed(#[from] SshTunnelError),
     #[error("Authenticate session failed: {0:?}")]
     AuthenticateSession(String),
 }
@@ -43,10 +31,6 @@ pub enum HttpTransportError {
 
     #[error("Failed to read headers")]
     NoHeaders,
-
-    #[cfg(feature = "clickhouse")]
-    #[error(transparent)]
-    LinesCodec(#[from] LinesCodecError),
 }
 
 impl From<HttpTransportError> for QueryError {

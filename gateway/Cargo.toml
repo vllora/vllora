@@ -5,7 +5,7 @@ authors = ["Vllora Team<api@vllora.dev>"]
 description = "AI gateway for managing and routing LLM requests - Govern, Secure, and Optimize your AI Traffic."
 license = "Apache-2.0"
 repository = "https://github.com/vllora/vllora"
-documentation = "https://docs.vllora.dev"
+documentation = "https://vllora.dev/docs"
 readme = "../README.md"
 keywords = ["llm", "openai", "anthropic", "gemini", "mcp"]
 categories = ["web-programming", "network-programming"]
@@ -62,4 +62,3 @@ libsqlite3-sys = { version = "0.27.0", features = ["bundled"] }
 
 [features]
 default = []
-clickhouse = ["vllora_core/clickhouse"]

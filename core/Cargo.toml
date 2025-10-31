@@ -6,7 +6,7 @@ authors = ["Vllora Team<api@vllora.dev>"]
 description = "AI gateway Core for Vllora."
 license = "Apache-2.0"
 repository = "https://github.com/vllora/vllora"
-documentation = "https://docs.vllora.dev"
+documentation = "https://vllora.dev/docs"
 readme = "../README.md"
 keywords = ["llm", "openai", "anthropic", "gemini", "mcp"]
 categories = ["web-programming", "network-programming"]
@@ -69,11 +69,6 @@ opentelemetry-proto = { version = "0.30.0", features = [
   "trace",
   "with-serde",
 ] }
-openssh = { version = "0.11.5", optional = true }
-clickhouse = { version = "0.11.6", package = "langdb_clickhouse", features = [
-  "uuid",
-], optional = true }
-tokio-util = { version = "0.7.16", optional = true }
 rmcp = { version = "0.8.2", default-features = true, features = [
   "reqwest",
   "client",
@@ -101,6 +96,5 @@ actix-http = "3.11.1"
 
 [features]
 default = []
-clickhouse = ["dep:openssh", "dep:clickhouse", "dep:tokio-util"]
 postgres = ["diesel/postgres"]
 sqlite = []

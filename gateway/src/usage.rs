@@ -7,7 +7,7 @@ use vllora_core::{
     usage::{InMemoryStorage, LimitPeriod},
 };
 
-use crate::{cost::GatewayCostCalculator, limit::LLM_USAGE};
+use crate::cost::GatewayCostCalculator;
 use vllora_core::model::CredentialsIdent;
 use vllora_core::types::provider::ModelPrice;
 
@@ -17,6 +17,7 @@ pub enum UsageSetError {
     CostCalculatorError(#[from] CostCalculatorError),
 }
 
+pub const LLM_USAGE: &str = "llm_usage";
 pub const INPUT_TOKENS: &str = "input_tokens";
 pub const OUTPUT_TOKENS: &str = "output_tokens";
 pub const TOTAL_TOKENS: &str = "total_tokens";

@@ -1,1 +1,0 @@
-FROM rust:1.75-slim\nWORKDIR /app\nCOPY . .\nRUN apt-get update && apt-get install -y pkg-config libssl-dev clang && cargo build --locked\n

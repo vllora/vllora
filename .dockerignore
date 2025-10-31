@@ -8,7 +8,6 @@
 src/
 core/
 gateway/
-udfs/
 config.yaml
 Cargo.toml
 Cargo.lock

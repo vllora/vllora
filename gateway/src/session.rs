@@ -1,14 +1,9 @@
 use diesel::{sql_query, RunQueryDsl};
 use reqwest::header::{HeaderMap, HeaderValue};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use uuid::Uuid;
 use vllora_core::metadata::models::session::DbSession;
 use vllora_core::{metadata::pool::DbPool, types::LANGDB_API_URL};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Credentials {
-    pub api_key: String,
-}
 
 pub fn get_api_url() -> String {
     std::env::var("LANGDB_API_URL").unwrap_or_else(|_| LANGDB_API_URL.to_string())
