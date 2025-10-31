@@ -453,8 +453,8 @@ pub struct InterceptorState {
 
 ## References
 
-- [Current Router Example](ai-gateway/core/src/routing/router_example.json)
-- [Conditional Router Implementation](ai-gateway/core/src/routing/strategy/conditional/)
-- [Interceptor Implementation](ai-gateway/core/src/routing/interceptor/)
-- [Metrics Implementation](ai-gateway/core/src/routing/strategy/metric.rs)
-- [Extra Struct Definition](ai-gateway/core/src/types/gateway.rs)
+- [Current Router Example](vllora/core/src/routing/router_example.json)
+- [Conditional Router Implementation](vllora/core/src/routing/strategy/conditional/)
+- [Interceptor Implementation](vllora/core/src/routing/interceptor/)
+- [Metrics Implementation](vllora/core/src/routing/strategy/metric.rs)
+- [Extra Struct Definition](vllora/core/src/types/gateway.rs)

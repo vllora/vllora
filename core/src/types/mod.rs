@@ -9,7 +9,10 @@ pub mod guardrails;
 pub mod http;
 pub mod image;
 pub mod json;
+pub mod mcp;
 pub mod message;
+pub mod metadata;
+pub mod project_settings;
 pub mod provider;
 pub mod threads;
 

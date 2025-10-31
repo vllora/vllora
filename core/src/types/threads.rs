@@ -8,6 +8,33 @@ use serde_with::serde_as;
 
 use super::{gateway::ToolCall, message::MessageType};
 use crate::types::gateway::CacheControl;
+use crate::types::gateway::CompletionModelUsage;
+
+#[derive(Clone, Debug)]
+pub struct CompletionsRunId(String);
+
+impl CompletionsRunId {
+    pub fn new(value: String) -> Self {
+        Self(value)
+    }
+
+    pub fn value(&self) -> String {
+        self.0.clone()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct CompletionsThreadId(String);
+
+impl CompletionsThreadId {
+    pub fn new(value: String) -> Self {
+        Self(value)
+    }
+
+    pub fn value(&self) -> String {
+        self.0.clone()
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MessageThread {
@@ -40,6 +67,8 @@ pub struct Message {
     pub r#type: MessageType, // Human / AI Message
     pub tool_call_id: Option<String>,
     pub tool_calls: Option<Vec<ToolCall>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -96,6 +125,7 @@ impl<'de> Deserialize<'de> for Message {
             r#type: helper.r#type,
             tool_call_id: helper.tool_call_id,
             tool_calls: tool_calls.and_then(|v| serde_json::from_value(v).ok()),
+            created_at: None,
         })
     }
 }
@@ -263,6 +293,163 @@ pub struct MessageRequest {
 
 pub fn default_include_history() -> bool {
     true
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct MessageThreadWithTitle {
+    pub id: String, // UUID
+    pub title: String,
+    pub created_at: String,
+    pub updated_at: String,
+    #[serde(alias = "used_models")]
+    pub input_models: Vec<String>,
+    pub mcp_template_definition_ids: Vec<String>,
+    pub cost: f64,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub description: Option<String>,
+    pub keywords: Option<Vec<String>>,
+    pub is_public: bool,
+    pub project_id: String,
+    pub errors: Option<Vec<String>>,
+    pub tags_info: Option<Vec<String>>,
+    #[serde(alias = "model_name")]
+    pub request_model_name: String,
+}
+
+impl From<MessageThread> for MessageThreadWithTitle {
+    fn from(thread: MessageThread) -> Self {
+        Self {
+            id: thread.id,
+            title: thread.title.unwrap_or_default(),
+            created_at: chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+            updated_at: chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+            input_models: vec![],
+            mcp_template_definition_ids: vec![],
+            cost: 0.0,
+            input_tokens: 0,
+            output_tokens: 0,
+            description: thread.description,
+            keywords: thread.keywords,
+            is_public: thread.is_public,
+            project_id: thread.project_id,
+            errors: None,
+            tags_info: None,
+            request_model_name: thread.model_name,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct MessageWithMetrics {
+    #[serde(flatten)]
+    pub message: Message,
+    pub created_at: String,
+    pub id: String,
+    #[serde(flatten)]
+    pub metrics: MessageMetrics,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct MessageWithAllMetrics {
+    #[serde(flatten)]
+    pub message: Message,
+    pub id: String,
+    pub metrics: Vec<MessageMetrics>,
+}
+
+#[derive(Serialize, Debug, Clone)]
+pub struct MessageMetrics {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ttft: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub usage: Option<CompletionModelUsage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trace_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub span_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_time_us: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cost: Option<f64>,
+}
+
+impl<'de> serde::Deserialize<'de> for MessageMetrics {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        struct Helper {
+            #[serde(default)]
+            ttft: Option<u64>,
+            #[serde(default)]
+            usage: Option<serde_json::Value>,
+            #[serde(default)]
+            duration: Option<u64>,
+            #[serde(default)]
+            run_id: Option<String>,
+            #[serde(default)]
+            trace_id: Option<String>,
+            #[serde(default)]
+            span_id: Option<String>,
+            #[serde(default)]
+            start_time_us: Option<u64>,
+            #[serde(default)]
+            cost: Option<f64>,
+        }
+
+        let helper = Helper::deserialize(deserializer)?;
+
+        // Handle `usage` being either a JSON object or a JSON string containing JSON
+        let usage: Option<CompletionModelUsage> = match helper.usage {
+            Some(serde_json::Value::String(s)) if s.is_empty() => None,
+            Some(serde_json::Value::String(s)) => {
+                // Example: "{\"input_tokens\": 28, ...}"
+                serde_json::from_str::<CompletionModelUsage>(&s)
+                    .map(Some)
+                    .map_err(serde::de::Error::custom)?
+            }
+            Some(other) => serde_json::from_value::<CompletionModelUsage>(other)
+                .map(Some)
+                .map_err(serde::de::Error::custom)?,
+            None => None,
+        };
+
+        Ok(MessageMetrics {
+            ttft: helper.ttft,
+            usage,
+            duration: helper.duration,
+            run_id: helper.run_id,
+            trace_id: helper.trace_id,
+            span_id: helper.span_id,
+            start_time_us: helper.start_time_us,
+            cost: helper.cost,
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct InsertMessageResult {
+    pub message_id: String,
+    pub thread_id: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PageOptions {
+    pub order_by: Vec<(String, PageOrderType)>,
+    pub limit: Option<usize>,
+    pub offset: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PageOrderType {
+    Asc,
+    Desc,
 }
 
 #[cfg(test)]

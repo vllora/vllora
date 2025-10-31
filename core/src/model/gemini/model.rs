@@ -11,9 +11,6 @@ use super::types::{
     PartFunctionResponse, UsageMetadata,
 };
 use crate::error::GatewayError;
-use crate::events::JsonValue;
-use crate::events::SPAN_GEMINI;
-use crate::events::{self, RecordResult};
 use crate::model::error::{AuthorizationError, ModelFinishError};
 use crate::model::gemini::types::{
     Candidate, FunctionDeclaration, GenerationConfig, PartWithThought, Role, Tools,
@@ -21,6 +18,9 @@ use crate::model::gemini::types::{
 use crate::model::handler::handle_tool_call;
 use crate::model::types::LLMFirstToken;
 use crate::model::{async_trait, CredentialsIdent, DEFAULT_MAX_RETRIES};
+use crate::telemetry::events::JsonValue;
+use crate::telemetry::events::SPAN_GEMINI;
+use crate::telemetry::events::{self, RecordResult};
 use crate::types::credentials::ApiKeyCredentials;
 use crate::types::engine::{ExecutionOptions, GeminiModelParams, Prompt};
 use crate::types::gateway::{
@@ -43,10 +43,10 @@ use valuable::Valuable;
 
 macro_rules! target {
     () => {
-        "langdb::user_tracing::models::gemini"
+        "vllora::user_tracing::models::gemini"
     };
     ($subtgt:literal) => {
-        concat!("langdb::user_tracing::models::gemini::", $subtgt)
+        concat!("vllora::user_tracing::models::gemini::", $subtgt)
     };
 }
 
@@ -68,7 +68,7 @@ pub fn gemini_client(credentials: Option<&ApiKeyCredentials>) -> Result<Client, 
     let api_key = if let Some(credentials) = credentials {
         credentials.api_key.clone()
     } else {
-        std::env::var("LANGDB_GEMINI_API_KEY").map_err(|_| AuthorizationError::InvalidApiKey)?
+        std::env::var("VLLORA_GEMINI_API_KEY").map_err(|_| AuthorizationError::InvalidApiKey)?
     };
     Ok(Client::new(api_key))
 }
@@ -104,7 +104,7 @@ impl GeminiModel {
             tools: Arc::new(tools),
             credentials_ident: credentials
                 .map(|_c| CredentialsIdent::Own)
-                .unwrap_or(CredentialsIdent::Langdb),
+                .unwrap_or(CredentialsIdent::Vllora),
         })
     }
 

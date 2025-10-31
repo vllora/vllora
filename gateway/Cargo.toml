@@ -1,23 +1,24 @@
 [package]
-name = "ai-gateway"
+name = "vllora"
 version = "0.3.2"
-authors = ["LangDB Team<api@langdb.ai>"]
+authors = ["Vllora Team<api@vllora.dev>"]
 description = "AI gateway for managing and routing LLM requests - Govern, Secure, and Optimize your AI Traffic."
 license = "Apache-2.0"
-repository = "https://github.com/langdb/ai-gateway"
-documentation = "https://docs.langdb.ai"
+repository = "https://github.com/vllora/vllora"
+documentation = "https://docs.vllora.dev"
 readme = "../README.md"
 keywords = ["llm", "openai", "anthropic", "gemini", "mcp"]
 categories = ["web-programming", "network-programming"]
 edition = "2021"
-default-run = "ai-gateway"
+default-run = "vllora"
+
 [[bin]]
-name = "ai-gateway"
+name = "vllora"
 path = "src/main.rs"
 
 [dependencies]
-langdb_core = { path = "../core", version = "0.3.2" }
-langdb_guardrails = { path = "../guardrails", version = "0.3.2" }
+vllora_core = { path = "../core", version = "0.3.2", features = ["sqlite"], default-features = false }
+vllora_guardrails = { path = "../guardrails", version = "0.3.2" }
 
 tokio = { workspace = true }
 serde = { workspace = true }
@@ -31,6 +32,7 @@ minijinja = "2.12.0"
 reqwest = { version = "0.12.23", default-features = false, features = [
   "json",
   "stream",
+  "rustls-tls",
 ] }
 actix-web = "4"
 tonic = { workspace = true}
@@ -41,13 +43,23 @@ opentelemetry-otlp = { workspace = true }
 opentelemetry_sdk = { workspace = true }
 serde_yaml = { workspace = true }
 clap = { version = "4.5", features = ["derive"] }
-directories = "6.0"
 prettytable-rs = "0.10.0"
 dotenv = "0.15.0"
 futures-util = "0.3"
 
-ratatui = "0.29.0"
-crossterm = "0.29.0"
 open = "5.3.2"
 
 chrono = { workspace = true }
+uuid = { version = "1.18.1", features = ["serde", "v4"] }
+
+tokio-stream = "0.1"
+
+static-serve = "0.4"
+static-serve-macro = "0.4"
+axum = "0.8"
+diesel = { version = "2.3.2", features = ["sqlite"] }
+libsqlite3-sys = { version = "0.27.0", features = ["bundled"] }
+
+[features]
+default = []
+clickhouse = ["vllora_core/clickhouse"]

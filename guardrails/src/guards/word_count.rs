@@ -1,7 +1,7 @@
-use langdb_core::types::gateway::{ChatCompletionContent, ChatCompletionMessage};
-use langdb_core::types::guardrails::evaluator::Evaluator;
-use langdb_core::types::guardrails::{Guard, GuardResult};
 use regex::Regex;
+use vllora_core::types::gateway::{ChatCompletionContent, ChatCompletionMessage};
+use vllora_core::types::guardrails::evaluator::Evaluator;
+use vllora_core::types::guardrails::{Guard, GuardResult};
 
 /// Word count evaluator that checks if text meets specified word count limits
 pub struct WordCountEvaluator;

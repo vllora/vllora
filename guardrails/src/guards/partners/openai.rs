@@ -3,7 +3,8 @@ use async_openai::{
     types::{CreateModerationRequest, ModerationContentPart, ModerationImageUrl, ModerationInput},
     Client,
 };
-use langdb_core::{
+use tracing::Span;
+use vllora_core::{
     model::error::AuthorizationError,
     types::{
         credentials::ApiKeyCredentials,
@@ -14,7 +15,6 @@ use langdb_core::{
         },
     },
 };
-use tracing::Span;
 
 pub struct OpenaiGuardrailPartner {
     api_key: String,
@@ -25,7 +25,7 @@ impl OpenaiGuardrailPartner {
         let api_key = if let Some(credentials) = credentials {
             credentials.api_key.clone()
         } else {
-            std::env::var("LANGDB_OPENAI_API_KEY")
+            std::env::var("VLLORA_OPENAI_API_KEY")
                 .map_err(|_| GuardPartnerError::InvalidApiKey(AuthorizationError::InvalidApiKey))?
         };
         Ok(Self { api_key })

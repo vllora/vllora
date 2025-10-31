@@ -165,7 +165,7 @@ impl CompletionModelDefinition {
             CompletionEngineParams::Bedrock { provider, .. } => provider.to_string(),
             CompletionEngineParams::Anthropic { .. } => "anthropic".to_string(),
             CompletionEngineParams::Gemini { .. } => "gemini".to_string(),
-            CompletionEngineParams::Proxy { .. } => "langdb_open".to_string(),
+            CompletionEngineParams::Proxy { .. } => "vllora_open".to_string(),
         }
     }
 }
@@ -403,7 +403,7 @@ pub enum ImageGenerationEngineParams {
         endpoint: Option<String>,
         model_name: String,
     },
-    LangdbOpen {
+    VlloraOpen {
         credentials: Option<ApiKeyCredentials>,
         model_name: String,
     },
@@ -413,14 +413,14 @@ impl ImageGenerationEngineParams {
     pub fn engine_name(&self) -> String {
         match self {
             Self::OpenAi { .. } => "openai".to_string(),
-            Self::LangdbOpen { .. } => "langdb_open".to_string(),
+            Self::VlloraOpen { .. } => "vllora_open".to_string(),
         }
     }
 
     pub fn provider_name(&self) -> String {
         match self {
             Self::OpenAi { .. } => "openai".to_string(),
-            Self::LangdbOpen { .. } => "langdb_open".to_string(),
+            Self::VlloraOpen { .. } => "vllora_open".to_string(),
         }
     }
 }

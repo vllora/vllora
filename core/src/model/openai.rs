@@ -6,13 +6,13 @@ use super::types::{
 };
 use super::{CredentialsIdent, ModelInstance};
 use crate::error::GatewayError;
-use crate::events::JsonValue;
-use crate::events::SPAN_OPENAI;
-use crate::events::{self, RecordResult};
 use crate::model::error::ModelFinishError;
 use crate::model::handler::handle_tool_call;
 use crate::model::types::LLMFirstToken;
 use crate::model::{async_trait, DEFAULT_MAX_RETRIES};
+use crate::telemetry::events::JsonValue;
+use crate::telemetry::events::SPAN_OPENAI;
+use crate::telemetry::events::{self, RecordResult};
 use crate::types::credentials::ApiKeyCredentials;
 use crate::types::engine::{ExecutionOptions, OpenAiModelParams, Prompt};
 use crate::types::gateway::{ChatCompletionContent, ChatCompletionMessage, ToolCall};
@@ -47,6 +47,7 @@ use std::sync::Arc;
 use tracing::field;
 use tracing::Instrument;
 use tracing::Span;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use valuable::Valuable;
 
 pub type StreamExecutionResult = (
@@ -58,10 +59,10 @@ pub type StreamExecutionResult = (
 
 macro_rules! target {
     () => {
-        "langdb::user_tracing::models::openai"
+        "vllora::user_tracing::models::openai"
     };
     ($subtgt:literal) => {
-        concat!("langdb::user_tracing::models::openai::", $subtgt)
+        concat!("vllora::user_tracing::models::openai::", $subtgt)
     };
 }
 
@@ -84,7 +85,7 @@ pub fn openai_client(
     let api_key = if let Some(credentials) = credentials {
         credentials.api_key.clone()
     } else {
-        std::env::var("LANGDB_OPENAI_API_KEY").map_err(|_| AuthorizationError::InvalidApiKey)?
+        std::env::var("VLLORA_OPENAI_API_KEY").map_err(|_| AuthorizationError::InvalidApiKey)?
     };
 
     let mut config = OpenAIConfig::new();
@@ -160,7 +161,7 @@ impl OpenAIModel<OpenAIConfig> {
             tools: Arc::new(tools),
             credentials_ident: credentials
                 .map(|_c| CredentialsIdent::Own)
-                .unwrap_or(CredentialsIdent::Langdb),
+                .unwrap_or(CredentialsIdent::Vllora),
         })
     }
 }
@@ -182,7 +183,7 @@ impl OpenAIModel<AzureConfig> {
             let api_key = if let Some(credentials) = credentials {
                 credentials.api_key.clone()
             } else {
-                std::env::var("LANGDB_OPENAI_API_KEY")
+                std::env::var("VLLORA_OPENAI_API_KEY")
                     .map_err(|_| AuthorizationError::InvalidApiKey)?
             };
             azure_openai_client(api_key, endpoint, &params.model.clone().unwrap_or_default())
@@ -200,7 +201,7 @@ impl OpenAIModel<AzureConfig> {
             tools: Arc::new(tools),
             credentials_ident: credentials
                 .map(|_c| CredentialsIdent::Own)
-                .unwrap_or(CredentialsIdent::Langdb),
+                .unwrap_or(CredentialsIdent::Vllora),
         })
     }
 
@@ -398,7 +399,6 @@ impl<C: Config> OpenAIModel<C> {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip_all)]
     async fn process_stream(
         &self,
         mut stream: impl Stream<Item = Result<CreateChatCompletionStreamResponse, OpenAIError>> + Unpin,
@@ -418,6 +418,7 @@ impl<C: Config> OpenAIModel<C> {
                 Ok(mut response) => {
                     if !first_response_received {
                         first_response_received = true;
+                        Span::current().add_event("llm.first_token", vec![]);
                         tx.send(Some(ModelEvent::new(
                             &Span::current(),
                             ModelEventType::LlmFirstToken(LLMFirstToken {}),
@@ -624,25 +625,25 @@ impl<C: Config> OpenAIModel<C> {
                     .tools
                     .get(tool_name.as_str())
                     .unwrap_or_else(|| panic!("Tool {tool_name} not found checked"));
-                if tool.stop_at_call() {
-                    let finish_reason = Self::map_finish_reason(
-                        &finish_reason.expect("Finish reason is already checked"),
-                    );
-                    tx.send(Some(ModelEvent::new(
-                        &span,
-                        ModelEventType::LlmStop(LLMFinishEvent {
-                            provider_name: SPAN_OPENAI.to_string(),
-                            model_name: self.params.model.clone().unwrap_or_default(),
-                            output: content.clone(),
-                            usage: Self::map_usage(response.usage.as_ref()),
-                            finish_reason: finish_reason.clone(),
-                            tool_calls: tool_calls.iter().map(Self::map_tool_call).collect(),
-                            credentials_ident: self.credentials_ident.clone(),
-                        }),
-                    )))
-                    .await
-                    .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+                let finish_reason = Self::map_finish_reason(
+                    &finish_reason.expect("Finish reason is already checked"),
+                );
+                tx.send(Some(ModelEvent::new(
+                    &span,
+                    ModelEventType::LlmStop(LLMFinishEvent {
+                        provider_name: SPAN_OPENAI.to_string(),
+                        model_name: self.params.model.clone().unwrap_or_default(),
+                        output: content.clone(),
+                        usage: Self::map_usage(response.usage.as_ref()),
+                        finish_reason: finish_reason.clone(),
+                        tool_calls: tool_calls.iter().map(Self::map_tool_call).collect(),
+                        credentials_ident: self.credentials_ident.clone(),
+                    }),
+                )))
+                .await
+                .map_err(|e| GatewayError::CustomError(e.to_string()))?;
 
+                if tool.stop_at_call() {
                     Ok(InnerExecutionResult::Finish(
                         ChatCompletionMessageWithFinishReason::new(
                             ChatCompletionMessage {
@@ -739,7 +740,6 @@ impl<C: Config> OpenAIModel<C> {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip_all)]
     async fn execute(
         &self,
         input_messages: Vec<ChatCompletionRequestMessage>,
@@ -841,6 +841,9 @@ impl<C: Config> OpenAIModel<C> {
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
     ) -> GatewayResult<InnerExecutionResult> {
+        let request = self.build_request(&input_messages, true)?;
+        span.record("request", serde_json::to_string(&request)?);
+
         tx.send(Some(ModelEvent::new(
             &span,
             ModelEventType::LlmStart(LLMStartEvent {
@@ -851,9 +854,6 @@ impl<C: Config> OpenAIModel<C> {
         )))
         .await
         .map_err(|e| GatewayError::CustomError(e.to_string()))?;
-
-        let request = self.build_request(&input_messages, true)?;
-        span.record("request", serde_json::to_string(&request)?);
 
         let started_at = std::time::Instant::now();
         let stream = self
@@ -958,7 +958,6 @@ impl<C: Config> OpenAIModel<C> {
         }
     }
 
-    #[tracing::instrument(skip_all)]
     async fn execute_stream(
         &self,
         input_messages: Vec<ChatCompletionRequestMessage>,

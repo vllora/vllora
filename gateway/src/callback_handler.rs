@@ -3,8 +3,8 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use chrono::{DateTime, Utc};
-use langdb_core::usage::InMemoryStorage;
-use langdb_core::{
+use vllora_core::usage::InMemoryStorage;
+use vllora_core::{
     handler::CallbackHandlerFn, model::types::ModelEventType,
     types::gateway::ImageGenerationModelUsage,
 };
@@ -99,7 +99,7 @@ pub fn init_callback_handler(
                                     &model_name,
                                     &model.provider_name,
                                     usage
-                                        .map(langdb_core::types::gateway::Usage::CompletionModelUsage)
+                                        .map(vllora_core::types::gateway::Usage::CompletionModelUsage)
                                         .as_ref(),
                                     duration.map(|d| d as u64),
                                     ttft.map(|t| t as u64),
@@ -121,7 +121,7 @@ pub fn init_callback_handler(
                                     &model_name,
                                     &model.provider_name,
                                     Some(
-                                        &langdb_core::types::gateway::Usage::ImageGenerationModelUsage(
+                                        &vllora_core::types::gateway::Usage::ImageGenerationModelUsage(
                                             ImageGenerationModelUsage {
                                                 quality: finish_event.quality.clone(),
                                                 size: finish_event.size.clone().into(),

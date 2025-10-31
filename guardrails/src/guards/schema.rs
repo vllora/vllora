@@ -1,7 +1,7 @@
 use jsonschema::{Draft, Validator};
-use langdb_core::types::gateway::ChatCompletionMessage;
-use langdb_core::types::guardrails::{evaluator::Evaluator, Guard, GuardResult};
 use serde_json::Value;
+use vllora_core::types::gateway::ChatCompletionMessage;
+use vllora_core::types::guardrails::{evaluator::Evaluator, Guard, GuardResult};
 
 pub struct SchemaEvaluator;
 

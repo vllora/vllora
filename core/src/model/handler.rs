@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     error::GatewayError,
-    events::{JsonValue, RecordResult},
+    telemetry::events::{JsonValue, RecordResult},
     GatewayResult,
 };
 
@@ -17,10 +17,10 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 // macro_rules! target {
 //     () => {
-//         "langdb::user_tracing::models"
+//         "vllora::user_tracing::models"
 //     };
 //     ($subtgt:literal) => {
-//         concat!("langdb::user_tracing::models::", $subtgt)
+//         concat!("vllora::user_tracing::models::", $subtgt)
 //     };
 // }
 

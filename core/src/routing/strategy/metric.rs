@@ -2,11 +2,11 @@ use std::collections::{HashMap, HashSet};
 
 use crate::routing::ConditionOpType;
 use crate::{
-    events::JsonValue,
     routing::{
         metrics::MetricsRepository, strategy::conditional::evaluator::compare_values,
         MetricsDuration, RouterError,
     },
+    telemetry::events::JsonValue,
     usage::{Metrics, ModelMetrics, TimeMetrics},
 };
 use futures::future;

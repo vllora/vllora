@@ -1,13 +1,13 @@
-use langdb_core::events::JsonValue;
-use langdb_core::events::SPAN_GUARD_EVAULATION;
-use langdb_core::types::gateway::ChatCompletionMessage;
-use langdb_core::types::guardrails::evaluator::Evaluator;
-use langdb_core::types::guardrails::Guard;
-use langdb_core::types::guardrails::GuardResult;
 use tracing::field;
 use tracing::info_span;
 use tracing_futures::Instrument;
 use valuable::Valuable;
+use vllora_core::telemetry::events::JsonValue;
+use vllora_core::telemetry::events::SPAN_GUARD_EVAULATION;
+use vllora_core::types::gateway::ChatCompletionMessage;
+use vllora_core::types::guardrails::evaluator::Evaluator;
+use vllora_core::types::guardrails::Guard;
+use vllora_core::types::guardrails::GuardResult;
 
 pub struct TracedGuard {
     inner: Box<dyn Evaluator>,
@@ -31,7 +31,7 @@ impl Evaluator for TracedGuard {
         guard: &Guard,
     ) -> Result<GuardResult, String> {
         let span = info_span!(
-            target: "langdb::user_tracing::guard",
+            target: "vllora::user_tracing::guard",
             SPAN_GUARD_EVAULATION,
             id = guard.id(),
             label = guard.name(),

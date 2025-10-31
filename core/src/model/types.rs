@@ -1,4 +1,6 @@
+use crate::events::CustomEventType;
 use crate::types::gateway::{CompletionModelUsage, ImageSize};
+use crate::types::gateway::{FunctionCall, ToolCall};
 use chrono::{DateTime, Utc};
 use opentelemetry::trace::TraceContextExt;
 use serde::{Deserialize, Serialize};
@@ -15,21 +17,28 @@ pub enum StreamEvent {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CustomEvent {
-    value: serde_json::Value,
-    name: String,
+    event: CustomEventType,
 }
 
 impl CustomEvent {
-    pub fn new(name: String, value: serde_json::Value) -> Self {
-        Self { value, name }
+    pub fn new(event: CustomEventType) -> Self {
+        Self { event }
     }
 
-    pub fn name(&self) -> String {
-        self.name.clone()
+    pub fn event(&self) -> CustomEventType {
+        self.event.clone()
     }
+}
 
-    pub fn value(&self) -> serde_json::Value {
-        self.value.clone()
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CostEvent {
+    cost: f64,
+    usage: Option<CompletionModelUsage>,
+}
+
+impl CostEvent {
+    pub fn new(cost: f64, usage: Option<CompletionModelUsage>) -> Self {
+        Self { cost, usage }
     }
 }
 
@@ -75,16 +84,32 @@ pub struct ModelEvent {
     pub timestamp: DateTime<Utc>,
     #[serde(skip)]
     pub span: Option<Span>,
+    pub parent_span_id: Option<String>,
 }
 
 impl ModelEvent {
     pub fn new(span: &Span, event_type: ModelEventType) -> Self {
+        // Try to get parent span ID from current context
+        let parent_span_id = {
+            let current = Span::current();
+            let current_span_id = current.context().span().span_context().span_id();
+            let this_span_id = span.context().span().span_context().span_id();
+
+            // If the passed span is different from current, current is likely the parent
+            if current_span_id != this_span_id && !current_span_id.to_string().is_empty() {
+                Some(current_span_id.to_string())
+            } else {
+                None
+            }
+        };
+
         Self {
             event: event_type,
             timestamp: Utc::now(),
             span_id: span.context().span().span_context().span_id().to_string(),
             trace_id: span.context().span().span_context().trace_id().to_string(),
             span: Some(span.clone()),
+            parent_span_id,
         }
     }
 }
@@ -124,6 +149,21 @@ pub struct ModelToolCall {
     pub tool_name: String,
     pub input: String,
 }
+
+impl ModelToolCall {
+    pub fn into_tool_call_with_index(&self, index: usize) -> ToolCall {
+        ToolCall {
+            index: Some(index),
+            id: self.tool_id.clone(),
+            r#type: "function".into(),
+            function: FunctionCall {
+                name: self.tool_name.clone(),
+                arguments: self.input.clone(),
+            },
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ModelFinishReason {

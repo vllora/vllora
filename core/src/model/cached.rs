@@ -1,7 +1,7 @@
 use crate::error::GatewayError;
-use crate::events::{JsonValue, SPAN_CACHE};
 use crate::model::types::{ModelEvent, ModelEventType, ModelFinishReason};
 use crate::model::ModelInstance;
+use crate::telemetry::events::{JsonValue, SPAN_CACHE};
 use crate::types::gateway::{ChatCompletionMessage, ChatCompletionMessageWithFinishReason};
 use crate::types::threads::Message;
 use crate::{create_model_span, GatewayResult};
@@ -15,10 +15,10 @@ use valuable::Valuable;
 
 macro_rules! target {
     () => {
-        "langdb::user_tracing::models::cached_response"
+        "vllora::user_tracing::models::cached_response"
     };
     ($subtgt:literal) => {
-        concat!("langdb::user_tracing::models::cached_response::", $subtgt)
+        concat!("vllora::user_tracing::models::cached_response::", $subtgt)
     };
 }
 

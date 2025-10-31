@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use langdb_core::types::guardrails::{Guard, GuardModel, GuardTemplate};
 use serde::{Deserialize, Serialize};
+use vllora_core::types::guardrails::{Guard, GuardModel, GuardTemplate};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GuardsTemplatesConfig {

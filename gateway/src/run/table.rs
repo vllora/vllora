@@ -1,5 +1,5 @@
-use langdb_core::{models::ModelMetadata, types::provider::ModelPrice};
 use prettytable::{row, Table};
+use vllora_core::{models::ModelMetadata, types::provider::ModelPrice};
 
 pub fn pretty_print_models(models: Vec<ModelMetadata>) {
     let mut table = Table::new();
@@ -40,13 +40,23 @@ pub fn pretty_print_models(models: Vec<ModelMetadata>) {
 fn get_price(price: ModelPrice) -> String {
     match price {
         ModelPrice::Completion(completion_model_price) => {
-            format!(
-                "Input: ${:.2}/1M\nOutput: ${:.2}/1M",
-                completion_model_price.per_input_token, completion_model_price.per_output_token
-            )
+            let mut lines = vec![
+                format!("Input: ${:.4}/1M", completion_model_price.per_input_token),
+                format!("Output: ${:.4}/1M", completion_model_price.per_output_token),
+            ];
+
+            if let Some(cached_input) = completion_model_price.per_cached_input_token {
+                lines.push(format!("Cached Input: ${:.4}/1M", cached_input));
+            }
+
+            if let Some(cached_write) = completion_model_price.per_cached_input_write_token {
+                lines.push(format!("Cached Write: ${:.4}/1M", cached_write));
+            }
+
+            lines.join("\n")
         }
         ModelPrice::Embedding(embedding_model_price) => {
-            format!("${:.2}/1M", embedding_model_price.per_input_token)
+            format!("${:.4}/1M", embedding_model_price.per_input_token)
         }
         ModelPrice::ImageGeneration(image_generation_price) => {
             if let Some(p) = image_generation_price.mp_price {

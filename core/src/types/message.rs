@@ -1,3 +1,4 @@
+use std::str::FromStr;
 use std::{collections::HashSet, fmt::Display};
 
 use serde::{Deserialize, Serialize};
@@ -6,7 +7,7 @@ use serde::{Deserialize, Serialize};
 pub enum MessageType {
     #[serde(rename = "system")]
     SystemMessage,
-    #[serde(rename = "ai")]
+    #[serde(rename = "ai", alias = "assistant")]
     AIMessage,
     #[serde(rename = "human")]
     HumanMessage,
@@ -21,6 +22,19 @@ impl Display for MessageType {
             MessageType::AIMessage => f.write_str("ai"),
             MessageType::HumanMessage => f.write_str("human"),
             MessageType::ToolResult => f.write_str("tool"),
+        }
+    }
+}
+
+impl FromStr for MessageType {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "system" => Ok(MessageType::SystemMessage),
+            "ai" | "assistant" => Ok(MessageType::AIMessage),
+            "human" => Ok(MessageType::HumanMessage),
+            "tool" => Ok(MessageType::ToolResult),
+            _ => Err(format!("Invalid message type: {}", s)),
         }
     }
 }

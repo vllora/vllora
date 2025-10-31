@@ -1,6 +1,6 @@
-use langdb_core::types::gateway::ChatCompletionMessage;
-use langdb_core::types::guardrails::{evaluator::Evaluator, Guard, GuardResult};
 use regex::Regex;
+use vllora_core::types::gateway::ChatCompletionMessage;
+use vllora_core::types::guardrails::{evaluator::Evaluator, Guard, GuardResult};
 pub struct RegexEvaluator;
 
 #[async_trait::async_trait]

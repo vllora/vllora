@@ -1,15 +1,15 @@
 use std::sync::Arc;
 
-use langdb_core::{
+use thiserror::Error;
+use tokio::sync::Mutex;
+use vllora_core::{
     types::gateway::{CostCalculator, CostCalculatorError, Usage},
     usage::{InMemoryStorage, LimitPeriod},
 };
-use thiserror::Error;
-use tokio::sync::Mutex;
 
 use crate::{cost::GatewayCostCalculator, limit::LLM_USAGE};
-use langdb_core::model::CredentialsIdent;
-use langdb_core::types::provider::ModelPrice;
+use vllora_core::model::CredentialsIdent;
+use vllora_core::types::provider::ModelPrice;
 
 #[derive(Error, Debug)]
 pub enum UsageSetError {
@@ -57,7 +57,7 @@ pub(crate) async fn update_usage(
         }
 
         match usage {
-            Usage::CompletionModelUsage(langdb_core::types::gateway::CompletionModelUsage {
+            Usage::CompletionModelUsage(vllora_core::types::gateway::CompletionModelUsage {
                 input_tokens,
                 output_tokens,
                 total_tokens,
