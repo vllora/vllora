@@ -235,3 +235,20 @@ jobs:
           SLACK_TITLE: New brew release available
           SLACK_USERNAME: vllora-bot
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+
+  notify-slack-community:
+    name: Slack Notification
+    needs: update-homebrew-formula
+    if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref_name, '-prerelease')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify Slack
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_CHANNEL: general
+          SLACK_COLOR: ${{ job.status }}
+          SLACK_ICON: https://github.com/vllora.png?size=48
+          SLACK_MESSAGE: "Release ${{ github.ref_name }}. Use `brew upgrade vllora` to update :rocket:"
+          SLACK_TITLE: New brew release available
+          SLACK_USERNAME: vllora-bot
+          SLACK_WEBHOOK: ${{ secrets.SLACK_COMMUNITY_WEBHOOK }}
