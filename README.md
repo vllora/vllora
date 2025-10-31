@@ -12,7 +12,7 @@ Debug your Agents in Real Time. Trace, analyze, and optimize instantly. Seamless
 </div>
 
 
-## Using Homebrew (Recommended)
+## Quick Start
 
 First, install [Homebrew](https://brew.sh) if you haven't already, then:
 
