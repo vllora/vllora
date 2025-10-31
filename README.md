@@ -13,10 +13,14 @@ Debug your Agents in Real Time. Trace, analyze, and optimize instantly. Seamless
 
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 ## Quick Start
 =======
 ## Using Homebrew (Recommended)
 >>>>>>> 656fa70 (chore: Rename project from LangDB AI Gateway to vLLora and update related documentation)
+=======
+## Quick Start
+>>>>>>> 3cce4c8 (docs: Update README to rename section from 'Using Homebrew' to 'Quick Start' for improved clarity)
 
 First, install [Homebrew](https://brew.sh) if you haven't already, then:
 
