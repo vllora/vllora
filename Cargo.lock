@@ -4073,9 +4073,9 @@ dependencies = [
 
 [[package]]
 name = "serde_with"
-version = "3.14.0"
+version = "3.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2c45cd61fefa9db6f254525d46e392b852e0e61d9a1fd36e5bd183450a556d5"
+checksum = "aa66c845eee442168b2c8134fec70ac50dc20e760769c8ba0ad1319ca1959b04"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -4084,8 +4084,7 @@ dependencies = [
  "indexmap 2.11.4",
  "schemars 0.9.0",
  "schemars 1.0.3",
- "serde",
- "serde_derive",
+ "serde_core",
  "serde_json",
  "serde_with_macros",
  "time",
@@ -4093,11 +4092,11 @@ dependencies = [
 
 [[package]]
 name = "serde_with_macros"
-version = "3.14.0"
+version = "3.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "de90945e6565ce0d9a25098082ed4ee4002e047cb59892c318d66821e14bb30f"
+checksum = "b91a903660542fced4e99881aa481bdbaec1634568ee02e0b8bd57c64cb38955"
 dependencies = [
- "darling 0.20.10",
+ "darling 0.21.3",
  "proc-macro2",
  "quote",
  "syn 2.0.96",
