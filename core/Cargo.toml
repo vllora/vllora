@@ -95,6 +95,6 @@ opentelemetry-semantic-conventions = "0.30.0"
 actix-http = "3.11.1"
 
 [features]
-default = []
+default = ["sqlite"]
 postgres = ["diesel/postgres"]
 sqlite = []
