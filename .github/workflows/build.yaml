@@ -67,7 +67,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ui-dist
-          path: dist
+          path: gateway/dist
 
       - name: Install base dependencies
         run: |
@@ -131,7 +131,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ui-dist
-          path: dist
+          path: gateway/dist
       
       - name: Install dependencies
         run: |
