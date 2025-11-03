@@ -1,12 +1,11 @@
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Result};
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use std::collections::HashMap;
-use std::sync::Arc;
+use serde::Deserialize;
 use vllora_core::metadata::models::project::DbProject;
 use vllora_core::metadata::pool::DbPool;
 use vllora_core::metadata::services::trace::{ListTracesQuery, TraceService, TraceServiceImpl};
-
+use vllora_core::types::handlers::pagination::PaginatedResult;
+use vllora_core::types::handlers::pagination::Pagination;
+use vllora_core::types::traces::{LangdbSpan, Operation};
 #[derive(Deserialize)]
 pub struct ListTracesQueryParams {
     #[serde(alias = "runId")]
@@ -21,39 +20,12 @@ pub struct ListTracesQueryParams {
     offset: Option<i64>,
 }
 
-#[derive(Serialize)]
-pub struct LangdbSpan {
-    pub trace_id: String,
-    pub span_id: String,
-    pub thread_id: Option<String>,
-    pub parent_span_id: Option<String>,
-    pub operation_name: String,
-    pub start_time_us: i64,
-    pub finish_time_us: i64,
-    pub attribute: HashMap<String, Value>,
-    pub child_attribute: Option<HashMap<String, Value>>,
-    pub run_id: Option<String>,
-}
-
-#[derive(Serialize)]
-pub struct PaginatedResult<T> {
-    pub pagination: Pagination,
-    pub data: Vec<T>,
-}
-
-#[derive(Serialize)]
-pub struct Pagination {
-    pub offset: i64,
-    pub limit: i64,
-    pub total: i64,
-}
-
 pub async fn list_traces(
     req: HttpRequest,
     query: web::Query<ListTracesQueryParams>,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
-    let trace_service = TraceServiceImpl::new(Arc::new(db_pool.get_ref().clone()));
+    let trace_service = TraceServiceImpl::new(db_pool.get_ref().clone());
 
     // Extract project_id from extensions (set by ProjectMiddleware)
     let project_id = req.extensions().get::<DbProject>().map(|p| p.slug.clone());
@@ -85,54 +57,9 @@ pub async fn list_traces(
         offset: query.offset.unwrap_or(0),
     };
 
-    Ok(trace_service.list(list_query.clone()).map(|traces| {
-        // Get child attributes for all traces
-        let trace_ids: Vec<String> = traces.iter().map(|t| t.trace_id.clone()).collect();
-        let span_ids: Vec<String> = traces.iter().map(|t| t.span_id.clone()).collect();
-
-        let child_attrs = trace_service
-            .get_child_attributes(&trace_ids, &span_ids, project_id.as_deref())
-            .unwrap_or_default();
-
-        let spans: Vec<LangdbSpan> = traces
-            .into_iter()
-            .map(|trace| {
-                let attribute = trace.parse_attribute().unwrap_or_default();
-
-                // Get child_attribute from the map
-                let child_attribute = child_attrs
-                    .get(&trace.span_id)
-                    .and_then(|opt| opt.as_ref())
-                    .and_then(|json_str| serde_json::from_str(json_str).ok());
-
-                LangdbSpan {
-                    trace_id: trace.trace_id,
-                    span_id: trace.span_id,
-                    thread_id: trace.thread_id,
-                    parent_span_id: trace.parent_span_id,
-                    operation_name: trace.operation_name,
-                    start_time_us: trace.start_time_us,
-                    finish_time_us: trace.finish_time_us,
-                    attribute,
-                    child_attribute,
-                    run_id: trace.run_id,
-                }
-            })
-            .collect();
-
-        let total = trace_service.count(list_query).unwrap_or(0);
-
-        let result = PaginatedResult {
-            pagination: Pagination {
-                offset: query.offset.unwrap_or(0),
-                limit: query.limit.unwrap_or(100),
-                total,
-            },
-            data: spans,
-        };
-
-        HttpResponse::Ok().json(result)
-    })?)
+    Ok(trace_service
+        .list_paginated(list_query.clone())
+        .map(|result| HttpResponse::Ok().json(result))?)
 }
 
 #[derive(Deserialize)]
@@ -147,7 +74,7 @@ pub async fn get_spans_by_run(
     query: web::Query<GetSpansByRunQuery>,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
-    let trace_service = TraceServiceImpl::new(Arc::new(db_pool.get_ref().clone()));
+    let trace_service = TraceServiceImpl::new(db_pool.get_ref().clone());
 
     // Extract project_id from extensions (set by ProjectMiddleware)
     let project_id = req.extensions().get::<DbProject>().map(|p| p.slug.clone());
@@ -182,7 +109,7 @@ pub async fn get_spans_by_run(
                         span_id: trace.span_id,
                         thread_id: trace.thread_id,
                         parent_span_id: trace.parent_span_id,
-                        operation_name: trace.operation_name,
+                        operation_name: Operation::from(trace.operation_name.as_str()),
                         start_time_us: trace.start_time_us,
                         finish_time_us: trace.finish_time_us,
                         attribute,
