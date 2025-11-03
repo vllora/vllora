@@ -602,7 +602,12 @@ impl AnthropicModel {
                 }
 
                 let tool_calls_str = serde_json::to_string(&tool_runs)?;
-                let tools_span = tracing::info_span!(target: target!(), events::SPAN_TOOLS, tool_calls=tool_calls_str, label=tool_runs.iter().map(|t| t.name.clone()).collect::<Vec<String>>().join(","));
+                let tools_span = tracing::info_span!(
+                    target: target!(), 
+                    events::SPAN_TOOLS,
+                    tool_calls=tool_calls_str,
+                    tool.name=tool_runs.iter().map(|t| t.name.clone()).collect::<Vec<String>>().join(",")
+                );
                 tools_span.follows_from(span.id());
 
                 let tool = self.tools.get(&tool_runs[0].name).unwrap();
@@ -918,7 +923,12 @@ impl AnthropicModel {
             StopReason::MaxTokens => Err(Self::handle_max_tokens_error()),
             StopReason::ToolUse => {
                 let tool_calls_str = serde_json::to_string(&tool_calls)?;
-                let tools_span = tracing::info_span!(target: target!(), events::SPAN_TOOLS, tool_calls=tool_calls_str, label=tool_calls.iter().map(|t| t.name.clone()).collect::<Vec<String>>().join(","));
+                let tools_span = tracing::info_span!(
+                    target: target!(),
+                    events::SPAN_TOOLS, 
+                    tool_calls=tool_calls_str, 
+                    tool.name=tool_calls.iter().map(|t| t.name.clone()).collect::<Vec<String>>().join(",")
+                );
                 tools_span.follows_from(span.id());
                 let tool = self.tools.get(&tool_calls[0].name).unwrap();
                 if tool.stop_at_call() {
