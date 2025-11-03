@@ -1129,9 +1129,9 @@ dependencies = [
 
 [[package]]
 name = "cfg-if"
-version = "1.0.0"
+version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
+checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
 name = "cfg_aliases"
@@ -4693,7 +4693,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vllora"
-version = "1.0.0"
+version = "0.1.0"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -4731,7 +4731,7 @@ dependencies = [
 
 [[package]]
 name = "vllora_core"
-version = "1.0.0"
+version = "0.1.0"
 dependencies = [
  "actix-http",
  "actix-web",
@@ -4790,7 +4790,7 @@ dependencies = [
 
 [[package]]
 name = "vllora_guardrails"
-version = "1.0.0"
+version = "0.1.0"
 dependencies = [
  "async-openai-compat",
  "async-trait",
