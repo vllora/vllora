@@ -217,6 +217,7 @@ jobs:
       source_repo: ${{ github.repository }}
       target_branch: main
       tap_repo: vllora/homebrew-vllora
+      is_prerelease: ${{ contains(github.ref_name, '-prerelease') }}
     secrets:
       HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
 
