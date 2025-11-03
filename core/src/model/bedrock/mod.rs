@@ -587,7 +587,11 @@ impl BedrockModel {
 
             StopReason::ToolUse => {
                 let tools_span =
-                    tracing::info_span!(target: target!(), events::SPAN_TOOLS, label=field::Empty);
+                    tracing::info_span!(
+                        target: target!(),
+                        events::SPAN_TOOLS,
+                        tool.name=field::Empty
+                    );
                 tools_span.follows_from(span.id());
                 if let Some(message_output) = response.output {
                     match message_output {
@@ -631,7 +635,7 @@ impl BedrockModel {
                             let tools_span = tracing::info_span!(target: target!(), events::SPAN_TOOLS, tool_calls=tool_calls_str, label=tool_uses.iter().map(|t| t.name.clone()).collect::<Vec<String>>().join(","));
 
                             tools_span.record(
-                                "label",
+                                "tool.name",
                                 tool_uses
                                     .iter()
                                     .map(|t| t.name.clone())
@@ -991,7 +995,12 @@ impl BedrockModel {
                 };
 
                 let tool_calls_str = serde_json::to_string(&tool_calls)?;
-                let tools_span = tracing::info_span!(target: target!(), events::SPAN_TOOLS, tool_calls=tool_calls_str, label=tool_uses.iter().map(|t| t.name.clone()).collect::<Vec<String>>().join(","));
+                let tools_span = tracing::info_span!(
+                    target: target!(), 
+                    events::SPAN_TOOLS, 
+                    tool_calls=tool_calls_str, 
+                    tool.name=tool_uses.iter().map(|t| t.name.clone()).collect::<Vec<String>>().join(",")
+                );
 
                 let tool = self.tools.get(&tool_calls[0].tool_name).unwrap();
                 if tool.stop_at_call() {

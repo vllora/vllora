@@ -610,13 +610,13 @@ impl<C: Config> OpenAIModel<C> {
 
                 let content = first_choice.message.content;
 
-                let label = map_tool_names_to_labels(&tool_calls);
+                let tool_names = map_tool_names(&tool_calls);
                 let tools_span = tracing::info_span!(
                     target: target!(),
                     parent: span.clone(),
                     events::SPAN_TOOLS,
                     tool_calls=JsonValue(&serde_json::to_value(&tool_calls)?).as_value(),
-                    label=label
+                    tool.name=tool_names
                 );
                 tools_span.follows_from(span.id());
 
@@ -910,14 +910,14 @@ impl<C: Config> OpenAIModel<C> {
                     .get(tool_calls[0].function.name.as_str())
                     .unwrap();
 
-                let label = map_tool_names_to_labels(&tool_calls);
+                let tool_names = tool_calls.iter().map(|t| t.function.name.clone()).collect::<Vec<String>>().join(",");
                 let tools_span = tracing::info_span!(
                     target: target!(),
                     parent: span.clone(),
                     events::SPAN_TOOLS,
                     tool_calls=JsonValue(&serde_json::to_value(&tool_calls)?).as_value(),
                     tool_results=field::Empty,
-                    label=label
+                    tool.name=tool_names
                 );
                 tools_span.follows_from(span.id());
 
@@ -1238,7 +1238,7 @@ pub fn record_map_err(e: impl Into<GatewayError> + ToString, span: tracing::Span
     e.into()
 }
 
-fn map_tool_names_to_labels(tool_calls: &[ChatCompletionMessageToolCall]) -> String {
+fn map_tool_names(tool_calls: &[ChatCompletionMessageToolCall]) -> String {
     tool_calls
         .iter()
         .map(|tool_call| tool_call.function.name.clone())

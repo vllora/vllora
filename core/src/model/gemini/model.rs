@@ -54,7 +54,7 @@ fn custom_err(e: impl ToString) -> ModelError {
     ModelError::CustomError(e.to_string())
 }
 
-fn map_calls_to_tool_label(calls: &[(String, HashMap<String, Value>)]) -> String {
+fn map_calls_to_tool_names(calls: &[(String, HashMap<String, Value>)]) -> String {
     calls
         .iter()
         .map(|(name, _)| name.clone())
@@ -419,13 +419,13 @@ impl GeminiModel {
                     .collect::<Vec<_>>(),
             )?;
 
-            let label = map_calls_to_tool_label(&calls);
+            let name = map_calls_to_tool_names(&calls);
             let tools_span = tracing::info_span!(
                 target: target!(),
                 parent: span.clone(),
                 events::SPAN_TOOLS,
                 tool_calls=tool_calls_str,
-                label=label
+                tool.name=name
             );
 
             let tool = self.tools.get(&calls[0].0);
@@ -755,13 +755,13 @@ impl GeminiModel {
                 });
             }
             let tool_calls_str = serde_json::to_string(&tools)?;
-            let label = map_calls_to_tool_label(&tool_calls);
+            let name = map_calls_to_tool_names(&tool_calls);
             let tools_span = tracing::info_span!(
                 target: target!(),
                 parent: call_span.id(),
                 events::SPAN_TOOLS,
                 tool_calls=tool_calls_str,
-                label=label
+                tool.name=name
             );
             let tool = self.tools.get(&tool_calls[0].0);
             if let Some(tool) = tool {
