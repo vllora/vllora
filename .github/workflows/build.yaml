@@ -232,8 +232,8 @@ jobs:
           SLACK_CHANNEL: engineering
           SLACK_COLOR: ${{ job.status }}
           SLACK_ICON: https://github.com/vllora.png?size=48
-          SLACK_MESSAGE: "Release ${{ github.ref_name }} updated formula in tap vllora/homebrew-vllora :rocket:"
-          SLACK_TITLE: New brew release available
+          SLACK_MESSAGE: "Release ${{ github.ref_name }} updated formula in tap vllora/homebrew-vllora. Use `brew upgrade vllora-beta` to update :rocket:"
+          SLACK_TITLE: New beta release available
           SLACK_USERNAME: vllora-bot
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
 
