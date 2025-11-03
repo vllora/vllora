@@ -54,7 +54,6 @@ reqwest = { version = "0.12.23", default-features = false, features = [
 jsonwebtoken = { version = "9.3.0", default-features = false, features = ["use_pem"] }
 regex = "1.12.2"
 secrecy = { version = "0.10.3", features = ["serde"] }
-actix-web = "4"
 tonic = { workspace = true }
 dashmap = "6.1.0"
 bytes = { version = "1", features = ["serde"] }
@@ -69,14 +68,6 @@ opentelemetry-proto = { version = "0.30.0", features = [
   "trace",
   "with-serde",
 ] }
-rmcp = { version = "0.8.3", default-features = true, features = [
-  "reqwest",
-  "client",
-  "server",
-  "transport-streamable-http-client-reqwest",
-  "transport-sse-client-reqwest"
-] }
-rmcp-macros = { version = "0.8.3", default-features = true}
 parking_lot = "0.12.4"
 rand = "0.9"
 
@@ -93,6 +84,17 @@ diesel_migrations = { version = "2.3.0", features = ["sqlite"] }
 r2d2 = "0.8.10"
 opentelemetry-semantic-conventions = "0.30.0"
 actix-http = "3.11.1"
+actix-web = "4"
+
+rmcp = { version = "0.8.3", default-features = true, features = [
+  "reqwest",
+  "client",
+  "server",
+  "transport-streamable-http-client-reqwest",
+  "transport-sse-client-reqwest"
+] }
+rmcp-macros = { version = "0.8.3", default-features = true}
+rmcp-actix-web = { version = "0.8.11", default-features = false, features = ["transport-streamable-http"] }
 
 [features]
 default = ["sqlite"]

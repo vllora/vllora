@@ -691,7 +691,7 @@ pub struct BedrockModelParams {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum ProviderModelParams {
-    OpenAI(OpenAiModelParams),
+    OpenAI(Box<OpenAiModelParams>),
     Bedrock(BedrockModelParams),
 }
 

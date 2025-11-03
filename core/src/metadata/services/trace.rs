@@ -2,12 +2,14 @@ use crate::metadata::error::DatabaseError;
 use crate::metadata::models::trace::{DbNewTrace, DbTrace};
 use crate::metadata::pool::DbPool;
 use crate::metadata::schema::traces;
+use crate::types::handlers::pagination::{PaginatedResult, Pagination};
+use crate::types::traces::{LangdbSpan, Operation};
 use diesel::prelude::*;
 use diesel::sql_types::{Nullable, Text};
 use std::collections::HashMap;
-use std::sync::Arc;
 
 #[derive(Debug, Clone)]
+
 pub struct ListTracesQuery {
     pub project_id: Option<String>,
     pub run_ids: Option<Vec<String>>,
@@ -30,8 +32,36 @@ pub struct ListTracesQuery {
     pub offset: i64,
 }
 
+impl Default for ListTracesQuery {
+    fn default() -> Self {
+        Self {
+            project_id: None,
+            run_ids: None,
+            thread_ids: None,
+            operation_names: None,
+            parent_span_ids: None,
+            filter_null_thread: false,
+            filter_null_run: false,
+            filter_null_operation: false,
+            filter_null_parent: false,
+            filter_not_null_thread: false,
+            filter_not_null_run: false,
+            filter_not_null_operation: false,
+            filter_not_null_parent: false,
+            start_time_min: None,
+            start_time_max: None,
+            limit: 100,
+            offset: 0,
+        }
+    }
+}
+
 pub trait TraceService {
     fn list(&self, query: ListTracesQuery) -> Result<Vec<DbTrace>, DatabaseError>;
+    fn list_paginated(
+        &self,
+        query: ListTracesQuery,
+    ) -> Result<PaginatedResult<LangdbSpan>, DatabaseError>;
     fn get_by_run_id(
         &self,
         run_id: &str,
@@ -48,13 +78,16 @@ pub trait TraceService {
     ) -> Result<HashMap<String, Option<String>>, DatabaseError>;
 }
 
+#[derive(Clone)]
 pub struct TraceServiceImpl {
-    db_pool: Arc<DbPool>,
+    db_pool: DbPool,
 }
 
 impl TraceServiceImpl {
-    pub fn new(db_pool: Arc<DbPool>) -> Self {
-        Self { db_pool }
+    pub fn new(db_pool: DbPool) -> Self {
+        Self {
+            db_pool: db_pool.clone(),
+        }
     }
 }
 
@@ -131,6 +164,61 @@ impl TraceService for TraceServiceImpl {
             .map_err(DatabaseError::QueryError)?;
 
         Ok(results)
+    }
+
+    fn list_paginated(
+        &self,
+        query: ListTracesQuery,
+    ) -> Result<PaginatedResult<LangdbSpan>, DatabaseError> {
+        self.list(query.clone()).map(|traces| {
+            let mut pagination = Pagination {
+                offset: query.offset,
+                limit: query.limit,
+                total: 0,
+            };
+            if traces.is_empty() {
+                return PaginatedResult::<LangdbSpan>::new(vec![], pagination);
+            }
+
+            // Get child attributes for all traces
+            let trace_ids: Vec<String> = traces.iter().map(|t| t.trace_id.clone()).collect();
+            let span_ids: Vec<String> = traces.iter().map(|t| t.span_id.clone()).collect();
+            let project_id = traces.first().and_then(|t| t.project_id.clone());
+
+            let child_attrs = self
+                .get_child_attributes(&trace_ids, &span_ids, project_id.as_deref())
+                .unwrap_or_default();
+
+            let spans: Vec<LangdbSpan> = traces
+                .into_iter()
+                .map(|trace| {
+                    let attribute = trace.parse_attribute().unwrap_or_default();
+
+                    // Get child_attribute from the map
+                    let child_attribute = child_attrs
+                        .get(&trace.span_id)
+                        .and_then(|opt| opt.as_ref())
+                        .and_then(|json_str| serde_json::from_str(json_str).ok());
+
+                    LangdbSpan {
+                        trace_id: trace.trace_id,
+                        span_id: trace.span_id,
+                        thread_id: trace.thread_id,
+                        parent_span_id: trace.parent_span_id,
+                        operation_name: Operation::from(trace.operation_name.as_str()),
+                        start_time_us: trace.start_time_us,
+                        finish_time_us: trace.finish_time_us,
+                        attribute,
+                        child_attribute,
+                        run_id: trace.run_id,
+                    }
+                })
+                .collect();
+
+            let total = self.count(query.clone()).unwrap_or(0);
+            pagination.total = total;
+            PaginatedResult::<LangdbSpan>::new(spans, pagination)
+        })
     }
 
     fn get_by_run_id(
