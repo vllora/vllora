@@ -47,7 +47,7 @@ aws-smithy-runtime-api = "1.9.2"
 aws-config = { version = "1.8.8", features = ["behavior-version-latest"] }
 bytemuck = { version = "1.24", features = ["derive"] }
 reqwest-eventsource = "0.6.0"
-reqwest = { version = "0.12.23", default-features = false, features = [
+reqwest = { version = "0.12.24", default-features = false, features = [
   "json",
   "stream",
 ] }
