@@ -17,6 +17,7 @@ pub enum TypeFilter {
 pub enum GroupBy {
     Time,
     Thread,
+    Run,
     // Future: Model, User, etc.
 }
 
@@ -42,6 +43,8 @@ pub struct GroupUsageInformation {
     pub time_bucket: Option<i64>, // Populated when group_by=time
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
     pub thread_id: Option<String>, // Populated when group_by=thread
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+    pub run_id: Option<String>, // Populated when group_by=run
 
     // Aggregated data (same for all grouping types)
     #[diesel(sql_type = diesel::sql_types::Text)]
@@ -191,14 +194,19 @@ impl GroupService for GroupServiceImpl {
             GroupBy::Time => {
                 let bucket_size_us = query.bucket_size_seconds * 1_000_000;
                 (
-                    format!("(start_time_us / {}) * {} as time_bucket, NULL as thread_id", bucket_size_us, bucket_size_us),
+                    format!("(start_time_us / {}) * {} as time_bucket, NULL as thread_id, NULL as run_id", bucket_size_us, bucket_size_us),
                     "time_bucket".to_string(),
                     "time_bucket DESC".to_string(),
                 )
             }
             GroupBy::Thread => (
-                "NULL as time_bucket, thread_id".to_string(),
+                "NULL as time_bucket, thread_id, NULL as run_id".to_string(),
                 "thread_id".to_string(),
+                "start_time_us DESC".to_string(),
+            ),
+            GroupBy::Run => (
+                "NULL as time_bucket, NULL as thread_id, run_id".to_string(),
+                "run_id".to_string(),
                 "start_time_us DESC".to_string(),
             ),
         };
@@ -273,6 +281,7 @@ impl GroupService for GroupServiceImpl {
                 format!("(start_time_us / {}) * {}", bucket_size_us, bucket_size_us)
             }
             GroupBy::Thread => "thread_id".to_string(),
+            GroupBy::Run => "run_id".to_string(),
         };
 
         // Count distinct groups
