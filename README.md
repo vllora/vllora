@@ -82,6 +82,18 @@ The binary will be available at `target/release/vlora`.
 cargo test
 ```
 
+## License
+
+vLLora is [fair-code](https://faircode.io/) distributed under the [Elastic License 2.0 (ELv2)](https://github.com/vllora/vllora/blob/main/LICENSE.md).
+
+- **Source Available**: Always visible vLLora source code
+- **Self-Hostable**: Deploy vLLora anywhere you need
+- **Extensible**: Add your own providers, tools, MCP servers, and custom functionality
+
+For Enterprise License, contact us at [hello@vllora.dev](mailto:hello@vllora.dev).
+
+Additional information about the license model can be found in the docs.
+
 ## Contributing
 
 We welcome contributions! Please check out our [Contributing Guide](CONTRIBUTING.md) for guidelines on:
@@ -91,7 +103,3 @@ We welcome contributions! Please check out our [Contributing Guide](CONTRIBUTING
 - Code style conventions
 - Development workflow
 - Testing requirements
-
-## License
-
-This project is released under the [Elastic License 2.0](./LICENSE.md). See the license file for more information.
