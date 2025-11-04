@@ -6,7 +6,7 @@ use crate::types::traces::Operation;
 const MAX_LIMIT: i64 = 1000;
 
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
-
+#[schemars(description = "The request to list traces from vllora.")]
 pub struct ListTracesRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub run_ids: Option<Vec<String>>,
