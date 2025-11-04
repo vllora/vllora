@@ -28,6 +28,10 @@ pub struct ServeArgs {
     /// Comma-separated list of allowed CORS origins (e.g., http://localhost:3000,https://example.com)
     #[arg(long, value_name = "ORIGINS")]
     pub cors_origins: Option<String>,
+
+    /// Don't open UI in browser on startup
+    #[arg(long, value_name = "OPEN_UI_ON_STARTUP", default_value = "true")]
+    pub open_ui_on_startup: Option<bool>,
 }
 
 #[derive(Subcommand)]

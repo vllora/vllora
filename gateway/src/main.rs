@@ -162,6 +162,7 @@ async fn main() -> Result<(), CliError> {
 
             let backend_port = config.http.port;
             let ui_port = config.ui.port;
+            let open_ui_on_startup = config.ui.open_on_startup;
 
             let api_server = ApiServer::new(config, db_pool.clone());
             let server_handle = tokio::spawn(async move {
@@ -195,14 +196,16 @@ async fn main() -> Result<(), CliError> {
                 let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", ui_port)).await;
                 match listener {
                     Ok(listener) => {
-                        // Open UI in browser after server starts
-                        let ui_url = format!("http://localhost:{}", ui_port);
-                        // Try to open in browser, but don't fail if it doesn't work
-                        if let Err(e) = open::that(&ui_url) {
-                            println!("⚠ Could not open browser automatically: {}", e);
-                            println!("   Please open {} manually", ui_url);
-                        } else {
-                            println!("🚀 Opening UI in your default browser...");
+                        if open_ui_on_startup {
+                            // Open UI in browser after server starts
+                            let ui_url = format!("http://localhost:{}", ui_port);
+                            // Try to open in browser, but don't fail if it doesn't work
+                            if let Err(e) = open::that(&ui_url) {
+                                println!("⚠ Could not open browser automatically: {}", e);
+                                println!("   Please open {} manually", ui_url);
+                            } else {
+                                println!("🚀 Opening UI in your default browser...");
+                            }
                         }
 
                         axum::serve(listener, router.into_make_service())

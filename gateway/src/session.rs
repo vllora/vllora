@@ -31,10 +31,7 @@ pub fn check_version(session_id: String) {
     tokio::spawn(async move {
         let version = format!("v{}", env!("CARGO_PKG_VERSION"));
         let mut headers = HeaderMap::new();
-        headers.insert(
-            "X-vllora-version", 
-            HeaderValue::from_str(&version).unwrap(),
-        );
+        headers.insert("X-vllora-version", HeaderValue::from_str(&version).unwrap());
 
         if let Some(latest) = fetch_latest_release_version().await {
             if let Ok(v) = HeaderValue::from_str(&latest) {

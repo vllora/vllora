@@ -37,11 +37,15 @@ pub struct Config {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UiConfig {
     pub port: u16,
+    pub open_on_startup: bool,
 }
 
 impl Default for UiConfig {
     fn default() -> Self {
-        Self { port: 9091 }
+        Self {
+            port: 9091,
+            open_on_startup: true,
+        }
     }
 }
 
@@ -94,6 +98,10 @@ impl Config {
             // Apply UI config overrides
             if let Some(port) = args.ui_port {
                 self.ui.port = port;
+            }
+
+            if let Some(open_ui_on_startup) = &args.open_ui_on_startup {
+                self.ui.open_on_startup = *open_ui_on_startup;
             }
 
             if let Some(cors) = &args.cors_origins {
