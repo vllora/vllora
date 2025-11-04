@@ -104,6 +104,7 @@ version = "2.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "24eda4e2a6e042aa4e55ac438a2ae052d3b5da0ecf83d7411e1a368946925208"
 dependencies = [
+ "actix-macros",
  "futures-core",
  "tokio",
 ]
@@ -350,6 +351,28 @@ name = "async-openai-macros"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0289cba6d5143bfe8251d57b4a8cac036adf158525a76533a7082ba65ec76398"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "async-stream"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b5a71a6f37880a80d1d7f19efd781e4b5de42c88f0722cc13bcb6cc2cfe8476"
+dependencies = [
+ "async-stream-impl",
+ "futures-core",
+ "pin-project-lite",
+]
+
+[[package]]
+name = "async-stream-impl"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7c24de15d275a1ecfd47a380fb4d5ec9bfe0933f309ed5e705b775596a3574d"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -966,6 +989,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "bon"
+version = "3.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ebeb9aaf9329dff6ceb65c689ca3db33dbf15f324909c60e4e5eef5701ce31b1"
+dependencies = [
+ "bon-macros",
+ "rustversion",
+]
+
+[[package]]
+name = "bon-macros"
+version = "3.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77e9d642a7e3a318e37c2c9427b5a6a48aa1ad55dcd986f3034ab2239045a645"
+dependencies = [
+ "darling 0.21.3",
+ "ident_case",
+ "prettyplease",
+ "proc-macro2",
+ "quote",
+ "rustversion",
+ "syn",
+]
+
+[[package]]
 name = "borrow-or-share"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1081,9 +1129,9 @@ dependencies = [
 
 [[package]]
 name = "cfg-if"
-version = "1.0.0"
+version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
+checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
 name = "cfg_aliases"
@@ -3363,11 +3411,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1fdad1258f7259fdc0f2dfc266939c82c3b5d1fd72bcde274d600cdc27e60243"
 dependencies = [
  "base64 0.22.1",
+ "bytes",
  "chrono",
  "futures",
  "http 1.2.0",
+ "http-body 1.0.1",
+ "http-body-util",
  "paste",
  "pin-project-lite",
+ "rand 0.9.2",
  "reqwest",
  "rmcp-macros",
  "schemars 1.0.3",
@@ -3375,6 +3427,31 @@ dependencies = [
  "serde_json",
  "sse-stream",
  "thiserror 2.0.16",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "tower-service",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "rmcp-actix-web"
+version = "0.8.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bcf7d40f035b92a31b04b4a8d2e2e37b82c87a1b604143ca31236f954486d58e"
+dependencies = [
+ "actix-rt",
+ "actix-web",
+ "async-stream",
+ "bon",
+ "bytes",
+ "futures",
+ "http 1.2.0",
+ "rmcp",
+ "serde",
+ "serde_json",
+ "sse-stream",
  "tokio",
  "tokio-stream",
  "tokio-util",
@@ -3702,6 +3779,7 @@ version = "1.0.145"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "402a6f66d8c709116cf22f558eab210f5a50187f702eb4d7e5ef38d9a7f1c79c"
 dependencies = [
+ "indexmap 2.11.4",
  "itoa",
  "memchr",
  "ryu",
@@ -4615,7 +4693,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vllora"
-version = "1.0.0"
+version = "0.1.5"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -4653,7 +4731,7 @@ dependencies = [
 
 [[package]]
 name = "vllora_core"
-version = "1.0.0"
+version = "0.1.5"
 dependencies = [
  "actix-http",
  "actix-web",
@@ -4690,6 +4768,7 @@ dependencies = [
  "reqwest",
  "reqwest-eventsource",
  "rmcp",
+ "rmcp-actix-web",
  "rmcp-macros",
  "secrecy",
  "serde",
@@ -4711,7 +4790,7 @@ dependencies = [
 
 [[package]]
 name = "vllora_guardrails"
-version = "1.0.0"
+version = "0.1.5"
 dependencies = [
  "async-openai-compat",
  "async-trait",

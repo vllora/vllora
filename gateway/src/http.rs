@@ -37,6 +37,7 @@ use vllora_core::handler::middleware::rate_limit::RateLimitMiddleware;
 use vllora_core::handler::middleware::run_id::RunId;
 use vllora_core::handler::middleware::thread_id::ThreadId;
 use vllora_core::handler::CallbackHandlerFn;
+use vllora_core::mcp::server::LocalSessionManager;
 use vllora_core::metadata::models::session::DbSession;
 use vllora_core::metadata::pool::DbPool;
 use vllora_core::metadata::project_trace::ProjectTraceTenantResolver;
@@ -50,6 +51,8 @@ use vllora_core::types::gateway::CostCalculator;
 use vllora_core::types::guardrails::service::GuardrailsEvaluator;
 use vllora_core::types::guardrails::Guard;
 use vllora_core::usage::InMemoryStorage;
+
+use vllora_core::metadata::services::trace::TraceServiceImpl as MetadataTraceServiceImpl;
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 #[serde(crate = "serde")]
@@ -81,14 +84,26 @@ impl ApiServer {
 
     pub fn print_useful_info(&self) {
         // Print friendly startup message
-        println!("\n🚀 AI Gateway starting up:");
+        println!("\n🌐 AI Gateway starting up:");
         println!(
-            "   🌐 HTTP server ready at: \x1b[36mhttp://{}:{}\x1b[0m",
+            "   🚀 HTTP server ready at: \x1b[36mhttp://{}:{}\x1b[0m",
             self.config.http.host, self.config.http.port
         );
+        println!("\n🌐 Starting UI server...");
         println!(
             "   🚀 UI server ready at: \x1b[36mhttp://{}:{}\x1b[0m",
             self.config.http.host, self.config.ui.port
+        );
+        println!("\n🌐 Starting MCP server...");
+        println!(
+            "   🚀 MCP server ready at: \x1b[36mhttp://{}:{}/mcp\x1b[0m",
+            self.config.http.host, self.config.http.port
+        );
+
+        println!("\n🌐 Starting OTEL gRPC collector...");
+        println!(
+            "   🚀 OTEL gRPC collector ready at: \x1b[36mhttp://{}:4317\x1b[0m",
+            self.config.http.host
         );
 
         // Add documentation and community links
@@ -140,6 +155,8 @@ impl ApiServer {
         let events_senders_container = Arc::new(EventsSendersContainer::new(events_senders));
 
         let project_traces_senders = project_trace_senders.clone();
+        let session_manager = Arc::new(LocalSessionManager::default());
+
         let server = HttpServer::new(move || {
             let cors = Self::get_cors(CorsOptions::Permissive);
             Self::create_app_entry(
@@ -152,15 +169,16 @@ impl ApiServer {
                 events_senders_container.clone(),
                 project_traces_senders.clone(),
                 session.clone(),
+                session_manager.clone(),
             )
         })
         .bind((self.config.http.host.as_str(), self.config.http.port))?
         .run()
         .map_err(ServerError::Actix);
 
-        let writer = Box::new(SqliteTraceWriterTransport::new(Arc::new(
+        let writer = Box::new(SqliteTraceWriterTransport::new(
             server_config.db_pool.clone(),
-        ))) as Box<dyn SpanWriterTransport>;
+        )) as Box<dyn SpanWriterTransport>;
 
         let project_service = ProjectServiceImpl::new(server_config.db_pool.clone());
         let trace_service = TraceServiceServer::new(TraceServiceImpl::new(
@@ -193,6 +211,7 @@ impl ApiServer {
         events_senders_container: Arc<EventsSendersContainer>,
         project_trace_senders: Arc<BroadcastChannelManager>,
         session: DbSession,
+        session_manager: Arc<LocalSessionManager>,
     ) -> App<
         impl ServiceFactory<
             ServiceRequest,
@@ -220,6 +239,12 @@ impl ApiServer {
 
         let model_service =
             Box::new(ModelServiceImpl::new(db_pool.clone())) as Box<dyn ModelService>;
+
+        let mcp_scope = vllora_core::mcp::server::service::attach_vllora_mcp(
+            web::scope("/mcp"),
+            session_manager.clone(),
+            MetadataTraceServiceImpl::new(db_pool.clone()),
+        );
 
         app.wrap(TraceLogger)
             .wrap(ThreadId)
@@ -312,6 +337,7 @@ impl ApiServer {
                     .route("/start", web::post().to(session::start_session))
                     .route("/fetch_key/{session_id}", web::get().to(session::fetch_key)),
             )
+            .service(mcp_scope)
             .wrap(cors)
     }
 

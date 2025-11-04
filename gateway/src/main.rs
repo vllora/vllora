@@ -197,8 +197,6 @@ async fn main() -> Result<(), CliError> {
                     Ok(listener) => {
                         // Open UI in browser after server starts
                         let ui_url = format!("http://localhost:{}", ui_port);
-                        println!("🌐 UI available at: {}", ui_url);
-
                         // Try to open in browser, but don't fail if it doesn't work
                         if let Err(e) = open::that(&ui_url) {
                             println!("⚠ Could not open browser automatically: {}", e);

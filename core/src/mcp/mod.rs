@@ -5,6 +5,7 @@
 
 // Re-export MCP types from the types module
 
+pub mod server;
 pub mod transport;
 
 pub use crate::types::mcp::*;

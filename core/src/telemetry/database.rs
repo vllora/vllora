@@ -7,7 +7,6 @@ use crate::GatewayError;
 use crate::GatewayResult;
 use serde_json::Value;
 use std::collections::HashMap;
-use std::sync::Arc;
 
 pub struct DatabaseSpanWritter {
     transport: Box<dyn DatabaseTransport + Send + Sync>,
@@ -39,7 +38,7 @@ pub struct SqliteTraceWriterTransport {
 }
 
 impl SqliteTraceWriterTransport {
-    pub fn new(db_pool: Arc<DbPool>) -> Self {
+    pub fn new(db_pool: DbPool) -> Self {
         Self {
             trace_service: TraceServiceImpl::new(db_pool),
         }

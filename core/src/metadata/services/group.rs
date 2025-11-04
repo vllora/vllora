@@ -3,7 +3,6 @@ use crate::metadata::pool::DbPool;
 use diesel::prelude::*;
 use diesel::{sql_query, RunQueryDsl};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -98,12 +97,14 @@ pub trait GroupService {
 }
 
 pub struct GroupServiceImpl {
-    db_pool: Arc<DbPool>,
+    db_pool: DbPool,
 }
 
 impl GroupServiceImpl {
-    pub fn new(db_pool: Arc<DbPool>) -> Self {
-        Self { db_pool }
+    pub fn new(db_pool: DbPool) -> Self {
+        Self {
+            db_pool: db_pool.clone(),
+        }
     }
 
     // Helper function to safely escape string values for SQL

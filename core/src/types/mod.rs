@@ -5,6 +5,7 @@ pub mod embed;
 pub mod engine;
 pub mod gateway;
 pub mod guardrails;
+pub mod handlers;
 pub mod http;
 pub mod image;
 pub mod json;
@@ -14,6 +15,7 @@ pub mod metadata;
 pub mod project_settings;
 pub mod provider;
 pub mod threads;
+pub mod traces;
 
 pub const LANGDB_API_URL: &str = "https://api.us-east-1.langdb.ai/v1";
 pub const LANGDB_UI_URL: &str = "https://app.langdb.ai";
