@@ -94,4 +94,4 @@ We welcome contributions! Please check out our [Contributing Guide](CONTRIBUTING
 
 ## License
 
-This project is released under the [Apache License 2.0](./LICENSE.md). See the license file for more information.
+This project is released under the [Elastic License 2.0](./LICENSE.md). See the license file for more information.
