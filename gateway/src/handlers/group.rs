@@ -2,7 +2,6 @@ use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::sync::Arc;
 use vllora_core::metadata::models::project::DbProject;
 use vllora_core::metadata::pool::DbPool;
 use vllora_core::metadata::services::group::{
@@ -116,8 +115,7 @@ pub async fn list_root_group(
     query: web::Query<ListGroupQueryParams>,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
-    let group_service: GroupServiceImpl =
-        GroupServiceImpl::new(Arc::new(db_pool.get_ref().clone()));
+    let group_service: GroupServiceImpl = GroupServiceImpl::new(db_pool.get_ref().clone());
 
     // Extract project_id from extensions (set by ProjectMiddleware)
     let project_id = req.extensions().get::<DbProject>().map(|p| p.slug.clone());
@@ -199,8 +197,8 @@ pub async fn get_spans_by_group(
     query: web::Query<GetSpansByGroupQuery>,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
-    let group_service = GroupServiceImpl::new(Arc::new(db_pool.get_ref().clone()));
-    let trace_service = TraceServiceImpl::new(Arc::new(db_pool.get_ref().clone()));
+    let group_service = GroupServiceImpl::new(db_pool.get_ref().clone());
+    let trace_service = TraceServiceImpl::new(db_pool.get_ref().clone());
 
     // Extract project_id from extensions (set by ProjectMiddleware)
     let project_id = req.extensions().get::<DbProject>().map(|p| p.slug.clone());
