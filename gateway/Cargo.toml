@@ -1,6 +1,6 @@
 [package]
 name = "vllora"
-version = "0.1.0"
+version = "0.1.5"
 authors = ["Vllora Team<api@vllora.dev>"]
 description = "AI gateway for managing and routing LLM requests - Govern, Secure, and Optimize your AI Traffic."
 license = "Apache-2.0"
