@@ -69,6 +69,13 @@ jobs:
           name: ui-dist
           path: gateway/dist
 
+      - name: Generate UI content hash
+        id: ui-hash
+        run: |
+          UI_HASH=$(find gateway/dist -type f -exec sha256sum {} \; | sort | sha256sum | cut -d' ' -f1)
+          echo "hash=$UI_HASH" >> $GITHUB_OUTPUT
+          echo "UI content hash: $UI_HASH"
+
       - name: Install base dependencies
         run: |
           sudo apt-get update && \
@@ -92,11 +99,11 @@ jobs:
           profile: minimal
           toolchain: stable
           target: ${{ matrix.target }}
-      
+
       - uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.target }}
-      
+          key: ${{ matrix.target }}-${{ steps.ui-hash.outputs.hash }}
+
       - name: Build Gateway project
         env:
           CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
@@ -132,7 +139,14 @@ jobs:
         with:
           name: ui-dist
           path: gateway/dist
-      
+
+      - name: Generate UI content hash
+        id: ui-hash
+        run: |
+          UI_HASH=$(find gateway/dist -type f -exec shasum -a 256 {} \; | sort | shasum -a 256 | cut -d' ' -f1)
+          echo "hash=$UI_HASH" >> $GITHUB_OUTPUT
+          echo "UI content hash: $UI_HASH"
+
       - name: Install dependencies
         run: |
           brew install postgresql sqlite3
@@ -149,11 +163,11 @@ jobs:
           profile: minimal
           toolchain: stable
           target: ${{ matrix.target }}
-      
+
       - uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.target }}
-      
+          key: ${{ matrix.target }}-${{ steps.ui-hash.outputs.hash }}
+
       - name: Build Gateway project
         env:
           PQ_LIB_STATIC: "1"
