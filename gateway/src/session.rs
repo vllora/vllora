@@ -29,11 +29,11 @@ pub async fn fetch_session_id(pool: DbPool) -> DbSession {
 
 pub fn check_version(session_id: String) {
     tokio::spawn(async move {
-        let version = env!("CARGO_PKG_VERSION");
+        let version = format!("v{}", env!("CARGO_PKG_VERSION"));
         let mut headers = HeaderMap::new();
         headers.insert(
-            "X-vllora-version",
-            HeaderValue::from_str(&format!("v{version}")).unwrap(),
+            "X-vllora-version", 
+            HeaderValue::from_str(&version).unwrap(),
         );
 
         if let Some(latest) = fetch_latest_release_version().await {
@@ -42,7 +42,7 @@ pub fn check_version(session_id: String) {
             }
 
             if version != latest {
-                println!("New version available: {latest}. Your version is outdated. Please update to the latest version");
+                println!("New version available: {latest}. Please update to the latest version");
                 println!("Do upgrade with \x1b[32mbrew upgrade vllora\x1b[0m");
             }
         }
