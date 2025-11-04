@@ -910,7 +910,11 @@ impl<C: Config> OpenAIModel<C> {
                     .get(tool_calls[0].function.name.as_str())
                     .unwrap();
 
-                let tool_names = tool_calls.iter().map(|t| t.function.name.clone()).collect::<Vec<String>>().join(",");
+                let tool_names = tool_calls
+                    .iter()
+                    .map(|t| t.function.name.clone())
+                    .collect::<Vec<String>>()
+                    .join(",");
                 let tools_span = tracing::info_span!(
                     target: target!(),
                     parent: span.clone(),

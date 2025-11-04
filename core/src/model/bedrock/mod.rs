@@ -586,12 +586,11 @@ impl BedrockModel {
             },
 
             StopReason::ToolUse => {
-                let tools_span =
-                    tracing::info_span!(
-                        target: target!(),
-                        events::SPAN_TOOLS,
-                        tool.name=field::Empty
-                    );
+                let tools_span = tracing::info_span!(
+                    target: target!(),
+                    events::SPAN_TOOLS,
+                    tool.name=field::Empty
+                );
                 tools_span.follows_from(span.id());
                 if let Some(message_output) = response.output {
                     match message_output {
@@ -996,9 +995,9 @@ impl BedrockModel {
 
                 let tool_calls_str = serde_json::to_string(&tool_calls)?;
                 let tools_span = tracing::info_span!(
-                    target: target!(), 
-                    events::SPAN_TOOLS, 
-                    tool_calls=tool_calls_str, 
+                    target: target!(),
+                    events::SPAN_TOOLS,
+                    tool_calls=tool_calls_str,
                     tool.name=tool_uses.iter().map(|t| t.name.clone()).collect::<Vec<String>>().join(",")
                 );
 
