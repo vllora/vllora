@@ -6,7 +6,7 @@ use std::sync::Arc;
 use vllora_core::metadata::models::project::DbProject;
 use vllora_core::metadata::pool::DbPool;
 use vllora_core::metadata::services::group::{
-    GroupService, GroupServiceImpl, GroupUsageInformation, ListGroupQuery, TypeFilter,
+    GroupBy, GroupService, GroupServiceImpl, GroupUsageInformation, ListGroupQuery, TypeFilter,
 };
 use vllora_core::metadata::services::trace::{TraceService, TraceServiceImpl};
 
@@ -24,6 +24,8 @@ pub struct ListGroupQueryParams {
     pub start_time_max: Option<i64>,
     #[serde(alias = "bucketSize")]
     pub bucket_size: Option<i64>, // Time bucket size in seconds
+    #[serde(alias = "groupBy")]
+    pub group_by: Option<String>, // Grouping mode: "time" or "thread" (default: "time")
     pub limit: Option<i64>,
     pub offset: Option<i64>,
 }
@@ -41,7 +43,87 @@ pub struct Pagination {
     pub total: i64,
 }
 
-/// Response struct for group information with properly typed array fields
+/// Enum representing the grouping key (discriminated union)
+#[derive(Debug, Serialize, Clone)]
+#[serde(tag = "group_by", content = "group_key")]
+pub enum GroupByKey {
+    #[serde(rename = "time")]
+    Time { time_bucket: i64 },
+
+    #[serde(rename = "thread")]
+    Thread { thread_id: String },
+
+    // Future grouping types can be added here:
+    // #[serde(rename = "model")]
+    // Model { model_name: String },
+}
+
+/// Generic response struct for all grouping types
+#[derive(Debug, Serialize)]
+pub struct GenericGroupResponse {
+    #[serde(flatten)]
+    pub key: GroupByKey, // Flattens the enum fields into the response
+    pub thread_ids: Vec<String>,
+    pub trace_ids: Vec<String>,
+    pub run_ids: Vec<String>,
+    pub root_span_ids: Vec<String>,
+    pub request_models: Vec<String>,
+    pub used_models: Vec<String>,
+    pub llm_calls: i64,
+    pub cost: f64,
+    pub input_tokens: Option<i64>,
+    pub output_tokens: Option<i64>,
+    pub start_time_us: i64,
+    pub finish_time_us: i64,
+    pub errors: Vec<String>,
+}
+
+impl From<GroupUsageInformation> for GenericGroupResponse {
+    fn from(group: GroupUsageInformation) -> Self {
+        // Parse JSON string fields into proper arrays
+        let thread_ids: Vec<String> =
+            serde_json::from_str(&group.thread_ids_json).unwrap_or_default();
+        let trace_ids: Vec<String> =
+            serde_json::from_str(&group.trace_ids_json).unwrap_or_default();
+        let run_ids: Vec<String> = serde_json::from_str(&group.run_ids_json).unwrap_or_default();
+        let root_span_ids: Vec<String> =
+            serde_json::from_str(&group.root_span_ids_json).unwrap_or_default();
+        let request_models: Vec<String> =
+            serde_json::from_str(&group.request_models_json).unwrap_or_default();
+        let used_models: Vec<String> =
+            serde_json::from_str(&group.used_models_json).unwrap_or_default();
+        let errors: Vec<String> = serde_json::from_str(&group.errors_json).unwrap_or_default();
+
+        // Determine which grouping key to use
+        let key = if let Some(time_bucket) = group.time_bucket {
+            GroupByKey::Time { time_bucket }
+        } else if let Some(thread_id) = group.thread_id {
+            GroupByKey::Thread { thread_id }
+        } else {
+            // This shouldn't happen if SQL is correct
+            panic!("GroupUsageInformation must have either time_bucket or thread_id set")
+        };
+
+        Self {
+            key,
+            thread_ids,
+            trace_ids,
+            run_ids,
+            root_span_ids,
+            request_models,
+            used_models,
+            llm_calls: group.llm_calls,
+            cost: group.cost,
+            input_tokens: group.input_tokens,
+            output_tokens: group.output_tokens,
+            start_time_us: group.start_time_us,
+            finish_time_us: group.finish_time_us,
+            errors,
+        }
+    }
+}
+
+// Keep old GroupResponse for backward compatibility (will be deprecated)
 #[derive(Debug, Serialize)]
 pub struct GroupResponse {
     pub time_bucket: i64,
@@ -58,41 +140,6 @@ pub struct GroupResponse {
     pub start_time_us: i64,
     pub finish_time_us: i64,
     pub errors: Vec<String>,
-}
-
-impl From<GroupUsageInformation> for GroupResponse {
-    fn from(group: GroupUsageInformation) -> Self {
-        // Parse JSON string fields into proper arrays
-        let thread_ids: Vec<String> =
-            serde_json::from_str(&group.thread_ids_json).unwrap_or_default();
-        let trace_ids: Vec<String> =
-            serde_json::from_str(&group.trace_ids_json).unwrap_or_default();
-        let run_ids: Vec<String> = serde_json::from_str(&group.run_ids_json).unwrap_or_default();
-        let root_span_ids: Vec<String> =
-            serde_json::from_str(&group.root_span_ids_json).unwrap_or_default();
-        let request_models: Vec<String> =
-            serde_json::from_str(&group.request_models_json).unwrap_or_default();
-        let used_models: Vec<String> =
-            serde_json::from_str(&group.used_models_json).unwrap_or_default();
-        let errors: Vec<String> = serde_json::from_str(&group.errors_json).unwrap_or_default();
-
-        Self {
-            time_bucket: group.time_bucket,
-            thread_ids,
-            trace_ids,
-            run_ids,
-            root_span_ids,
-            request_models,
-            used_models,
-            llm_calls: group.llm_calls,
-            cost: group.cost,
-            input_tokens: group.input_tokens,
-            output_tokens: group.output_tokens,
-            start_time_us: group.start_time_us,
-            finish_time_us: group.finish_time_us,
-            errors,
-        }
-    }
 }
 
 /// GET /group - List root spans grouped by time buckets
@@ -122,6 +169,17 @@ pub async fn list_root_group(
     // Extract project_id from extensions (set by ProjectMiddleware)
     let project_id = req.extensions().get::<DbProject>().map(|p| p.slug.clone());
 
+    // Parse group_by parameter (default: "time" for backward compatibility)
+    let group_by = match query.group_by.as_deref().unwrap_or("time") {
+        "time" => GroupBy::Time,
+        "thread" => GroupBy::Thread,
+        other => {
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "error": format!("Invalid group_by parameter: '{}'. Must be 'time' or 'thread'", other)
+            })))
+        }
+    };
+
     let list_query = ListGroupQuery {
         project_id: project_id.clone(),
         thread_ids: query
@@ -137,6 +195,7 @@ pub async fn list_root_group(
         start_time_min: query.start_time_min,
         start_time_max: query.start_time_max,
         bucket_size_seconds: query.bucket_size.unwrap_or(3600), // Default to 1 hour
+        group_by,                                                // NEW: Add GroupBy enum
         limit: query.limit.unwrap_or(100),
         offset: query.offset.unwrap_or(0),
     };
@@ -144,8 +203,8 @@ pub async fn list_root_group(
     let groups = group_service.list_root_group(list_query.clone())?;
     let total = group_service.count_root_group(list_query)?;
 
-    // Transform GroupUsageInformation into GroupResponse with properly typed arrays
-    let group_responses: Vec<GroupResponse> = groups.into_iter().map(|g| g.into()).collect();
+    // Transform GroupUsageInformation into GenericGroupResponse with properly typed arrays
+    let group_responses: Vec<GenericGroupResponse> = groups.into_iter().map(|g| g.into()).collect();
 
     let result = PaginatedResult {
         pagination: Pagination {
@@ -268,4 +327,115 @@ pub async fn get_spans_by_group(
 
             HttpResponse::Ok().json(result)
         })?)
+}
+
+/// GET /group/thread/{thread_id} - Get all spans for a specific thread
+///
+/// This endpoint retrieves all spans that belong to the specified thread_id.
+/// Similar to get_spans_by_group but filters by thread_id instead of time bucket.
+pub async fn get_spans_by_thread(
+    req: HttpRequest,
+    thread_id: web::Path<String>,
+    query: web::Query<GetSpansByGroupQuery>,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let trace_service = TraceServiceImpl::new(Arc::new(db_pool.get_ref().clone()));
+
+    // Extract project_id from extensions (set by ProjectMiddleware)
+    let project_id = req.extensions().get::<DbProject>().map(|p| p.slug.clone());
+
+    let limit = query.limit.unwrap_or(100);
+    let offset = query.offset.unwrap_or(0);
+
+    // Use Diesel to query traces by thread_id
+    use vllora_core::metadata::models::trace::DbTrace;
+    use vllora_core::metadata::schema::traces;
+    use diesel::prelude::*;
+
+    let mut conn = db_pool.get().map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
+    })?;
+
+    // Get total count
+    let total = {
+        let mut count_query = traces::table
+            .filter(traces::thread_id.eq(thread_id.as_str()))
+            .into_boxed();
+
+        if let Some(ref proj_id) = project_id {
+            count_query = count_query.filter(traces::project_id.eq(proj_id));
+        }
+
+        count_query
+            .count()
+            .get_result::<i64>(&mut conn)
+            .map_err(|e| {
+                actix_web::error::ErrorInternalServerError(format!("Database query error: {}", e))
+            })?
+    };
+
+    // Get paginated results
+    let traces: Vec<DbTrace> = {
+        let mut data_query = traces::table
+            .filter(traces::thread_id.eq(thread_id.as_str()))
+            .into_boxed();
+
+        if let Some(ref proj_id) = project_id {
+            data_query = data_query.filter(traces::project_id.eq(proj_id));
+        }
+
+        data_query
+            .order(traces::start_time_us.asc())
+            .limit(limit)
+            .offset(offset)
+            .load::<DbTrace>(&mut conn)
+            .map_err(|e| {
+                actix_web::error::ErrorInternalServerError(format!("Database query error: {}", e))
+            })?
+    };
+
+    // Get child attributes for all traces
+    let trace_ids: Vec<String> = traces.iter().map(|t| t.trace_id.clone()).collect();
+    let span_ids: Vec<String> = traces.iter().map(|t| t.span_id.clone()).collect();
+
+    let child_attrs = trace_service
+        .get_child_attributes(&trace_ids, &span_ids, project_id.as_deref())
+        .unwrap_or_default();
+
+    let spans: Vec<LangdbSpan> = traces
+        .into_iter()
+        .map(|trace| {
+            let attribute = trace.parse_attribute().unwrap_or_default();
+
+            // Get child_attribute from the map
+            let child_attribute = child_attrs
+                .get(&trace.span_id)
+                .and_then(|opt| opt.as_ref())
+                .and_then(|json_str| serde_json::from_str(json_str).ok());
+
+            LangdbSpan {
+                trace_id: trace.trace_id,
+                span_id: trace.span_id,
+                thread_id: trace.thread_id,
+                parent_span_id: trace.parent_span_id,
+                operation_name: trace.operation_name,
+                start_time_us: trace.start_time_us,
+                finish_time_us: trace.finish_time_us,
+                attribute,
+                child_attribute,
+                run_id: trace.run_id,
+            }
+        })
+        .collect();
+
+    let result = PaginatedResult {
+        pagination: Pagination {
+            offset,
+            limit,
+            total,
+        },
+        data: spans,
+    };
+
+    Ok(HttpResponse::Ok().json(result))
 }

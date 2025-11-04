@@ -304,6 +304,7 @@ impl ApiServer {
             .service(
                 web::scope("/group")
                     .route("", web::get().to(group::list_root_group))
+                    .route("/thread/{thread_id}", web::get().to(group::get_spans_by_thread))
                     .route("/{time_bucket}", web::get().to(group::get_spans_by_group)),
             )
             .service(
