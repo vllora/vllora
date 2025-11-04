@@ -159,6 +159,7 @@ where
                     ).as_value(),
                     http.response.status_code = field::Empty,
                     status = field::Empty,
+                    error = field::Empty,
                     ip = get_client_ip(req.request())
                 );
 
@@ -209,24 +210,16 @@ where
                 // Proceed with the request if within limits
                 match service.call(req).instrument(span.clone()).await {
                     Ok(ok_res) => {
-                        let span = Span::current();
                         span.record(HTTP_RESPONSE_STATUS_CODE, ok_res.status().as_u16() as i64);
-                        span.record("status", ok_res.status().as_u16() as i64);
-                        if ok_res.status().is_server_error() {
-                            span.record(
-                                "status",
-                                ok_res
-                                    .status()
-                                    .canonical_reason()
-                                    .map(ToString::to_string)
-                                    .unwrap_or_default(),
-                            );
-                        };
+                        if let Some(error) = ok_res.response().error() {
+                            span.record("error", error.to_string());
+                        }
+
                         Ok(ok_res)
                     }
                     Err(err) => {
-                        let span = Span::current();
-                        span.record("status", format!("err {err:?}"));
+                        span.record("error", err.to_string());
+                        span.record(HTTP_RESPONSE_STATUS_CODE, 500);
                         Err(err)
                     }
                 }
