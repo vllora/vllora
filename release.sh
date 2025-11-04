@@ -55,9 +55,10 @@ git add CHANGELOG.md core/Cargo.toml gateway/Cargo.toml guardrails/Cargo.toml
 git commit -m "chore: release v$NEW_VERSION"
 git push origin main
 
-gh pr create \
-    --title "Release v$NEW_VERSION" \
-    --body "Automated PR for version v$NEW_VERSION release" \
-    --base main \
-    --head main
+git tag v$NEW_VERSION
+git push origin v$NEW_VERSION
+
+cargo publish -p vllora_core
+cargo publish -p vllora_guardrails
+cargo publish -p vllora
 
