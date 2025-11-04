@@ -100,6 +100,12 @@ impl ApiServer {
             self.config.http.host, self.config.http.port
         );
 
+        println!("\n🌐 Starting OTEL gRPC collector...");
+        println!(
+            "   🚀 OTEL gRPC collector ready at: \x1b[36mhttp://{}:4317\x1b[0m",
+            self.config.http.host
+        );
+
         // Add documentation and community links
         println!("\n📚 Where the cool kids hang out:");
         println!(
