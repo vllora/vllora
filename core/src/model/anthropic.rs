@@ -603,7 +603,7 @@ impl AnthropicModel {
 
                 let tool_calls_str = serde_json::to_string(&tool_runs)?;
                 let tools_span = tracing::info_span!(
-                    target: target!(), 
+                    target: target!(),
                     events::SPAN_TOOLS,
                     tool_calls=tool_calls_str,
                     tool.name=tool_runs.iter().map(|t| t.name.clone()).collect::<Vec<String>>().join(",")
@@ -925,8 +925,8 @@ impl AnthropicModel {
                 let tool_calls_str = serde_json::to_string(&tool_calls)?;
                 let tools_span = tracing::info_span!(
                     target: target!(),
-                    events::SPAN_TOOLS, 
-                    tool_calls=tool_calls_str, 
+                    events::SPAN_TOOLS,
+                    tool_calls=tool_calls_str,
                     tool.name=tool_calls.iter().map(|t| t.name.clone()).collect::<Vec<String>>().join(",")
                 );
                 tools_span.follows_from(span.id());
