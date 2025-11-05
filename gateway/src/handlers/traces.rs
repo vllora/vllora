@@ -103,7 +103,6 @@ pub async fn get_spans_by_run(
                         .get(&trace.span_id)
                         .and_then(|opt| opt.as_ref())
                         .and_then(|json_str| serde_json::from_str(json_str).ok());
-
                     LangdbSpan {
                         trace_id: trace.trace_id,
                         span_id: trace.span_id,

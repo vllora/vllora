@@ -329,7 +329,8 @@ impl ApiServer {
             .service(
                 web::scope("/group")
                     .route("", web::get().to(group::list_root_group))
-                    .route("/{time_bucket}", web::get().to(group::get_spans_by_group)),
+                    .route("/spans", web::get().to(group::get_group_spans)) // Unified endpoint for all group types
+                    .route("/batch-spans", web::post().to(group::get_batch_group_spans)), // Batch endpoint for multiple groups
             )
             .service(
                 web::scope("/session")

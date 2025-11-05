@@ -11,6 +11,15 @@ pub enum TypeFilter {
     Mcp,
 }
 
+/// Enum representing the grouping type
+#[derive(Debug, Clone, PartialEq)]
+pub enum GroupBy {
+    Time,
+    Thread,
+    Run,
+    // Future: Model, User, etc.
+}
+
 #[derive(Debug, Clone)]
 pub struct ListGroupQuery {
     pub project_id: Option<String>,
@@ -20,15 +29,23 @@ pub struct ListGroupQuery {
     pub type_filter: Option<TypeFilter>,
     pub start_time_min: Option<i64>,
     pub start_time_max: Option<i64>,
-    pub bucket_size_seconds: i64, // Time bucket size in seconds
+    pub bucket_size_seconds: i64, // Time bucket size in seconds (used when group_by=Time)
+    pub group_by: GroupBy,        // NEW: Determines grouping type
     pub limit: i64,
     pub offset: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize, QueryableByName)]
 pub struct GroupUsageInformation {
-    #[diesel(sql_type = diesel::sql_types::BigInt)]
-    pub time_bucket: i64,
+    // Grouping key fields - one will be populated depending on group_by
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::BigInt>)]
+    pub time_bucket: Option<i64>, // Populated when group_by=time
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+    pub thread_id: Option<String>, // Populated when group_by=thread
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+    pub run_id: Option<String>, // Populated when group_by=run
+
+    // Aggregated data (same for all grouping types)
     #[diesel(sql_type = diesel::sql_types::Text)]
     pub thread_ids_json: String,
     #[diesel(sql_type = diesel::sql_types::Text)]
@@ -173,13 +190,32 @@ impl GroupService for GroupServiceImpl {
 
         let filter_clause = self.build_filters(&query);
 
-        // Convert bucket size from seconds to microseconds
-        let bucket_size_us = query.bucket_size_seconds * 1_000_000;
+        // Determine grouping field and SELECT clause based on group_by type
+        let (group_key_select, group_by_field, order_by) = match query.group_by {
+            GroupBy::Time => {
+                let bucket_size_us = query.bucket_size_seconds * 1_000_000;
+                (
+                    format!("(start_time_us / {}) * {} as time_bucket, NULL as thread_id, NULL as run_id", bucket_size_us, bucket_size_us),
+                    "time_bucket".to_string(),
+                    "time_bucket DESC".to_string(),
+                )
+            }
+            GroupBy::Thread => (
+                "NULL as time_bucket, thread_id, NULL as run_id".to_string(),
+                "thread_id".to_string(),
+                "start_time_us DESC".to_string(),
+            ),
+            GroupBy::Run => (
+                "NULL as time_bucket, NULL as thread_id, run_id".to_string(),
+                "run_id".to_string(),
+                "start_time_us DESC".to_string(),
+            ),
+        };
 
-        // This query groups spans by time buckets based on start_time_us
+        // This query groups spans based on the group_by parameter
         // Only considers spans that have at least run_id OR thread_id
         let sql_query_str = format!("SELECT
-              time_bucket,
+              {},
               COALESCE(json_group_array(DISTINCT thread_id) FILTER (WHERE thread_id IS NOT NULL), '[]') as thread_ids_json,
               COALESCE(json_group_array(DISTINCT trace_id), '[]') as trace_ids_json,
               COALESCE(json_group_array(DISTINCT run_id) FILTER (WHERE run_id IS NOT NULL), '[]') as run_ids_json,
@@ -195,7 +231,7 @@ impl GroupService for GroupServiceImpl {
               COALESCE(json_group_array(DISTINCT error_msg) FILTER (WHERE error_msg IS NOT NULL), '[]') as errors_json
             FROM (
               SELECT
-                (start_time_us / {}) * {} as time_bucket,
+                {},
                 thread_id,
                 trace_id,
                 run_id,
@@ -215,10 +251,10 @@ impl GroupService for GroupServiceImpl {
               WHERE (run_id IS NOT NULL OR thread_id IS NOT NULL)
                 {}
             )
-            GROUP BY time_bucket
-            ORDER BY time_bucket DESC
+            GROUP BY {}
+            ORDER BY {}
             LIMIT ? OFFSET ?",
-            bucket_size_us, bucket_size_us, filter_clause);
+            group_key_select, group_key_select, filter_clause, group_by_field, order_by);
         let results = sql_query(&sql_query_str)
             .bind::<diesel::sql_types::BigInt, _>(query.limit)
             .bind::<diesel::sql_types::BigInt, _>(query.offset)
@@ -233,22 +269,29 @@ impl GroupService for GroupServiceImpl {
 
         let filter_clause = self.build_filters(&query);
 
-        // Convert bucket size from seconds to microseconds
-        let bucket_size_us = query.bucket_size_seconds * 1_000_000;
-
         #[derive(QueryableByName)]
         struct CountResult {
             #[diesel(sql_type = diesel::sql_types::BigInt)]
             count: i64,
         }
 
-        // Count distinct time buckets
+        // Determine what to count based on group_by type
+        let count_expr = match query.group_by {
+            GroupBy::Time => {
+                let bucket_size_us = query.bucket_size_seconds * 1_000_000;
+                format!("(start_time_us / {}) * {}", bucket_size_us, bucket_size_us)
+            }
+            GroupBy::Thread => "thread_id".to_string(),
+            GroupBy::Run => "run_id".to_string(),
+        };
+
+        // Count distinct groups
         let sql_query_str = format!(
-            "SELECT COUNT(DISTINCT (start_time_us / {}) * {}) as count
+            "SELECT COUNT(DISTINCT {}) as count
             FROM traces
             WHERE (run_id IS NOT NULL OR thread_id IS NOT NULL)
               {}",
-            bucket_size_us, bucket_size_us, filter_clause
+            count_expr, filter_clause
         );
 
         let result = sql_query(&sql_query_str)

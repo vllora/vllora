@@ -1,6 +1,6 @@
 use rmcp::schemars;
-use serde::Deserialize;
 use serde::Serialize;
+use serde::{Deserialize, Deserializer, Serializer};
 use serde_json::Value;
 use std::{collections::HashMap, fmt::Display};
 
@@ -18,8 +18,7 @@ pub struct LangdbSpan {
     pub run_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, schemars::JsonSchema)]
 #[schemars(
     description = "The operation name. Available operations: run, agent, task, tools, openai, anthropic, bedrock, gemini, cloud_api_invoke, api_invoke, model_call"
 )]
@@ -36,6 +35,26 @@ pub enum Operation {
     Bedrock,
     Gemini,
     Other(String),
+}
+
+impl Serialize for Operation {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let s: String = self.clone().into();
+        serializer.serialize_str(&s)
+    }
+}
+
+impl<'de> Deserialize<'de> for Operation {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(Operation::from(s.as_str()))
+    }
 }
 
 impl From<&str> for Operation {
