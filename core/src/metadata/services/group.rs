@@ -30,7 +30,7 @@ pub struct ListGroupQuery {
     pub start_time_min: Option<i64>,
     pub start_time_max: Option<i64>,
     pub bucket_size_seconds: i64, // Time bucket size in seconds (used when group_by=Time)
-    pub group_by: GroupBy,         // NEW: Determines grouping type
+    pub group_by: GroupBy,        // NEW: Determines grouping type
     pub limit: i64,
     pub offset: i64,
 }
