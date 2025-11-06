@@ -73,6 +73,15 @@ impl ProviderCredentialsId {
     pub fn provider_name(&self) -> String {
         self.provider_name.clone()
     }
+
+    pub fn from_string(value: String) -> Self {
+        Self {
+            value: value.clone(),
+            tenant_name: "".to_string(),
+            provider_name: "".to_string(),
+            project_slug: "".to_string(),
+        }
+    }
 }
 
 /// Helper function to construct a key ID for provider credentials
