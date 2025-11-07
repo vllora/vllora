@@ -323,7 +323,7 @@ impl ProviderCredentialsService for ProviderCredentialsServiceImpl {
 }
 
 /// Get the provider type based on provider name
-fn get_provider_type(provider_name: &str) -> String {
+pub fn get_provider_type(provider_name: &str) -> String {
     match provider_name.to_lowercase().as_str() {
         "openai" => "api_key".to_string(),
         "anthropic" => "api_key".to_string(),

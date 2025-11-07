@@ -4,7 +4,7 @@ use crate::cost::GatewayCostCalculator;
 use crate::guardrails::GuardrailsService;
 use crate::handlers::{group, spans, threads};
 
-use crate::handlers::{mcp_configs, models, projects, providers, runs, session, traces};
+use crate::handlers::{mcp_configs, models, projects, runs, session, traces};
 use crate::middleware::project::ProjectMiddleware;
 use crate::middleware::thread_service::ThreadsServiceMiddleware;
 use crate::middleware::trace_logger::TraceLogger;
@@ -52,6 +52,7 @@ use vllora_core::types::gateway::CostCalculator;
 use vllora_core::types::guardrails::service::GuardrailsEvaluator;
 use vllora_core::types::guardrails::Guard;
 use vllora_core::usage::InMemoryStorage;
+use vllora_core::metadata::services::providers::ProvidersServiceImpl;
 
 use vllora_core::metadata::services::trace::TraceServiceImpl as MetadataTraceServiceImpl;
 
@@ -281,16 +282,19 @@ impl ApiServer {
                         web::post().to(projects::set_default_project),
                     ),
             )
-            .service(
+            .service(   
                 web::scope("/providers")
-                    .route("", web::get().to(providers::list_providers))
                     .route(
-                        "/{provider_name}",
-                        web::put().to(providers::update_provider),
+                        "",
+                        web::get().to(vllora_core::handler::providers::list_providers::<ProvidersServiceImpl>),
                     )
                     .route(
                         "/{provider_name}",
-                        web::delete().to(providers::delete_provider),
+                        web::put().to(vllora_core::handler::providers::update_provider::<ProvidersServiceImpl>),
+                    )
+                    .route(
+                        "/{provider_name}",
+                        web::delete().to(vllora_core::handler::providers::delete_provider),
                     ),
             )
             .service(

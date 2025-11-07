@@ -8,19 +8,21 @@ use diesel::BoolExpressionMethods;
 use diesel::ExpressionMethods;
 use diesel::OptionalExtension;
 use diesel::{QueryDsl, RunQueryDsl};
+use uuid::Uuid;
 
 pub trait ProviderService {
+    fn new(db_pool: DbPool) -> Self;
     /// Get provider by ID
-    fn get_provider_by_id(&self, provider_id: &str) -> Result<Option<DbProvider>, DatabaseError>;
+    fn get_provider_by_id(&self, provider_id: &str) -> Result<Option<ProviderInfo>, DatabaseError>;
 
     /// Get provider by name
     fn get_provider_by_name(
         &self,
         provider_name: &str,
-    ) -> Result<Option<DbProvider>, DatabaseError>;
+    ) -> Result<Option<ProviderInfo>, DatabaseError>;
 
     /// List all active providers
-    fn list_providers(&self) -> Result<Vec<DbProvider>, DatabaseError>;
+    fn list_providers(&self) -> Result<Vec<ProviderInfo>, DatabaseError>;
 
     /// Create a new provider
     fn create_provider(&self, provider: DbInsertProvider) -> Result<(), DatabaseError>;
@@ -41,7 +43,7 @@ pub trait ProviderService {
     /// Get providers with their credential status for a project
     fn list_providers_with_credential_status(
         &self,
-        project_id: Option<&str>,
+        project_id: Option<&Uuid>,
     ) -> Result<Vec<ProviderInfo>, DatabaseError>;
 }
 
@@ -76,31 +78,39 @@ impl From<DbProvider> for ProviderInfo {
     }
 }
 
-impl ProviderService for ProviderServiceImpl {
-    fn get_provider_by_id(&self, provider_id: &str) -> Result<Option<DbProvider>, DatabaseError> {
+pub struct ProvidersServiceImpl {
+    db_pool: DbPool,
+}
+
+impl ProviderService for ProvidersServiceImpl {
+    fn new(db_pool: DbPool) -> Self {
+        Self { db_pool }
+    }
+
+    fn get_provider_by_id(&self, provider_id: &str) -> Result<Option<ProviderInfo>, DatabaseError> {
         let mut conn = self.db_pool.get()?;
 
         let query = providers
             .filter(p::id.eq(provider_id))
             .filter(p::is_active.eq(1));
 
-        Ok(query.first(&mut conn).optional()?)
+        Ok(query.first::<DbProvider>(&mut conn).optional()?.map(|p| p.into()))
     }
 
     fn get_provider_by_name(
         &self,
         provider_name: &str,
-    ) -> Result<Option<DbProvider>, DatabaseError> {
+    ) -> Result<Option<ProviderInfo>, DatabaseError> {
         let mut conn = self.db_pool.get()?;
 
         let query = providers
             .filter(p::provider_name.eq(provider_name))
             .filter(p::is_active.eq(1));
 
-        Ok(query.first(&mut conn).optional()?)
+        Ok(query.first::<DbProvider>(&mut conn).optional()?.map(|p| p.into()))
     }
 
-    fn list_providers(&self) -> Result<Vec<DbProvider>, DatabaseError> {
+    fn list_providers(&self) -> Result<Vec<ProviderInfo>, DatabaseError> {
         let mut conn = self.db_pool.get()?;
 
         let query = providers
@@ -108,7 +118,7 @@ impl ProviderService for ProviderServiceImpl {
             .order(p::priority.desc())
             .then_order_by(p::provider_name.asc());
 
-        Ok(query.load::<DbProvider>(&mut conn)?)
+        Ok(query.load::<DbProvider>(&mut conn)?.into_iter().map(|p| p.into()).collect())
     }
 
     fn create_provider(&self, provider: DbInsertProvider) -> Result<(), DatabaseError> {
@@ -158,7 +168,7 @@ impl ProviderService for ProviderServiceImpl {
 
     fn list_providers_with_credential_status(
         &self,
-        project_id: Option<&str>,
+        project_id: Option<&Uuid>,
     ) -> Result<Vec<ProviderInfo>, DatabaseError> {
         let mut conn = self.db_pool.get()?;
 
@@ -180,7 +190,7 @@ impl ProviderService for ProviderServiceImpl {
                 crate::metadata::schema::provider_credentials::dsl::provider_credentials
                     .select(count(crate::metadata::schema::provider_credentials::id))
                     .filter(crate::metadata::schema::provider_credentials::provider_name.eq(&provider_info.name))
-                    .filter(crate::metadata::schema::provider_credentials::project_id.eq(pid).or(crate::metadata::schema::provider_credentials::project_id.is_null()))
+                    .filter(crate::metadata::schema::provider_credentials::project_id.eq(pid.to_string()).or(crate::metadata::schema::provider_credentials::project_id.is_null()))
                     .filter(crate::metadata::schema::provider_credentials::is_active.eq(1))
                     .first::<i64>(&mut conn)? > 0
             } else {
@@ -202,16 +212,6 @@ impl ProviderService for ProviderServiceImpl {
         }
 
         Ok(result)
-    }
-}
-
-pub struct ProviderServiceImpl {
-    db_pool: DbPool,
-}
-
-impl ProviderServiceImpl {
-    pub fn new(db_pool: DbPool) -> Self {
-        Self { db_pool }
     }
 }
 

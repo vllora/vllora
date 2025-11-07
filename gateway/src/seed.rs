@@ -6,7 +6,7 @@ use vllora_core::metadata::models::project::NewProjectDTO;
 use vllora_core::metadata::pool::DbPool;
 use vllora_core::metadata::services::model::{ModelService, ModelServiceImpl};
 use vllora_core::metadata::services::project::{ProjectService, ProjectServiceImpl};
-use vllora_core::metadata::services::providers::{ProviderService, ProviderServiceImpl};
+use vllora_core::metadata::services::providers::{ProviderService, ProvidersServiceImpl};
 
 use crate::run;
 
@@ -123,7 +123,7 @@ async fn load_embedded_models(db_pool: DbPool) -> Result<usize, run::models::Mod
 
 /// Seeds the database with providers if the providers table is empty
 pub async fn seed_providers(db_pool: &DbPool) -> Result<(), run::providers::ProvidersLoadError> {
-    let provider_service = ProviderServiceImpl::new(db_pool.clone());
+    let provider_service = ProvidersServiceImpl::new(db_pool.clone());
     let providers = provider_service.list_providers()?;
 
     if providers.is_empty() {

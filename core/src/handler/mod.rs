@@ -6,6 +6,7 @@ pub mod middleware;
 pub mod models;
 pub mod responses;
 pub mod threads;
+pub mod providers;
 
 use crate::metadata::services::model::ModelService;
 use crate::model::types::ModelEvent;
@@ -17,6 +18,24 @@ use actix_web::HttpRequest;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
+
+/// Macro to convert a Result<T, E> into Result<HttpResponse>
+///
+/// Takes an expression that returns a Result, maps the Ok value to an HttpResponse::Ok().json(),
+/// and wraps the entire result in Ok().
+///
+/// # Example
+/// ```
+/// ok_json!(service.get_data())
+/// // expands to:
+/// // Ok(service.get_data().map(|data| HttpResponse::Ok().json(data))?)
+/// ```
+#[macro_export]
+macro_rules! ok_json {
+    ($expr:expr) => {
+        Ok($expr.map(|result| actix_web::HttpResponse::Ok().json(result))?)
+    };
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AvailableModels(pub Vec<ModelMetadata>);

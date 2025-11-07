@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use vllora_core::metadata::error::DatabaseError;
 use vllora_core::metadata::models::providers::DbInsertProvider;
 use vllora_core::metadata::pool::DbPool;
-use vllora_core::metadata::services::providers::{ProviderService, ProviderServiceImpl};
+use vllora_core::metadata::services::providers::{ProviderService, ProvidersServiceImpl};
 use vllora_core::types::LANGDB_API_URL;
 
 #[derive(Debug, thiserror::Error)]
@@ -74,13 +74,13 @@ pub async fn fetch_and_store_providers(
         .collect();
 
     // Store in database using ProviderService
-    let provider_service = ProviderServiceImpl::new(db_pool.clone());
+    let provider_service = ProvidersServiceImpl::new(db_pool.clone());
 
     // Get existing providers to avoid duplicates
     let existing_providers = provider_service.list_providers()?;
     let existing_provider_names: HashSet<String> = existing_providers
         .iter()
-        .map(|p| p.provider_name.clone())
+        .map(|p| p.name.clone())
         .collect();
 
     // Insert only new providers
@@ -108,7 +108,7 @@ pub async fn fetch_and_store_providers(
     // Find providers in DB but not in API response (these should be deactivated)
     let providers_to_deactivate: Vec<String> = db_providers
         .iter()
-        .filter(|db_provider| !synced_provider_names.contains(&db_provider.provider_name))
+        .filter(|db_provider| !synced_provider_names.contains(&db_provider.name))
         .map(|db_provider| db_provider.id.clone())
         .collect();
 

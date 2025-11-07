@@ -1,14 +1,15 @@
 use actix_web::{web, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
-use vllora_core::credentials::KeyStorage;
-use vllora_core::credentials::ProviderCredentialsId;
-use vllora_core::metadata::pool::DbPool;
-use vllora_core::metadata::services::providers::{
-    ProviderInfo as ProvidersProviderInfo, ProviderService as ProvidersService,
-    ProviderServiceImpl as ProvidersServiceImpl,
+use crate::credentials::KeyStorage;
+use crate::credentials::ProviderCredentialsId;
+use crate::metadata::pool::DbPool;
+use crate::metadata::services::providers::{
+    ProviderInfo as ProvidersProviderInfo, ProviderService as ProvidersService
 };
-use vllora_core::types::credentials::Credentials;
-use vllora_core::types::metadata::project::Project;
+use crate::types::credentials::Credentials;
+use crate::types::metadata::project::Project;
+use actix_web::HttpRequest;
+use actix_web::HttpMessage;
 
 use crate::ok_json;
 
@@ -23,19 +24,18 @@ pub struct ProviderResponse {
 }
 
 /// List all providers with their credential status for the current project
-pub async fn list_providers(
-    project: web::ReqData<Project>,
+pub async fn list_providers<T: ProvidersService>(
+    req: HttpRequest,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
-    let project = project.into_inner();
+    let providers_service = T::new(db_pool.get_ref().clone());
+    let project_id = req.extensions().get::<Project>().cloned().map(|p| p.id);
 
-    let providers_service = ProvidersServiceImpl::new(db_pool.get_ref().clone());
-
-    ok_json!(providers_service.list_providers_with_credential_status(Some(&project.id.to_string())))
+    ok_json!(providers_service.list_providers_with_credential_status(project_id.as_ref()))
 }
 
 /// Update provider credentials for the current project
-pub async fn update_provider(
+pub async fn update_provider<T: ProvidersService>(
     path: web::Path<String>,
     req: web::Json<UpdateProviderRequest>,
     project: web::ReqData<Project>,
@@ -45,7 +45,7 @@ pub async fn update_provider(
     let provider_name = path.into_inner();
     let project = project.into_inner();
 
-    let providers_service = ProvidersServiceImpl::new(db_pool.get_ref().clone());
+    let providers_service = T::new(db_pool.get_ref().clone());
 
     let provider_credentials_id = ProviderCredentialsId::new(
         "default".to_string(),
@@ -74,7 +74,7 @@ pub async fn update_provider(
 
                     // Return updated provider info
                     match providers_service
-                        .list_providers_with_credential_status(Some(&project.id.to_string()))
+                        .list_providers_with_credential_status(Some(&project.id))
                     {
                         Ok(providers) => {
                             if let Some(updated_provider) =
@@ -132,7 +132,7 @@ pub async fn update_provider(
 
                     // Return created provider info
                     match providers_service
-                        .list_providers_with_credential_status(Some(&project.id.to_string()))
+                        .list_providers_with_credential_status(Some(&project.id))
                     {
                         Ok(providers) => {
                             if let Some(created_provider) =

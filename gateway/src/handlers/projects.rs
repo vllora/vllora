@@ -6,7 +6,7 @@ use vllora_core::metadata::pool::DbPool;
 use vllora_core::metadata::services::project::{ProjectService, ProjectServiceImpl};
 use vllora_core::types::metadata::project::Project;
 
-use crate::ok_json;
+use vllora_core::ok_json;
 
 #[derive(Deserialize)]
 pub struct CreateProjectRequest {
