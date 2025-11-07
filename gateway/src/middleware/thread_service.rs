@@ -61,14 +61,10 @@ where
             let database_pool: Option<&web::Data<DbPool>> = req.app_data();
             let project: Option<Project> = req.extensions().get::<Project>().cloned();
 
-            tracing::info!("Database pool: {:?}, project: {:?}", database_pool, project);
             if let (Some(database_pool), Some(project)) = (database_pool, project) {
                 let thread_impl = ThreadImpl::new(database_pool.get_ref().clone(), project.clone());
                 req.extensions_mut()
                     .insert(Rc::new(thread_impl) as Rc<dyn ThreadServiceWrapper>);
-                tracing::info!("Thread service wrapper inserted into extensions");
-            } else {
-                tracing::error!("Database pool or project is not found");
             }
 
             let fut = srv.call(req);
