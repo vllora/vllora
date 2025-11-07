@@ -1,15 +1,15 @@
-use actix_web::{web, HttpResponse, Result};
-use serde::{Deserialize, Serialize};
 use crate::credentials::KeyStorage;
 use crate::credentials::ProviderCredentialsId;
 use crate::metadata::pool::DbPool;
 use crate::metadata::services::providers::{
-    ProviderInfo as ProvidersProviderInfo, ProviderService as ProvidersService
+    ProviderInfo as ProvidersProviderInfo, ProviderService as ProvidersService,
 };
 use crate::types::credentials::Credentials;
 use crate::types::metadata::project::Project;
-use actix_web::HttpRequest;
 use actix_web::HttpMessage;
+use actix_web::HttpRequest;
+use actix_web::{web, HttpResponse, Result};
+use serde::{Deserialize, Serialize};
 
 use crate::ok_json;
 
@@ -73,8 +73,7 @@ pub async fn update_provider<T: ProvidersService>(
                     );
 
                     // Return updated provider info
-                    match providers_service
-                        .list_providers_with_credential_status(Some(&project.id))
+                    match providers_service.list_providers_with_credential_status(Some(&project.id))
                     {
                         Ok(providers) => {
                             if let Some(updated_provider) =
@@ -131,8 +130,7 @@ pub async fn update_provider<T: ProvidersService>(
                     );
 
                     // Return created provider info
-                    match providers_service
-                        .list_providers_with_credential_status(Some(&project.id))
+                    match providers_service.list_providers_with_credential_status(Some(&project.id))
                     {
                         Ok(providers) => {
                             if let Some(created_provider) =

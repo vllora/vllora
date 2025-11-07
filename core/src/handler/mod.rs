@@ -4,9 +4,9 @@ pub mod events;
 pub mod image;
 pub mod middleware;
 pub mod models;
+pub mod providers;
 pub mod responses;
 pub mod threads;
-pub mod providers;
 
 use crate::metadata::services::model::ModelService;
 use crate::model::types::ModelEvent;
@@ -24,9 +24,6 @@ use tokio::sync::Mutex;
 /// Takes an expression that returns a Result, maps the Ok value to an HttpResponse::Ok().json(),
 /// and wraps the entire result in Ok().
 ///
-/// # Example
-/// ```
-/// ok_json!(service.get_data())
 /// // expands to:
 /// // Ok(service.get_data().map(|data| HttpResponse::Ok().json(data))?)
 /// ```

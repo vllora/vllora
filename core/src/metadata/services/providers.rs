@@ -94,7 +94,10 @@ impl ProviderService for ProvidersServiceImpl {
             .filter(p::id.eq(provider_id))
             .filter(p::is_active.eq(1));
 
-        Ok(query.first::<DbProvider>(&mut conn).optional()?.map(|p| p.into()))
+        Ok(query
+            .first::<DbProvider>(&mut conn)
+            .optional()?
+            .map(|p| p.into()))
     }
 
     fn get_provider_by_name(
@@ -107,7 +110,10 @@ impl ProviderService for ProvidersServiceImpl {
             .filter(p::provider_name.eq(provider_name))
             .filter(p::is_active.eq(1));
 
-        Ok(query.first::<DbProvider>(&mut conn).optional()?.map(|p| p.into()))
+        Ok(query
+            .first::<DbProvider>(&mut conn)
+            .optional()?
+            .map(|p| p.into()))
     }
 
     fn list_providers(&self) -> Result<Vec<ProviderInfo>, DatabaseError> {
@@ -118,7 +124,11 @@ impl ProviderService for ProvidersServiceImpl {
             .order(p::priority.desc())
             .then_order_by(p::provider_name.asc());
 
-        Ok(query.load::<DbProvider>(&mut conn)?.into_iter().map(|p| p.into()).collect())
+        Ok(query
+            .load::<DbProvider>(&mut conn)?
+            .into_iter()
+            .map(|p| p.into())
+            .collect())
     }
 
     fn create_provider(&self, provider: DbInsertProvider) -> Result<(), DatabaseError> {

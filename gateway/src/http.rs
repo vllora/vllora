@@ -45,6 +45,7 @@ use vllora_core::metadata::project_trace::ProjectTraceTenantResolver;
 use vllora_core::metadata::services::model::ModelService;
 use vllora_core::metadata::services::model::ModelServiceImpl;
 use vllora_core::metadata::services::project::ProjectServiceImpl;
+use vllora_core::metadata::services::providers::ProvidersServiceImpl;
 use vllora_core::telemetry::database::SqliteTraceWriterTransport;
 use vllora_core::telemetry::SpanWriterTransport;
 use vllora_core::telemetry::{TraceServiceImpl, TraceServiceServer};
@@ -52,7 +53,6 @@ use vllora_core::types::gateway::CostCalculator;
 use vllora_core::types::guardrails::service::GuardrailsEvaluator;
 use vllora_core::types::guardrails::Guard;
 use vllora_core::usage::InMemoryStorage;
-use vllora_core::metadata::services::providers::ProvidersServiceImpl;
 
 use vllora_core::metadata::services::trace::TraceServiceImpl as MetadataTraceServiceImpl;
 
@@ -282,15 +282,19 @@ impl ApiServer {
                         web::post().to(projects::set_default_project),
                     ),
             )
-            .service(   
+            .service(
                 web::scope("/providers")
                     .route(
                         "",
-                        web::get().to(vllora_core::handler::providers::list_providers::<ProvidersServiceImpl>),
+                        web::get().to(vllora_core::handler::providers::list_providers::<
+                            ProvidersServiceImpl,
+                        >),
                     )
                     .route(
                         "/{provider_name}",
-                        web::put().to(vllora_core::handler::providers::update_provider::<ProvidersServiceImpl>),
+                        web::put().to(vllora_core::handler::providers::update_provider::<
+                            ProvidersServiceImpl,
+                        >),
                     )
                     .route(
                         "/{provider_name}",

@@ -78,10 +78,8 @@ pub async fn fetch_and_store_providers(
 
     // Get existing providers to avoid duplicates
     let existing_providers = provider_service.list_providers()?;
-    let existing_provider_names: HashSet<String> = existing_providers
-        .iter()
-        .map(|p| p.name.clone())
-        .collect();
+    let existing_provider_names: HashSet<String> =
+        existing_providers.iter().map(|p| p.name.clone()).collect();
 
     // Insert only new providers
     let mut inserted_count = 0;
