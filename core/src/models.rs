@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::types::provider::{CompletionModelPrice, InferenceModelProvider, ModelPrice};
 
+use std::collections::HashMap;
 use std::str::FromStr;
 
 /// OpenAI Completion Models
@@ -376,4 +377,93 @@ impl ModelMetadata {
     pub fn qualified_model_name(&self) -> String {
         format!("{}/{}", self.inference_provider.provider, self.model)
     }
+}
+
+/// Groups models by name and creates endpoints for each model with availability based on credentials
+pub fn group_models_by_name_with_endpoints(
+    models: Vec<ModelMetadata>,
+    provider_credentials_map: &HashMap<String, bool>,
+) -> Vec<ModelMetadataWithEndpoints> {
+    let mut grouped: HashMap<String, Vec<ModelMetadata>> = HashMap::new();
+
+    // Group models by their model name
+    for model in &models {
+        grouped
+            .entry(model.model.clone())
+            .or_default()
+            .push(model.clone());
+    }
+
+    // Convert grouped models to ModelMetadataWithEndpoints
+    // Preserve database order by iterating through original models
+    let mut result: Vec<ModelMetadataWithEndpoints> = Vec::new();
+    let mut processed_models: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    for model in models {
+        if processed_models.contains(&model.model) {
+            continue; // Skip if we already processed this model name
+        }
+
+        // Get all instances of this model
+        if let Some(model_instances) = grouped.get(&model.model) {
+            // Sort model instances by cost (cheapest first)
+            let mut model_instances = model_instances.clone();
+            model_instances.sort_by(|a, b| {
+                let a_cost = a.price.per_input_token();
+                let b_cost = b.price.per_input_token();
+                a_cost
+                    .partial_cmp(&b_cost)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+
+            // Use the first (cheapest) model instance as the base
+            let base_model = model_instances[0].clone();
+
+            // Create endpoints from all instances with availability and pricing
+            let endpoints: Vec<Endpoint> = model_instances
+                .iter()
+                .map(|model| {
+                    // Check if provider has credentials configured using pre-fetched data
+                    let provider_name =
+                        model.inference_provider.provider.to_string().to_lowercase();
+                    let has_credentials = provider_credentials_map
+                        .get(&provider_name)
+                        .copied()
+                        .unwrap_or(false);
+
+                    // Extract pricing from model
+                    let pricing = match &model.price {
+                        ModelPrice::Completion(price) => Some(EndpointPricing {
+                            per_input_token: price.per_input_token,
+                            per_output_token: price.per_output_token,
+                            per_cached_input_token: price.per_cached_input_token,
+                            per_cached_input_write_token: price.per_cached_input_write_token,
+                        }),
+                        ModelPrice::Embedding(price) => Some(EndpointPricing {
+                            per_input_token: price.per_input_token,
+                            per_output_token: 0.0,
+                            per_cached_input_token: None,
+                            per_cached_input_write_token: None,
+                        }),
+                        ModelPrice::ImageGeneration(_) => None,
+                    };
+
+                    Endpoint {
+                        provider: model.inference_provider.clone(),
+                        available: has_credentials,
+                        pricing,
+                    }
+                })
+                .collect();
+
+            result.push(ModelMetadataWithEndpoints {
+                model: base_model,
+                endpoints,
+            });
+
+            processed_models.insert(model.model.clone());
+        }
+    }
+
+    result
 }
