@@ -6,6 +6,7 @@ use crate::handlers::{group, spans, threads};
 
 use crate::handlers::{events, mcp_configs, models, projects, providers, runs, session, traces};
 use crate::middleware::project::ProjectMiddleware;
+use crate::middleware::thread_service::ThreadsServiceMiddleware;
 use crate::middleware::trace_logger::TraceLogger;
 use crate::middleware::tracing_context::TracingContext;
 use actix_cors::Cors;
@@ -249,6 +250,7 @@ impl ApiServer {
         app.wrap(TraceLogger)
             .wrap(ThreadId)
             .wrap(RunId)
+            .wrap(ThreadsServiceMiddleware::new())
             .wrap(ProjectMiddleware::new())
             .app_data(Data::new(broadcaster))
             .app_data(web::Data::from(project_trace_senders))
@@ -293,8 +295,14 @@ impl ApiServer {
             )
             .service(
                 web::scope("/threads")
-                    .route("", web::get().to(threads::list_threads))
-                    .route("", web::post().to(threads::list_threads))
+                    .route(
+                        "",
+                        web::get().to(vllora_core::handler::threads::list_threads),
+                    )
+                    .route(
+                        "",
+                        web::post().to(vllora_core::handler::threads::list_threads),
+                    )
                     .route("/{id}", web::get().to(threads::get_thread))
                     .route("/{id}", web::put().to(threads::update_thread)),
             )

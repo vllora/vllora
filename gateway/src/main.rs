@@ -22,6 +22,7 @@ mod middleware;
 mod run;
 mod seed;
 mod session;
+mod threads;
 mod tracing;
 mod usage;
 use static_serve::embed_asset;

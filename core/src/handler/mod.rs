@@ -5,6 +5,7 @@ pub mod image;
 pub mod middleware;
 pub mod models;
 pub mod responses;
+pub mod threads;
 
 use crate::metadata::services::model::ModelService;
 use crate::model::types::ModelEvent;

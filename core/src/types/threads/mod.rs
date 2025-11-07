@@ -1,4 +1,9 @@
+pub mod public_threads;
+pub mod related_threads;
+pub mod service;
+
 use std::fmt::Display;
+use std::sync::Arc;
 
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -9,6 +14,15 @@ use serde_with::serde_as;
 use super::{gateway::ToolCall, message::MessageType};
 use crate::types::gateway::CacheControl;
 use crate::types::gateway::CompletionModelUsage;
+
+use crate::types::threads::{
+    public_threads::PublicThreads, related_threads::RelatedThreads, service::ThreadService,
+};
+pub trait ThreadServiceWrapper: 'static {
+    fn related_threads(&self) -> Arc<dyn RelatedThreads>;
+    fn public_threads(&self) -> Arc<dyn PublicThreads>;
+    fn service(&self) -> Arc<dyn ThreadService>;
+}
 
 #[derive(Clone, Debug)]
 pub struct CompletionsRunId(String);
