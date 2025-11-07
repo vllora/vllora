@@ -4,7 +4,7 @@ use crate::cost::GatewayCostCalculator;
 use crate::guardrails::GuardrailsService;
 use crate::handlers::{group, spans, threads};
 
-use crate::handlers::{events, mcp_configs, models, projects, providers, runs, session, traces};
+use crate::handlers::{mcp_configs, models, projects, providers, runs, session, traces};
 use crate::middleware::project::ProjectMiddleware;
 use crate::middleware::thread_service::ThreadsServiceMiddleware;
 use crate::middleware::trace_logger::TraceLogger;
@@ -312,7 +312,10 @@ impl ApiServer {
                         "",
                         web::get().to(vllora_core::handler::events::stream_events),
                     )
-                    .route("", web::post().to(events::send_events)),
+                    .route(
+                        "",
+                        web::post().to(vllora_core::handler::events::send_events),
+                    ),
             )
             .service(web::scope("/spans").route("", web::get().to(spans::list_spans)))
             .service(

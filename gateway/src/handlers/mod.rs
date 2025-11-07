@@ -1,4 +1,3 @@
-pub mod events;
 pub mod group;
 pub mod mcp_configs;
 pub mod models;
