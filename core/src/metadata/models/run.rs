@@ -1,39 +1,163 @@
+use diesel::deserialize::{self, FromSql};
+#[cfg(feature = "postgres")]
+use diesel::pg::sql_types::Uuid;
+#[cfg(feature = "postgres")]
+use diesel::pg::{Pg, PgValue};
 use diesel::prelude::*;
-use diesel::sql_types::{BigInt, Double, Nullable, Text};
+#[cfg(feature = "postgres")]
+use diesel::sql_types::Jsonb;
+#[cfg(feature = "sqlite")]
+use diesel::sql_types::Text;
+use diesel::sql_types::{BigInt, Float, Nullable};
+#[cfg(feature = "sqlite")]
+use diesel::sqlite::Sqlite;
+#[cfg(feature = "sqlite")]
+use diesel::sqlite::SqliteValue;
+use diesel::{AsExpression, FromSqlRow};
 use serde::{Deserialize, Serialize};
+use std::fmt::Display;
+use std::ops::Deref;
+#[cfg(feature = "sqlite")]
+use std::str::FromStr;
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, FromSqlRow, AsExpression)]
+#[serde(transparent)]
+#[cfg_attr(not(feature = "postgres"), diesel(sql_type = Text))]
+#[cfg_attr(feature = "postgres", diesel(sql_type = Jsonb))]
+pub struct JsonVec(pub Vec<String>);
+
+impl JsonVec {
+    pub fn into_vec(self) -> Vec<String> {
+        self.0
+    }
+}
+
+impl Deref for JsonVec {
+    type Target = Vec<String>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[cfg(feature = "sqlite")]
+impl FromSql<Text, Sqlite> for JsonVec {
+    fn from_sql(
+        bytes: <Sqlite as diesel::backend::Backend>::RawValue<'_>,
+    ) -> deserialize::Result<Self> {
+        let raw = <String as FromSql<Text, Sqlite>>::from_sql(bytes)?;
+        let vec = serde_json::from_str(&raw)?;
+        Ok(JsonVec(vec))
+    }
+}
+
+#[derive(
+    Debug, Clone, Copy, FromSqlRow, AsExpression, Hash, Eq, PartialEq, Serialize, Deserialize,
+)]
+#[cfg_attr(feature = "sqlite", diesel(sql_type = Text))]
+#[cfg_attr(feature = "postgres", diesel(sql_type = Uuid))]
+pub struct UUID(pub uuid::Uuid);
+
+// Small function to easily initialize our uuid
+impl UUID {
+    pub fn random() -> Self {
+        Self(uuid::Uuid::new_v4())
+    }
+}
+
+// Allow easy conversion from UUID to the wanted uuid::Uuid
+impl From<UUID> for uuid::Uuid {
+    fn from(s: UUID) -> Self {
+        s.0
+    }
+}
+
+impl Display for UUID {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+#[cfg(feature = "sqlite")]
+// Convert binary data from SQLite to a UUID
+impl FromSql<Text, Sqlite> for UUID {
+    fn from_sql(bytes: SqliteValue<'_, '_, '_>) -> deserialize::Result<Self> {
+        let bytes = <String as FromSql<Text, Sqlite>>::from_sql(bytes)?;
+        let uuid = uuid::Uuid::from_str(&bytes).map_err(|_| "Invalid UUID")?;
+        Ok(UUID(uuid))
+    }
+}
+
+#[cfg(feature = "postgres")]
+// Convert binary data from SQLite to a UUID
+impl FromSql<Uuid, Pg> for UUID {
+    fn from_sql(bytes: PgValue<'_>) -> deserialize::Result<Self> {
+        let uuid = <uuid::Uuid as FromSql<Uuid, Pg>>::from_sql(bytes)?;
+        Ok(UUID(uuid))
+    }
+}
+
+#[cfg(feature = "postgres")]
+impl FromSql<Jsonb, Pg> for JsonVec {
+    fn from_sql(bytes: PgValue<'_>) -> deserialize::Result<Self> {
+        let value = <serde_json::Value as FromSql<Jsonb, Pg>>::from_sql(bytes)?;
+        let array = match value.as_array() {
+            Some(array) => array,
+            None => return Err("expected json array when decoding JsonStringVec".into()),
+        };
+        let mut result = Vec::with_capacity(array.len());
+        for item in array {
+            match item {
+                serde_json::Value::String(s) => result.push(s.clone()),
+                other => result.push(other.to_string()),
+            }
+        }
+        Ok(JsonVec(result))
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, QueryableByName)]
-#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+#[cfg_attr(feature = "sqlite", diesel(check_for_backend(diesel::sqlite::Sqlite)))]
+#[cfg_attr(feature = "postgres", diesel(check_for_backend(diesel::pg::Pg)))]
 pub struct RunUsageInformation {
-    #[diesel(sql_type = Nullable<Text>)]
-    pub run_id: Option<String>,
+    #[cfg_attr(feature = "sqlite", diesel(sql_type = Nullable<Text>))]
+    #[cfg_attr(feature = "postgres", diesel(sql_type = Nullable<Uuid>))]
+    pub run_id: Option<UUID>,
 
-    #[diesel(sql_type = Text)]
-    thread_ids_json: String,
+    #[cfg_attr(feature = "sqlite", diesel(sql_type = Text))]
+    #[cfg_attr(feature = "postgres", diesel(sql_type = Jsonb))]
+    thread_ids: JsonVec,
 
-    #[diesel(sql_type = Text)]
-    trace_ids_json: String,
+    #[cfg_attr(feature = "sqlite", diesel(sql_type = Text))]
+    #[cfg_attr(feature = "postgres", diesel(sql_type = Jsonb))]
+    trace_ids: JsonVec,
 
-    #[diesel(sql_type = Text)]
-    root_span_ids_json: String,
+    #[cfg_attr(feature = "sqlite", diesel(sql_type = Text))]
+    #[cfg_attr(feature = "postgres", diesel(sql_type = Jsonb))]
+    root_span_ids: JsonVec,
 
-    #[diesel(sql_type = Text)]
-    request_models_json: String,
+    #[cfg_attr(feature = "sqlite", diesel(sql_type = Text))]
+    #[cfg_attr(feature = "postgres", diesel(sql_type = Jsonb))]
+    request_models: JsonVec,
 
-    #[diesel(sql_type = Text)]
-    used_models_json: String,
+    #[cfg_attr(feature = "sqlite", diesel(sql_type = Text))]
+    #[cfg_attr(feature = "postgres", diesel(sql_type = Jsonb))]
+    used_models: JsonVec,
 
-    #[diesel(sql_type = Text)]
-    used_tools_json: String,
+    #[cfg_attr(feature = "sqlite", diesel(sql_type = Text))]
+    #[cfg_attr(feature = "postgres", diesel(sql_type = Jsonb))]
+    used_tools: JsonVec,
 
-    #[diesel(sql_type = Text)]
-    mcp_template_definition_ids_json: String,
+    #[cfg_attr(feature = "sqlite", diesel(sql_type = Text))]
+    #[cfg_attr(feature = "postgres", diesel(sql_type = Jsonb))]
+    mcp_template_definition_ids: JsonVec,
 
     #[diesel(sql_type = BigInt)]
     pub llm_calls: i64,
 
-    #[diesel(sql_type = Double)]
-    pub cost: f64,
+    #[cfg_attr(feature = "sqlite", diesel(sql_type = Float))]
+    #[cfg_attr(feature = "postgres", diesel(sql_type = Float))]
+    pub cost: f32,
 
     #[diesel(sql_type = Nullable<BigInt>)]
     pub input_tokens: Option<i64>,
@@ -47,82 +171,7 @@ pub struct RunUsageInformation {
     #[diesel(sql_type = BigInt)]
     pub finish_time_us: i64,
 
-    #[diesel(sql_type = Text)]
-    errors_json: String,
-}
-
-impl RunUsageInformation {
-    pub fn thread_ids(&self) -> Vec<String> {
-        serde_json::from_str(&self.thread_ids_json).unwrap_or_default()
-    }
-
-    pub fn trace_ids(&self) -> Vec<String> {
-        serde_json::from_str(&self.trace_ids_json).unwrap_or_default()
-    }
-
-    pub fn root_span_ids(&self) -> Vec<String> {
-        serde_json::from_str(&self.root_span_ids_json).unwrap_or_default()
-    }
-
-    pub fn request_models(&self) -> Vec<String> {
-        serde_json::from_str(&self.request_models_json).unwrap_or_default()
-    }
-
-    pub fn used_models(&self) -> Vec<String> {
-        serde_json::from_str(&self.used_models_json).unwrap_or_default()
-    }
-
-    pub fn used_tools(&self) -> Vec<String> {
-        serde_json::from_str(&self.used_tools_json).unwrap_or_default()
-    }
-
-    pub fn mcp_template_definition_ids(&self) -> Vec<String> {
-        serde_json::from_str(&self.mcp_template_definition_ids_json).unwrap_or_default()
-    }
-
-    pub fn errors(&self) -> Vec<String> {
-        serde_json::from_str(&self.errors_json).unwrap_or_default()
-    }
-}
-
-// For serialization responses - with parsed vectors
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RunUsageResponse {
-    pub run_id: Option<String>,
-    pub thread_ids: Vec<String>,
-    pub trace_ids: Vec<String>,
-    pub root_span_ids: Vec<String>,
-    pub request_models: Vec<String>,
-    pub used_models: Vec<String>,
-    pub used_tools: Vec<String>,
-    pub mcp_template_definition_ids: Vec<String>,
-    pub llm_calls: i64,
-    pub cost: f64,
-    pub input_tokens: i64,
-    pub output_tokens: i64,
-    pub start_time_us: i64,
-    pub finish_time_us: i64,
-    pub errors: Vec<String>,
-}
-
-impl From<RunUsageInformation> for RunUsageResponse {
-    fn from(info: RunUsageInformation) -> Self {
-        Self {
-            run_id: info.run_id.clone(),
-            thread_ids: info.thread_ids(),
-            trace_ids: info.trace_ids(),
-            root_span_ids: info.root_span_ids(),
-            request_models: info.request_models(),
-            used_models: info.used_models(),
-            used_tools: info.used_tools(),
-            mcp_template_definition_ids: info.mcp_template_definition_ids(),
-            llm_calls: info.llm_calls,
-            cost: info.cost,
-            input_tokens: info.input_tokens.unwrap_or(0),
-            output_tokens: info.output_tokens.unwrap_or(0),
-            start_time_us: info.start_time_us,
-            finish_time_us: info.finish_time_us,
-            errors: info.errors(),
-        }
-    }
+    #[cfg_attr(feature = "sqlite", diesel(sql_type = Text))]
+    #[cfg_attr(feature = "postgres", diesel(sql_type = Jsonb))]
+    errors: JsonVec,
 }

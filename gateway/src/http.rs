@@ -2,7 +2,7 @@ use crate::callback_handler::init_callback_handler;
 use crate::config::Config;
 use crate::cost::GatewayCostCalculator;
 use crate::guardrails::GuardrailsService;
-use crate::handlers::{group, mcp_configs, models, projects, runs, session, threads, traces};
+use crate::handlers::{group, mcp_configs, models, projects, session, threads, traces};
 use crate::middleware::project::ProjectMiddleware;
 use crate::middleware::thread_service::ThreadsServiceMiddleware;
 use crate::middleware::trace_logger::TraceLogger;
@@ -35,6 +35,7 @@ use vllora_core::handler::middleware::actix_otel::ActixOtelMiddleware;
 use vllora_core::handler::middleware::rate_limit::RateLimitMiddleware;
 use vllora_core::handler::middleware::run_id::RunId;
 use vllora_core::handler::middleware::thread_id::ThreadId;
+use vllora_core::handler::runs;
 use vllora_core::handler::spans;
 use vllora_core::handler::CallbackHandlerFn;
 use vllora_core::mcp::server::LocalSessionManager;
@@ -45,6 +46,7 @@ use vllora_core::metadata::services::model::ModelService;
 use vllora_core::metadata::services::model::ModelServiceImpl;
 use vllora_core::metadata::services::project::ProjectServiceImpl;
 use vllora_core::metadata::services::providers::ProvidersServiceImpl;
+use vllora_core::metadata::services::run::RunServiceImpl;
 use vllora_core::telemetry::database::SqliteTraceWriterTransport;
 use vllora_core::telemetry::SpanWriterTransport;
 use vllora_core::telemetry::{TraceServiceImpl, TraceServiceServer};
@@ -349,7 +351,7 @@ impl ApiServer {
             .service(web::scope("/traces").route("", web::get().to(traces::list_traces)))
             .service(
                 web::scope("/runs")
-                    .route("", web::get().to(runs::list_root_runs))
+                    .route("", web::get().to(runs::list_root_runs::<RunServiceImpl>))
                     .route("/{run_id}", web::get().to(traces::get_spans_by_run)),
             )
             .service(

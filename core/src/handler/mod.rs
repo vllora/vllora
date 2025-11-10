@@ -6,6 +6,7 @@ pub mod middleware;
 pub mod models;
 pub mod providers;
 pub mod responses;
+pub mod runs;
 pub mod spans;
 pub mod threads;
 

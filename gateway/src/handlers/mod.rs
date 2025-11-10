@@ -2,7 +2,6 @@ pub mod group;
 pub mod mcp_configs;
 pub mod models;
 pub mod projects;
-pub mod runs;
 pub mod session;
 pub mod threads;
 pub mod traces;

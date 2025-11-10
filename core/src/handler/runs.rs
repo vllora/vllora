@@ -1,10 +1,8 @@
-use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Result};
+use crate::metadata::services::run::{ListRunsQuery, RunService, TypeFilter};
+use crate::metadata::{DatabaseService, DatabaseServiceTrait};
+use crate::types::metadata::project::Project;
+use actix_web::{web, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use vllora_core::metadata::models::project::DbProject;
-use vllora_core::metadata::models::run::RunUsageResponse;
-use vllora_core::metadata::pool::DbPool;
-use vllora_core::metadata::services::run::{ListRunsQuery, RunService, RunServiceImpl, TypeFilter};
 
 #[derive(Deserialize)]
 pub struct ListRunsQueryParams {
@@ -47,18 +45,18 @@ pub struct Pagination {
 /// to only include runs that have at least one root span.
 ///
 /// This uses a single optimized SQL query that filters runs directly.
-pub async fn list_root_runs(
-    req: HttpRequest,
+pub async fn list_root_runs<T: RunService + DatabaseServiceTrait>(
     query: web::Query<ListRunsQueryParams>,
-    db_pool: web::Data<DbPool>,
+    project: web::ReqData<Project>,
+    database_service: web::Data<DatabaseService>,
 ) -> Result<HttpResponse> {
-    let run_service: RunServiceImpl = RunServiceImpl::new(Arc::new(db_pool.get_ref().clone()));
+    let run_service: T = database_service.init();
 
     // Extract project_id from extensions (set by ProjectMiddleware)
-    let project_id = req.extensions().get::<DbProject>().map(|p| p.slug.clone());
+    let project_slug = project.slug.clone();
 
     let list_query = ListRunsQuery {
-        project_id: project_id.clone(),
+        project_slug: Some(project_slug),
         run_ids: query
             .run_ids
             .as_ref()
@@ -83,16 +81,13 @@ pub async fn list_root_runs(
     let runs = run_service.list_root_runs(list_query.clone())?;
     let total = run_service.count_root_runs(list_query)?;
 
-    // Convert to RunUsageResponse for JSON serialization
-    let runs_response: Vec<RunUsageResponse> = runs.into_iter().map(|run| run.into()).collect();
-
     let result = PaginatedResult {
         pagination: Pagination {
             offset: query.offset.unwrap_or(0),
             limit: query.limit.unwrap_or(100),
             total,
         },
-        data: runs_response,
+        data: runs,
     };
 
     Ok(HttpResponse::Ok().json(result))

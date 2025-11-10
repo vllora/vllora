@@ -1,10 +1,10 @@
 use crate::metadata::error::DatabaseError;
 use crate::metadata::models::run::RunUsageInformation;
 use crate::metadata::pool::DbPool;
+use crate::metadata::DatabaseServiceTrait;
 use diesel::prelude::*;
 use diesel::{sql_query, RunQueryDsl};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -15,7 +15,7 @@ pub enum TypeFilter {
 
 #[derive(Debug, Clone)]
 pub struct ListRunsQuery {
-    pub project_id: Option<String>,
+    pub project_slug: Option<String>,
     pub run_ids: Option<Vec<String>>,
     pub thread_ids: Option<Vec<String>>,
     pub trace_ids: Option<Vec<String>>,
@@ -39,14 +39,16 @@ pub trait RunService {
 }
 
 pub struct RunServiceImpl {
-    db_pool: Arc<DbPool>,
+    db_pool: DbPool,
+}
+
+impl DatabaseServiceTrait for RunServiceImpl {
+    fn init(db_pool: DbPool) -> Self {
+        Self { db_pool }
+    }
 }
 
 impl RunServiceImpl {
-    pub fn new(db_pool: Arc<DbPool>) -> Self {
-        Self { db_pool }
-    }
-
     // Helper function to safely escape string values for SQL
     fn escape_sql_string(value: &str) -> String {
         value.replace('\'', "''")
@@ -64,10 +66,10 @@ impl RunServiceImpl {
     fn build_filters(&self, query: &ListRunsQuery) -> String {
         let mut conditions = vec![];
 
-        if let Some(project_id) = &query.project_id {
+        if let Some(project_slug) = &query.project_slug {
             conditions.push(format!(
                 "project_id = '{}'",
-                Self::escape_sql_string(project_id)
+                Self::escape_sql_string(project_slug)
             ));
         }
 
@@ -133,20 +135,20 @@ impl RunService for RunServiceImpl {
 
         let sql_query_str = format!("SELECT
               run_id,
-              COALESCE(json_group_array(DISTINCT thread_id) FILTER (WHERE thread_id IS NOT NULL), '[]') as thread_ids_json,
-              COALESCE(json_group_array(DISTINCT trace_id), '[]') as trace_ids_json,
-              COALESCE(json_group_array(DISTINCT span_id) FILTER (WHERE parent_span_id IS NULL), '[]') as root_span_ids_json,
-              COALESCE(json_group_array(DISTINCT request_model) FILTER (WHERE request_model IS NOT NULL), '[]') as request_models_json,
-              COALESCE(json_group_array(DISTINCT used_model) FILTER (WHERE used_model IS NOT NULL), '[]') as used_models_json,
+              COALESCE(json_group_array(DISTINCT thread_id) FILTER (WHERE thread_id IS NOT NULL), '[]') as thread_ids,
+              COALESCE(json_group_array(DISTINCT trace_id), '[]') as trace_ids,
+              COALESCE(json_group_array(DISTINCT span_id) FILTER (WHERE parent_span_id IS NULL), '[]') as root_span_ids,
+              COALESCE(json_group_array(DISTINCT request_model) FILTER (WHERE request_model IS NOT NULL), '[]') as request_models,
+              COALESCE(json_group_array(DISTINCT used_model) FILTER (WHERE used_model IS NOT NULL), '[]') as used_models,
               CAST(SUM(CASE WHEN operation_name = 'model_call' THEN 1 ELSE 0 END) AS BIGINT) as llm_calls,
               SUM(COALESCE(CAST(json_extract(attribute, '$.cost') as REAL), 0)) as cost,
               SUM(CASE WHEN operation_name != 'model_call' THEN json_extract(json_extract(attribute, '$.usage'), '$.input_tokens') END) AS input_tokens,
               SUM(CASE WHEN operation_name != 'model_call' THEN json_extract(json_extract(attribute, '$.usage'), '$.output_tokens') END) AS output_tokens,
               MIN(start_time_us) as start_time_us,
               MAX(finish_time_us) as finish_time_us,
-              COALESCE(json_group_array(DISTINCT error_msg) FILTER (WHERE error_msg IS NOT NULL), '[]') as errors_json,
-              '[]' as used_tools_json,
-              '[]' as mcp_template_definition_ids_json
+              COALESCE(json_group_array(DISTINCT error_msg) FILTER (WHERE error_msg IS NOT NULL), '[]') as errors,
+              '[]' as used_tools,
+              '[]' as mcp_template_definition_ids
             FROM (
               SELECT
                 run_id,
@@ -220,20 +222,20 @@ impl RunService for RunServiceImpl {
         // (span with run_id but no parent_span_id)
         let sql_query_str = format!("SELECT
               run_id,
-              COALESCE(json_group_array(DISTINCT thread_id) FILTER (WHERE thread_id IS NOT NULL), '[]') as thread_ids_json,
-              COALESCE(json_group_array(DISTINCT trace_id) FILTER (WHERE parent_span_id IS NULL), '[]') as trace_ids_json,
-              COALESCE(json_group_array(DISTINCT span_id) FILTER (WHERE parent_span_id IS NULL), '[]') as root_span_ids_json,
-              COALESCE(json_group_array(DISTINCT request_model) FILTER (WHERE request_model IS NOT NULL), '[]') as request_models_json,
-              COALESCE(json_group_array(DISTINCT used_model) FILTER (WHERE used_model IS NOT NULL), '[]') as used_models_json,
+              COALESCE(json_group_array(DISTINCT thread_id) FILTER (WHERE thread_id IS NOT NULL), '[]') as thread_ids,
+              COALESCE(json_group_array(DISTINCT trace_id) FILTER (WHERE parent_span_id IS NULL), '[]') as trace_ids,
+              COALESCE(json_group_array(DISTINCT span_id) FILTER (WHERE parent_span_id IS NULL), '[]') as root_span_ids,
+              COALESCE(json_group_array(DISTINCT request_model) FILTER (WHERE request_model IS NOT NULL), '[]') as request_models,
+              COALESCE(json_group_array(DISTINCT used_model) FILTER (WHERE used_model IS NOT NULL), '[]') as used_models,
               CAST(SUM(CASE WHEN operation_name = 'model_call' THEN 1 ELSE 0 END) AS BIGINT) as llm_calls,
               SUM(COALESCE(CAST(json_extract(attribute, '$.cost') as REAL), 0)) as cost,
               SUM(CASE WHEN operation_name != 'model_call' THEN json_extract(json_extract(attribute, '$.usage'), '$.input_tokens') END) AS input_tokens,
               SUM(CASE WHEN operation_name != 'model_call' THEN json_extract(json_extract(attribute, '$.usage'), '$.output_tokens') END) AS output_tokens,
               MIN(start_time_us) as start_time_us,
               MAX(finish_time_us) as finish_time_us,
-              COALESCE(json_group_array(DISTINCT error_msg) FILTER (WHERE error_msg IS NOT NULL), '[]') as errors_json,
-              '[]' as used_tools_json,
-              '[]' as mcp_template_definition_ids_json
+              COALESCE(json_group_array(DISTINCT error_msg) FILTER (WHERE error_msg IS NOT NULL), '[]') as errors,
+              '[]' as used_tools,
+              '[]' as mcp_template_definition_ids
             FROM (
               SELECT
                 run_id,
