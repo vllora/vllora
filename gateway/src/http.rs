@@ -292,7 +292,7 @@ impl ApiServer {
                     )
                     .route(
                         "/{provider_name}",
-                        web::put().to(vllora_core::handler::providers::update_provider::<
+                        web::put().to(vllora_core::handler::providers::update_provider_key::<
                             ProvidersServiceImpl,
                         >),
                     )

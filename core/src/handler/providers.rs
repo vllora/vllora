@@ -6,6 +6,7 @@ use crate::metadata::services::providers::{
 };
 use crate::types::credentials::Credentials;
 use crate::types::metadata::project::Project;
+use crate::types::GatewayTenant;
 use actix_web::HttpMessage;
 use actix_web::HttpRequest;
 use actix_web::{web, HttpResponse, Result};
@@ -35,12 +36,13 @@ pub async fn list_providers<T: ProvidersService>(
 }
 
 /// Update provider credentials for the current project
-pub async fn update_provider<T: ProvidersService>(
+pub async fn update_provider_key<T: ProvidersService>(
     path: web::Path<String>,
     req: web::Json<UpdateProviderRequest>,
     project: web::ReqData<Project>,
     db_pool: web::Data<DbPool>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
+    tenant: web::ReqData<GatewayTenant>,
 ) -> Result<HttpResponse> {
     let provider_name = path.into_inner();
     let project = project.into_inner();
@@ -48,7 +50,7 @@ pub async fn update_provider<T: ProvidersService>(
     let providers_service = T::new(db_pool.get_ref().clone());
 
     let provider_credentials_id = ProviderCredentialsId::new(
-        "default".to_string(),
+        tenant.name.clone(),
         provider_name.clone(),
         project.id.to_string(),
     );
