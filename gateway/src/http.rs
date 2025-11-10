@@ -2,9 +2,7 @@ use crate::callback_handler::init_callback_handler;
 use crate::config::Config;
 use crate::cost::GatewayCostCalculator;
 use crate::guardrails::GuardrailsService;
-use crate::handlers::{group, spans, threads};
-
-use crate::handlers::{mcp_configs, models, projects, runs, session, traces};
+use crate::handlers::{group, mcp_configs, models, projects, runs, session, threads, traces};
 use crate::middleware::project::ProjectMiddleware;
 use crate::middleware::thread_service::ThreadsServiceMiddleware;
 use crate::middleware::trace_logger::TraceLogger;
@@ -37,6 +35,7 @@ use vllora_core::handler::middleware::actix_otel::ActixOtelMiddleware;
 use vllora_core::handler::middleware::rate_limit::RateLimitMiddleware;
 use vllora_core::handler::middleware::run_id::RunId;
 use vllora_core::handler::middleware::thread_id::ThreadId;
+use vllora_core::handler::spans;
 use vllora_core::handler::CallbackHandlerFn;
 use vllora_core::mcp::server::LocalSessionManager;
 use vllora_core::metadata::models::session::DbSession;
@@ -55,6 +54,7 @@ use vllora_core::types::guardrails::Guard;
 use vllora_core::usage::InMemoryStorage;
 
 use vllora_core::metadata::services::trace::TraceServiceImpl as MetadataTraceServiceImpl;
+use vllora_core::metadata::DatabaseService;
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 #[serde(crate = "serde")]
@@ -242,11 +242,14 @@ impl ApiServer {
         let model_service =
             Box::new(ModelServiceImpl::new(db_pool.clone())) as Box<dyn ModelService>;
 
-        let mcp_scope = vllora_core::mcp::server::service::attach_vllora_mcp(
-            web::scope("/mcp"),
-            session_manager.clone(),
-            MetadataTraceServiceImpl::new(db_pool.clone()),
-        );
+        let database_service = DatabaseService::new(db_pool.clone());
+
+        let mcp_scope =
+            vllora_core::mcp::server::service::attach_vllora_mcp::<MetadataTraceServiceImpl>(
+                web::scope("/mcp"),
+                session_manager.clone(),
+                &database_service,
+            );
 
         app.wrap(TraceLogger)
             .wrap(ThreadId)
@@ -258,6 +261,7 @@ impl ApiServer {
             .app_data(Data::new(callback_handler))
             .app_data(Data::new(key_storage))
             .app_data(Data::new(session))
+            .app_data(Data::new(database_service))
             .service(
                 service
                     .app_data(Data::new(model_service))
@@ -325,7 +329,10 @@ impl ApiServer {
                         web::post().to(vllora_core::handler::events::send_events),
                     ),
             )
-            .service(web::scope("/spans").route("", web::get().to(spans::list_spans)))
+            .service(web::scope("/spans").route(
+                "",
+                web::get().to(spans::list_spans::<MetadataTraceServiceImpl>),
+            ))
             .service(
                 web::scope("/mcp-configs")
                     .route("", web::get().to(mcp_configs::list_mcp_configs))

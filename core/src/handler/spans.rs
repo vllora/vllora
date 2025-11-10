@@ -1,10 +1,11 @@
-use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Result};
+use crate::metadata::services::trace::{ListTracesQuery, TraceService};
+use crate::metadata::DatabaseService;
+use crate::metadata::DatabaseServiceTrait;
+use crate::types::metadata::project::Project;
+use actix_web::{web, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use vllora_core::metadata::models::project::DbProject;
-use vllora_core::metadata::pool::DbPool;
-use vllora_core::metadata::services::trace::{ListTracesQuery, TraceService, TraceServiceImpl};
 
 #[derive(Deserialize)]
 pub struct ListSpansQueryParams {
@@ -68,15 +69,14 @@ pub struct Pagination {
 /// - "!null": Returns only spans where field IS NOT NULL
 ///
 /// Returns paginated list of spans with their attributes
-pub async fn list_spans(
-    req: HttpRequest,
+pub async fn list_spans<T: TraceService + DatabaseServiceTrait>(
     query: web::Query<ListSpansQueryParams>,
-    db_pool: web::Data<DbPool>,
+    project: web::ReqData<Project>,
+    database_service: web::Data<DatabaseService>,
 ) -> Result<HttpResponse> {
-    let trace_service = TraceServiceImpl::new(db_pool.get_ref().clone());
+    let trace_service = database_service.init::<T>();
 
-    // Extract project_id from extensions (set by ProjectMiddleware)
-    let project_id = req.extensions().get::<DbProject>().map(|p| p.slug.clone());
+    let project_slug = project.slug.clone();
 
     // Parse comma-separated values into vectors
     // Handle special cases: "null" = IS NULL, "!null" = IS NOT NULL
@@ -162,7 +162,7 @@ pub async fn list_spans(
     };
 
     let list_query = ListTracesQuery {
-        project_id: project_id.clone(),
+        project_slug: Some(project_slug.clone()),
         run_ids,
         thread_ids,
         operation_names,
@@ -189,7 +189,7 @@ pub async fn list_spans(
         let span_ids: Vec<String> = traces.iter().map(|t| t.span_id.clone()).collect();
 
         let child_attrs = trace_service
-            .get_child_attributes(&trace_ids, &span_ids, project_id.as_deref())
+            .get_child_attributes(&trace_ids, &span_ids, Some(&project_slug))
             .unwrap_or_default();
 
         let spans: Vec<Span> = traces
@@ -200,8 +200,9 @@ pub async fn list_spans(
                 // Get child_attribute from the map
                 let child_attribute = child_attrs
                     .get(&trace.span_id)
-                    .and_then(|opt| opt.as_ref())
-                    .and_then(|json_str| serde_json::from_str(json_str).ok());
+                    .cloned()
+                    .unwrap_or(None)
+                    .and_then(|json| serde_json::from_value(json).ok());
 
                 Span {
                     trace_id: trace.trace_id,

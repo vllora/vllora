@@ -1,11 +1,12 @@
-use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Result};
+use actix_web::{web, HttpResponse, Result};
 use serde::Deserialize;
-use vllora_core::metadata::models::project::DbProject;
-use vllora_core::metadata::pool::DbPool;
 use vllora_core::metadata::services::trace::{ListTracesQuery, TraceService, TraceServiceImpl};
+use vllora_core::metadata::DatabaseService;
 use vllora_core::types::handlers::pagination::PaginatedResult;
 use vllora_core::types::handlers::pagination::Pagination;
+use vllora_core::types::metadata::project::Project;
 use vllora_core::types::traces::{LangdbSpan, Operation};
+
 #[derive(Deserialize)]
 pub struct ListTracesQueryParams {
     #[serde(alias = "runId")]
@@ -21,14 +22,14 @@ pub struct ListTracesQueryParams {
 }
 
 pub async fn list_traces(
-    req: HttpRequest,
     query: web::Query<ListTracesQueryParams>,
-    db_pool: web::Data<DbPool>,
+    project: web::ReqData<Project>,
+    database_service: web::Data<DatabaseService>,
 ) -> Result<HttpResponse> {
-    let trace_service = TraceServiceImpl::new(db_pool.get_ref().clone());
+    let trace_service = database_service.init::<TraceServiceImpl>();
 
     // Extract project_id from extensions (set by ProjectMiddleware)
-    let project_id = req.extensions().get::<DbProject>().map(|p| p.slug.clone());
+    let project_slug = project.slug.clone();
 
     let thread_ids = query
         .thread_ids
@@ -38,7 +39,7 @@ pub async fn list_traces(
     let run_ids = query.run_id.as_ref().map(|id| vec![id.clone()]);
 
     let list_query = ListTracesQuery {
-        project_id: project_id.clone(),
+        project_slug: Some(project_slug.clone()),
         run_ids,
         thread_ids,
         operation_names: None,
@@ -69,28 +70,27 @@ pub struct GetSpansByRunQuery {
 }
 
 pub async fn get_spans_by_run(
-    req: HttpRequest,
     run_id: web::Path<String>,
     query: web::Query<GetSpansByRunQuery>,
-    db_pool: web::Data<DbPool>,
+    project: web::ReqData<Project>,
+    database_service: web::Data<DatabaseService>,
 ) -> Result<HttpResponse> {
-    let trace_service = TraceServiceImpl::new(db_pool.get_ref().clone());
+    let trace_service = database_service.init::<TraceServiceImpl>();
 
-    // Extract project_id from extensions (set by ProjectMiddleware)
-    let project_id = req.extensions().get::<DbProject>().map(|p| p.slug.clone());
+    let project_slug = project.slug.clone();
 
     let limit = query.limit.unwrap_or(100);
     let offset = query.offset.unwrap_or(0);
 
     Ok(trace_service
-        .get_by_run_id(&run_id, project_id.as_deref(), limit, offset)
+        .get_by_run_id(&run_id, Some(&project_slug), limit, offset)
         .map(|traces| {
             // Get child attributes for all traces
             let trace_ids: Vec<String> = traces.iter().map(|t| t.trace_id.clone()).collect();
             let span_ids: Vec<String> = traces.iter().map(|t| t.span_id.clone()).collect();
 
             let child_attrs = trace_service
-                .get_child_attributes(&trace_ids, &span_ids, project_id.as_deref())
+                .get_child_attributes(&trace_ids, &span_ids, Some(&project_slug))
                 .unwrap_or_default();
 
             let spans: Vec<LangdbSpan> = traces
@@ -102,7 +102,7 @@ pub async fn get_spans_by_run(
                     let child_attribute = child_attrs
                         .get(&trace.span_id)
                         .and_then(|opt| opt.as_ref())
-                        .and_then(|json_str| serde_json::from_str(json_str).ok());
+                        .and_then(|json| serde_json::from_value(json.clone()).ok());
                     LangdbSpan {
                         trace_id: trace.trace_id,
                         span_id: trace.span_id,
@@ -120,7 +120,7 @@ pub async fn get_spans_by_run(
 
             // Get total count for this run_id
             let count_query = ListTracesQuery {
-                project_id: project_id.clone(),
+                project_slug: Some(project_slug.clone()),
                 run_ids: Some(vec![run_id.into_inner()]),
                 thread_ids: None,
                 operation_names: None,

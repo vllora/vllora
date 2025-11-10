@@ -11,6 +11,8 @@ use vllora_core::metadata::services::group::{
     GroupBy, GroupService, GroupServiceImpl, GroupUsageInformation, ListGroupQuery, TypeFilter,
 };
 use vllora_core::metadata::services::trace::{TraceService, TraceServiceImpl};
+use vllora_core::metadata::DatabaseService;
+use vllora_core::types::metadata::project::Project;
 
 #[derive(Deserialize)]
 pub struct ListGroupQueryParams {
@@ -313,14 +315,14 @@ pub struct BatchGroupSpansResponse {
 /// - limit: number of results to return (default: 100)
 /// - offset: number of results to skip (default: 0)
 pub async fn get_group_spans(
-    req: HttpRequest,
     query: web::Query<GetGroupSpansQuery>,
+    project: web::ReqData<Project>,
+    database_service: web::Data<DatabaseService>,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
-    let trace_service = TraceServiceImpl::new(db_pool.get_ref().clone());
+    let trace_service = database_service.init::<TraceServiceImpl>();
 
-    // Extract project_id from extensions (set by ProjectMiddleware)
-    let project_id = req.extensions().get::<DbProject>().map(|p| p.slug.clone());
+    let project_slug = project.slug.clone();
 
     let limit = query.limit.unwrap_or(100);
     let offset = query.offset.unwrap_or(0);
@@ -386,10 +388,8 @@ pub async fn get_group_spans(
     }
 
     // Add project_id filter if present
-    if let Some(ref proj_id) = project_id {
-        count_query = count_query.filter(traces::project_id.eq(proj_id));
-        data_query = data_query.filter(traces::project_id.eq(proj_id));
-    }
+    count_query = count_query.filter(traces::project_id.eq(&project_slug));
+    data_query = data_query.filter(traces::project_id.eq(&project_slug));
 
     // Get total count
     let total = count_query
@@ -414,7 +414,7 @@ pub async fn get_group_spans(
     let span_ids: Vec<String> = traces.iter().map(|t| t.span_id.clone()).collect();
 
     let child_attrs = trace_service
-        .get_child_attributes(&trace_ids, &span_ids, project_id.as_deref())
+        .get_child_attributes(&trace_ids, &span_ids, Some(&project_slug))
         .unwrap_or_default();
 
     let spans: Vec<LangdbSpan> = traces
@@ -424,7 +424,7 @@ pub async fn get_group_spans(
             let child_attribute = child_attrs
                 .get(&trace.span_id)
                 .and_then(|opt| opt.as_ref())
-                .and_then(|json_str| serde_json::from_str(json_str).ok());
+                .and_then(|json_config| serde_json::from_value(json_config.clone()).ok());
 
             LangdbSpan {
                 trace_id: trace.trace_id,
@@ -485,12 +485,13 @@ pub async fn get_group_spans(
 /// }
 /// ```
 pub async fn get_batch_group_spans(
-    req: HttpRequest,
     body: web::Json<BatchGroupSpansRequest>,
+    project: web::ReqData<Project>,
+    database_service: web::Data<DatabaseService>,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
-    let trace_service = TraceServiceImpl::new(db_pool.get_ref().clone());
-    let project_id = req.extensions().get::<DbProject>().map(|p| p.slug.clone());
+    let trace_service = database_service.init::<TraceServiceImpl>();
+    let project_slug = project.slug.clone();
 
     let limit = body.spans_per_group;
     let offset = 0; // Batch endpoint always starts from offset 0
@@ -546,11 +547,8 @@ pub async fn get_batch_group_spans(
             }
         }
 
-        // Add project_id filter if present
-        if let Some(ref proj_id) = project_id {
-            count_query = count_query.filter(traces::project_id.eq(proj_id));
-            data_query = data_query.filter(traces::project_id.eq(proj_id));
-        }
+        count_query = count_query.filter(traces::project_id.eq(&project_slug));
+        data_query = data_query.filter(traces::project_id.eq(&project_slug));
 
         // Get total count
         let total = count_query
@@ -571,7 +569,7 @@ pub async fn get_batch_group_spans(
         let span_ids: Vec<String> = traces.iter().map(|t| t.span_id.clone()).collect();
 
         let child_attrs = trace_service
-            .get_child_attributes(&trace_ids, &span_ids, project_id.as_deref())
+            .get_child_attributes(&trace_ids, &span_ids, Some(&project_slug))
             .unwrap_or_default();
 
         let spans: Vec<LangdbSpan> = traces
@@ -581,7 +579,7 @@ pub async fn get_batch_group_spans(
                 let child_attribute = child_attrs
                     .get(&trace.span_id)
                     .and_then(|opt| opt.as_ref())
-                    .and_then(|json_str| serde_json::from_str(json_str).ok());
+                    .and_then(|json_config| serde_json::from_value(json_config.clone()).ok());
 
                 LangdbSpan {
                     trace_id: trace.trace_id,

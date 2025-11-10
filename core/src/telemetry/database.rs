@@ -1,6 +1,7 @@
 use crate::metadata::models::trace::DbNewTrace;
 use crate::metadata::pool::DbPool;
 use crate::metadata::services::trace::TraceServiceImpl;
+use crate::metadata::DatabaseServiceTrait;
 use crate::telemetry::SpanWriterTransport;
 use crate::GatewayError;
 use crate::GatewayResult;
@@ -14,7 +15,7 @@ pub struct SqliteTraceWriterTransport {
 impl SqliteTraceWriterTransport {
     pub fn new(db_pool: DbPool) -> Self {
         Self {
-            trace_service: TraceServiceImpl::new(db_pool),
+            trace_service: TraceServiceImpl::init(db_pool),
         }
     }
 

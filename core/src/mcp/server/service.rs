@@ -3,16 +3,16 @@ use rmcp_actix_web::transport::StreamableHttpService;
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 
 use crate::mcp::server::VlloraMcp;
-use crate::metadata::services::trace::TraceServiceImpl;
+use crate::metadata::services::trace::TraceService;
+use crate::metadata::{DatabaseService, DatabaseServiceTrait};
 use actix_web::Scope;
 use std::sync::Arc;
 use std::time::Duration;
 
-fn create_http_service(
+fn create_http_service<T: TraceService + Clone + Send + Sync + 'static>(
     session_manager: Arc<LocalSessionManager>,
-    trace_service: TraceServiceImpl,
-) -> StreamableHttpService<VlloraMcp> {
-    let trace_service = trace_service.clone();
+    trace_service: T,
+) -> StreamableHttpService<VlloraMcp<T>> {
     let vllora_mcp = VlloraMcp::new(trace_service);
     StreamableHttpService::builder()
         .service_factory(Arc::new(move || Ok(vllora_mcp.clone())))
@@ -22,11 +22,12 @@ fn create_http_service(
         .build()
 }
 
-pub fn attach_vllora_mcp(
+pub fn attach_vllora_mcp<T: TraceService + DatabaseServiceTrait + Clone + Send + Sync + 'static>(
     scope: Scope,
     session_manager: Arc<LocalSessionManager>,
-    trace_service: TraceServiceImpl,
+    database_service: &DatabaseService,
 ) -> Scope {
+    let trace_service = database_service.init::<T>();
     let http_service = create_http_service(session_manager, trace_service);
 
     // StreamableHttp-based calculator (cloned for each worker)

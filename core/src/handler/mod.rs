@@ -6,6 +6,7 @@ pub mod middleware;
 pub mod models;
 pub mod providers;
 pub mod responses;
+pub mod spans;
 pub mod threads;
 
 use crate::metadata::services::model::ModelService;

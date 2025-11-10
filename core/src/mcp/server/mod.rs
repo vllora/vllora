@@ -6,7 +6,6 @@ pub use rmcp::transport::streamable_http_server::session::local::LocalSessionMan
 use crate::mcp::server::tools::ListTracesRequest;
 use crate::metadata::services::trace::ListTracesQuery;
 use crate::metadata::services::trace::TraceService;
-use crate::metadata::services::trace::TraceServiceImpl;
 use crate::types::handlers::pagination::PaginatedResult;
 use crate::types::traces::LangdbSpan;
 use rmcp::handler::server::wrapper::Parameters;
@@ -19,16 +18,16 @@ use rmcp::{
 };
 
 #[derive(Clone)]
-pub struct VlloraMcp {
+pub struct VlloraMcp<T: TraceService + Send + Sync + 'static> {
     /// Router for tool dispatch
-    tool_router: ToolRouter<VlloraMcp>,
-    trace_service: TraceServiceImpl,
+    tool_router: ToolRouter<VlloraMcp<T>>,
+    trace_service: T,
 }
 
 #[tool_router]
-impl VlloraMcp {
+impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
     #[allow(dead_code)]
-    pub fn new(trace_service: TraceServiceImpl) -> Self {
+    pub fn new(trace_service: T) -> Self {
         Self {
             tool_router: Self::tool_router(),
             trace_service,
@@ -49,7 +48,7 @@ impl VlloraMcp {
     ) -> Result<Json<PaginatedResult<LangdbSpan>>, String> {
         let range = params.get_range();
         let list_query = ListTracesQuery {
-            project_id: None,
+            project_slug: None,
             run_ids: params.run_ids.clone(),
             thread_ids: params.thread_ids.clone(),
             operation_names: params.operation_names.as_ref().map(|operation_names| {
@@ -74,7 +73,7 @@ impl VlloraMcp {
 }
 
 #[tool_handler]
-impl ServerHandler for VlloraMcp {
+impl<T: TraceService + Send + Sync + 'static> ServerHandler for VlloraMcp<T> {
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
             protocol_version: ProtocolVersion::V_2024_11_05,

@@ -2,6 +2,7 @@ use crate::metadata::error::DatabaseError;
 use crate::metadata::models::trace::{DbNewTrace, DbTrace};
 use crate::metadata::pool::DbPool;
 use crate::metadata::schema::traces;
+use crate::metadata::DatabaseServiceTrait;
 use crate::types::handlers::pagination::{PaginatedResult, Pagination};
 use crate::types::traces::{LangdbSpan, Operation};
 use diesel::prelude::*;
@@ -11,7 +12,7 @@ use std::collections::HashMap;
 #[derive(Debug, Clone)]
 
 pub struct ListTracesQuery {
-    pub project_id: Option<String>,
+    pub project_slug: Option<String>,
     pub run_ids: Option<Vec<String>>,
     pub thread_ids: Option<Vec<String>>,
     pub operation_names: Option<Vec<String>>,
@@ -35,7 +36,7 @@ pub struct ListTracesQuery {
 impl Default for ListTracesQuery {
     fn default() -> Self {
         Self {
-            project_id: None,
+            project_slug: None,
             run_ids: None,
             thread_ids: None,
             operation_names: None,
@@ -75,7 +76,7 @@ pub trait TraceService {
         trace_ids: &[String],
         span_ids: &[String],
         project_id: Option<&str>,
-    ) -> Result<HashMap<String, Option<String>>, DatabaseError>;
+    ) -> Result<HashMap<String, Option<serde_json::Value>>, DatabaseError>;
 }
 
 #[derive(Clone)]
@@ -83,11 +84,9 @@ pub struct TraceServiceImpl {
     db_pool: DbPool,
 }
 
-impl TraceServiceImpl {
-    pub fn new(db_pool: DbPool) -> Self {
-        Self {
-            db_pool: db_pool.clone(),
-        }
+impl DatabaseServiceTrait for TraceServiceImpl {
+    fn init(db_pool: DbPool) -> Self {
+        Self { db_pool }
     }
 }
 
@@ -98,8 +97,8 @@ impl TraceService for TraceServiceImpl {
         let mut db_query = traces::table.into_boxed();
 
         // Apply project_id filter
-        if let Some(project_id) = &query.project_id {
-            db_query = db_query.filter(traces::project_id.eq(project_id));
+        if let Some(project_slug) = &query.project_slug {
+            db_query = db_query.filter(traces::project_id.eq(project_slug.clone()));
         }
 
         // Apply run_ids filter
@@ -198,7 +197,7 @@ impl TraceService for TraceServiceImpl {
                     let child_attribute = child_attrs
                         .get(&trace.span_id)
                         .and_then(|opt| opt.as_ref())
-                        .and_then(|json_str| serde_json::from_str(json_str).ok());
+                        .and_then(|json| serde_json::from_value(json.clone()).ok());
 
                     LangdbSpan {
                         trace_id: trace.trace_id,
@@ -253,7 +252,7 @@ impl TraceService for TraceServiceImpl {
         let mut db_query = traces::table.into_boxed();
 
         // Apply project_id filter
-        if let Some(project_id) = &query.project_id {
+        if let Some(project_id) = &query.project_slug {
             db_query = db_query.filter(traces::project_id.eq(project_id));
         }
 
@@ -323,7 +322,7 @@ impl TraceService for TraceServiceImpl {
         trace_ids: &[String],
         span_ids: &[String],
         project_id: Option<&str>,
-    ) -> Result<HashMap<String, Option<String>>, DatabaseError> {
+    ) -> Result<HashMap<String, Option<serde_json::Value>>, DatabaseError> {
         if trace_ids.is_empty() || span_ids.is_empty() {
             return Ok(HashMap::new());
         }
@@ -378,9 +377,13 @@ impl TraceService for TraceServiceImpl {
 
         let mut map = HashMap::new();
         for result in results {
-            map.insert(result.parent_span_id, result.child_attribute);
+            map.insert(
+                result.parent_span_id,
+                result
+                    .child_attribute
+                    .map(|attr| serde_json::from_str(&attr).unwrap()),
+            );
         }
-
         Ok(map)
     }
 }
