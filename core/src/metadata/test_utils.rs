@@ -17,7 +17,8 @@ pub fn setup_test_database() -> DbPool {
 /// Seeds the test database with sample data
 pub fn seed_test_database(db_pool: &DbPool) {
     use crate::metadata::models::project::NewProjectDTO;
-    use crate::metadata::services::project::{ProjectService, ProjectServiceImpl};
+    use crate::metadata::services::project::ProjectServiceImpl;
+    use crate::types::metadata::services::project::ProjectService;
 
     let project_service = ProjectServiceImpl::new(db_pool.clone());
     let dummy_owner_id = uuid::Uuid::nil();
