@@ -4,7 +4,8 @@ use crate::metadata::pool::DbPool;
 use crate::metadata::schema::traces;
 use crate::metadata::DatabaseServiceTrait;
 use crate::types::handlers::pagination::{PaginatedResult, Pagination};
-use crate::types::metadata::services::trace::{ListTracesQuery, TraceService};
+use crate::types::metadata::services::trace::GroupByKey;
+use crate::types::metadata::services::trace::{GetGroupSpansQuery, ListTracesQuery, TraceService};
 use crate::types::traces::{LangdbSpan, Operation};
 use diesel::prelude::*;
 use diesel::sql_types::{Nullable, Text};
@@ -316,6 +317,110 @@ impl TraceService for TraceServiceImpl {
             );
         }
         Ok(map)
+    }
+
+    fn get_group_spans(
+        &self,
+        project_slug: &str,
+        query: GetGroupSpansQuery,
+    ) -> Result<PaginatedResult<LangdbSpan>, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+        let limit = query.limit.unwrap_or(100);
+        let offset = query.offset.unwrap_or(0);
+
+        // Build base query with appropriate filter based on group_by
+        let mut count_query = traces::table.into_boxed();
+        let mut data_query = traces::table.into_boxed();
+
+        match &query.group_by {
+            GroupByKey::Time { time_bucket } => {
+                let bucket_size_seconds = query.bucket_size.unwrap_or(3600);
+                let bucket_size_us = bucket_size_seconds * 1_000_000;
+                let bucket_start = time_bucket;
+                let bucket_end = time_bucket + bucket_size_us;
+
+                // Filter by time range and ensure run_id or thread_id is not null
+                count_query = count_query
+                    .filter(traces::start_time_us.ge(bucket_start))
+                    .filter(traces::start_time_us.lt(bucket_end))
+                    .filter(
+                        traces::run_id
+                            .is_not_null()
+                            .or(traces::thread_id.is_not_null()),
+                    );
+                data_query = data_query
+                    .filter(traces::start_time_us.ge(bucket_start))
+                    .filter(traces::start_time_us.lt(bucket_end))
+                    .filter(
+                        traces::run_id
+                            .is_not_null()
+                            .or(traces::thread_id.is_not_null()),
+                    );
+            }
+            GroupByKey::Thread { thread_id } => {
+                count_query = count_query.filter(traces::thread_id.eq(thread_id.as_str()));
+                data_query = data_query.filter(traces::thread_id.eq(thread_id.as_str()));
+            }
+            GroupByKey::Run { run_id } => {
+                count_query = count_query.filter(traces::run_id.eq(run_id.to_string()));
+                data_query = data_query.filter(traces::run_id.eq(run_id.to_string()));
+            }
+        }
+
+        // Add project_id filter if present
+        count_query = count_query.filter(traces::project_id.eq(&project_slug));
+        data_query = data_query.filter(traces::project_id.eq(&project_slug));
+
+        // Get total count
+        let total = count_query.count().get_result::<i64>(&mut conn)?;
+
+        // Get paginated traces
+        let traces: Vec<DbTrace> = data_query
+            .order(traces::start_time_us.asc())
+            .limit(limit)
+            .offset(offset)
+            .load::<DbTrace>(&mut conn)?;
+
+        // Get child attributes
+        let trace_ids: Vec<String> = traces.iter().map(|t| t.trace_id.clone()).collect();
+        let span_ids: Vec<String> = traces.iter().map(|t| t.span_id.clone()).collect();
+
+        let child_attrs = self
+            .get_child_attributes(&trace_ids, &span_ids, Some(project_slug))
+            .unwrap_or_default();
+
+        let spans: Vec<LangdbSpan> = traces
+            .into_iter()
+            .map(|trace| {
+                let attribute = trace.parse_attribute().unwrap_or_default();
+                let child_attribute = child_attrs
+                    .get(&trace.span_id)
+                    .and_then(|opt| opt.as_ref())
+                    .and_then(|json_config| serde_json::from_value(json_config.clone()).ok());
+
+                LangdbSpan {
+                    trace_id: trace.trace_id,
+                    span_id: trace.span_id,
+                    operation_name: Operation::from(trace.operation_name.as_str()),
+                    parent_span_id: trace.parent_span_id,
+                    thread_id: trace.thread_id,
+                    start_time_us: trace.start_time_us,
+                    finish_time_us: trace.finish_time_us,
+                    attribute,
+                    child_attribute,
+                    run_id: trace.run_id,
+                }
+            })
+            .collect();
+
+        Ok(PaginatedResult {
+            pagination: Pagination {
+                offset,
+                limit,
+                total,
+            },
+            data: spans,
+        })
     }
 }
 

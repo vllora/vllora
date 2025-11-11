@@ -1,8 +1,29 @@
+use serde::Deserialize;
+
 use crate::metadata::error::DatabaseError;
 use crate::metadata::models::trace::DbTrace;
 use crate::types::handlers::pagination::PaginatedResult;
 use crate::types::traces::LangdbSpan;
+use serde::Serialize;
 use std::collections::HashMap;
+
+/// Enum representing the grouping key (discriminated union)
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(untagged, rename_all = "snake_case")]
+pub enum GroupByKey {
+    Time {
+        #[serde(alias = "timeBucket")]
+        time_bucket: i64,
+    },
+    Thread {
+        #[serde(alias = "threadId")]
+        thread_id: String,
+    },
+    Run {
+        #[serde(alias = "runId")]
+        run_id: uuid::Uuid,
+    },
+}
 
 #[derive(Debug, Clone)]
 
@@ -26,6 +47,19 @@ pub struct ListTracesQuery {
     pub start_time_max: Option<i64>,
     pub limit: i64,
     pub offset: i64,
+}
+
+/// Query parameters for unified GET /group/spans endpoint
+#[derive(Deserialize)]
+pub struct GetGroupSpansQuery {
+    #[serde(flatten)]
+    pub group_by: GroupByKey,
+
+    // Common parameters
+    #[serde(alias = "bucketSize")]
+    pub bucket_size: Option<i64>, // Only used for time grouping
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
 }
 
 impl Default for ListTracesQuery {
@@ -72,4 +106,9 @@ pub trait TraceService {
         span_ids: &[String],
         project_id: Option<&str>,
     ) -> Result<HashMap<String, Option<serde_json::Value>>, DatabaseError>;
+    fn get_group_spans(
+        &self,
+        project_slug: &str,
+        query: GetGroupSpansQuery,
+    ) -> Result<PaginatedResult<LangdbSpan>, DatabaseError>;
 }

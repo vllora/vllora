@@ -9,6 +9,8 @@ use crate::types::metadata::services::group::GroupService;
 use crate::types::metadata::services::group::GroupUsageInformation;
 use crate::types::metadata::services::group::ListGroupQuery;
 use crate::types::metadata::services::group::TypeFilter;
+use crate::types::metadata::services::trace::GetGroupSpansQuery;
+use crate::types::metadata::services::trace::GroupByKey;
 use crate::types::metadata::services::trace::TraceService;
 use actix_web::{web, HttpResponse, Result};
 use diesel::prelude::*;
@@ -49,26 +51,10 @@ pub struct Pagination {
     pub total: i64,
 }
 
-/// Enum representing the grouping key (discriminated union)
-#[derive(Debug, Serialize, Clone)]
-#[serde(tag = "group_by", content = "group_key")]
-pub enum GroupByKey {
-    #[serde(rename = "time")]
-    Time { time_bucket: i64 },
-
-    #[serde(rename = "thread")]
-    Thread { thread_id: String },
-
-    #[serde(rename = "run")]
-    Run { run_id: String },
-    // Future grouping types can be added here:
-    // #[serde(rename = "model")]
-    // Model { model_name: String },
-}
-
 /// Generic response struct for all grouping types
 #[derive(Debug, Serialize)]
 pub struct GenericGroupResponse {
+    pub group_by: GroupBy,
     #[serde(flatten)]
     pub key: GroupByKey, // Flattens the enum fields into the response
     #[serde(flatten)]
@@ -78,24 +64,37 @@ pub struct GenericGroupResponse {
 impl From<GroupUsageInformation> for GenericGroupResponse {
     fn from(group: GroupUsageInformation) -> Self {
         // Determine which grouping key to use
-        let key = if let Some(time_bucket) = &group.time_bucket {
-            GroupByKey::Time {
-                time_bucket: *time_bucket,
-            }
+        let (key, group_by) = if let Some(time_bucket) = &group.time_bucket {
+            (
+                GroupByKey::Time {
+                    time_bucket: *time_bucket,
+                },
+                GroupBy::Time,
+            )
         } else if let Some(thread_id) = &group.thread_id {
-            GroupByKey::Thread {
-                thread_id: thread_id.clone(),
-            }
+            (
+                GroupByKey::Thread {
+                    thread_id: thread_id.clone(),
+                },
+                GroupBy::Thread,
+            )
         } else if let Some(run_id) = &group.run_id {
-            GroupByKey::Run {
-                run_id: run_id.clone(),
-            }
+            (
+                GroupByKey::Run {
+                    run_id: (*run_id).into(),
+                },
+                GroupBy::Run,
+            )
         } else {
             // This shouldn't happen if SQL is correct
             panic!("GroupUsageInformation must have either time_bucket, thread_id, or run_id set")
         };
 
-        Self { key, group }
+        Self {
+            key,
+            group,
+            group_by,
+        }
     }
 }
 
@@ -177,27 +176,6 @@ pub struct LangdbSpan {
     pub run_id: Option<String>,
 }
 
-/// Query parameters for unified GET /group/spans endpoint
-#[derive(Deserialize)]
-pub struct GetGroupSpansQuery {
-    #[serde(alias = "groupBy")]
-    pub group_by: Option<GroupBy>, // 'time', 'thread', or 'run'
-
-    // Group-specific identifiers (one should be provided based on group_by)
-    #[serde(alias = "timeBucket")]
-    pub time_bucket: Option<i64>, // For time grouping
-    #[serde(alias = "threadId")]
-    pub thread_id: Option<String>, // For thread grouping
-    #[serde(alias = "runId")]
-    pub run_id: Option<String>, // For run grouping
-
-    // Common parameters
-    #[serde(alias = "bucketSize")]
-    pub bucket_size: Option<i64>, // Only used for time grouping
-    pub limit: Option<i64>,
-    pub offset: Option<i64>,
-}
-
 /// Group identifier for batch requests - discriminated union
 #[derive(Debug, Deserialize, Clone)]
 #[serde(tag = "groupBy")]
@@ -274,130 +252,14 @@ pub async fn get_group_spans<T: TraceService + DatabaseServiceTrait>(
     query: web::Query<GetGroupSpansQuery>,
     project: web::ReqData<Project>,
     database_service: web::Data<DatabaseService>,
-    db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
     let trace_service = database_service.init::<T>();
 
     let project_slug = project.slug.clone();
 
-    let limit = query.limit.unwrap_or(100);
-    let offset = query.offset.unwrap_or(0);
+    let result = trace_service.get_group_spans(&project_slug, query.into_inner())?;
 
-    // Unified query for all grouping types - just different filter conditions
-    let mut conn = db_pool.get().map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Database connection error: {}", e))
-    })?;
-
-    // Build base query with appropriate filter based on group_by
-    let mut count_query = traces::table.into_boxed();
-    let mut data_query = traces::table.into_boxed();
-
-    match query.group_by.clone().unwrap_or_default() {
-        GroupBy::Time => {
-            let time_bucket = query.time_bucket.ok_or_else(|| {
-                actix_web::error::ErrorBadRequest("timeBucket is required for groupBy=time")
-            })?;
-            let bucket_size_seconds = query.bucket_size.unwrap_or(3600);
-            let bucket_size_us = bucket_size_seconds * 1_000_000;
-            let bucket_start = time_bucket;
-            let bucket_end = time_bucket + bucket_size_us;
-
-            // Filter by time range and ensure run_id or thread_id is not null
-            count_query = count_query
-                .filter(traces::start_time_us.ge(bucket_start))
-                .filter(traces::start_time_us.lt(bucket_end))
-                .filter(
-                    traces::run_id
-                        .is_not_null()
-                        .or(traces::thread_id.is_not_null()),
-                );
-            data_query = data_query
-                .filter(traces::start_time_us.ge(bucket_start))
-                .filter(traces::start_time_us.lt(bucket_end))
-                .filter(
-                    traces::run_id
-                        .is_not_null()
-                        .or(traces::thread_id.is_not_null()),
-                );
-        }
-        GroupBy::Thread => {
-            let thread_id = query.thread_id.as_ref().ok_or_else(|| {
-                actix_web::error::ErrorBadRequest("threadId is required for groupBy=thread")
-            })?;
-            count_query = count_query.filter(traces::thread_id.eq(thread_id.as_str()));
-            data_query = data_query.filter(traces::thread_id.eq(thread_id.as_str()));
-        }
-        GroupBy::Run => {
-            let run_id = query.run_id.as_ref().ok_or_else(|| {
-                actix_web::error::ErrorBadRequest("runId is required for groupBy=run")
-            })?;
-            count_query = count_query.filter(traces::run_id.eq(run_id.as_str()));
-            data_query = data_query.filter(traces::run_id.eq(run_id.as_str()));
-        }
-    }
-
-    // Add project_id filter if present
-    count_query = count_query.filter(traces::project_id.eq(&project_slug));
-    data_query = data_query.filter(traces::project_id.eq(&project_slug));
-
-    // Get total count
-    let total = count_query
-        .count()
-        .get_result::<i64>(&mut conn)
-        .map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!("Database query error: {}", e))
-        })?;
-
-    // Get paginated traces
-    let traces: Vec<DbTrace> = data_query
-        .order(traces::start_time_us.asc())
-        .limit(limit)
-        .offset(offset)
-        .load::<DbTrace>(&mut conn)
-        .map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!("Database query error: {}", e))
-        })?;
-
-    // Get child attributes
-    let trace_ids: Vec<String> = traces.iter().map(|t| t.trace_id.clone()).collect();
-    let span_ids: Vec<String> = traces.iter().map(|t| t.span_id.clone()).collect();
-
-    let child_attrs = trace_service
-        .get_child_attributes(&trace_ids, &span_ids, Some(&project_slug))
-        .unwrap_or_default();
-
-    let spans: Vec<LangdbSpan> = traces
-        .into_iter()
-        .map(|trace| {
-            let attribute = trace.parse_attribute().unwrap_or_default();
-            let child_attribute = child_attrs
-                .get(&trace.span_id)
-                .and_then(|opt| opt.as_ref())
-                .and_then(|json_config| serde_json::from_value(json_config.clone()).ok());
-
-            LangdbSpan {
-                trace_id: trace.trace_id,
-                span_id: trace.span_id,
-                operation_name: trace.operation_name,
-                parent_span_id: trace.parent_span_id,
-                thread_id: trace.thread_id,
-                start_time_us: trace.start_time_us,
-                finish_time_us: trace.finish_time_us,
-                attribute,
-                child_attribute,
-                run_id: trace.run_id,
-            }
-        })
-        .collect();
-
-    Ok(HttpResponse::Ok().json(PaginatedResult {
-        pagination: Pagination {
-            offset,
-            limit,
-            total,
-        },
-        data: spans,
-    }))
+    Ok(HttpResponse::Ok().json(result))
 }
 
 /// POST /group/batch-spans - Get spans for multiple groups in a single request
