@@ -6,6 +6,7 @@ pub mod schema;
 pub mod services;
 #[cfg(test)]
 pub mod test_utils;
+pub mod types;
 pub mod utils;
 
 use crate::metadata::pool::DbPool;

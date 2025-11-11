@@ -1,22 +1,20 @@
-use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Result};
+use crate::metadata::models::trace::DbTrace;
+use crate::metadata::pool::DbPool;
+use crate::metadata::schema::traces;
+use crate::metadata::DatabaseService;
+use crate::metadata::DatabaseServiceTrait;
+use crate::types::metadata::project::Project;
+use crate::types::metadata::services::group::GroupBy;
+use crate::types::metadata::services::group::GroupService;
+use crate::types::metadata::services::group::GroupUsageInformation;
+use crate::types::metadata::services::group::ListGroupQuery;
+use crate::types::metadata::services::group::TypeFilter;
+use crate::types::metadata::services::trace::TraceService;
+use actix_web::{web, HttpResponse, Result};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use vllora_core::metadata::models::project::DbProject;
-use vllora_core::metadata::models::trace::DbTrace;
-use vllora_core::metadata::pool::DbPool;
-use vllora_core::metadata::schema::traces;
-use vllora_core::metadata::services::group::GroupServiceImpl;
-use vllora_core::metadata::services::trace::TraceServiceImpl;
-use vllora_core::metadata::DatabaseService;
-use vllora_core::types::metadata::project::Project;
-use vllora_core::types::metadata::services::group::GroupBy;
-use vllora_core::types::metadata::services::group::GroupService;
-use vllora_core::types::metadata::services::group::GroupUsageInformation;
-use vllora_core::types::metadata::services::group::ListGroupQuery;
-use vllora_core::types::metadata::services::group::TypeFilter;
-use vllora_core::types::metadata::services::trace::TraceService;
 
 #[derive(Deserialize)]
 pub struct ListGroupQueryParams {
@@ -33,7 +31,7 @@ pub struct ListGroupQueryParams {
     #[serde(alias = "bucketSize")]
     pub bucket_size: Option<i64>, // Time bucket size in seconds
     #[serde(alias = "groupBy")]
-    pub group_by: Option<String>, // Grouping mode: "time" or "thread" (default: "time")
+    pub group_by: Option<GroupBy>, // Grouping mode: "time" or "thread" (default: "time")
     pub limit: Option<i64>,
     pub offset: Option<i64>,
 }
@@ -73,65 +71,31 @@ pub enum GroupByKey {
 pub struct GenericGroupResponse {
     #[serde(flatten)]
     pub key: GroupByKey, // Flattens the enum fields into the response
-    pub thread_ids: Vec<String>,
-    pub trace_ids: Vec<String>,
-    pub run_ids: Vec<String>,
-    pub root_span_ids: Vec<String>,
-    pub request_models: Vec<String>,
-    pub used_models: Vec<String>,
-    pub llm_calls: i64,
-    pub cost: f64,
-    pub input_tokens: Option<i64>,
-    pub output_tokens: Option<i64>,
-    pub start_time_us: i64,
-    pub finish_time_us: i64,
-    pub errors: Vec<String>,
+    #[serde(flatten)]
+    pub group: GroupUsageInformation,
 }
 
 impl From<GroupUsageInformation> for GenericGroupResponse {
     fn from(group: GroupUsageInformation) -> Self {
-        // Parse JSON string fields into proper arrays
-        let thread_ids: Vec<String> =
-            serde_json::from_str(&group.thread_ids_json).unwrap_or_default();
-        let trace_ids: Vec<String> =
-            serde_json::from_str(&group.trace_ids_json).unwrap_or_default();
-        let run_ids: Vec<String> = serde_json::from_str(&group.run_ids_json).unwrap_or_default();
-        let root_span_ids: Vec<String> =
-            serde_json::from_str(&group.root_span_ids_json).unwrap_or_default();
-        let request_models: Vec<String> =
-            serde_json::from_str(&group.request_models_json).unwrap_or_default();
-        let used_models: Vec<String> =
-            serde_json::from_str(&group.used_models_json).unwrap_or_default();
-        let errors: Vec<String> = serde_json::from_str(&group.errors_json).unwrap_or_default();
-
         // Determine which grouping key to use
-        let key = if let Some(time_bucket) = group.time_bucket {
-            GroupByKey::Time { time_bucket }
-        } else if let Some(thread_id) = group.thread_id {
-            GroupByKey::Thread { thread_id }
-        } else if let Some(run_id) = group.run_id {
-            GroupByKey::Run { run_id }
+        let key = if let Some(time_bucket) = &group.time_bucket {
+            GroupByKey::Time {
+                time_bucket: *time_bucket,
+            }
+        } else if let Some(thread_id) = &group.thread_id {
+            GroupByKey::Thread {
+                thread_id: thread_id.clone(),
+            }
+        } else if let Some(run_id) = &group.run_id {
+            GroupByKey::Run {
+                run_id: run_id.clone(),
+            }
         } else {
             // This shouldn't happen if SQL is correct
             panic!("GroupUsageInformation must have either time_bucket, thread_id, or run_id set")
         };
 
-        Self {
-            key,
-            thread_ids,
-            trace_ids,
-            run_ids,
-            root_span_ids,
-            request_models,
-            used_models,
-            llm_calls: group.llm_calls,
-            cost: group.cost,
-            input_tokens: group.input_tokens,
-            output_tokens: group.output_tokens,
-            start_time_us: group.start_time_us,
-            finish_time_us: group.finish_time_us,
-            errors,
-        }
+        Self { key, group }
     }
 }
 
@@ -151,30 +115,18 @@ impl From<GroupUsageInformation> for GenericGroupResponse {
 /// - start_time_max: Maximum start time in microseconds
 /// - limit: Number of results to return (default: 100)
 /// - offset: Number of results to skip (default: 0)
-pub async fn list_root_group(
-    req: HttpRequest,
+pub async fn list_root_group<T: GroupService + DatabaseServiceTrait>(
     query: web::Query<ListGroupQueryParams>,
-    db_pool: web::Data<DbPool>,
+    database_service: web::Data<DatabaseService>,
+    project: web::ReqData<Project>,
 ) -> Result<HttpResponse> {
-    let group_service: GroupServiceImpl = GroupServiceImpl::new(db_pool.get_ref().clone());
+    let group_service = database_service.init::<T>();
 
     // Extract project_id from extensions (set by ProjectMiddleware)
-    let project_id = req.extensions().get::<DbProject>().map(|p| p.slug.clone());
-
-    // Parse group_by parameter (default: "time" for backward compatibility)
-    let group_by = match query.group_by.as_deref().unwrap_or("time") {
-        "time" => GroupBy::Time,
-        "thread" => GroupBy::Thread,
-        "run" => GroupBy::Run,
-        other => {
-            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
-                "error": format!("Invalid group_by parameter: '{}'. Must be 'time', 'thread', or 'run'", other)
-            })))
-        }
-    };
+    let project_slug = project.slug.clone();
 
     let list_query = ListGroupQuery {
-        project_id: project_id.clone(),
+        project_slug: Some(project_slug),
         thread_ids: query
             .thread_ids
             .as_ref()
@@ -188,7 +140,7 @@ pub async fn list_root_group(
         start_time_min: query.start_time_min,
         start_time_max: query.start_time_max,
         bucket_size_seconds: query.bucket_size.unwrap_or(3600), // Default to 1 hour
-        group_by,                                               // NEW: Add GroupBy enum
+        group_by: query.group_by.clone().unwrap_or_default(),
         limit: query.limit.unwrap_or(100),
         offset: query.offset.unwrap_or(0),
     };
@@ -229,7 +181,7 @@ pub struct LangdbSpan {
 #[derive(Deserialize)]
 pub struct GetGroupSpansQuery {
     #[serde(alias = "groupBy")]
-    pub group_by: Option<String>, // 'time', 'thread', or 'run'
+    pub group_by: Option<GroupBy>, // 'time', 'thread', or 'run'
 
     // Group-specific identifiers (one should be provided based on group_by)
     #[serde(alias = "timeBucket")]
@@ -318,19 +270,18 @@ pub struct BatchGroupSpansResponse {
 /// - bucketSize: time bucket size in seconds (only for groupBy='time', default: 3600)
 /// - limit: number of results to return (default: 100)
 /// - offset: number of results to skip (default: 0)
-pub async fn get_group_spans(
+pub async fn get_group_spans<T: TraceService + DatabaseServiceTrait>(
     query: web::Query<GetGroupSpansQuery>,
     project: web::ReqData<Project>,
     database_service: web::Data<DatabaseService>,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
-    let trace_service = database_service.init::<TraceServiceImpl>();
+    let trace_service = database_service.init::<T>();
 
     let project_slug = project.slug.clone();
 
     let limit = query.limit.unwrap_or(100);
     let offset = query.offset.unwrap_or(0);
-    let group_by = query.group_by.as_deref().unwrap_or("time");
 
     // Unified query for all grouping types - just different filter conditions
     let mut conn = db_pool.get().map_err(|e| {
@@ -341,8 +292,8 @@ pub async fn get_group_spans(
     let mut count_query = traces::table.into_boxed();
     let mut data_query = traces::table.into_boxed();
 
-    match group_by {
-        "time" => {
+    match query.group_by.clone().unwrap_or_default() {
+        GroupBy::Time => {
             let time_bucket = query.time_bucket.ok_or_else(|| {
                 actix_web::error::ErrorBadRequest("timeBucket is required for groupBy=time")
             })?;
@@ -369,25 +320,19 @@ pub async fn get_group_spans(
                         .or(traces::thread_id.is_not_null()),
                 );
         }
-        "thread" => {
+        GroupBy::Thread => {
             let thread_id = query.thread_id.as_ref().ok_or_else(|| {
                 actix_web::error::ErrorBadRequest("threadId is required for groupBy=thread")
             })?;
             count_query = count_query.filter(traces::thread_id.eq(thread_id.as_str()));
             data_query = data_query.filter(traces::thread_id.eq(thread_id.as_str()));
         }
-        "run" => {
+        GroupBy::Run => {
             let run_id = query.run_id.as_ref().ok_or_else(|| {
                 actix_web::error::ErrorBadRequest("runId is required for groupBy=run")
             })?;
             count_query = count_query.filter(traces::run_id.eq(run_id.as_str()));
             data_query = data_query.filter(traces::run_id.eq(run_id.as_str()));
-        }
-        other => {
-            return Err(actix_web::error::ErrorBadRequest(format!(
-                "Invalid groupBy parameter: '{}'. Must be 'time', 'thread', or 'run'",
-                other
-            )));
         }
     }
 
@@ -488,13 +433,13 @@ pub async fn get_group_spans(
 ///   }
 /// }
 /// ```
-pub async fn get_batch_group_spans(
+pub async fn get_batch_group_spans<T: TraceService + DatabaseServiceTrait>(
     body: web::Json<BatchGroupSpansRequest>,
     project: web::ReqData<Project>,
     database_service: web::Data<DatabaseService>,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
-    let trace_service = database_service.init::<TraceServiceImpl>();
+    let trace_service = database_service.init::<T>();
     let project_slug = project.slug.clone();
 
     let limit = body.spans_per_group;

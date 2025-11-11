@@ -1,5 +1,6 @@
 use crate::metadata::error::DatabaseError;
 use crate::metadata::pool::DbPool;
+use diesel::sql_types::Float;
 use diesel::QueryableByName;
 use diesel::{sql_query, RunQueryDsl};
 
@@ -15,8 +16,9 @@ pub struct ThreadSpanQueryResult {
     pub run_ids: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
     pub input_models: Option<String>,
-    #[diesel(sql_type = diesel::sql_types::Double)]
-    pub cost: f64,
+    #[cfg_attr(feature = "sqlite", diesel(sql_type = Float))]
+    #[cfg_attr(feature = "postgres", diesel(sql_type = Float))]
+    pub cost: f32,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
     pub title: Option<String>,
 }

@@ -3,6 +3,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::metadata::error::DatabaseError;
 
+use crate::metadata::types::JsonVec;
+use diesel::sql_types::Float;
+#[cfg(feature = "postgres")]
+use diesel::sql_types::Jsonb;
+#[cfg(feature = "sqlite")]
+use diesel::sql_types::Text;
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TypeFilter {
@@ -11,17 +18,17 @@ pub enum TypeFilter {
 }
 
 /// Enum representing the grouping type
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
 pub enum GroupBy {
+    #[default]
     Time,
     Thread,
     Run,
-    // Future: Model, User, etc.
 }
 
 #[derive(Debug, Clone)]
 pub struct ListGroupQuery {
-    pub project_id: Option<String>,
+    pub project_slug: Option<String>,
     pub thread_ids: Option<Vec<String>>,
     pub trace_ids: Option<Vec<String>>,
     pub model_name: Option<String>,
@@ -45,22 +52,29 @@ pub struct GroupUsageInformation {
     pub run_id: Option<String>, // Populated when group_by=run
 
     // Aggregated data (same for all grouping types)
-    #[diesel(sql_type = diesel::sql_types::Text)]
-    pub thread_ids_json: String,
-    #[diesel(sql_type = diesel::sql_types::Text)]
-    pub trace_ids_json: String,
-    #[diesel(sql_type = diesel::sql_types::Text)]
-    pub run_ids_json: String,
-    #[diesel(sql_type = diesel::sql_types::Text)]
-    pub root_span_ids_json: String,
-    #[diesel(sql_type = diesel::sql_types::Text)]
-    pub request_models_json: String,
-    #[diesel(sql_type = diesel::sql_types::Text)]
-    pub used_models_json: String,
+    #[cfg_attr(feature = "sqlite", diesel(sql_type = Text))]
+    #[cfg_attr(feature = "postgres", diesel(sql_type = Jsonb))]
+    pub thread_ids: JsonVec,
+    #[cfg_attr(feature = "sqlite", diesel(sql_type = Text))]
+    #[cfg_attr(feature = "postgres", diesel(sql_type = Jsonb))]
+    pub trace_ids: JsonVec,
+    #[cfg_attr(feature = "sqlite", diesel(sql_type = Text))]
+    #[cfg_attr(feature = "postgres", diesel(sql_type = Jsonb))]
+    pub run_ids: JsonVec,
+    #[cfg_attr(feature = "sqlite", diesel(sql_type = Text))]
+    #[cfg_attr(feature = "postgres", diesel(sql_type = Jsonb))]
+    pub root_span_ids: JsonVec,
+    #[cfg_attr(feature = "sqlite", diesel(sql_type = Text))]
+    #[cfg_attr(feature = "postgres", diesel(sql_type = Jsonb))]
+    pub request_models: JsonVec,
+    #[cfg_attr(feature = "sqlite", diesel(sql_type = Text))]
+    #[cfg_attr(feature = "postgres", diesel(sql_type = Jsonb))]
+    pub used_models: JsonVec,
     #[diesel(sql_type = diesel::sql_types::BigInt)]
     pub llm_calls: i64,
-    #[diesel(sql_type = diesel::sql_types::Double)]
-    pub cost: f64,
+    #[cfg_attr(feature = "sqlite", diesel(sql_type = Float))]
+    #[cfg_attr(feature = "postgres", diesel(sql_type = Float))]
+    pub cost: f32,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::BigInt>)]
     pub input_tokens: Option<i64>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::BigInt>)]
@@ -69,8 +83,9 @@ pub struct GroupUsageInformation {
     pub start_time_us: i64,
     #[diesel(sql_type = diesel::sql_types::BigInt)]
     pub finish_time_us: i64,
-    #[diesel(sql_type = diesel::sql_types::Text)]
-    pub errors_json: String,
+    #[cfg_attr(feature = "sqlite", diesel(sql_type = Text))]
+    #[cfg_attr(feature = "postgres", diesel(sql_type = Jsonb))]
+    pub errors: JsonVec,
 }
 
 pub trait GroupService {

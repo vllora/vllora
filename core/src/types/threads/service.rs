@@ -56,7 +56,7 @@ impl From<ThreadSpanQueryResult> for ThreadSpan {
                         .collect()
                 })
                 .unwrap_or_default(),
-            cost: result.cost,
+            cost: result.cost as f64,
             title,
         }
     }

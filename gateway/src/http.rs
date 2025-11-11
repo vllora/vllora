@@ -2,7 +2,7 @@ use crate::callback_handler::init_callback_handler;
 use crate::config::Config;
 use crate::cost::GatewayCostCalculator;
 use crate::guardrails::GuardrailsService;
-use crate::handlers::{group, mcp_configs, models, projects, session, threads};
+use crate::handlers::{mcp_configs, models, projects, session, threads};
 use crate::middleware::project::ProjectMiddleware;
 use crate::middleware::thread_service::ThreadsServiceMiddleware;
 use crate::middleware::trace_logger::TraceLogger;
@@ -30,6 +30,7 @@ use vllora_core::events::ui_broadcaster::EventsSendersContainer;
 use vllora_core::events::ui_broadcaster::EventsUIBroadcaster;
 use vllora_core::handler::chat::create_chat_completion;
 use vllora_core::handler::embedding::embeddings_handler;
+use vllora_core::handler::group;
 use vllora_core::handler::image::create_image;
 use vllora_core::handler::middleware::actix_otel::ActixOtelMiddleware;
 use vllora_core::handler::middleware::rate_limit::RateLimitMiddleware;
@@ -43,6 +44,7 @@ use vllora_core::mcp::server::LocalSessionManager;
 use vllora_core::metadata::models::session::DbSession;
 use vllora_core::metadata::pool::DbPool;
 use vllora_core::metadata::project_trace::ProjectTraceTenantResolver;
+use vllora_core::metadata::services::group::GroupServiceImpl;
 use vllora_core::metadata::services::model::ModelServiceImpl;
 use vllora_core::metadata::services::project::ProjectServiceImpl;
 use vllora_core::metadata::services::provider::ProvidersServiceImpl;
@@ -363,9 +365,18 @@ impl ApiServer {
             )
             .service(
                 web::scope("/group")
-                    .route("", web::get().to(group::list_root_group))
-                    .route("/spans", web::get().to(group::get_group_spans)) // Unified endpoint for all group types
-                    .route("/batch-spans", web::post().to(group::get_batch_group_spans)), // Batch endpoint for multiple groups
+                    .route(
+                        "",
+                        web::get().to(group::list_root_group::<GroupServiceImpl>),
+                    )
+                    .route(
+                        "/spans",
+                        web::get().to(group::get_group_spans::<MetadataTraceServiceImpl>),
+                    ) // Unified endpoint for all group types
+                    .route(
+                        "/batch-spans",
+                        web::post().to(group::get_batch_group_spans::<MetadataTraceServiceImpl>),
+                    ), // Batch endpoint for multiple groups
             )
             .service(
                 web::scope("/session")

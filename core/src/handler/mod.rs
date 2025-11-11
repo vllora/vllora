@@ -1,6 +1,7 @@
 pub mod chat;
 pub mod embedding;
 pub mod events;
+pub mod group;
 pub mod image;
 pub mod middleware;
 pub mod models;
