@@ -19,6 +19,7 @@ pub enum TypeFilter {
 
 /// Enum representing the grouping type
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
+#[serde(rename_all = "snake_case")]
 pub enum GroupBy {
     #[default]
     Time,
