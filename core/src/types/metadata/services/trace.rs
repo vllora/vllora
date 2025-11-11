@@ -3,6 +3,7 @@ use serde::Deserialize;
 use crate::metadata::error::DatabaseError;
 use crate::metadata::models::trace::DbTrace;
 use crate::types::handlers::pagination::PaginatedResult;
+use crate::types::handlers::pagination::Pagination;
 use crate::types::traces::LangdbSpan;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -62,6 +63,65 @@ pub struct GetGroupSpansQuery {
     pub offset: Option<i64>,
 }
 
+/// Group identifier for batch requests - discriminated union
+#[derive(Debug, Deserialize, Clone)]
+#[serde(untagged, rename_all = "snake_case")]
+pub enum GroupIdentifier {
+    #[serde(rename = "time")]
+    Time {
+        #[serde(alias = "timeBucket")]
+        time_bucket: i64,
+        #[serde(alias = "bucketSize")]
+        bucket_size: i64,
+    },
+    #[serde(rename = "thread")]
+    Thread {
+        #[serde(alias = "threadId")]
+        thread_id: String,
+    },
+    #[serde(rename = "run")]
+    Run {
+        #[serde(alias = "runId")]
+        run_id: uuid::Uuid,
+    },
+}
+
+impl GroupIdentifier {
+    /// Generate unique key string for this group
+    pub fn to_key(&self) -> String {
+        match self {
+            GroupIdentifier::Time { time_bucket, .. } => format!("time-{}", time_bucket),
+            GroupIdentifier::Thread { thread_id } => format!("thread-{}", thread_id),
+            GroupIdentifier::Run { run_id } => format!("run-{}", run_id),
+        }
+    }
+}
+
+fn default_spans_per_group() -> i64 {
+    100
+}
+
+#[derive(Deserialize)]
+pub struct BatchGroupSpansQuery {
+    pub groups: Vec<GroupIdentifier>,
+    #[serde(alias = "spansPerGroup", default = "default_spans_per_group")]
+    pub spans_per_group: i64,
+}
+
+/// Individual group's spans with pagination info
+#[derive(Serialize)]
+pub struct GroupSpansData {
+    pub spans: Vec<LangdbSpan>,
+    pub pagination: Pagination,
+}
+
+/// Response for batch group spans request
+/// Map of groupKey -> { spans, pagination }
+#[derive(Serialize)]
+pub struct BatchGroupSpansResponse {
+    pub data: HashMap<String, GroupSpansData>,
+}
+
 impl Default for ListTracesQuery {
     fn default() -> Self {
         Self {
@@ -111,4 +171,9 @@ pub trait TraceService {
         project_slug: &str,
         query: GetGroupSpansQuery,
     ) -> Result<PaginatedResult<LangdbSpan>, DatabaseError>;
+    fn get_batch_group_spans(
+        &self,
+        project_slug: &str,
+        query: BatchGroupSpansQuery,
+    ) -> Result<BatchGroupSpansResponse, DatabaseError>;
 }

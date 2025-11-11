@@ -4,7 +4,10 @@ use crate::metadata::pool::DbPool;
 use crate::metadata::schema::traces;
 use crate::metadata::DatabaseServiceTrait;
 use crate::types::handlers::pagination::{PaginatedResult, Pagination};
-use crate::types::metadata::services::trace::GroupByKey;
+use crate::types::metadata::services::trace::BatchGroupSpansResponse;
+use crate::types::metadata::services::trace::GroupIdentifier;
+use crate::types::metadata::services::trace::GroupSpansData;
+use crate::types::metadata::services::trace::{BatchGroupSpansQuery, GroupByKey};
 use crate::types::metadata::services::trace::{GetGroupSpansQuery, ListTracesQuery, TraceService};
 use crate::types::traces::{LangdbSpan, Operation};
 use diesel::prelude::*;
@@ -421,6 +424,126 @@ impl TraceService for TraceServiceImpl {
             },
             data: spans,
         })
+    }
+
+    fn get_batch_group_spans(
+        &self,
+        project_slug: &str,
+        query: BatchGroupSpansQuery,
+    ) -> Result<BatchGroupSpansResponse, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+        let limit = query.spans_per_group;
+        let offset = 0; // Batch endpoint always starts from offset 0
+
+        let mut result_map: HashMap<String, GroupSpansData> = HashMap::new();
+
+        // Process each group sequentially to avoid SQLite lock contention
+        // (even with async, SQLite serializes writes anyway)
+        for group_identifier in &query.groups {
+            let group_key = group_identifier.to_key();
+
+            let mut count_query = traces::table.into_boxed();
+            let mut data_query = traces::table.into_boxed();
+
+            match group_identifier {
+                GroupIdentifier::Time {
+                    time_bucket,
+                    bucket_size,
+                } => {
+                    let bucket_size_us = bucket_size * 1_000_000;
+                    let bucket_start = *time_bucket;
+                    let bucket_end = time_bucket + bucket_size_us;
+
+                    count_query = count_query
+                        .filter(traces::start_time_us.ge(bucket_start))
+                        .filter(traces::start_time_us.lt(bucket_end))
+                        .filter(
+                            traces::run_id
+                                .is_not_null()
+                                .or(traces::thread_id.is_not_null()),
+                        );
+                    data_query = data_query
+                        .filter(traces::start_time_us.ge(bucket_start))
+                        .filter(traces::start_time_us.lt(bucket_end))
+                        .filter(
+                            traces::run_id
+                                .is_not_null()
+                                .or(traces::thread_id.is_not_null()),
+                        );
+                }
+                GroupIdentifier::Thread { thread_id } => {
+                    count_query = count_query.filter(traces::thread_id.eq(thread_id.as_str()));
+                    data_query = data_query.filter(traces::thread_id.eq(thread_id.as_str()));
+                }
+                GroupIdentifier::Run { run_id } => {
+                    count_query = count_query.filter(traces::run_id.eq(run_id.to_string()));
+                    data_query = data_query.filter(traces::run_id.eq(run_id.to_string()));
+                }
+            }
+
+            count_query = count_query.filter(traces::project_id.eq(&project_slug));
+            data_query = data_query.filter(traces::project_id.eq(&project_slug));
+
+            // Get total count
+            let total = count_query
+                .count()
+                .get_result::<i64>(&mut conn)
+                .unwrap_or(0);
+
+            // Get paginated traces
+            let traces: Vec<DbTrace> = data_query
+                .order(traces::start_time_us.asc())
+                .limit(limit)
+                .offset(offset)
+                .load::<DbTrace>(&mut conn)
+                .unwrap_or_default();
+
+            // Get child attributes
+            let trace_ids: Vec<String> = traces.iter().map(|t| t.trace_id.clone()).collect();
+            let span_ids: Vec<String> = traces.iter().map(|t| t.span_id.clone()).collect();
+
+            let child_attrs = self
+                .get_child_attributes(&trace_ids, &span_ids, Some(project_slug))
+                .unwrap_or_default();
+
+            let spans: Vec<LangdbSpan> = traces
+                .into_iter()
+                .map(|trace| {
+                    let attribute = trace.parse_attribute().unwrap_or_default();
+                    let child_attribute = child_attrs
+                        .get(&trace.span_id)
+                        .and_then(|opt| opt.as_ref())
+                        .and_then(|json_config| serde_json::from_value(json_config.clone()).ok());
+
+                    LangdbSpan {
+                        trace_id: trace.trace_id,
+                        span_id: trace.span_id,
+                        operation_name: Operation::from(trace.operation_name.as_str()),
+                        parent_span_id: trace.parent_span_id,
+                        thread_id: trace.thread_id,
+                        start_time_us: trace.start_time_us,
+                        finish_time_us: trace.finish_time_us,
+                        attribute,
+                        child_attribute,
+                        run_id: trace.run_id,
+                    }
+                })
+                .collect();
+
+            result_map.insert(
+                group_key,
+                GroupSpansData {
+                    spans,
+                    pagination: Pagination {
+                        offset,
+                        limit,
+                        total,
+                    },
+                },
+            );
+        }
+
+        Ok(BatchGroupSpansResponse { data: result_map })
     }
 }
 
