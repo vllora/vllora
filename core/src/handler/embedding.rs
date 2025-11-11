@@ -1,7 +1,7 @@
 use crate::executor::embeddings::handle_embeddings;
-use crate::metadata::services::model::ModelService;
 use crate::types::credentials::Credentials;
 use crate::types::embed::EmbeddingResult;
+use crate::types::metadata::services::model::ModelService;
 use actix_web::{web, HttpResponse};
 use actix_web::{HttpMessage, HttpRequest};
 use tracing::Span;

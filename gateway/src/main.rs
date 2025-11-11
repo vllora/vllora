@@ -29,6 +29,7 @@ use static_serve::embed_asset;
 use static_serve::embed_assets;
 use tokio::sync::Mutex;
 use vllora_core::events::broadcast_channel_manager::BroadcastChannelManager;
+use vllora_core::types::metadata::services::model::ModelService;
 
 #[derive(Error, Debug)]
 pub enum CliError {
@@ -127,7 +128,6 @@ async fn main() -> Result<(), CliError> {
         }
         cli::Commands::List => {
             // Query models from database
-            use vllora_core::metadata::services::model::ModelService;
             let model_service = ModelServiceImpl::new(db_pool.clone());
             let db_models = model_service.list(None)?;
 

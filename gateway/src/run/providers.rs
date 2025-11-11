@@ -1,9 +1,10 @@
 use reqwest;
 use std::collections::HashSet;
 use vllora_core::metadata::error::DatabaseError;
-use vllora_core::metadata::models::providers::DbInsertProvider;
+use vllora_core::metadata::models::provider::DbInsertProvider;
 use vllora_core::metadata::pool::DbPool;
-use vllora_core::metadata::services::providers::{ProviderService, ProvidersServiceImpl};
+use vllora_core::metadata::services::provider::ProvidersServiceImpl;
+use vllora_core::types::metadata::services::provider::ProviderService;
 use vllora_core::types::LANGDB_API_URL;
 
 #[derive(Debug, thiserror::Error)]

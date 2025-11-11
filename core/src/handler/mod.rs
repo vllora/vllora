@@ -10,10 +10,10 @@ pub mod runs;
 pub mod spans;
 pub mod threads;
 
-use crate::metadata::services::model::ModelService;
 use crate::model::types::ModelEvent;
 use crate::models::ModelMetadata;
 use crate::types::engine::Model;
+use crate::types::metadata::services::model::ModelService;
 use crate::GatewayApiError;
 use crate::{error::GatewayError, model::error::ModelError};
 use actix_web::HttpRequest;

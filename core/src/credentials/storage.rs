@@ -1,11 +1,10 @@
 use crate::credentials::{KeyStorage, KeyStorageError, ProviderCredentialsId};
-use crate::metadata::models::provider_credentials::{
+use crate::metadata::models::provider_credential::{
     DbInsertProviderCredentials, DbUpdateProviderCredentials,
 };
 use crate::metadata::pool::DbPool;
-use crate::metadata::services::provider_credentials::{
-    ProviderCredentialsService, ProviderCredentialsServiceImpl,
-};
+use crate::metadata::services::provider_credential::ProviderCredentialsServiceImpl;
+use crate::types::metadata::services::provider_credential::ProviderCredentialsService;
 
 pub struct ProviderKeyResolver {
     provider_service: ProviderCredentialsServiceImpl,

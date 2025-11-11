@@ -9,9 +9,9 @@ pub mod traces;
 use actix_web::{web, HttpResponse};
 use chrono::NaiveTime;
 use vllora_core::handler::models::ChatModelsResponse;
-use vllora_core::metadata::services::model::ModelService;
 use vllora_core::models::ModelMetadata;
 use vllora_core::types::gateway::ChatModel;
+use vllora_core::types::metadata::services::model::ModelService;
 use vllora_core::GatewayApiError;
 
 /// Handler to list models from SQLite database

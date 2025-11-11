@@ -2,13 +2,12 @@ use actix_web::{web, HttpResponse, Result};
 use serde::Deserialize;
 use std::collections::HashMap;
 use vllora_core::metadata::pool::DbPool;
-use vllora_core::metadata::services::model::ModelService;
-use vllora_core::metadata::services::provider_credentials::{
-    ProviderCredentialsService, ProviderCredentialsServiceImpl,
-};
+use vllora_core::metadata::services::provider_credential::ProviderCredentialsServiceImpl;
 use vllora_core::models::group_models_by_name_with_endpoints;
 use vllora_core::models::ModelMetadata;
 use vllora_core::types::metadata::project::Project;
+use vllora_core::types::metadata::services::model::ModelService;
+use vllora_core::types::metadata::services::provider_credential::ProviderCredentialsService;
 use vllora_core::GatewayApiError;
 
 #[derive(Deserialize)]

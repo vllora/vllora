@@ -1,4 +1,5 @@
 use crate::metadata::schema::providers;
+use crate::types::metadata::provider::ProviderInfo;
 use diesel::helper_types::AsSelect;
 use diesel::helper_types::Select;
 #[cfg(feature = "postgres")]
@@ -56,26 +57,47 @@ impl DbProvider {
 
     /// Get provider type based on provider name
     pub fn get_provider_type(&self) -> String {
-        match self.provider_name.to_lowercase().as_str() {
-            "openai" => "api_key".to_string(),
-            "anthropic" => "api_key".to_string(),
-            "gemini" => "api_key".to_string(),
-            "bedrock" => "aws".to_string(),
-            "vertex-ai" => "vertex".to_string(),
-            "azure" => "azure".to_string(),
-            "openrouter" => "api_key".to_string(),
-            "parasail" => "api_key".to_string(),
-            "togetherai" => "api_key".to_string(),
-            "xai" => "api_key".to_string(),
-            "zai" => "api_key".to_string(),
-            "mistralai" => "api_key".to_string(),
-            "groq" => "api_key".to_string(),
-            "deepinfra" => "api_key".to_string(),
-            "deepseek" => "api_key".to_string(),
-            "fireworksai" => "api_key".to_string(),
-            "langdb" => "langdb".to_string(),
-            "vllora" => "vllora".to_string(),
-            _ => "api_key".to_string(), // Default to api_key for unknown providers
+        get_provider_type(&self.provider_name)
+    }
+}
+
+pub fn get_provider_type(provider_name: &str) -> String {
+    match provider_name.to_lowercase().as_str() {
+        "openai" => "api_key".to_string(),
+        "anthropic" => "api_key".to_string(),
+        "gemini" => "api_key".to_string(),
+        "bedrock" => "aws".to_string(),
+        "vertex-ai" => "vertex".to_string(),
+        "azure" => "azure".to_string(),
+        "openrouter" => "api_key".to_string(),
+        "parasail" => "api_key".to_string(),
+        "togetherai" => "api_key".to_string(),
+        "xai" => "api_key".to_string(),
+        "zai" => "api_key".to_string(),
+        "mistralai" => "api_key".to_string(),
+        "groq" => "api_key".to_string(),
+        "deepinfra" => "api_key".to_string(),
+        "deepseek" => "api_key".to_string(),
+        "fireworksai" => "api_key".to_string(),
+        "langdb" => "langdb".to_string(),
+        "vllora" => "vllora".to_string(),
+        _ => "api_key".to_string(), // Default to api_key for unknown providers
+    }
+}
+
+impl From<DbProvider> for ProviderInfo {
+    fn from(val: DbProvider) -> Self {
+        let provider_type = val.get_provider_type();
+        ProviderInfo {
+            id: val.id,
+            name: val.provider_name,
+            description: val.description,
+            endpoint: val.endpoint,
+            priority: val.priority,
+            privacy_policy_url: val.privacy_policy_url,
+            terms_of_service_url: val.terms_of_service_url,
+            provider_type,
+            has_credentials: false,
         }
     }
 }

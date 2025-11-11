@@ -29,10 +29,10 @@ use valuable::Valuable;
 
 use super::can_execute_llm_for_request;
 use crate::handler::CallbackHandlerFn;
-use crate::metadata::services::model::ModelService;
 use crate::model::ModelMetadataFactory;
 use crate::types::gateway::{ChatCompletionDelta, CostCalculator};
 use crate::types::metadata::project::Project;
+use crate::types::metadata::services::model::ModelService;
 use crate::types::threads::{CompletionsRunId, CompletionsThreadId};
 use crate::GatewayApiError;
 use tracing::Span;

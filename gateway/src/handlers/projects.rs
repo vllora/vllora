@@ -3,8 +3,9 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use vllora_core::metadata::models::project::NewProjectDTO;
 use vllora_core::metadata::pool::DbPool;
-use vllora_core::metadata::services::project::{ProjectService, ProjectServiceImpl};
+use vllora_core::metadata::services::project::ProjectServiceImpl;
 use vllora_core::types::metadata::project::Project;
+use vllora_core::types::metadata::services::project::ProjectService;
 
 use vllora_core::ok_json;
 

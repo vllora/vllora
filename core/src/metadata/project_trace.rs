@@ -1,6 +1,6 @@
-use crate::metadata::services::project::ProjectService;
 use crate::metadata::services::project::ProjectServiceImpl;
 use crate::telemetry::TraceTenantResolver;
+use crate::types::metadata::services::project::ProjectService;
 use std::{collections::HashMap, sync::Arc};
 use tonic::metadata::MetadataMap;
 use uuid::Uuid;

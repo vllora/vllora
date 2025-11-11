@@ -1,11 +1,10 @@
 use crate::credentials::KeyStorage;
 use crate::credentials::ProviderCredentialsId;
 use crate::metadata::pool::DbPool;
-use crate::metadata::services::providers::{
-    ProviderInfo as ProvidersProviderInfo, ProviderService as ProvidersService,
-};
 use crate::types::credentials::Credentials;
 use crate::types::metadata::project::Project;
+use crate::types::metadata::provider::ProviderInfo;
+use crate::types::metadata::services::provider::ProviderService;
 use crate::types::GatewayTenant;
 use actix_web::HttpMessage;
 use actix_web::HttpRequest;
@@ -21,11 +20,11 @@ pub struct UpdateProviderRequest {
 
 #[derive(Serialize)]
 pub struct ProviderResponse {
-    pub provider: ProvidersProviderInfo,
+    pub provider: ProviderInfo,
 }
 
 /// List all providers with their credential status for the current project
-pub async fn list_providers<T: ProvidersService>(
+pub async fn list_providers<T: ProviderService>(
     req: HttpRequest,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
@@ -36,7 +35,7 @@ pub async fn list_providers<T: ProvidersService>(
 }
 
 /// Update provider credentials for the current project
-pub async fn update_provider_key<T: ProvidersService>(
+pub async fn update_provider_key<T: ProviderService>(
     path: web::Path<String>,
     req: web::Json<UpdateProviderRequest>,
     project: web::ReqData<Project>,

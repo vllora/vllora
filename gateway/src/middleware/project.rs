@@ -7,7 +7,8 @@ use std::rc::Rc;
 use tracing::error;
 use uuid::Uuid;
 use vllora_core::metadata::pool::DbPool;
-use vllora_core::metadata::services::project::{ProjectService, ProjectServiceImpl};
+use vllora_core::metadata::services::project::ProjectServiceImpl;
+use vllora_core::types::metadata::services::project::ProjectService;
 
 pub const PROJECT_HEADER: &str = "X-Project-Id";
 

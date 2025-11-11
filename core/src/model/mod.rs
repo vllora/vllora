@@ -1,6 +1,5 @@
 use crate::events::CustomEventType;
 use crate::executor::context::ExecutorContext;
-use crate::metadata::services::model::ModelService;
 use crate::model::bedrock::BedrockModel;
 use crate::model::cached::CachedModel;
 use crate::model::error::ModelError;
@@ -14,6 +13,7 @@ use crate::types::gateway::{
 };
 use crate::types::guardrails::service::GuardrailsEvaluator;
 use crate::types::guardrails::{GuardError, GuardResult, GuardStage};
+use crate::types::metadata::services::model::ModelService;
 use crate::types::provider::ModelPrice;
 use crate::types::threads::Message;
 use crate::GatewayResult;

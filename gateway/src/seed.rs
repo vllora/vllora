@@ -4,9 +4,12 @@ use uuid::Uuid;
 use vllora_core::metadata::error::DatabaseError;
 use vllora_core::metadata::models::project::NewProjectDTO;
 use vllora_core::metadata::pool::DbPool;
-use vllora_core::metadata::services::model::{ModelService, ModelServiceImpl};
-use vllora_core::metadata::services::project::{ProjectService, ProjectServiceImpl};
-use vllora_core::metadata::services::providers::{ProviderService, ProvidersServiceImpl};
+use vllora_core::metadata::services::model::ModelServiceImpl;
+use vllora_core::metadata::services::project::ProjectServiceImpl;
+use vllora_core::metadata::services::provider::ProvidersServiceImpl;
+use vllora_core::types::metadata::services::model::ModelService;
+use vllora_core::types::metadata::services::project::ProjectService;
+use vllora_core::types::metadata::services::provider::ProviderService;
 
 use crate::run;
 

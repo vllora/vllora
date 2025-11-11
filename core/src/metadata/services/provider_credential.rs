@@ -1,79 +1,20 @@
 use crate::metadata::error::DatabaseError;
-use crate::metadata::models::provider_credentials::{
+use crate::metadata::models::provider::get_provider_type;
+use crate::metadata::models::provider_credential::{
     DbInsertProviderCredentials, DbProviderCredentials, DbUpdateProviderCredentials,
 };
 use crate::metadata::pool::DbPool;
 use crate::metadata::schema::provider_credentials as pc;
 use crate::metadata::schema::provider_credentials::dsl::provider_credentials;
 use crate::types::credentials::Credentials;
+use crate::types::metadata::provider_credential::ProviderCredentialsInfo;
+use crate::types::metadata::services::provider_credential::ProviderCredentialsService;
 use diesel::dsl::count;
 use diesel::BoolExpressionMethods;
 use diesel::ExpressionMethods;
 use diesel::OptionalExtension;
 use diesel::{QueryDsl, RunQueryDsl};
 use std::collections::HashMap;
-
-pub trait ProviderCredentialsService {
-    /// Get provider credentials by provider name and optional project ID
-    fn get_provider_credentials(
-        &self,
-        provider_name: &str,
-        project_id: Option<&str>,
-    ) -> Result<Option<DbProviderCredentials>, DatabaseError>;
-
-    /// Save or update provider credentials
-    fn save_provider(&self, provider: DbInsertProviderCredentials) -> Result<(), DatabaseError>;
-
-    /// Update existing provider credentials
-    fn update_provider(
-        &self,
-        provider_name: &str,
-        project_id: Option<&str>,
-        update: DbUpdateProviderCredentials,
-    ) -> Result<(), DatabaseError>;
-
-    /// Delete provider credentials
-    fn delete_provider(
-        &self,
-        provider_name: &str,
-        project_id: Option<&str>,
-    ) -> Result<(), DatabaseError>;
-
-    /// List all providers with their credential status
-    fn list_providers(
-        &self,
-        project_id: Option<&str>,
-    ) -> Result<Vec<ProviderCredentialsInfo>, DatabaseError>;
-
-    /// List all available providers from models with their credential status
-    fn list_available_providers(
-        &self,
-        project_id: Option<&str>,
-        available_models: &[crate::models::ModelMetadata],
-    ) -> Result<Vec<ProviderCredentialsInfo>, DatabaseError>;
-
-    /// Check if provider has credentials configured
-    fn has_provider_credentials(
-        &self,
-        provider_name: &str,
-        project_id: Option<&str>,
-    ) -> Result<bool, DatabaseError>;
-
-    /// Get all provider credentials for a project (including global fallbacks)
-    fn get_all_provider_credentials(
-        &self,
-        project_id: Option<&str>,
-    ) -> Result<HashMap<String, Credentials>, DatabaseError>;
-}
-
-/// Information about a provider's credential status
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct ProviderCredentialsInfo {
-    pub id: String,
-    pub name: String,
-    pub provider_type: String,
-    pub has_credentials: bool,
-}
 
 impl ProviderCredentialsService for ProviderCredentialsServiceImpl {
     fn get_provider_credentials(
@@ -322,20 +263,6 @@ impl ProviderCredentialsService for ProviderCredentialsServiceImpl {
     }
 }
 
-/// Get the provider type based on provider name
-pub fn get_provider_type(provider_name: &str) -> String {
-    match provider_name.to_lowercase().as_str() {
-        "openai" => "api_key".to_string(),
-        "anthropic" => "api_key".to_string(),
-        "gemini" => "api_key".to_string(),
-        "bedrock" => "aws".to_string(),
-        "vertex-ai" => "vertex".to_string(),
-        "langdb" => "langdb".to_string(),
-        "vllora" => "vllora".to_string(),
-        _ => "api_key".to_string(), // Default to api_key for unknown providers
-    }
-}
-
 pub struct ProviderCredentialsServiceImpl {
     db_pool: DbPool,
 }
@@ -350,8 +277,8 @@ impl ProviderCredentialsServiceImpl {
 mod tests {
     use super::*;
     use crate::metadata::models::project::NewProjectDTO;
-    use crate::metadata::models::provider_credentials::NewProviderCredentialsDTO;
-    use crate::metadata::models::provider_credentials::UpdateProviderCredentialsDTO;
+    use crate::metadata::models::provider_credential::NewProviderCredentialsDTO;
+    use crate::metadata::models::provider_credential::UpdateProviderCredentialsDTO;
     use crate::metadata::services::project::ProjectService;
     use crate::metadata::services::project::ProjectServiceImpl;
     use crate::metadata::test_utils::setup_test_database;
