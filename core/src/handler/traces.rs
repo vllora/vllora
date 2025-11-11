@@ -1,11 +1,11 @@
+use crate::metadata::{DatabaseService, DatabaseServiceTrait};
+use crate::types::handlers::pagination::PaginatedResult;
+use crate::types::handlers::pagination::Pagination;
+use crate::types::metadata::project::Project;
+use crate::types::metadata::services::trace::{ListTracesQuery, TraceService};
+use crate::types::traces::{LangdbSpan, Operation};
 use actix_web::{web, HttpResponse, Result};
 use serde::Deserialize;
-use vllora_core::metadata::services::trace::{ListTracesQuery, TraceService, TraceServiceImpl};
-use vllora_core::metadata::DatabaseService;
-use vllora_core::types::handlers::pagination::PaginatedResult;
-use vllora_core::types::handlers::pagination::Pagination;
-use vllora_core::types::metadata::project::Project;
-use vllora_core::types::traces::{LangdbSpan, Operation};
 
 #[derive(Deserialize)]
 pub struct ListTracesQueryParams {
@@ -21,12 +21,12 @@ pub struct ListTracesQueryParams {
     offset: Option<i64>,
 }
 
-pub async fn list_traces(
+pub async fn list_traces<T: TraceService + DatabaseServiceTrait>(
     query: web::Query<ListTracesQueryParams>,
     project: web::ReqData<Project>,
     database_service: web::Data<DatabaseService>,
 ) -> Result<HttpResponse> {
-    let trace_service = database_service.init::<TraceServiceImpl>();
+    let trace_service = database_service.init::<T>();
 
     // Extract project_id from extensions (set by ProjectMiddleware)
     let project_slug = project.slug.clone();
@@ -69,13 +69,13 @@ pub struct GetSpansByRunQuery {
     offset: Option<i64>,
 }
 
-pub async fn get_spans_by_run(
+pub async fn get_spans_by_run<T: TraceService + DatabaseServiceTrait>(
     run_id: web::Path<String>,
     query: web::Query<GetSpansByRunQuery>,
     project: web::ReqData<Project>,
     database_service: web::Data<DatabaseService>,
 ) -> Result<HttpResponse> {
-    let trace_service = database_service.init::<TraceServiceImpl>();
+    let trace_service = database_service.init::<T>();
 
     let project_slug = project.slug.clone();
 

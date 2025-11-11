@@ -2,7 +2,7 @@ use crate::callback_handler::init_callback_handler;
 use crate::config::Config;
 use crate::cost::GatewayCostCalculator;
 use crate::guardrails::GuardrailsService;
-use crate::handlers::{group, mcp_configs, models, projects, session, threads, traces};
+use crate::handlers::{group, mcp_configs, models, projects, session, threads};
 use crate::middleware::project::ProjectMiddleware;
 use crate::middleware::thread_service::ThreadsServiceMiddleware;
 use crate::middleware::trace_logger::TraceLogger;
@@ -37,6 +37,7 @@ use vllora_core::handler::middleware::run_id::RunId;
 use vllora_core::handler::middleware::thread_id::ThreadId;
 use vllora_core::handler::runs;
 use vllora_core::handler::spans;
+use vllora_core::handler::traces;
 use vllora_core::handler::CallbackHandlerFn;
 use vllora_core::mcp::server::LocalSessionManager;
 use vllora_core::metadata::models::session::DbSession;
@@ -48,7 +49,7 @@ use vllora_core::metadata::services::provider::ProvidersServiceImpl;
 use vllora_core::metadata::services::run::RunServiceImpl;
 use vllora_core::telemetry::database::SqliteTraceWriterTransport;
 use vllora_core::telemetry::SpanWriterTransport;
-use vllora_core::telemetry::{TraceServiceImpl, TraceServiceServer};
+use vllora_core::telemetry::{TraceServiceImpl as TelemetryTraceServiceImpl, TraceServiceServer};
 use vllora_core::types::gateway::CostCalculator;
 use vllora_core::types::guardrails::service::GuardrailsEvaluator;
 use vllora_core::types::guardrails::Guard;
@@ -185,7 +186,7 @@ impl ApiServer {
         )) as Box<dyn SpanWriterTransport>;
 
         let project_service = ProjectServiceImpl::new(server_config.db_pool.clone());
-        let trace_service = TraceServiceServer::new(TraceServiceImpl::new(
+        let trace_service = TraceServiceServer::new(TelemetryTraceServiceImpl::new(
             writer,
             Box::new(ProjectTraceTenantResolver::new(project_service)),
             project_trace_senders.inner().clone(),
@@ -348,11 +349,17 @@ impl ApiServer {
                     .route("/{id}", web::delete().to(mcp_configs::delete_mcp_config))
                     .route("/{id}", web::put().to(mcp_configs::update_mcp_config)),
             )
-            .service(web::scope("/traces").route("", web::get().to(traces::list_traces)))
+            .service(web::scope("/traces").route(
+                "",
+                web::get().to(traces::list_traces::<MetadataTraceServiceImpl>),
+            ))
             .service(
                 web::scope("/runs")
                     .route("", web::get().to(runs::list_root_runs::<RunServiceImpl>))
-                    .route("/{run_id}", web::get().to(traces::get_spans_by_run)),
+                    .route(
+                        "/{run_id}",
+                        web::get().to(traces::get_spans_by_run::<MetadataTraceServiceImpl>),
+                    ),
             )
             .service(
                 web::scope("/group")

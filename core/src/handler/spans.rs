@@ -1,7 +1,7 @@
-use crate::metadata::services::trace::{ListTracesQuery, TraceService};
 use crate::metadata::DatabaseService;
 use crate::metadata::DatabaseServiceTrait;
 use crate::types::metadata::project::Project;
+use crate::types::metadata::services::trace::{ListTracesQuery, TraceService};
 use actix_web::{web, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

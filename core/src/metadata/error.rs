@@ -17,6 +17,9 @@ pub enum DatabaseError {
 
     #[error("Invalid argument: {0}")]
     InvalidArgument(String),
+
+    #[error("Invalid UUID: {0:?}")]
+    InvalidUuid(#[from] uuid::Error),
 }
 
 impl ResponseError for DatabaseError {

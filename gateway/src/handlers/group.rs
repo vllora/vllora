@@ -8,7 +8,7 @@ use vllora_core::metadata::models::trace::DbTrace;
 use vllora_core::metadata::pool::DbPool;
 use vllora_core::metadata::schema::traces;
 use vllora_core::metadata::services::group::GroupServiceImpl;
-use vllora_core::metadata::services::trace::{TraceService, TraceServiceImpl};
+use vllora_core::metadata::services::trace::TraceServiceImpl;
 use vllora_core::metadata::DatabaseService;
 use vllora_core::types::metadata::project::Project;
 use vllora_core::types::metadata::services::group::GroupBy;
@@ -16,6 +16,7 @@ use vllora_core::types::metadata::services::group::GroupService;
 use vllora_core::types::metadata::services::group::GroupUsageInformation;
 use vllora_core::types::metadata::services::group::ListGroupQuery;
 use vllora_core::types::metadata::services::group::TypeFilter;
+use vllora_core::types::metadata::services::trace::TraceService;
 
 #[derive(Deserialize)]
 pub struct ListGroupQueryParams {

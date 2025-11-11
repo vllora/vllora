@@ -4,9 +4,9 @@ pub mod tools;
 pub use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 
 use crate::mcp::server::tools::ListTracesRequest;
-use crate::metadata::services::trace::ListTracesQuery;
-use crate::metadata::services::trace::TraceService;
 use crate::types::handlers::pagination::PaginatedResult;
+use crate::types::metadata::services::trace::ListTracesQuery;
+use crate::types::metadata::services::trace::TraceService;
 use crate::types::traces::LangdbSpan;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, Content};

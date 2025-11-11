@@ -9,6 +9,7 @@ pub mod responses;
 pub mod runs;
 pub mod spans;
 pub mod threads;
+pub mod traces;
 
 use crate::model::types::ModelEvent;
 use crate::models::ModelMetadata;

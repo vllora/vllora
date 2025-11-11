@@ -4,7 +4,6 @@ pub mod models;
 pub mod projects;
 pub mod session;
 pub mod threads;
-pub mod traces;
 
 use actix_web::{web, HttpResponse};
 use chrono::NaiveTime;

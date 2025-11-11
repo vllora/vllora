@@ -3,8 +3,8 @@ use rmcp_actix_web::transport::StreamableHttpService;
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 
 use crate::mcp::server::VlloraMcp;
-use crate::metadata::services::trace::TraceService;
 use crate::metadata::{DatabaseService, DatabaseServiceTrait};
+use crate::types::metadata::services::trace::TraceService;
 use actix_web::Scope;
 use std::sync::Arc;
 use std::time::Duration;
