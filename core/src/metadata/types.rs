@@ -63,6 +63,12 @@ impl UUID {
     }
 }
 
+impl Default for UUID {
+    fn default() -> Self {
+        Self(uuid::Uuid::new_v4())
+    }
+}
+
 // Allow easy conversion from UUID to the wanted uuid::Uuid
 impl From<UUID> for uuid::Uuid {
     fn from(s: UUID) -> Self {

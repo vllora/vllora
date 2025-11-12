@@ -1,4 +1,3 @@
-pub mod mcp_configs;
 pub mod models;
 pub mod projects;
 pub mod session;

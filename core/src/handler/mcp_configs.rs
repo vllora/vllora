@@ -1,14 +1,14 @@
-use actix_web::{web, HttpRequest, HttpResponse, Result};
+use crate::metadata::pool::DbPool;
+use crate::metadata::services::mcp_config::McpConfigService;
+use crate::model::mcp::get_tools;
+use crate::rmcp::model::Tool;
+use crate::types::mcp::McpConfig;
+use crate::types::GatewayTenant;
+use crate::GatewayApiError;
+use actix_web::{web, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use vllora_core::metadata::pool::DbPool;
-use vllora_core::metadata::services::mcp_config::McpConfigService;
-use vllora_core::model::mcp::get_tools;
-use vllora_core::rmcp::model::Tool;
-use vllora_core::types::mcp::McpConfig;
-use vllora_core::types::GatewayTenant;
-use vllora_core::GatewayApiError;
 
 #[derive(Deserialize)]
 pub struct CreateMcpConfigRequest {
@@ -37,34 +37,34 @@ pub struct McpConfigListResponse {
     pub configs: Vec<McpConfigResponse>,
 }
 
-impl From<vllora_core::metadata::models::mcp_config::DbMcpConfig> for McpConfigResponse {
-    fn from(db_config: vllora_core::metadata::models::mcp_config::DbMcpConfig) -> Self {
+impl From<crate::metadata::models::mcp_config::DbMcpConfig> for McpConfigResponse {
+    fn from(db_config: crate::metadata::models::mcp_config::DbMcpConfig) -> Self {
         let config = db_config.to_mcp_config().unwrap_or_default();
         let tools = db_config
             .get_tools()
             .unwrap_or_else(|_| Value::Array(vec![]));
 
         Self {
-            id: db_config.id,
+            id: db_config.id.to_string(),
             company_slug: db_config.company_slug,
             config,
             tools,
-            tools_refreshed_at: db_config.tools_refreshed_at,
-            created_at: db_config.created_at,
-            updated_at: db_config.updated_at,
+            tools_refreshed_at: db_config.tools_refreshed_at.map(|t| t.to_rfc3339()),
+            created_at: db_config.created_at.to_rfc3339(),
+            updated_at: db_config.updated_at.to_rfc3339(),
         }
     }
 }
 
 /// List all MCP configurations
 pub async fn list_mcp_configs(
-    _req: HttpRequest,
     db_pool: web::Data<DbPool>,
+    tenant: web::ReqData<GatewayTenant>,
 ) -> Result<HttpResponse, GatewayApiError> {
     let service = McpConfigService::new(db_pool.get_ref().clone());
 
     let db_configs = service
-        .get_all()
+        .get_all(&tenant.name)
         .map_err(|e| GatewayApiError::CustomError(format!("Failed to fetch MCP configs: {}", e)))?;
 
     let configs: Vec<McpConfigResponse> = db_configs.into_iter().map(|c| c.into()).collect();
@@ -74,14 +74,15 @@ pub async fn list_mcp_configs(
 
 /// Get MCP configuration by ID
 pub async fn get_mcp_config(
-    path: web::Path<String>,
+    path: web::Path<uuid::Uuid>,
     db_pool: web::Data<DbPool>,
+    tenant: web::ReqData<GatewayTenant>,
 ) -> Result<HttpResponse, GatewayApiError> {
     let service = McpConfigService::new(db_pool.get_ref().clone());
     let id = path.into_inner();
 
     let db_config = service
-        .get_by_id(&id)
+        .get_by_id(&id, &tenant.name)
         .map_err(|e| GatewayApiError::CustomError(format!("Failed to fetch MCP config: {}", e)))?;
 
     Ok(HttpResponse::Ok().json(McpConfigResponse::from(db_config)))
@@ -91,12 +92,12 @@ pub async fn get_mcp_config(
 pub async fn upsert_mcp_config(
     req: web::Json<CreateMcpConfigRequest>,
     db_pool: web::Data<DbPool>,
-    gateway_tenant: web::ReqData<GatewayTenant>,
+    tenant: web::ReqData<GatewayTenant>,
 ) -> Result<HttpResponse, GatewayApiError> {
     let service = McpConfigService::new(db_pool.get_ref().clone());
 
     let db_config = service
-        .upsert(gateway_tenant.name.clone(), &req.config)
+        .upsert(tenant.name.clone(), &req.config)
         .map_err(|e| GatewayApiError::CustomError(format!("Failed to upsert MCP config: {}", e)))?;
 
     Ok(HttpResponse::Ok().json(McpConfigResponse::from(db_config)))
@@ -104,30 +105,31 @@ pub async fn upsert_mcp_config(
 
 /// Update MCP configuration by ID
 pub async fn update_mcp_config(
-    path: web::Path<String>,
+    path: web::Path<uuid::Uuid>,
     req: web::Json<UpdateMcpConfigRequest>,
     db_pool: web::Data<DbPool>,
+    tenant: web::ReqData<GatewayTenant>,
 ) -> Result<HttpResponse, GatewayApiError> {
     let service = McpConfigService::new(db_pool.get_ref().clone());
     let id = path.into_inner();
 
     // Get existing config to check what needs to be updated
-    let _existing_config = service.get_by_id(&id).map_err(|e| {
+    let _existing_config = service.get_by_id(&id, &tenant.name).map_err(|e| {
         GatewayApiError::CustomError(format!("Failed to fetch existing MCP config: {}", e))
     })?;
 
     let result = match (&req.config, &req.tools) {
         (Some(config), Some(tools)) => {
             // Update both config and tools
-            service.update_config_and_tools(&id, config, tools)
+            service.update_config_and_tools(&id, &tenant.name, config, tools)
         }
         (Some(config), None) => {
             // Update config only
-            service.update_config(&id, config)
+            service.update_config(&id, &tenant.name, config)
         }
         (None, Some(tools)) => {
             // Update tools only
-            service.update_tools(&id, tools)
+            service.update_tools(&id, &tenant.name, tools)
         }
         (None, None) => {
             return Err(GatewayApiError::CustomError(
@@ -140,7 +142,7 @@ pub async fn update_mcp_config(
         .map_err(|e| GatewayApiError::CustomError(format!("Failed to update MCP config: {}", e)))?;
 
     // Return the updated config
-    let db_config = service.get_by_id(&id).map_err(|e| {
+    let db_config = service.get_by_id(&id, &tenant.name).map_err(|e| {
         GatewayApiError::CustomError(format!("Failed to fetch updated MCP config: {}", e))
     })?;
 
@@ -149,14 +151,15 @@ pub async fn update_mcp_config(
 
 /// Delete MCP configuration by ID
 pub async fn delete_mcp_config(
-    path: web::Path<String>,
+    path: web::Path<uuid::Uuid>,
     db_pool: web::Data<DbPool>,
+    tenant: web::ReqData<GatewayTenant>,
 ) -> Result<HttpResponse, GatewayApiError> {
     let service = McpConfigService::new(db_pool.get_ref().clone());
     let id = path.into_inner();
 
     let deleted_rows = service
-        .delete(&id)
+        .delete(&id, &tenant.name)
         .map_err(|e| GatewayApiError::CustomError(format!("Failed to delete MCP config: {}", e)))?;
 
     if deleted_rows == 0 {
@@ -169,14 +172,15 @@ pub async fn delete_mcp_config(
 }
 
 pub async fn update_mcp_config_tools(
-    path: web::Path<String>,
+    path: web::Path<uuid::Uuid>,
     db_pool: web::Data<DbPool>,
+    tenant: web::ReqData<GatewayTenant>,
 ) -> Result<HttpResponse, GatewayApiError> {
     let service = McpConfigService::new(db_pool.get_ref().clone());
     let id = path.into_inner();
 
     let db_config = service
-        .get_by_id(&id)
+        .get_by_id(&id, &tenant.name)
         .map_err(|e| GatewayApiError::CustomError(format!("Failed to fetch MCP config: {}", e)))?;
 
     let config = db_config.to_mcp_config().unwrap_or_default();
@@ -205,9 +209,11 @@ pub async fn update_mcp_config_tools(
         }
     }
 
-    service.update_tools(&id, &tools_result).map_err(|e| {
-        GatewayApiError::CustomError(format!("Failed to update MCP config tools: {}", e))
-    })?;
+    service
+        .update_tools(&id, &tenant.name, &tools_result)
+        .map_err(|e| {
+            GatewayApiError::CustomError(format!("Failed to update MCP config tools: {}", e))
+        })?;
 
     Ok(HttpResponse::Ok().json(tools_result))
 }

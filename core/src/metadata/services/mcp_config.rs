@@ -10,6 +10,7 @@ use crate::metadata::error::DatabaseError;
 
 use crate::rmcp::model::Tool;
 use std::collections::HashMap;
+use uuid::Uuid;
 
 pub struct McpConfigService {
     db_pool: DbPool,
@@ -46,10 +47,15 @@ impl McpConfigService {
     }
 
     /// Gets an MCP configuration by ID
-    pub fn get_by_id(&self, id: &str) -> Result<DbMcpConfig, DatabaseError> {
+    pub fn get_by_id(&self, id: &Uuid, company_slug: &str) -> Result<DbMcpConfig, DatabaseError> {
         let mut conn = self.db_pool.get()?;
+        #[cfg(feature = "sqlite")]
+        let binding = id.to_string();
+        #[cfg(feature = "sqlite")]
+        let id = binding.as_str();
         Ok(mcp_configs::table
             .filter(mcp_configs::id.eq(id))
+            .filter(mcp_configs::company_slug.eq(company_slug))
             .first::<DbMcpConfig>(&mut conn)?)
     }
 
@@ -62,10 +68,11 @@ impl McpConfigService {
     }
 
     /// Gets all MCP configurations
-    pub fn get_all(&self) -> Result<Vec<DbMcpConfig>, DatabaseError> {
+    pub fn get_all(&self, company_slug: &str) -> Result<Vec<DbMcpConfig>, DatabaseError> {
         let mut conn = self.db_pool.get()?;
         Ok(mcp_configs::table
             .order(mcp_configs::created_at.desc())
+            .filter(mcp_configs::company_slug.eq(company_slug))
             .load::<DbMcpConfig>(&mut conn)?)
     }
 
@@ -164,9 +171,10 @@ impl McpConfigService {
     pub fn get_configs_needing_tool_refresh(
         &self,
         max_age_minutes: i64,
+        company_slug: &str,
     ) -> Result<Vec<DbMcpConfig>, DatabaseError> {
         let mut conn = self.db_pool.get()?;
-        let cutoff_time = (Utc::now() - chrono::Duration::minutes(max_age_minutes)).to_rfc3339();
+        let cutoff_time = Utc::now() - chrono::Duration::minutes(max_age_minutes);
 
         Ok(mcp_configs::table
             .filter(
@@ -175,76 +183,113 @@ impl McpConfigService {
                     .or(mcp_configs::tools_refreshed_at.lt(cutoff_time)),
             )
             .order(mcp_configs::created_at.desc())
+            .filter(mcp_configs::company_slug.eq(company_slug))
             .load::<DbMcpConfig>(&mut conn)?)
     }
 
     /// Updates an MCP configuration    
-    pub fn update_config(&self, id: &str, config: &McpConfig) -> Result<usize, DatabaseError> {
+    pub fn update_config(
+        &self,
+        id: &Uuid,
+        company_slug: &str,
+        config: &McpConfig,
+    ) -> Result<usize, DatabaseError> {
         let mut conn = self.db_pool.get()?;
         let update = UpdateMcpConfig::from_mcp_config(config)?;
-        Ok(
-            diesel::update(mcp_configs::table.filter(mcp_configs::id.eq(id)))
-                .set(&update)
-                .execute(&mut conn)?,
+        #[cfg(feature = "sqlite")]
+        let binding = id.to_string();
+        #[cfg(feature = "sqlite")]
+        let id = binding.as_str();
+        Ok(diesel::update(
+            mcp_configs::table
+                .filter(mcp_configs::id.eq(id))
+                .filter(mcp_configs::company_slug.eq(company_slug)),
         )
+        .set(&update)
+        .execute(&mut conn)?)
     }
 
     /// Updates tools for an MCP configuration
     pub fn update_tools(
         &self,
-        id: &str,
+        id: &Uuid,
+        company_slug: &str,
         tools: &HashMap<String, Vec<Tool>>,
     ) -> Result<usize, DatabaseError> {
         let mut conn = self.db_pool.get()?;
         let update = UpdateMcpConfig::from_tools(tools)?;
-
-        Ok(
-            diesel::update(mcp_configs::table.filter(mcp_configs::id.eq(id)))
-                .set(&update)
-                .execute(&mut conn)?,
+        #[cfg(feature = "sqlite")]
+        let binding = id.to_string();
+        #[cfg(feature = "sqlite")]
+        let id = binding.as_str();
+        Ok(diesel::update(
+            mcp_configs::table
+                .filter(mcp_configs::id.eq(id))
+                .filter(mcp_configs::company_slug.eq(company_slug)),
         )
+        .set(&update)
+        .execute(&mut conn)?)
     }
 
     /// Updates both config and tools for an MCP configuration
     pub fn update_config_and_tools(
         &self,
-        id: &str,
+        id: &Uuid,
+        company_slug: &str,
         config: &McpConfig,
         tools: &HashMap<String, Vec<Tool>>,
     ) -> Result<usize, DatabaseError> {
         let mut conn = self.db_pool.get()?;
         let update = UpdateMcpConfig::from_config_and_tools(config, tools)?;
 
-        Ok(
-            diesel::update(mcp_configs::table.filter(mcp_configs::id.eq(id)))
-                .set(&update)
-                .execute(&mut conn)?,
+        #[cfg(feature = "sqlite")]
+        let binding = id.to_string();
+        #[cfg(feature = "sqlite")]
+        let id = binding.as_str();
+        Ok(diesel::update(
+            mcp_configs::table
+                .filter(mcp_configs::id.eq(id))
+                .filter(mcp_configs::company_slug.eq(company_slug)),
         )
+        .set(&update)
+        .execute(&mut conn)?)
     }
 
     /// Deletes an MCP configuration
-    pub fn delete(&self, id: &str) -> Result<usize, DatabaseError> {
+    pub fn delete(&self, id: &Uuid, company_slug: &str) -> Result<usize, DatabaseError> {
         let mut conn = self.db_pool.get()?;
-        Ok(diesel::delete(mcp_configs::table.filter(mcp_configs::id.eq(id))).execute(&mut conn)?)
+        #[cfg(feature = "sqlite")]
+        let binding = id.to_string();
+        #[cfg(feature = "sqlite")]
+        let id = binding.as_str();
+        Ok(diesel::delete(
+            mcp_configs::table
+                .filter(mcp_configs::id.eq(id))
+                .filter(mcp_configs::company_slug.eq(company_slug)),
+        )
+        .execute(&mut conn)?)
     }
 
     /// Gets the count of MCP configurations
-    pub fn count(&self) -> Result<i64, DatabaseError> {
+    pub fn count(&self, company_slug: &str) -> Result<i64, DatabaseError> {
         let mut conn = self.db_pool.get()?;
-        Ok(mcp_configs::table.count().get_result(&mut conn)?)
+        Ok(mcp_configs::table
+            .filter(mcp_configs::company_slug.eq(company_slug))
+            .count()
+            .get_result(&mut conn)?)
     }
 
     /// Gets MCP configurations created within a time range
     pub fn get_by_created_at_range(
         &self,
+        company_slug: &str,
         start: chrono::DateTime<Utc>,
         end: chrono::DateTime<Utc>,
     ) -> Result<Vec<DbMcpConfig>, DatabaseError> {
         let mut conn = self.db_pool.get()?;
-        let start_str = start.to_rfc3339();
-        let end_str = end.to_rfc3339();
         Ok(mcp_configs::table
-            .filter(mcp_configs::created_at.between(start_str, end_str))
+            .filter(mcp_configs::created_at.between(start, end))
+            .filter(mcp_configs::company_slug.eq(company_slug))
             .order(mcp_configs::created_at.desc())
             .load::<DbMcpConfig>(&mut conn)?)
     }
@@ -252,14 +297,14 @@ impl McpConfigService {
     /// Gets MCP configurations updated within a time range
     pub fn get_by_updated_at_range(
         &self,
+        company_slug: &str,
         start: chrono::DateTime<Utc>,
         end: chrono::DateTime<Utc>,
     ) -> Result<Vec<DbMcpConfig>, DatabaseError> {
         let mut conn = self.db_pool.get()?;
-        let start_str = start.to_rfc3339();
-        let end_str = end.to_rfc3339();
         Ok(mcp_configs::table
-            .filter(mcp_configs::updated_at.between(start_str, end_str))
+            .filter(mcp_configs::updated_at.between(start, end))
+            .filter(mcp_configs::company_slug.eq(company_slug))
             .order(mcp_configs::updated_at.desc())
             .load::<DbMcpConfig>(&mut conn)?)
     }

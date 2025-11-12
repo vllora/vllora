@@ -1,3 +1,4 @@
+use crate::metadata::types::UUID;
 use crate::rmcp::model::Tool;
 use chrono::{DateTime, Utc};
 use diesel::helper_types::AsSelect;
@@ -16,6 +17,11 @@ use std::collections::HashMap;
 use crate::metadata::schema::mcp_configs;
 use crate::types::mcp::McpConfig;
 
+#[cfg(feature = "sqlite")]
+use diesel::sql_types::Text;
+#[cfg(feature = "postgres")]
+use diesel::sql_types::Uuid;
+
 #[derive(
     QueryableByName,
     Selectable,
@@ -33,13 +39,15 @@ use crate::types::mcp::McpConfig;
 #[serde(crate = "serde")]
 #[diesel(table_name = mcp_configs)]
 pub struct DbMcpConfig {
-    pub id: String,
+    #[cfg_attr(feature = "postgres", diesel(sql_type = Uuid))]
+    #[cfg_attr(feature = "sqlite", diesel(sql_type = Text))]
+    pub id: UUID,
     pub company_slug: String,
     pub config: String,
     pub tools: String,
-    pub tools_refreshed_at: Option<String>,
-    pub created_at: String,
-    pub updated_at: String,
+    pub tools_refreshed_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Insertable, Debug, Clone, Serialize, Deserialize)]
@@ -49,7 +57,7 @@ pub struct NewMcpConfig {
     pub company_slug: String,
     pub config: String,
     pub tools: String,
-    pub tools_refreshed_at: Option<String>,
+    pub tools_refreshed_at: Option<DateTime<Utc>>,
 }
 
 #[derive(AsChangeset, Debug, Clone, Serialize, Deserialize)]
@@ -59,8 +67,8 @@ pub struct UpdateMcpConfig {
     pub company_slug: Option<String>,
     pub config: Option<String>,
     pub tools: Option<String>,
-    pub tools_refreshed_at: Option<String>,
-    pub updated_at: Option<String>,
+    pub tools_refreshed_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
 }
 
 #[cfg(feature = "sqlite")]
@@ -92,14 +100,10 @@ impl DbMcpConfig {
     /// Checks if tools need to be refreshed based on the last refresh time
     pub fn should_refresh_tools(&self, max_age_minutes: i64) -> bool {
         match &self.tools_refreshed_at {
-            Some(last_refresh_str) => {
-                if let Ok(last_refresh) = DateTime::parse_from_rfc3339(last_refresh_str) {
-                    let now = Utc::now();
-                    let age = now.signed_duration_since(last_refresh.with_timezone(&Utc));
-                    age.num_minutes() > max_age_minutes
-                } else {
-                    true // Invalid timestamp, should refresh
-                }
+            Some(last_refresh) => {
+                let now = Utc::now();
+                let age = now.signed_duration_since(last_refresh.with_timezone(&Utc));
+                age.num_minutes() > max_age_minutes
             }
             None => true, // Never refreshed, so should refresh
         }
@@ -111,15 +115,15 @@ impl DbMcpConfig {
         tools: &HashMap<String, Vec<Tool>>,
     ) -> Result<(), serde_json::Error> {
         self.tools = serde_json::to_string(tools)?;
-        self.tools_refreshed_at = Some(Utc::now().to_rfc3339());
-        self.updated_at = Utc::now().to_rfc3339();
+        self.tools_refreshed_at = Some(Utc::now());
+        self.updated_at = Utc::now();
         Ok(())
     }
 
     /// Updates the MCP configuration
     pub fn update_config(&mut self, config: McpConfig) -> Result<(), serde_json::Error> {
         self.config = serde_json::to_string(&config)?;
-        self.updated_at = Utc::now().to_rfc3339();
+        self.updated_at = Utc::now();
         Ok(())
     }
 }
@@ -148,7 +152,7 @@ impl NewMcpConfig {
             company_slug,
             config: serde_json::to_string(config)?,
             tools: serde_json::to_string(tools)?,
-            tools_refreshed_at: Some(Utc::now().to_rfc3339()),
+            tools_refreshed_at: Some(Utc::now()),
         })
     }
 }
@@ -161,7 +165,7 @@ impl UpdateMcpConfig {
             config: Some(serde_json::to_string(config)?),
             tools: None,
             tools_refreshed_at: None,
-            updated_at: Some(Utc::now().to_rfc3339()),
+            updated_at: Some(Utc::now()),
         })
     }
 
@@ -171,8 +175,8 @@ impl UpdateMcpConfig {
             company_slug: None,
             config: None,
             tools: Some(serde_json::to_string(tools)?),
-            tools_refreshed_at: Some(Utc::now().to_rfc3339()),
-            updated_at: Some(Utc::now().to_rfc3339()),
+            tools_refreshed_at: Some(Utc::now()),
+            updated_at: Some(Utc::now()),
         })
     }
 
@@ -185,8 +189,8 @@ impl UpdateMcpConfig {
             company_slug: None,
             config: Some(serde_json::to_string(config)?),
             tools: Some(serde_json::to_string(tools)?),
-            tools_refreshed_at: Some(Utc::now().to_rfc3339()),
-            updated_at: Some(Utc::now().to_rfc3339()),
+            tools_refreshed_at: Some(Utc::now()),
+            updated_at: Some(Utc::now()),
         })
     }
 }

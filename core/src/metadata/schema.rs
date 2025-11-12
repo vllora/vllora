@@ -94,15 +94,29 @@ diesel::table! {
     }
 }
 
+#[cfg(feature = "sqlite")]
 diesel::table! {
     mcp_configs (id) {
         id -> Text,
         company_slug -> Text,
         config -> Text,
         tools -> Text,
-        tools_refreshed_at -> Nullable<Text>,
-        created_at -> Text,
-        updated_at -> Text,
+        tools_refreshed_at -> Nullable<TimestamptzSqlite>,
+        created_at -> TimestamptzSqlite,
+        updated_at -> TimestamptzSqlite,
+    }
+}
+
+#[cfg(feature = "postgres")]
+diesel::table! {
+    mcp_configs (id) {
+        id -> Uuid,
+        company_slug -> Text,
+        config -> Text,
+        tools -> Text,
+        tools_refreshed_at -> Nullable<Timestamptz>,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
     }
 }
 

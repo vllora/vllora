@@ -57,7 +57,7 @@ tokio-stream = "0.1"
 static-serve = "0.4"
 static-serve-macro = "0.4"
 axum = "0.8"
-diesel = { version = "2.3.2", features = ["sqlite"] }
+diesel = { version = "2.3.2", features = ["sqlite", "chrono"] }
 libsqlite3-sys = { version = "0.27.0", features = ["bundled"] }
 
 [features]
