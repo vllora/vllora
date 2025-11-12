@@ -6,9 +6,11 @@ use clap::Parser;
 use config::{Config, ConfigError};
 use http::ApiServer;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 use thiserror::Error;
 use vllora_core::metadata::error::DatabaseError;
 use vllora_core::metadata::services::model::ModelServiceImpl;
+use vllora_core::telemetry::RunSpanBuffer;
 use vllora_core::{error::GatewayError, usage::InMemoryStorage};
 
 mod callback_handler;
@@ -99,7 +101,12 @@ async fn main() -> Result<(), CliError> {
         (*project_trace_senders_cleanup).clone(),
     );
 
-    tracing::init_tracing(project_trace_senders.inner().clone());
+    let run_span_buffer = Arc::new(RunSpanBuffer::new(Duration::from_secs(20)));
+
+    tracing::init_tracing(
+        project_trace_senders.inner().clone(),
+        run_span_buffer.clone(),
+    );
     // Seed the database with a default project if none exist
     seed::seed_database(&db_pool)?;
 
@@ -172,6 +179,7 @@ async fn main() -> Result<(), CliError> {
                     .start(
                         Some(storage),
                         project_trace_senders.clone(),
+                        run_span_buffer.clone(),
                         session.clone(),
                     )
                     .await

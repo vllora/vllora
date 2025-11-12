@@ -1,9 +1,11 @@
 pub mod database;
 pub mod events;
 
+use crate::metadata::models::trace::DbTrace;
 use crate::types::GatewayTenant;
 use std::collections::HashMap;
-use std::time::Duration;
+use std::convert::TryFrom;
+use std::time::{Duration, Instant};
 use std::{future::Ready, sync::Arc};
 
 use crate::GatewayResult;
@@ -12,6 +14,7 @@ use actix_web::{
     http::header::HeaderMap,
     HttpMessage,
 };
+use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use futures::future::LocalBoxFuture;
 use opentelemetry::{
@@ -353,6 +356,30 @@ pub fn map_span(span: SpanData) -> Option<Span> {
     Some(span)
 }
 
+pub fn span_to_db_trace(span: &Span) -> Option<DbTrace> {
+    let run_id = span.run_id.clone()?;
+    let attributes =
+        serde_json::to_string(&serde_json::Value::Object(span.attributes.clone())).ok()?;
+    let start_time_us = i64::try_from(span.start_time_unix_nano / 1_000).ok()?;
+    let finish_time_us = i64::try_from(span.end_time_unix_nano / 1_000).ok()?;
+
+    Some(DbTrace {
+        trace_id: span.trace_id.to_string(),
+        span_id: span.span_id.to_string(),
+        thread_id: span.thread_id.clone(),
+        parent_span_id: span
+            .parent_span_id
+            .as_ref()
+            .map(|parent| parent.to_string()),
+        operation_name: span.operation_name.clone(),
+        start_time_us,
+        finish_time_us,
+        attribute: attributes,
+        run_id: Some(run_id),
+        project_id: span.project_id.clone(),
+    })
+}
+
 #[tonic::async_trait]
 impl TraceService for TraceServiceImpl {
     #[tracing::instrument(level = "info")]
@@ -559,6 +586,82 @@ pub struct TracingContextMiddleware<S> {
     service: S,
 }
 
+#[derive(Clone)]
+struct RunSpanBufferEntry {
+    spans: Vec<Span>,
+    expires_at: Instant,
+}
+
+pub struct RunSpanBuffer {
+    ttl: Duration,
+    inner: DashMap<String, RunSpanBufferEntry>,
+}
+
+impl RunSpanBuffer {
+    pub fn new(ttl: Duration) -> Self {
+        Self {
+            ttl,
+            inner: DashMap::new(),
+        }
+    }
+
+    pub fn insert(&self, span: Span) {
+        let Some(run_id) = span.run_id.clone() else {
+            return;
+        };
+
+        let now = Instant::now();
+        let expires_at = now + self.ttl;
+
+        match self.inner.entry(run_id) {
+            Entry::Occupied(mut occupied) => {
+                let entry = occupied.get_mut();
+                if entry.expires_at <= now {
+                    entry.spans.clear();
+                }
+                entry.spans.push(span);
+                entry.expires_at = expires_at;
+            }
+            Entry::Vacant(vacant) => {
+                vacant.insert(RunSpanBufferEntry {
+                    spans: vec![span],
+                    expires_at,
+                });
+            }
+        }
+    }
+
+    pub fn get(&self, run_id: &str, project_id: Option<&str>) -> Option<Vec<DbTrace>> {
+        let now = Instant::now();
+        let entry = self.inner.get(run_id)?;
+
+        if entry.expires_at <= now {
+            drop(entry);
+            self.inner.remove(run_id);
+            return None;
+        }
+
+        let mut spans: Vec<DbTrace> = entry
+            .spans
+            .iter()
+            .filter(|span| match (project_id, span.project_id.as_deref()) {
+                (Some(expected), Some(actual)) => expected == actual,
+                (Some(_), None) => false,
+                _ => true,
+            })
+            .filter_map(span_to_db_trace)
+            .collect();
+        drop(entry);
+
+        if spans.is_empty() {
+            None
+        } else {
+            spans.sort_by_key(|span| span.start_time_us);
+            Some(spans)
+        }
+    }
+}
+
 pub type ProjectTraceMap = DashMap<String, broadcast::Sender<Span>>;
 
 impl<S, B> Service<ServiceRequest> for TracingContextMiddleware<S>
@@ -668,6 +771,35 @@ impl opentelemetry_sdk::trace::SpanExporter for ProjectTraceSpanExporter {
                     if let Some(sender) = self.project_trace_senders.get(project_id).as_deref() {
                         let _result = sender.send(span.clone());
                     }
+                }
+            }
+        }
+        opentelemetry_sdk::error::OTelSdkResult::Ok(())
+    }
+}
+
+pub struct RunSpanBufferExporter {
+    buffer: Arc<RunSpanBuffer>,
+}
+
+impl RunSpanBufferExporter {
+    pub fn new(buffer: Arc<RunSpanBuffer>) -> Self {
+        Self { buffer }
+    }
+}
+
+impl std::fmt::Debug for RunSpanBufferExporter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RunSpanBufferExporter").finish()
+    }
+}
+
+impl opentelemetry_sdk::trace::SpanExporter for RunSpanBufferExporter {
+    async fn export(&self, batch: Vec<SpanData>) -> opentelemetry_sdk::error::OTelSdkResult {
+        for span in batch {
+            if let Some(span) = map_span(span) {
+                if span.run_id.is_some() {
+                    self.buffer.insert(span);
                 }
             }
         }

@@ -51,6 +51,7 @@ use vllora_core::metadata::services::project::ProjectServiceImpl;
 use vllora_core::metadata::services::provider::ProvidersServiceImpl;
 use vllora_core::metadata::services::run::RunServiceImpl;
 use vllora_core::telemetry::database::SqliteTraceWriterTransport;
+use vllora_core::telemetry::RunSpanBuffer;
 use vllora_core::telemetry::SpanWriterTransport;
 use vllora_core::telemetry::{TraceServiceImpl as TelemetryTraceServiceImpl, TraceServiceServer};
 use vllora_core::types::gateway::CostCalculator;
@@ -147,6 +148,7 @@ impl ApiServer {
         self,
         storage: Option<Arc<Mutex<InMemoryStorage>>>,
         project_trace_senders: Arc<BroadcastChannelManager>,
+        run_span_buffer: Arc<RunSpanBuffer>,
         session: DbSession,
     ) -> Result<impl Future<Output = Result<(), ServerError>>, ServerError> {
         let cost_calculator = GatewayCostCalculator::new();
@@ -176,6 +178,7 @@ impl ApiServer {
                 server_config_for_closure.db_pool.clone(),
                 events_senders_container.clone(),
                 project_traces_senders.clone(),
+                run_span_buffer.clone(),
                 session.clone(),
                 session_manager.clone(),
             )
@@ -218,6 +221,7 @@ impl ApiServer {
         db_pool: DbPool,
         events_senders_container: Arc<EventsSendersContainer>,
         project_trace_senders: Arc<BroadcastChannelManager>,
+        run_span_buffer: Arc<RunSpanBuffer>,
         session: DbSession,
         session_manager: Arc<LocalSessionManager>,
     ) -> App<
@@ -264,6 +268,7 @@ impl ApiServer {
             .wrap(ProjectMiddleware::new())
             .app_data(Data::new(broadcaster))
             .app_data(web::Data::from(project_trace_senders))
+            .app_data(web::Data::from(run_span_buffer))
             .app_data(Data::new(callback_handler))
             .app_data(Data::new(key_storage))
             .app_data(Data::new(session))

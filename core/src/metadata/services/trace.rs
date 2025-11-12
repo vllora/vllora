@@ -3,6 +3,7 @@ use crate::metadata::models::trace::{DbNewTrace, DbTrace};
 use crate::metadata::pool::DbPool;
 use crate::metadata::schema::traces;
 use crate::metadata::DatabaseServiceTrait;
+use crate::telemetry::RunSpanBuffer;
 use crate::types::handlers::pagination::{PaginatedResult, Pagination};
 use crate::types::metadata::services::trace::BatchGroupSpansResponse;
 use crate::types::metadata::services::trace::GroupIdentifier;
@@ -13,6 +14,7 @@ use crate::types::traces::{LangdbSpan, Operation};
 use diesel::prelude::*;
 use diesel::sql_types::{Nullable, Text};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct TraceServiceImpl {
@@ -161,7 +163,22 @@ impl TraceService for TraceServiceImpl {
         project_id: Option<&str>,
         limit: i64,
         offset: i64,
+        run_span_buffer: Arc<RunSpanBuffer>,
     ) -> Result<Vec<DbTrace>, DatabaseError> {
+        if limit <= 0 {
+            return Ok(Vec::new());
+        }
+
+        if let Some(spans) = run_span_buffer.get(run_id, project_id) {
+            let offset_usize = offset.max(0) as usize;
+            let limit_usize = limit as usize;
+            let end = (offset_usize + limit_usize).min(spans.len());
+            let slice = spans[offset_usize..end].to_vec();
+            if !slice.is_empty() {
+                return Ok(slice);
+            }
+        }
+
         let mut conn = self.db_pool.get()?;
 
         let mut query = traces::table.filter(traces::run_id.eq(run_id)).into_boxed();

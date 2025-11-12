@@ -2,24 +2,33 @@ use serde::Deserialize;
 
 use crate::metadata::error::DatabaseError;
 use crate::metadata::models::trace::DbTrace;
+use crate::telemetry::RunSpanBuffer;
 use crate::types::handlers::pagination::PaginatedResult;
 use crate::types::handlers::pagination::Pagination;
 use crate::types::traces::LangdbSpan;
 use serde::Serialize;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Enum representing the grouping key (discriminated union)
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "group_by", content = "group_key")]
 pub enum GroupByKey {
     #[serde(rename = "time")]
-    Time { time_bucket: i64 },
+    Time { 
+        #[serde(alias = "timeBucket")]
+        time_bucket: i64 
+    },
 
-    #[serde(rename = "thread")]
-    Thread { thread_id: String },
+    Thread { 
+        #[serde(alias = "threadId")]
+        thread_id: String 
+    },
 
-    #[serde(rename = "run")]
-    Run { run_id: uuid::Uuid },
+    Run { 
+        #[serde(alias = "runId")]
+        run_id: uuid::Uuid 
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -154,6 +163,7 @@ pub trait TraceService {
         project_id: Option<&str>,
         limit: i64,
         offset: i64,
+        run_span_buffer: Arc<RunSpanBuffer>,
     ) -> Result<Vec<DbTrace>, DatabaseError>;
     fn count(&self, query: ListTracesQuery) -> Result<i64, DatabaseError>;
     fn get_child_attributes(

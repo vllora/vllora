@@ -1,4 +1,5 @@
 use crate::metadata::{DatabaseService, DatabaseServiceTrait};
+use crate::telemetry::RunSpanBuffer;
 use crate::types::handlers::pagination::PaginatedResult;
 use crate::types::handlers::pagination::Pagination;
 use crate::types::metadata::project::Project;
@@ -74,6 +75,7 @@ pub async fn get_spans_by_run<T: TraceService + DatabaseServiceTrait>(
     query: web::Query<GetSpansByRunQuery>,
     project: web::ReqData<Project>,
     database_service: web::Data<DatabaseService>,
+    run_span_buffer: web::Data<RunSpanBuffer>,
 ) -> Result<HttpResponse> {
     let trace_service = database_service.init::<T>();
 
@@ -82,8 +84,16 @@ pub async fn get_spans_by_run<T: TraceService + DatabaseServiceTrait>(
     let limit = query.limit.unwrap_or(100);
     let offset = query.offset.unwrap_or(0);
 
+    let run_span_buffer = run_span_buffer.into_inner();
+
     Ok(trace_service
-        .get_by_run_id(&run_id, Some(&project_slug), limit, offset)
+        .get_by_run_id(
+            &run_id,
+            Some(&project_slug),
+            limit,
+            offset,
+            run_span_buffer.clone(),
+        )
         .map(|traces| {
             // Get child attributes for all traces
             let trace_ids: Vec<String> = traces.iter().map(|t| t.trace_id.clone()).collect();

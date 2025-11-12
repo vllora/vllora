@@ -7,8 +7,13 @@ use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Layer, Registry};
 use vllora_core::telemetry::events::{self, BaggageSpanProcessor};
 use vllora_core::telemetry::ProjectTraceMap;
 use vllora_core::telemetry::ProjectTraceSpanExporter;
+use vllora_core::telemetry::RunSpanBuffer;
+use vllora_core::telemetry::RunSpanBufferExporter;
 
-pub fn init_tracing(project_trace_senders: Arc<ProjectTraceMap>) {
+pub fn init_tracing(
+    project_trace_senders: Arc<ProjectTraceMap>,
+    run_span_buffer: Arc<RunSpanBuffer>,
+) {
     let log_level = std::env::var("RUST_LOG").unwrap_or("info".to_string());
     let env_filter = EnvFilter::new(log_level).add_directive("actix_server=off".parse().unwrap());
     let color = std::env::var("ANSI_OUTPUT").map_or(true, |v| v == "true");
@@ -29,6 +34,7 @@ pub fn init_tracing(project_trace_senders: Arc<ProjectTraceMap>) {
         .build()
         .unwrap();
     let project_trace_span_exporter = ProjectTraceSpanExporter::new(project_trace_senders);
+    let run_span_buffer_exporter = RunSpanBufferExporter::new(run_span_buffer);
 
     let provider = SdkTracerProvider::builder()
         .with_span_processor(BaggageSpanProcessor::new([
@@ -38,6 +44,7 @@ pub fn init_tracing(project_trace_senders: Arc<ProjectTraceMap>) {
             "vllora.tenant",
             "vllora.project_id",
         ]))
+        .with_simple_exporter(run_span_buffer_exporter)
         .with_simple_exporter(project_trace_span_exporter)
         .with_batch_exporter(otlp_exporter)
         .with_id_generator(events::UuidIdGenerator::default())
