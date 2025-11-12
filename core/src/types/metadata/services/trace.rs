@@ -20,11 +20,13 @@ pub enum GroupByKey {
         time_bucket: i64,
     },
 
+    #[serde(rename = "thread")]
     Thread {
         #[serde(alias = "threadId")]
         thread_id: String,
     },
 
+    #[serde(rename = "run")]
     Run {
         #[serde(alias = "runId")]
         run_id: uuid::Uuid,
