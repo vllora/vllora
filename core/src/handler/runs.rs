@@ -7,19 +7,14 @@ use serde::{Deserialize, Serialize};
 #[derive(Deserialize)]
 pub struct ListRunsQueryParams {
     pub run_ids: Option<String>, // Comma-separated
-    #[serde(alias = "threadIds")]
     pub thread_ids: Option<String>, // Comma-separated
-    #[serde(alias = "traceIds")]
     pub trace_ids: Option<String>, // Comma-separated
-    #[serde(alias = "modelName")]
     pub model_name: Option<String>,
-    #[serde(alias = "typeFilter")]
     pub type_filter: Option<TypeFilter>,
     pub start_time_min: Option<i64>,
     pub start_time_max: Option<i64>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
-    #[serde(alias = "includeMcpTemplates")]
     pub include_mcp_templates: Option<bool>,
 }
 
@@ -77,7 +72,6 @@ pub async fn list_root_runs<T: RunService + DatabaseServiceTrait>(
         offset: query.offset.unwrap_or(0),
         include_mcp_templates: query.include_mcp_templates.unwrap_or(false),
     };
-
     let runs = run_service.list_root_runs(list_query.clone())?;
     let total = run_service.count_root_runs(list_query)?;
 
