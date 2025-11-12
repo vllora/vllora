@@ -17,19 +17,13 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize)]
 pub struct ListGroupQueryParams {
-    #[serde(alias = "threadIds")]
     pub thread_ids: Option<String>, // Comma-separated
-    #[serde(alias = "traceIds")]
     pub trace_ids: Option<String>, // Comma-separated
-    #[serde(alias = "modelName")]
     pub model_name: Option<String>,
-    #[serde(alias = "typeFilter")]
     pub type_filter: Option<TypeFilter>,
     pub start_time_min: Option<i64>,
     pub start_time_max: Option<i64>,
-    #[serde(alias = "bucketSize")]
     pub bucket_size: Option<i64>, // Time bucket size in seconds
-    #[serde(alias = "groupBy")]
     pub group_by: Option<GroupBy>, // Grouping mode: "time" or "thread" (default: "time")
     pub limit: Option<i64>,
     pub offset: Option<i64>,
