@@ -10,20 +10,19 @@ use std::collections::HashMap;
 
 /// Enum representing the grouping key (discriminated union)
 #[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(untagged, rename_all = "snake_case")]
+#[serde(tag = "group_by", content = "group_key")]
 pub enum GroupByKey {
-    Time {
-        #[serde(alias = "timeBucket")]
-        time_bucket: i64,
-    },
-    Thread {
-        #[serde(alias = "threadId")]
-        thread_id: String,
-    },
-    Run {
-        #[serde(alias = "runId")]
-        run_id: uuid::Uuid,
-    },
+    #[serde(rename = "time")]
+    Time { time_bucket: i64 },
+
+    #[serde(rename = "thread")]
+    Thread { thread_id: String },
+
+    #[serde(rename = "run")]
+    Run { run_id: uuid::Uuid },
+    // Future grouping types can be added here:
+    // #[serde(rename = "model")]
+    // Model { model_name: String },
 }
 
 #[derive(Debug, Clone)]
