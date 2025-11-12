@@ -242,39 +242,39 @@ mod tests {
     #[test]
     fn test_should_refresh_tools() {
         let config = DbMcpConfig {
-            id: "test-id".to_string(),
+            id: UUID::random(),
             company_slug: "test-company".to_string(),
             config: "{}".to_string(),
             tools: "[]".to_string(),
             tools_refreshed_at: None,
-            created_at: Utc::now().to_rfc3339(),
-            updated_at: Utc::now().to_rfc3339(),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
         };
 
         // Should refresh if never refreshed
         assert!(config.should_refresh_tools(60));
 
         let config_with_recent_refresh = DbMcpConfig {
-            id: "test-id".to_string(),
+            id: UUID::random(),
             company_slug: "test-company".to_string(),
             config: "{}".to_string(),
             tools: "[]".to_string(),
-            tools_refreshed_at: Some(Utc::now().to_rfc3339()),
-            created_at: Utc::now().to_rfc3339(),
-            updated_at: Utc::now().to_rfc3339(),
+            tools_refreshed_at: Some(Utc::now()),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
         };
 
         // Should not refresh if recently refreshed
         assert!(!config_with_recent_refresh.should_refresh_tools(60));
 
         let config_with_old_refresh = DbMcpConfig {
-            id: "test-id".to_string(),
+            id: UUID::random(),
             company_slug: "test-company".to_string(),
             config: "{}".to_string(),
             tools: "[]".to_string(),
-            tools_refreshed_at: Some((Utc::now() - chrono::Duration::minutes(120)).to_rfc3339()),
-            created_at: Utc::now().to_rfc3339(),
-            updated_at: Utc::now().to_rfc3339(),
+            tools_refreshed_at: Some(Utc::now() - chrono::Duration::minutes(120)),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
         };
 
         // Should refresh if old refresh
@@ -284,13 +284,13 @@ mod tests {
     #[test]
     fn test_update_tools() {
         let mut config = DbMcpConfig {
-            id: "test-id".to_string(),
+            id: UUID::random(),
             company_slug: "test-company".to_string(),
             config: "{}".to_string(),
             tools: "[]".to_string(),
             tools_refreshed_at: None,
-            created_at: Utc::now().to_rfc3339(),
-            updated_at: Utc::now().to_rfc3339(),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
         };
 
         let old_updated_at = config.updated_at.clone();
@@ -313,13 +313,13 @@ mod tests {
     #[test]
     fn test_update_config() {
         let mut config = DbMcpConfig {
-            id: "test-id".to_string(),
+            id: UUID::random(),
             company_slug: "test-company".to_string(),
             config: "{}".to_string(),
             tools: "[]".to_string(),
             tools_refreshed_at: None,
-            created_at: Utc::now().to_rfc3339(),
-            updated_at: Utc::now().to_rfc3339(),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
         };
 
         let mut new_mcp_config = McpConfig::new();

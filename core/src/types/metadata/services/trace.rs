@@ -15,19 +15,19 @@ use std::sync::Arc;
 #[serde(tag = "group_by", content = "group_key")]
 pub enum GroupByKey {
     #[serde(rename = "time")]
-    Time { 
+    Time {
         #[serde(alias = "timeBucket")]
-        time_bucket: i64 
+        time_bucket: i64,
     },
 
-    Thread { 
+    Thread {
         #[serde(alias = "threadId")]
-        thread_id: String 
+        thread_id: String,
     },
 
-    Run { 
+    Run {
         #[serde(alias = "runId")]
-        run_id: uuid::Uuid 
+        run_id: uuid::Uuid,
     },
 }
 

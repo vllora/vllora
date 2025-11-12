@@ -18,12 +18,12 @@ use serde::{Deserialize, Serialize};
 #[derive(Deserialize)]
 pub struct ListGroupQueryParams {
     pub thread_ids: Option<String>, // Comma-separated
-    pub trace_ids: Option<String>, // Comma-separated
+    pub trace_ids: Option<String>,  // Comma-separated
     pub model_name: Option<String>,
     pub type_filter: Option<TypeFilter>,
     pub start_time_min: Option<i64>,
     pub start_time_max: Option<i64>,
-    pub bucket_size: Option<i64>, // Time bucket size in seconds
+    pub bucket_size: Option<i64>,  // Time bucket size in seconds
     pub group_by: Option<GroupBy>, // Grouping mode: "time" or "thread" (default: "time")
     pub limit: Option<i64>,
     pub offset: Option<i64>,
