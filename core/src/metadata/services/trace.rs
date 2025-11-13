@@ -5,10 +5,10 @@ use crate::metadata::schema::traces;
 use crate::metadata::DatabaseServiceTrait;
 use crate::telemetry::RunSpanBuffer;
 use crate::types::handlers::pagination::{PaginatedResult, Pagination};
+use crate::types::metadata::services::trace::BatchGroupSpansQuery;
 use crate::types::metadata::services::trace::BatchGroupSpansResponse;
 use crate::types::metadata::services::trace::GroupIdentifier;
 use crate::types::metadata::services::trace::GroupSpansData;
-use crate::types::metadata::services::trace::{BatchGroupSpansQuery, GroupByKey};
 use crate::types::metadata::services::trace::{GetGroupSpansQuery, ListTracesQuery, TraceService};
 use crate::types::traces::{LangdbSpan, Operation};
 use diesel::prelude::*;
@@ -352,12 +352,12 @@ impl TraceService for TraceServiceImpl {
         let mut count_query = traces::table.into_boxed();
         let mut data_query = traces::table.into_boxed();
 
-        match &query.group_by {
-            GroupByKey::Time { time_bucket } => {
+        match query.group_by.as_str() {
+            "time" => {
                 let bucket_size_seconds = query.bucket_size.unwrap_or(3600);
                 let bucket_size_us = bucket_size_seconds * 1_000_000;
-                let bucket_start = time_bucket;
-                let bucket_end = time_bucket + bucket_size_us;
+                let bucket_start = query.time_bucket.unwrap_or(0);
+                let bucket_end = bucket_start + bucket_size_us;
 
                 // Filter by time range and ensure run_id or thread_id is not null
                 count_query = count_query
@@ -377,16 +377,22 @@ impl TraceService for TraceServiceImpl {
                             .or(traces::thread_id.is_not_null()),
                     );
             }
-            GroupByKey::Thread { thread_id } => {
-                count_query = count_query.filter(traces::thread_id.eq(thread_id.as_str()));
-                data_query = data_query.filter(traces::thread_id.eq(thread_id.as_str()));
+            "thread" => {
+                let thread_id = query.thread_id.to_owned().unwrap_or_default();
+                count_query = count_query.filter(traces::thread_id.eq(thread_id.clone()));
+                data_query = data_query.filter(traces::thread_id.eq(thread_id.clone()));
             }
-            GroupByKey::Run { run_id } => {
-                count_query = count_query.filter(traces::run_id.eq(run_id.to_string()));
-                data_query = data_query.filter(traces::run_id.eq(run_id.to_string()));
+            "run" => {
+                let run_id = query.run_id.to_owned().unwrap_or_default();
+                count_query = count_query.filter(traces::run_id.eq(run_id.clone()));
+                data_query = data_query.filter(traces::run_id.eq(run_id.clone()));
+            }
+            _ => {
+                return Err(DatabaseError::InvalidArgument(
+                    "Invalid group_by".to_string(),
+                ));
             }
         }
-
         // Add project_id filter if present
         count_query = count_query.filter(traces::project_id.eq(&project_slug));
         data_query = data_query.filter(traces::project_id.eq(&project_slug));
