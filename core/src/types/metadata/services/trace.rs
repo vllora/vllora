@@ -60,12 +60,11 @@ pub struct ListTracesQuery {
 /// Query parameters for unified GET /group/spans endpoint
 #[derive(Deserialize)]
 pub struct GetGroupSpansQuery {
-    
     pub group_by: String,
     pub thread_id: Option<String>,
     pub run_id: Option<String>,
     // Only used for time grouping
-    pub bucket_size: Option<i64>, 
+    pub bucket_size: Option<i64>,
     pub time_bucket: Option<i64>,
     // Common parameters
     pub limit: Option<i64>,
