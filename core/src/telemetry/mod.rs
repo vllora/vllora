@@ -364,13 +364,13 @@ pub fn span_to_db_trace(span: &Span) -> Option<DbTrace> {
     let finish_time_us = i64::try_from(span.end_time_unix_nano / 1_000).ok()?;
 
     Some(DbTrace {
-        trace_id: span.trace_id.to_string(),
-        span_id: span.span_id.to_string(),
+        trace_id: trace_id_uuid(span.trace_id).to_string().into(),
+        span_id: u64::from_be_bytes(span.span_id.to_bytes()).to_string(),
         thread_id: span.thread_id.clone(),
         parent_span_id: span
             .parent_span_id
             .as_ref()
-            .map(|parent| parent.to_string()),
+            .map(|parent| u64::from_be_bytes(parent.to_bytes()).to_string()),
         operation_name: span.operation_name.clone(),
         start_time_us,
         finish_time_us,
