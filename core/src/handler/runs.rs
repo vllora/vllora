@@ -80,7 +80,6 @@ pub async fn list_root_runs<T: RunService + DatabaseServiceTrait>(
         offset: query.offset.unwrap_or(0),
         include_mcp_templates: query.include_mcp_templates.unwrap_or(false),
     };
-    tracing::info!("list_query: {:?}", list_query);
     let runs = run_service.list_root_runs(list_query.clone())?;
     let total = run_service.count_root_runs(list_query)?;
 
