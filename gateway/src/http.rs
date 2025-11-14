@@ -8,6 +8,7 @@ use crate::middleware::thread_service::ThreadsServiceMiddleware;
 use crate::middleware::trace_logger::TraceLogger;
 use crate::middleware::tracing_context::TracingContext;
 use actix_cors::Cors;
+use actix_web::web::JsonConfig;
 use actix_web::Scope as ActixScope;
 use actix_web::{
     body::MessageBody,
@@ -50,6 +51,8 @@ use vllora_core::metadata::services::model::ModelServiceImpl;
 use vllora_core::metadata::services::project::ProjectServiceImpl;
 use vllora_core::metadata::services::provider::ProvidersServiceImpl;
 use vllora_core::metadata::services::run::RunServiceImpl;
+use vllora_core::metadata::services::trace::TraceServiceImpl as MetadataTraceServiceImpl;
+use vllora_core::metadata::DatabaseService;
 use vllora_core::telemetry::database::SqliteTraceWriterTransport;
 use vllora_core::telemetry::RunSpanBuffer;
 use vllora_core::telemetry::SpanWriterTransport;
@@ -59,9 +62,6 @@ use vllora_core::types::guardrails::service::GuardrailsEvaluator;
 use vllora_core::types::guardrails::Guard;
 use vllora_core::types::metadata::services::model::ModelService;
 use vllora_core::usage::InMemoryStorage;
-
-use vllora_core::metadata::services::trace::TraceServiceImpl as MetadataTraceServiceImpl;
-use vllora_core::metadata::DatabaseService;
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 #[serde(crate = "serde")]
@@ -261,11 +261,14 @@ impl ApiServer {
                 &database_service,
             );
 
+        let json_config = JsonConfig::default().limit(8 * 1024 * 1024); // 8MB in bytes
+
         app.wrap(TraceLogger)
             .wrap(ThreadId)
             .wrap(RunId)
             .wrap(ThreadsServiceMiddleware::new())
             .wrap(ProjectMiddleware::new())
+            .app_data(json_config)
             .app_data(Data::new(broadcaster))
             .app_data(web::Data::from(project_trace_senders))
             .app_data(web::Data::from(run_span_buffer))
