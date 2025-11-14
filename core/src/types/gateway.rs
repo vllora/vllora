@@ -478,7 +478,8 @@ impl Default for FunctionParameters {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Property {
-    pub r#type: PropertyType,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub r#type: Option<PropertyType>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
