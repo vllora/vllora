@@ -32,7 +32,6 @@ futures = "0.3"
 serde_with = { version = "3.15.1", features = ["json"] }
 validator = { version = "0.20", features = ["derive"] }
 clust = { version = "0.9.8", package = "langdb_clust" }
-indexmap = { version = "2.11.4", features = ["serde"] }
 serde_tuple = "1.1.2"
 minijinja = "2.12.0"
 base64 = "0.22.1"

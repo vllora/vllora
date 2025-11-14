@@ -4693,7 +4693,6 @@ dependencies = [
  "diesel_migrations",
  "either",
  "futures",
- "indexmap 2.11.4",
  "jsonwebtoken",
  "langdb_clust",
  "libsqlite3-sys",
