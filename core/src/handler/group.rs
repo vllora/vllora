@@ -1,3 +1,4 @@
+use crate::error::GatewayError;
 use crate::metadata::DatabaseService;
 use crate::metadata::DatabaseServiceTrait;
 use crate::types::handlers::pagination::PaginatedResult;
@@ -47,8 +48,10 @@ pub struct GenericGroupResponse {
     pub group: GroupUsageInformation,
 }
 
-impl From<GroupUsageInformation> for GenericGroupResponse {
-    fn from(group: GroupUsageInformation) -> Self {
+impl TryFrom<GroupUsageInformation> for GenericGroupResponse {
+    type Error = GatewayError;
+
+    fn try_from(group: GroupUsageInformation) -> Result<Self, Self::Error> {
         // Determine which grouping key to use
         let (key, group_by) = if let Some(time_bucket) = &group.time_bucket {
             (
@@ -73,14 +76,17 @@ impl From<GroupUsageInformation> for GenericGroupResponse {
             )
         } else {
             // This shouldn't happen if SQL is correct
-            panic!("GroupUsageInformation must have either time_bucket, thread_id, or run_id set")
+            return Err(GatewayError::CustomError(
+                "GroupUsageInformation must have either time_bucket, thread_id, or run_id set"
+                    .to_string(),
+            ));
         };
 
-        Self {
+        Ok(GenericGroupResponse {
             key,
             group,
             group_by,
-        }
+        })
     }
 }
 
@@ -134,7 +140,10 @@ pub async fn list_root_group<T: GroupService + DatabaseServiceTrait>(
     let total = group_service.count_root_group(list_query)?;
 
     // Transform GroupUsageInformation into GenericGroupResponse with properly typed arrays
-    let group_responses: Vec<GenericGroupResponse> = groups.into_iter().map(|g| g.into()).collect();
+    let group_responses = groups
+        .into_iter()
+        .map(|g| g.try_into())
+        .collect::<Result<Vec<GenericGroupResponse>, GatewayError>>()?;
 
     let result = PaginatedResult {
         pagination: Pagination {
