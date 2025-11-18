@@ -2,4 +2,11 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.7](https://github.com/langdb/langdb-cloud/compare/v0.1.7-prerelease-3...v0.1.7) (2025-11-18)
+
+
+### Bug Fixes
+
+* Change From implementation to TryFrom for GenericGroupResponse and handle errors with GatewayError ([ff34d81](https://github.com/langdb/langdb-cloud/commit/ff34d812931d692ff41be1ecd9e6038c06f4e48d))
+
 ### [0.1.6](https://github.com/langdb/langdb-cloud/compare/v0.1.5-prerelease-1...v0.1.6) (2025-11-04)
