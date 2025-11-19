@@ -332,6 +332,13 @@ impl ChatCompletionContent {
                 .and_then(|c| c.text.clone()),
         }
     }
+
+    pub fn as_content(&self) -> Option<Vec<Content>> {
+        match self {
+            ChatCompletionContent::Content(content) => Some(content.clone()),
+            _ => None,
+        }
+    }
 }
 
 impl Default for ChatCompletionContent {
