@@ -4634,7 +4634,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vllora"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -4672,7 +4672,7 @@ dependencies = [
 
 [[package]]
 name = "vllora_core"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "actix-http",
  "actix-web",
@@ -4730,7 +4730,7 @@ dependencies = [
 
 [[package]]
 name = "vllora_guardrails"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "async-openai-compat",
  "async-trait",
