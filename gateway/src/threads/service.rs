@@ -26,7 +26,6 @@ impl ThreadService for ThreadServiceImpl {
         offset: i64,
     ) -> Result<PaginatedThreadSpans, ThreadServiceError> {
         let thread_service = DatabaseThreadService::new(self.db_pool.clone());
-
         // Query thread spans using the service
         let results = thread_service
             .list_thread_spans(&self.project.slug, limit, offset)
@@ -36,7 +35,6 @@ impl ThreadService for ThreadServiceImpl {
         let total = thread_service
             .count_thread_spans(&self.project.slug)
             .map_err(|e| ThreadServiceError::FailedToCountThreads(e.to_string()))?;
-
         // Convert results to ThreadSpan
         let data: Vec<ThreadSpan> = results.into_iter().map(ThreadSpan::from).collect();
 

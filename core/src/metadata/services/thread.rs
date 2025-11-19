@@ -23,6 +23,14 @@ pub struct ThreadSpanQueryResult {
     pub title: Option<String>,
 }
 
+#[derive(QueryableByName, Debug)]
+pub struct ThreadTitleResult {
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    pub thread_id: String,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+    pub title: Option<String>,
+}
+
 // For the efficient query approach, we'll use a struct that matches the SQL result
 #[derive(QueryableByName, Debug, Clone)]
 pub struct ThreadWithMessageInfo {
@@ -75,14 +83,15 @@ impl ThreadService {
     ) -> Result<Vec<ThreadSpanQueryResult>, DatabaseError> {
         let mut conn = self.db_pool.get()?;
         let query_sql = Self::build_thread_span_query(Some("?"), true);
-        sql_query(&query_sql)
+
+        let spans = sql_query(&query_sql)
             .bind::<diesel::sql_types::Text, _>(project_id) // attribute.title subquery
-            .bind::<diesel::sql_types::Text, _>(project_id) // message extraction subquery
-            .bind::<diesel::sql_types::Text, _>(project_id) // main query WHERE
             .bind::<diesel::sql_types::BigInt, _>(limit)
             .bind::<diesel::sql_types::BigInt, _>(offset)
-            .load(&mut conn)
-            .map_err(DatabaseError::QueryError)
+            .load::<ThreadSpanQueryResult>(&mut conn)
+            .map_err(DatabaseError::QueryError)?;
+
+        Ok(spans)
     }
 
     pub fn get_thread_span(
@@ -178,7 +187,7 @@ impl ThreadService {
             run_ids,
             input_models,
             COALESCE(cost, 0.0) as cost,
-            title
+            first_value(titles) over (PARTITION BY thread_id) title
         FROM (
             SELECT
                 thread_id,
@@ -193,47 +202,14 @@ impl ThreadService {
                 GROUP_CONCAT(DISTINCT CASE WHEN parent_span_id IS NULL THEN run_id END) as run_ids,
                 GROUP_CONCAT(DISTINCT json_extract(attribute, '$.model_name')) as input_models,
                 SUM(CAST(json_extract(attribute, '$.cost') AS REAL)) as cost,
-                (
-                    SELECT COALESCE(
-                        (
-                            SELECT json_extract(attribute, '$.title')
-                            FROM traces
-                            WHERE thread_id = main_traces.thread_id
-                                AND project_id = ?
-                                AND json_extract(attribute, '$.title') IS NOT NULL
-                            ORDER BY start_time_us ASC
-                            LIMIT 1
-                        ),
-                        (
-                            SELECT json_extract(value, '$.content')
-                            FROM traces t_inner,
-                                 json_each(json_extract(json(json_extract(t_inner.attribute, '$.request')), '$.messages'))
-                            WHERE t_inner.thread_id = main_traces.thread_id
-                                AND t_inner.project_id = ?
-                                AND t_inner.operation_name = 'api_invoke'
-                                AND (
-                                    json_extract(value, '$.role') != 'user'
-                                    OR (
-                                        json_type(value, '$.content') = 'text'
-                                        AND json_extract(value, '$.content') NOT LIKE '[%'
-                                        AND json_extract(value, '$.content') NOT LIKE '{{%'
-                                    )
-                                )
-                            ORDER BY
-                                t_inner.start_time_us ASC,
-                                CASE WHEN json_extract(value, '$.role') = 'user' THEN 0 ELSE 1 END
-                            LIMIT 1
-                        )
-                        
-                    )
-                ) as title
+                GROUP_CONCAT(json_extract(attribute, '$.title')) as titles
             FROM traces as main_traces
             WHERE project_id = {}
                 AND thread_id IS NOT NULL
             GROUP BY thread_id
             HAVING start_time_us IS NOT NULL
-        )
-        {}
+            
+        ) {}
         "#,
             where_filter, pagination
         )

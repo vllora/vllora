@@ -326,14 +326,10 @@ impl ChatCompletionContent {
     pub fn as_string(&self) -> Option<String> {
         match self {
             ChatCompletionContent::Text(content) => Some(content.clone()),
-            _ => None,
-        }
-    }
-
-    pub fn as_content(&self) -> Option<Vec<Content>> {
-        match self {
-            ChatCompletionContent::Content(content) => Some(content.clone()),
-            _ => None,
+            ChatCompletionContent::Content(content) => content
+                .iter()
+                .find(|c| c.r#type == ContentType::Text)
+                .and_then(|c| c.text.clone()),
         }
     }
 }

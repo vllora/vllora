@@ -88,12 +88,6 @@ async fn main() -> Result<(), CliError> {
 
     let db_pool = get_db_pool()?;
 
-    vllora_core::metadata::utils::init_db(&db_pool);
-    let session = session::fetch_session_id(db_pool.clone()).await;
-
-    // Ping session once in background (non-blocking)
-    session::check_version(session.id.clone());
-
     let project_trace_senders = Arc::new(BroadcastChannelManager::new(Default::default()));
 
     let project_trace_senders_cleanup = Arc::clone(&project_trace_senders);
@@ -107,6 +101,13 @@ async fn main() -> Result<(), CliError> {
         project_trace_senders.inner().clone(),
         run_span_buffer.clone(),
     );
+
+    vllora_core::metadata::utils::init_db(&db_pool);
+    let session = session::fetch_session_id(db_pool.clone()).await;
+
+    // Ping session once in background (non-blocking)
+    session::check_version(session.id.clone());
+
     // Seed the database with a default project if none exist
     seed::seed_database(&db_pool)?;
 

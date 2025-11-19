@@ -205,7 +205,23 @@ pub async fn create_chat_completion(
         thread_id = tracing::field::Empty,
         message_id = tracing::field::Empty,
         user = tracing::field::Empty,
+        title = tracing::field::Empty,
     ));
+
+    let thread_title = req.headers().get("X-Thread-Title").map_or_else(
+        || {
+            let message = request.request.messages.iter().find(|m| m.role == "user");
+            match message {
+                Some(message) => message.content.as_ref().and_then(|c| c.as_string()),
+                None => None,
+            }
+        },
+        |v| Some(v.to_str().unwrap().to_string()),
+    );
+
+    if let Some(thread_title) = thread_title {
+        span.record("title", thread_title);
+    }
 
     if let Some(Extra {
         user: Some(user), ..
@@ -222,10 +238,6 @@ pub async fn create_chat_completion(
     let guardrails_evaluator_service = evaluator_service.clone().into_inner();
 
     let project_slug = project.slug.clone();
-    // let thread_title = req
-    //     .headers()
-    //     .get("X-Thread-Title")
-    //     .map(|v| v.to_str().unwrap().to_string());
     let thread_id = thread_id.value();
 
     let cost_calculator = cost_calculator.into_inner();
