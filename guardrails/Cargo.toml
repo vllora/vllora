@@ -1,6 +1,6 @@
 [package]
 name = "vllora_guardrails"
-version = "0.1.7"
+version = "0.1.8"
 edition = "2021"
 authors = ["Vllora Team<api@vllora.dev>"]
 description = "AI gateway Core for Vllora AI Gateway."
@@ -12,7 +12,7 @@ keywords = ["llm", "openai", "anthropic", "gemini", "mcp"]
 categories = ["web-programming", "network-programming"]
 
 [dependencies]
-vllora_core = { path = "../core", version = "0.1.7", default-features = false }
+vllora_core = { path = "../core", version = "0.1.8", default-features = false }
 serde_json = { workspace = true }
 serde = { workspace = true }
 serde_yaml = { workspace = true }

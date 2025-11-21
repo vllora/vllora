@@ -1,6 +1,6 @@
 [package]
 name = "vllora"
-version = "0.1.7"
+version = "0.1.8"
 authors = ["Vllora Team<api@vllora.dev>"]
 description = "AI gateway for managing and routing LLM requests - Govern, Secure, and Optimize your AI Traffic."
 license = "Apache-2.0"
@@ -17,8 +17,8 @@ name = "vllora"
 path = "src/main.rs"
 
 [dependencies]
-vllora_core = { path = "../core", version = "0.1.7", features = ["sqlite"], default-features = false }
-vllora_guardrails = { path = "../guardrails", version = "0.1.7" }
+vllora_core = { path = "../core", version = "0.1.8", features = ["sqlite"], default-features = false }
+vllora_guardrails = { path = "../guardrails", version = "0.1.8" }
 
 tokio = { workspace = true }
 serde = { workspace = true }
