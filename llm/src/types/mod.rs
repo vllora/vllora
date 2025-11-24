@@ -154,11 +154,23 @@ pub struct LLMFinishEvent {
     pub credentials_ident: CredentialsIdent,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Hash, PartialEq, Eq)]
+pub struct ToolCallExtra {
+    pub google: Option<GoogleToolCallExtra>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Hash, PartialEq, Eq)]
+pub struct GoogleToolCallExtra {
+    pub thought_signature: String,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ModelToolCall {
     pub tool_id: String,
     pub tool_name: String,
     pub input: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extra: Option<ToolCallExtra>,
 }
 
 impl ModelToolCall {
@@ -171,6 +183,7 @@ impl ModelToolCall {
                 name: self.tool_name.clone(),
                 arguments: self.input.clone(),
             },
+            extra: self.extra.clone(),
         }
     }
 }

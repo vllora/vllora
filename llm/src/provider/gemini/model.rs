@@ -25,7 +25,7 @@ use crate::types::instance::ModelInstance;
 use crate::types::message::{AudioFormat, InnerMessage, Message, MessageContentPartOptions};
 use crate::types::message::{MessageContentType, MessageType};
 use crate::types::tools::Tool;
-use crate::types::LLMFirstToken;
+use crate::types::{GoogleToolCallExtra, LLMFirstToken, ToolCallExtra};
 use crate::types::{
     LLMContentEvent, LLMFinishEvent, LLMStartEvent, ModelEvent, ModelEventType, ModelFinishReason,
     ModelToolCall,
@@ -59,10 +59,10 @@ fn custom_err(e: impl ToString) -> ModelError {
     ModelError::CustomError(e.to_string())
 }
 
-fn map_calls_to_tool_names(calls: &[(String, HashMap<String, Value>)]) -> String {
+fn map_calls_to_tool_names(calls: &[(String, HashMap<String, Value>, Option<String>)]) -> String {
     calls
         .iter()
-        .map(|(name, _)| name.clone())
+        .map(|(name, _, _)| name.clone())
         .collect::<std::collections::HashSet<String>>()
         .into_iter()
         .collect::<Vec<String>>()
@@ -111,16 +111,20 @@ impl GeminiModel {
     }
 
     async fn handle_tool_calls(
-        function_calls: impl Iterator<Item = &(String, HashMap<String, Value>)>,
+        function_calls: impl Iterator<Item = &(String, HashMap<String, Value>, Option<String>)>,
         tools: &HashMap<String, Box<dyn Tool>>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
     ) -> Vec<PartWithThought> {
-        futures::future::join_all(function_calls.map(|(name, args)| {
+        futures::future::join_all(function_calls.map(|(name, args, thought_signature)| {
             let tags = tags.clone();
             async move {
                 tracing::trace!("Calling tool  {name:?}");
-                let tool_call = Self::map_tool_call(&(name.to_string(), args.clone()));
+                let tool_call = Self::map_tool_call(&(
+                    name.to_string(),
+                    args.clone(),
+                    thought_signature.clone(),
+                ));
                 let result = handle_tool_call(&tool_call, tools, tx, tags.clone()).await;
                 tracing::trace!("Result ({name}): {result:?}");
                 let content = result
@@ -212,11 +216,11 @@ impl GeminiModel {
         started_at: std::time::Instant,
     ) -> LLMResult<(
         FinishReason,
-        Vec<(String, HashMap<String, Value>)>,
+        Vec<(String, HashMap<String, Value>, Option<String>)>,
         Option<UsageMetadata>,
         Option<GenerateContentResponse>,
     )> {
-        let mut calls: Vec<(String, HashMap<String, Value>)> = vec![];
+        let mut calls: Vec<(String, HashMap<String, Value>, Option<String>)> = vec![];
         let mut usage_metadata = None;
         let mut finish_reason = None;
         let mut first_response_received = false;
@@ -259,7 +263,11 @@ impl GeminiModel {
                                             .await;
                                     }
                                     Part::FunctionCall { name, args } => {
-                                        calls.push((name.to_string(), args));
+                                        calls.push((
+                                            name.to_string(),
+                                            args,
+                                            part.thought_signature.clone(),
+                                        ));
                                     }
 
                                     x => {
@@ -291,14 +299,14 @@ impl GeminiModel {
                 parts.push(Part::Text(content).into());
             }
 
-            for (name, args) in &calls {
-                parts.push(
-                    Part::FunctionCall {
+            for (name, args, thought_signature) in &calls {
+                parts.push(PartWithThought {
+                    part: Part::FunctionCall {
                         name: name.clone(),
                         args: args.clone(),
-                    }
-                    .into(),
-                );
+                    },
+                    thought_signature: thought_signature.clone(),
+                });
             }
 
             let response = GenerateContentResponse {
@@ -371,7 +379,7 @@ impl GeminiModel {
         .instrument(span.clone().or_current())
         .await?;
         let mut finish_reason = None;
-        let mut calls: Vec<(String, HashMap<String, Value>)> = vec![];
+        let mut calls: Vec<(String, HashMap<String, Value>, Option<String>)> = vec![];
         let mut text = String::new();
         for candidate in response.candidates {
             if let Some(reason) = candidate.finish_reason {
@@ -383,7 +391,7 @@ impl GeminiModel {
                         text.push_str(&t);
                     }
                     Part::FunctionCall { name, args } => {
-                        calls.push((name.to_string(), args));
+                        calls.push((name.to_string(), args, part.thought_signature.clone()));
                     }
 
                     x => {
@@ -398,10 +406,13 @@ impl GeminiModel {
 
         if !calls.is_empty() {
             let mut call_messages = vec![];
-            for (name, args) in calls.clone() {
+            for (name, args, thought_signature) in calls.clone() {
                 call_messages.push(Content {
                     role: Role::Model,
-                    parts: vec![Part::FunctionCall { name, args }.into()],
+                    parts: vec![PartWithThought {
+                        part: Part::FunctionCall { name, args },
+                        thought_signature: thought_signature.clone(),
+                    }],
                 });
             }
 
@@ -417,6 +428,11 @@ impl GeminiModel {
                             name: c.0.clone(),
                             arguments: serde_json::to_string(&c.1).unwrap(),
                         },
+                        extra: c.2.as_ref().map(|s| ToolCallExtra {
+                            google: Some(GoogleToolCallExtra {
+                                thought_signature: s.clone(),
+                            }),
+                        }),
                     })
                     .collect::<Vec<_>>(),
             )?;
@@ -453,11 +469,16 @@ impl GeminiModel {
                             finish_reason,
                             tool_calls: calls
                                 .iter()
-                                .map(|(tool_name, params)| {
+                                .map(|(tool_name, params, thought_signature)| {
                                     Ok(ModelToolCall {
                                         tool_id: tool_name.clone(),
                                         tool_name: tool_name.clone(),
                                         input: serde_json::to_string(params)?,
+                                        extra: thought_signature.as_ref().map(|s| ToolCallExtra {
+                                            google: Some(GoogleToolCallExtra {
+                                                thought_signature: s.clone(),
+                                            }),
+                                        }),
                                     })
                                 })
                                 .collect::<Result<Vec<ModelToolCall>, LLMError>>()?,
@@ -480,7 +501,7 @@ impl GeminiModel {
                                     calls
                                         .iter()
                                         .enumerate()
-                                        .map(|(index, (tool_name, params))| {
+                                        .map(|(index, (tool_name, params, thought_signature))| {
                                             Ok(ToolCall {
                                                 index: Some(index),
                                                 id: tool_name.clone(),
@@ -489,6 +510,13 @@ impl GeminiModel {
                                                     name: tool_name.clone(),
                                                     arguments: serde_json::to_string(params)?,
                                                 },
+                                                extra: thought_signature.as_ref().map(|s| {
+                                                    ToolCallExtra {
+                                                        google: Some(GoogleToolCallExtra {
+                                                            thought_signature: s.clone(),
+                                                        }),
+                                                    }
+                                                }),
                                             })
                                         })
                                         .collect::<Result<Vec<ToolCall>, LLMError>>()?,
@@ -671,11 +699,16 @@ impl GeminiModel {
         })
     }
 
-    fn map_tool_call(t: &(String, HashMap<String, Value>)) -> ModelToolCall {
+    fn map_tool_call(t: &(String, HashMap<String, Value>, Option<String>)) -> ModelToolCall {
         ModelToolCall {
             tool_id: t.0.clone(),
             tool_name: t.0.clone(),
             input: serde_json::to_string(&t.1).unwrap(),
+            extra: t.2.as_ref().map(|s| ToolCallExtra {
+                google: Some(GoogleToolCallExtra {
+                    thought_signature: s.clone(),
+                }),
+            }),
         }
     }
 
@@ -747,7 +780,7 @@ impl GeminiModel {
         if !tool_calls.is_empty() {
             let mut call_messages = vec![];
             let mut tools = vec![];
-            for (index, (name, args)) in tool_calls.clone().iter().enumerate() {
+            for (index, (name, args, thought_signature)) in tool_calls.clone().iter().enumerate() {
                 tools.push(ToolCall {
                     index: Some(index),
                     id: name.clone(),
@@ -756,6 +789,11 @@ impl GeminiModel {
                         name: name.clone(),
                         arguments: serde_json::to_string(args)?,
                     },
+                    extra: thought_signature.as_ref().map(|s| ToolCallExtra {
+                        google: Some(GoogleToolCallExtra {
+                            thought_signature: s.clone(),
+                        }),
+                    }),
                 });
                 call_messages.push(Content {
                     role: Role::Model,
@@ -914,11 +952,17 @@ impl GeminiModel {
                                         } else {
                                             &c.function.arguments
                                         };
-                                        Ok(Part::FunctionCall {
-                                            name: c.id.clone(),
-                                            args: serde_json::from_str(args)?,
-                                        }
-                                        .into())
+                                        Ok(PartWithThought {
+                                            part: Part::FunctionCall {
+                                                name: c.id.clone(),
+                                                args: serde_json::from_str(args)?,
+                                            },
+                                            thought_signature: c.extra.as_ref().and_then(|e| {
+                                                e.google
+                                                    .as_ref()
+                                                    .map(|g| g.thought_signature.clone())
+                                            }),
+                                        })
                                     })
                                     .collect::<Result<Vec<PartWithThought>, LLMError>>()?,
                             })

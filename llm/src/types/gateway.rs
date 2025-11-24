@@ -4,6 +4,7 @@ use crate::types::provider::ModelPrice;
 use crate::types::tools::ModelTool;
 use crate::types::tools::Tool;
 use crate::types::ModelFinishReason;
+use crate::types::ToolCallExtra;
 use async_openai::types::Base64EmbeddingVector;
 use async_openai::types::ChatCompletionRequestMessage;
 use async_openai::types::CreateChatCompletionRequest;
@@ -280,6 +281,7 @@ fn map_message(message: &ChatCompletionRequestMessage) -> ChatCompletionMessage 
                     name: tool_call.function.name.clone(),
                     arguments: tool_call.function.arguments.clone(),
                 },
+                extra: None,
             }).collect()),
             tool_call_id: message.tool_calls.as_ref().and_then(|tool_calls| tool_calls.first().map(|tool_call| tool_call.id.clone())),
             cache_control: None
@@ -709,6 +711,8 @@ pub struct ToolCall {
     pub id: String,
     pub r#type: String,
     pub function: FunctionCall,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extra: Option<ToolCallExtra>,
 }
 
 impl From<ToolCall> for async_openai::types::ChatCompletionMessageToolCall {

@@ -229,6 +229,7 @@ impl<C: Config> OpenAIModel<C> {
             tool_id: tool_call.id.clone(),
             tool_name: tool_call.function.name.clone(),
             input: tool_call.function.arguments.clone(),
+            extra: None,
         }
     }
 
@@ -661,6 +662,7 @@ impl<C: Config> OpenAIModel<C> {
                                                 name: tool_call.function.name.clone(),
                                                 arguments: tool_call.function.arguments.clone(),
                                             },
+                                            extra: None,
                                         })
                                         .collect(),
                                 ),
