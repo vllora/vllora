@@ -158,11 +158,11 @@ impl MessageTransformerFactory {
 mod tests {
     use super::*;
     use crate::routing::interceptor::InterceptorState;
+    use std::collections::HashMap;
+    use std::sync::Arc;
     use vllora_llm::types::gateway::{
         ChatCompletionContent, ChatCompletionMessage, ChatCompletionRequest,
     };
-    use std::collections::HashMap;
-    use std::sync::Arc;
 
     fn create_test_request() -> ChatCompletionRequest {
         ChatCompletionRequest {

@@ -123,7 +123,7 @@ mod tests {
     use serde_json::json;
     use vllora_llm::types::message::MessageContentPart;
     use vllora_llm::types::message::MessageContentType;
-    
+
     #[test]
     fn message_serialization() {
         let test = vec![

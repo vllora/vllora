@@ -89,9 +89,9 @@ mod tests {
         ConditionOp, ConditionalRouting, InterceptorSpec, InterceptorType, Route, RouteCondition,
         TargetSpec,
     };
-    use vllora_llm::types::gateway::ChatCompletionRequest;
     use std::collections::HashMap;
     use std::sync::Arc;
+    use vllora_llm::types::gateway::ChatCompletionRequest;
 
     struct MockGuardrail {
         result: bool,

@@ -393,9 +393,9 @@ pub struct ResolvedModelContext {
 
 #[cfg(test)]
 mod tests {
-    use vllora_llm::mcp::get_tools;
     use crate::types::mcp::McpServerType;
     use crate::types::mcp::{McpConfig, McpServerConfig};
+    use vllora_llm::mcp::get_tools;
 
     #[tokio::test]
     async fn test_resolve_mcp_tools_integration() {
