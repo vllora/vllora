@@ -101,8 +101,7 @@ pub async fn fetch_and_save_models_json(
 ) -> Result<Vec<ModelMetadata>, ModelsLoadError> {
     let langdb_api_url = std::env::var("LANGDB_API_URL")
         .ok()
-        .unwrap_or(LANGDB_API_URL.to_string())
-        .replace("/v1", "");
+        .unwrap_or(LANGDB_API_URL.to_string());
 
     // Fetch models from API
     let client = reqwest::Client::new();
