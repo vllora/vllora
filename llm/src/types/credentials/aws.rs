@@ -1,7 +1,7 @@
 use aws_config::{sts::AssumeRoleProvider, Region};
 use aws_sdk_bedrock::config::Credentials;
 
-use super::credentials::AwsIAMCredentials;
+use crate::types::credentials::AwsIAMCredentials;
 
 pub async fn get_user_shared_config(credentials: AwsIAMCredentials) -> aws_config::ConfigLoader {
     let region_name = credentials

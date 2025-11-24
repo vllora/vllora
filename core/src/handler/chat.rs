@@ -4,21 +4,11 @@ use crate::events::callback_handler::GatewayCallbackHandlerFn;
 use crate::events::callback_handler::GatewayEvent;
 use crate::events::callback_handler::GatewayModelEventWithDetails;
 use crate::events::callback_handler::GatewaySpanStartEvent;
-use crate::events::CustomEventType;
 use crate::executor::context::ExecutorContext;
 use crate::handler::ModelEventWithDetails;
-use crate::model::types::CostEvent;
-use crate::model::types::CustomEvent;
-use crate::model::types::ModelEvent;
-use crate::model::types::ModelEventType;
 use crate::model::DefaultModelMetadataFactory;
 use crate::routing::interceptor::rate_limiter::InMemoryRateLimiterService;
 use crate::routing::RoutingStrategy;
-use crate::telemetry::events::JsonValue;
-use crate::types::gateway::ChatCompletionRequestWithTools;
-use crate::types::gateway::CompletionModelUsage;
-use crate::types::gateway::Extra;
-use crate::types::gateway::Usage;
 use crate::types::guardrails::service::GuardrailsEvaluator;
 use crate::usage::InMemoryStorage;
 use actix_web::{web, HttpRequest, HttpResponse};
@@ -26,17 +16,27 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use valuable::Valuable;
+use vllora_llm::types::events::CustomEventType;
+use vllora_llm::types::gateway::ChatCompletionRequestWithTools;
+use vllora_llm::types::gateway::CompletionModelUsage;
+use vllora_llm::types::gateway::Extra;
+use vllora_llm::types::gateway::Usage;
+use vllora_llm::types::CostEvent;
+use vllora_llm::types::CustomEvent;
+use vllora_llm::types::ModelEvent;
+use vllora_llm::types::ModelEventType;
+use vllora_telemetry::events::JsonValue;
 
 use super::can_execute_llm_for_request;
 use crate::handler::CallbackHandlerFn;
 use crate::model::ModelMetadataFactory;
-use crate::types::gateway::{ChatCompletionDelta, CostCalculator};
 use crate::types::metadata::project::Project;
 use crate::types::metadata::services::model::ModelService;
 use crate::types::threads::{CompletionsRunId, CompletionsThreadId};
 use crate::GatewayApiError;
 use tracing::Span;
 use tracing_futures::Instrument;
+use vllora_llm::types::gateway::{ChatCompletionDelta, CostCalculator};
 
 use crate::credentials::KeyStorage;
 use crate::executor::chat_completion::routed_executor::RoutedExecutor;
@@ -270,7 +270,12 @@ pub async fn create_chat_completion(
 
     let executor = RoutedExecutor::new(request.clone());
     executor
-        .execute(&executor_context, memory_storage, None, Some(&thread_id))
+        .execute(
+            &executor_context,
+            memory_storage,
+            None,
+            Some(&thread_id),
+        )
         .instrument(span.clone())
         .await
         .inspect_err(|e| {

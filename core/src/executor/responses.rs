@@ -1,17 +1,17 @@
 use crate::error::GatewayError;
 use crate::executor::get_key_credentials;
 use crate::executor::ProvidersConfig;
-use crate::model::types::ModelEvent;
-use crate::models::ModelMetadata;
 use crate::responses::OpenAIResponses;
 use crate::responses::Responses;
-use crate::types::credentials::ApiKeyCredentials;
-use crate::types::credentials::Credentials;
 use actix_web::HttpRequest;
 pub use async_openai::types::responses as ResponsesTypes;
 use async_openai::types::responses::CreateResponse;
 use async_openai::types::responses::Response;
 pub use async_openai::Client;
+use vllora_llm::types::credentials::ApiKeyCredentials;
+use vllora_llm::types::credentials::Credentials;
+use vllora_llm::types::models::ModelMetadata;
+use vllora_llm::types::ModelEvent;
 
 pub async fn handle_create_response(
     request: &CreateResponse,

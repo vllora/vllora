@@ -1,24 +1,20 @@
 use std::collections::HashMap;
 
-use crate::model::types::ModelEvent;
-use crate::model::types::{LLMFinishEvent, ToolStartEvent};
-use crate::types::engine::Model;
-use crate::types::gateway::ChatCompletionMessage;
 use crate::GatewayError;
-
-use crate::{
-    model::ModelInstance,
-    types::{
-        gateway::{
-            ChatCompletionChoice, ChatCompletionRequest, ChatCompletionResponse,
-            ChatCompletionUsage,
-        },
-        threads::Message,
-    },
-};
 use tracing::Span;
 use tracing_futures::Instrument;
 use uuid::Uuid;
+use vllora_llm::types::engine::Model;
+use vllora_llm::types::gateway::ChatCompletionChoice;
+use vllora_llm::types::gateway::ChatCompletionMessage;
+use vllora_llm::types::gateway::ChatCompletionRequest;
+use vllora_llm::types::gateway::ChatCompletionResponse;
+use vllora_llm::types::gateway::ChatCompletionUsage;
+use vllora_llm::types::instance::ModelInstance;
+use vllora_llm::types::message::Message;
+use vllora_llm::types::LLMFinishEvent;
+use vllora_llm::types::ModelEvent;
+use vllora_llm::types::ToolStartEvent;
 
 use crate::handler::record_map_err;
 use crate::GatewayApiError;

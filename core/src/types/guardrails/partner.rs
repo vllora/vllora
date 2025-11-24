@@ -1,6 +1,6 @@
-use crate::model::error::AuthorizationError;
-use crate::types::gateway::ChatCompletionMessage;
 use crate::types::guardrails::GuardResult;
+use vllora_llm::client::error::AuthorizationError;
+use vllora_llm::types::gateway::ChatCompletionMessage;
 
 #[derive(Debug, thiserror::Error)]
 pub enum GuardPartnerError {

@@ -1,4 +1,5 @@
-use crate::events::CustomEventType;
+use crate::types::credentials_ident::CredentialsIdent;
+use crate::types::events::CustomEventType;
 use crate::types::gateway::{CompletionModelUsage, ImageSize};
 use crate::types::gateway::{FunctionCall, ToolCall};
 use chrono::{DateTime, Utc};
@@ -7,7 +8,17 @@ use serde::{Deserialize, Serialize};
 use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-use super::CredentialsIdent;
+pub mod cache;
+pub mod credentials;
+pub mod credentials_ident;
+pub mod engine;
+pub mod events;
+pub mod gateway;
+pub mod instance;
+pub mod message;
+pub mod models;
+pub mod provider;
+pub mod tools;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum StreamEvent {
@@ -186,6 +197,21 @@ impl std::fmt::Display for ModelFinishReason {
             ModelFinishReason::ContentFilter => write!(f, "content_filter"),
             ModelFinishReason::Guardrail => write!(f, "guardrail"),
             ModelFinishReason::Other(s) => write!(f, "{s}"),
+        }
+    }
+}
+
+impl Into<async_openai::types::FinishReason> for ModelFinishReason {
+    fn into(self) -> async_openai::types::FinishReason {
+        match self {
+            ModelFinishReason::Stop => async_openai::types::FinishReason::Stop,
+            ModelFinishReason::Length => async_openai::types::FinishReason::Length,
+            ModelFinishReason::ToolCalls => async_openai::types::FinishReason::ToolCalls,
+            ModelFinishReason::ContentFilter => async_openai::types::FinishReason::ContentFilter,
+            // TODO: Handle stop sequence and guardrail in async-openai-compat
+            ModelFinishReason::StopSequence => async_openai::types::FinishReason::Stop,
+            ModelFinishReason::Guardrail => async_openai::types::FinishReason::Stop,
+            ModelFinishReason::Other(_s) => async_openai::types::FinishReason::Stop,
         }
     }
 }

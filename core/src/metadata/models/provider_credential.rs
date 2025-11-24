@@ -1,5 +1,4 @@
 use crate::metadata::schema::provider_credentials;
-use crate::types::credentials::Credentials;
 use diesel::helper_types::AsSelect;
 use diesel::helper_types::Select;
 #[cfg(feature = "postgres")]
@@ -10,6 +9,7 @@ use diesel::SelectableHelper;
 use diesel::{AsChangeset, Insertable, QueryableByName, Selectable};
 use diesel::{Identifiable, Queryable};
 use serde::{Deserialize, Serialize};
+use vllora_llm::types::credentials::Credentials;
 
 #[derive(
     QueryableByName,

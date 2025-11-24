@@ -1,6 +1,6 @@
-use crate::types::gateway::ChatCompletionMessage;
 use crate::types::guardrails::Guard;
 use crate::types::guardrails::GuardResult;
+use vllora_llm::types::gateway::ChatCompletionMessage;
 
 /// Trait for evaluating text against a guard
 #[async_trait::async_trait]

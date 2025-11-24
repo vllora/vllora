@@ -1,7 +1,7 @@
-use crate::types::gateway::Extra;
 use serde_json::Value;
 use std::collections::HashMap;
 use thiserror::Error;
+use vllora_llm::types::gateway::Extra;
 
 #[derive(Error, Debug)]
 pub enum MetadataError {
@@ -258,10 +258,12 @@ impl MetadataManager {
             // Extract guardrail results (placeholder for now)
             for guard in &extra.guards {
                 match guard {
-                    crate::types::gateway::GuardOrName::GuardId(guard_id) => {
+                    vllora_llm::types::gateway::GuardOrName::GuardId(guard_id) => {
                         metadata.insert(format!("guards.{guard_id}"), Value::Bool(true));
                     }
-                    crate::types::gateway::GuardOrName::GuardWithParameters(guard_with_params) => {
+                    vllora_llm::types::gateway::GuardOrName::GuardWithParameters(
+                        guard_with_params,
+                    ) => {
                         metadata.insert(
                             format!("guards.{}", guard_with_params.id),
                             Value::Bool(true),

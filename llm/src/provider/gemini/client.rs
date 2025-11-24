@@ -1,13 +1,10 @@
-use crate::{
-    error::GatewayError,
-    model::gemini::types::{CreateEmbeddingRequest, CreateEmbeddingResponse},
-    GatewayResult,
-};
-
 use super::types::{
     CountTokensRequest, CountTokensResponse, GenerateContentRequest, GenerateContentResponse,
     ModelsResponse,
 };
+use crate::error::LLMError;
+use crate::error::LLMResult;
+use crate::provider::gemini::types::{CreateEmbeddingRequest, CreateEmbeddingResponse};
 use futures::Stream;
 use reqwest::StatusCode;
 use reqwest_eventsource::{Error, EventSource};
@@ -43,7 +40,7 @@ impl Client {
         path: &str,
         payload: Option<P>,
         method: Method,
-    ) -> GatewayResult<T> {
+    ) -> LLMResult<T> {
         let url = format!("{API_URL}{path}?key={}", self.api_key);
 
         let resp = match method {
@@ -60,7 +57,7 @@ impl Client {
             .send()
             // .header("x-api-key", self.api_key.as_str())
             .await
-            .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+            .map_err(|e| LLMError::CustomError(e.to_string()))?;
 
         let status = resp.status();
         if !status.is_success() {
@@ -72,7 +69,7 @@ impl Client {
             };
             tracing::error!(target: "gemini", "{msg}. Payload: {p}");
 
-            return Err(GatewayError::CustomError(format!(
+            return Err(LLMError::CustomError(format!(
                 "Request failed with status: {status}"
             )));
         }
@@ -80,7 +77,7 @@ impl Client {
         let text = resp.text().await?;
         let response = serde_json::from_str::<T>(&text).map_err(|e| {
             tracing::error!(target: "gemini", "Response deserialize failed. Response: {text}");
-            GatewayError::CustomError(e.to_string())
+            LLMError::CustomError(e.to_string())
         })?;
         Ok(response)
     }
@@ -93,7 +90,7 @@ impl Client {
             "gemini-pro",
         ]
     }
-    pub async fn models(&self) -> GatewayResult<ModelsResponse> {
+    pub async fn models(&self) -> LLMResult<ModelsResponse> {
         let url = "".to_string();
         self.make_request(&url, None::<Value>, Method::Get).await
     }
@@ -101,7 +98,7 @@ impl Client {
         &self,
         model_name: &str,
         payload: CountTokensRequest,
-    ) -> GatewayResult<CountTokensResponse> {
+    ) -> LLMResult<CountTokensResponse> {
         let url = format!("/{model_name}:countTokens");
         self.make_request(&url, Some(&payload), Method::Post).await
     }
@@ -110,7 +107,7 @@ impl Client {
         &self,
         model_name: &str,
         payload: GenerateContentRequest,
-    ) -> GatewayResult<GenerateContentResponse> {
+    ) -> LLMResult<GenerateContentResponse> {
         let invoke_url = format!("/{model_name}:generateContent");
         tracing::debug!(target: "gemini", "Invoking model: {model_name} on {invoke_url} with payload: {:?}", payload);
         let span = tracing::Span::current();
@@ -123,7 +120,7 @@ impl Client {
         &self,
         model_name: &str,
         payload: CreateEmbeddingRequest,
-    ) -> GatewayResult<CreateEmbeddingResponse> {
+    ) -> LLMResult<CreateEmbeddingResponse> {
         let invoke_url = format!("/{model_name}:embedContent");
         tracing::debug!(target: "gemini", "Invoking model: {model_name} on {invoke_url} with payload: {:?}", payload);
         let span = tracing::Span::current();
@@ -136,8 +133,7 @@ impl Client {
         &self,
         model_name: &str,
         payload: GenerateContentRequest,
-    ) -> GatewayResult<impl Stream<Item = Result<Option<GenerateContentResponse>, GatewayError>>>
-    {
+    ) -> LLMResult<impl Stream<Item = Result<Option<GenerateContentResponse>, LLMError>>> {
         let stream_url = format!(
             "{API_URL}/{model_name}:streamGenerateContent?alt=sse&key={}",
             self.api_key
@@ -148,7 +144,7 @@ impl Client {
         let request = self.client.post(&stream_url).json(&payload);
         // Delegate the request to the EventSource.
         let event_source =
-            EventSource::new(request).map_err(|e| GatewayError::CustomError(e.to_string()))?;
+            EventSource::new(request).map_err(|e| LLMError::CustomError(e.to_string()))?;
 
         Ok(futures::stream::unfold(
             event_source,
@@ -161,7 +157,7 @@ impl Client {
                             Err(e) => {
                                 tracing::error!(target: "gemini", "{e:?}");
                                 return Some((
-                                    Err(GatewayError::CustomError(e.to_string())),
+                                    Err(LLMError::CustomError(e.to_string())),
                                     event_source,
                                 ));
                             }
@@ -191,7 +187,7 @@ impl Client {
                             _ => err_str,
                         };
 
-                        Some((Err(GatewayError::CustomError(err_str)), event_source))
+                        Some((Err(LLMError::CustomError(err_str)), event_source))
                     }
                     _ => None,
                 }
@@ -202,10 +198,10 @@ impl Client {
 
 #[cfg(test)]
 mod tests {
-    use crate::model::gemini::types::FinishReason;
-    use crate::model::gemini::types::GenerateContentResponse;
-    use crate::model::gemini::types::Part;
-    use crate::model::HashMap;
+    use crate::provider::gemini::types::FinishReason;
+    use crate::provider::gemini::types::GenerateContentResponse;
+    use crate::provider::gemini::types::Part;
+    use std::collections::HashMap;
     use serde_json;
 
     #[test]

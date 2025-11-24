@@ -1,8 +1,8 @@
 use crate::routing::interceptor::LazyInterceptorManager;
 use crate::routing::strategy::conditional::metadata::MetadataField;
 use crate::routing::{ConditionOpType, Route, RouteCondition};
-use crate::types::gateway::Extra;
 use std::collections::{HashMap, HashSet};
+use vllora_llm::types::gateway::Extra;
 
 /// Evaluates if a route's conditions are met using lazy interceptor execution.
 pub async fn evaluate_conditions(

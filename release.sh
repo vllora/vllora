@@ -40,6 +40,8 @@ echo "Updating version to $NEW_VERSION in Cargo.toml files..."
 (cd core && cargo set-version $NEW_VERSION)
 (cd gateway && cargo set-version $NEW_VERSION)
 (cd guardrails && cargo set-version $NEW_VERSION)
+(cd llm && cargo set-version $NEW_VERSION)
+(cd telemetry && cargo set-version $NEW_VERSION)
 
 # Install standard-version if not already installed
 if ! command -v npx &> /dev/null; then
@@ -58,6 +60,8 @@ git push origin main
 git tag v$NEW_VERSION
 git push origin v$NEW_VERSION
 
+cargo publish -p vllora_telemetry
+cargo publish -p vllora_llm
 cargo publish -p vllora_core
 cargo publish -p vllora_guardrails
 cargo publish -p vllora

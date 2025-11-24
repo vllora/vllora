@@ -5,25 +5,23 @@ use crate::handler::CallbackHandlerFn;
 use crate::handler::ModelEventWithDetails;
 use crate::llm_gateway::provider::Provider;
 use crate::model::image_generation::initialize_image_generation;
-use crate::model::types::ModelEvent;
-use crate::model::CredentialsIdent;
-use crate::models::ModelMetadata;
-use crate::types::engine::ImageGenerationModelDefinition;
-use crate::types::gateway::CreateImageRequest;
 use crate::types::image::ImagesResponse;
-use crate::types::provider::InferenceModelProvider;
 use crate::GatewayError;
-use crate::{
-    model::types::ModelEventType,
-    types::{
-        credentials::Credentials,
-        engine::{Model, ModelType},
-        gateway::CostCalculator,
-    },
-};
+use vllora_llm::types::credentials::Credentials;
+use vllora_llm::types::engine::ImageGenerationModelDefinition;
+use vllora_llm::types::engine::Model;
+
 use actix_web::HttpRequest;
 use tracing::Span;
 use tracing_futures::Instrument;
+use vllora_llm::types::credentials_ident::CredentialsIdent;
+use vllora_llm::types::gateway::CostCalculator;
+use vllora_llm::types::gateway::CreateImageRequest;
+use vllora_llm::types::models::ModelMetadata;
+use vllora_llm::types::models::ModelType;
+use vllora_llm::types::provider::InferenceModelProvider;
+use vllora_llm::types::ModelEvent;
+use vllora_llm::types::ModelEventType;
 
 use super::get_key_credentials;
 use super::ProvidersConfig;

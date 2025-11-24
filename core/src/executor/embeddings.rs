@@ -5,25 +5,22 @@ use crate::handler::CallbackHandlerFn;
 use crate::handler::ModelEventWithDetails;
 use crate::llm_gateway::provider::Provider;
 use crate::model::embeddings::initialize_embeddings_model_instance;
-use crate::model::types::ModelEvent;
-use crate::model::CredentialsIdent;
-use crate::models::ModelMetadata;
 use crate::types::embed::EmbeddingResult;
-use crate::types::engine::EmbeddingsModelDefinition;
-use crate::types::gateway::CreateEmbeddingRequest;
-use crate::types::provider::InferenceModelProvider;
 use crate::GatewayError;
-use crate::{
-    model::types::ModelEventType,
-    types::{
-        credentials::Credentials,
-        engine::{Model, ModelType},
-        gateway::CostCalculator,
-    },
-};
 use actix_web::HttpRequest;
 use tracing::Span;
 use tracing_futures::Instrument;
+use vllora_llm::types::credentials::Credentials;
+use vllora_llm::types::credentials_ident::CredentialsIdent;
+use vllora_llm::types::engine::EmbeddingsModelDefinition;
+use vllora_llm::types::engine::Model;
+use vllora_llm::types::gateway::CostCalculator;
+use vllora_llm::types::gateway::CreateEmbeddingRequest;
+use vllora_llm::types::models::ModelMetadata;
+use vllora_llm::types::models::ModelType;
+use vllora_llm::types::provider::InferenceModelProvider;
+use vllora_llm::types::ModelEvent;
+use vllora_llm::types::ModelEventType;
 
 use super::get_key_credentials;
 use super::ProvidersConfig;
@@ -57,7 +54,7 @@ pub async fn handle_embeddings(
         name: llm_model.model.clone(),
         inference_model_name: llm_model.inference_provider.model_name.clone(),
         provider_name: api_provider_name.clone(),
-        model_type: ModelType::Embedding,
+        model_type: ModelType::Embeddings,
         price: llm_model.price.clone(),
         credentials_ident: match key_credentials {
             Some(_) => CredentialsIdent::Own,

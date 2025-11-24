@@ -1,27 +1,27 @@
-use super::error::{AuthorizationError, ModelError};
-use super::tools::Tool;
-use super::types::{
-    LLMContentEvent, LLMFinishEvent, LLMStartEvent, ModelEvent, ModelEventType, ModelFinishReason,
-    ModelToolCall, ToolStartEvent,
-};
-use super::{CredentialsIdent, ModelInstance};
-use crate::error::GatewayError;
-use crate::model::error::{AnthropicError, ModelFinishError};
-use crate::model::handler::handle_tool_call;
-use crate::model::types::LLMFirstToken;
-use crate::model::{async_trait, DEFAULT_MAX_RETRIES};
-use crate::telemetry::events::JsonValue;
-use crate::telemetry::events::SPAN_ANTHROPIC;
-use crate::telemetry::events::{self, RecordResult};
+use crate::client::error::AnthropicError;
+use crate::client::error::AuthorizationError;
+use crate::client::error::ModelError;
+use crate::client::tools::handler::handle_tool_call;
+use crate::client::DEFAULT_MAX_RETRIES;
+use crate::error::{LLMError, LLMResult, ModelFinishError};
 use crate::types::credentials::ApiKeyCredentials;
-use crate::types::engine::{AnthropicModelParams, ExecutionOptions, Prompt};
+use crate::types::credentials_ident::CredentialsIdent;
+use crate::types::engine::{render, AnthropicModelParams, ExecutionOptions};
 use crate::types::gateway::{
-    ChatCompletionContent, ChatCompletionMessage, ChatCompletionMessageWithFinishReason, ToolCall,
+    ChatCompletionContent, ChatCompletionMessage, ChatCompletionMessageWithFinishReason,
+    FunctionCall, ToolCall,
 };
 use crate::types::gateway::{CompletionModelUsage, PromptTokensDetails};
-use crate::types::message::{MessageType, PromptMessage};
-use crate::types::threads::{InnerMessage, Message};
-use crate::{create_model_span, GatewayResult};
+use crate::types::instance::ModelInstance;
+use crate::types::message::InnerMessage;
+use crate::types::message::Message;
+use crate::types::message::{MessageContentType, MessageType};
+use crate::types::tools::Tool;
+use crate::types::{
+    LLMContentEvent, LLMFinishEvent, LLMFirstToken, LLMStartEvent, ModelEvent, ModelEventType,
+    ModelFinishReason, ModelToolCall, ToolStartEvent,
+};
+use async_trait::async_trait;
 use clust::messages::MessagesResponseBody;
 use clust::messages::{
     Content, ContentBlock, ImageContentBlock, ImageContentSource, Message as ClustMessage,
@@ -40,6 +40,8 @@ use tracing::field;
 use tracing::Instrument;
 use tracing::Span;
 use valuable::Valuable;
+use vllora_telemetry::create_model_span;
+use vllora_telemetry::events::{JsonValue, RecordResult, SPAN_ANTHROPIC, SPAN_TOOLS};
 
 macro_rules! target {
     () => {
@@ -90,7 +92,6 @@ pub struct AnthropicModel {
     params: AnthropicModelParams,
     execution_options: ExecutionOptions,
     client: Client,
-    prompt: Prompt,
     tools: Arc<HashMap<String, Box<dyn Tool>>>,
     credentials_ident: CredentialsIdent,
 }
@@ -100,7 +101,6 @@ impl AnthropicModel {
         params: AnthropicModelParams,
         execution_options: ExecutionOptions,
         credentials: Option<&ApiKeyCredentials>,
-        prompt: Prompt,
         tools: HashMap<String, Box<dyn Tool>>,
     ) -> Result<Self, ModelError> {
         let client: Client = anthropic_client(credentials)?;
@@ -108,7 +108,6 @@ impl AnthropicModel {
             params,
             execution_options,
             client,
-            prompt,
             tools: Arc::new(tools),
             credentials_ident: credentials
                 .map(|_c| CredentialsIdent::Own)
@@ -126,7 +125,7 @@ impl AnthropicModel {
             let tags_value = tags.clone();
             async move {
                 let tool_call = Self::map_tool_call(tool_use);
-                let tool_call = tool_call.map_err(|e| GatewayError::CustomError(e.to_string()));
+                let tool_call = tool_call.map_err(|e| LLMError::CustomError(e.to_string()));
                 let result = match tool_call {
                     Ok(tool_call) => {
                         let result =
@@ -219,8 +218,8 @@ impl AnthropicModel {
         Ok(builder.build())
     }
 
-    fn handle_max_tokens_error() -> GatewayError {
-        ModelError::FinishError(ModelFinishError::MaxTokens).into()
+    fn handle_max_tokens_error() -> LLMError {
+        LLMError::FinishError(ModelFinishError::MaxTokens)
     }
 
     fn build_response(
@@ -259,7 +258,7 @@ impl AnthropicModel {
         stream: impl Stream<Item = Result<MessageChunk, StreamError>>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         started_at: std::time::Instant,
-    ) -> GatewayResult<(StopReason, Vec<ToolUse>, Usage, MessagesResponseBody)> {
+    ) -> LLMResult<(StopReason, Vec<ToolUse>, Usage, MessagesResponseBody)> {
         let mut tool_call_states: HashMap<u32, ToolUse> = HashMap::new();
         tokio::pin!(stream);
         let mut json_states: HashMap<u32, String> = HashMap::new();
@@ -296,7 +295,7 @@ impl AnthropicModel {
                                 }),
                             )))
                             .await
-                            .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+                            .map_err(|e| LLMError::CustomError(e.to_string()))?;
                             stream_content.push_str(&block.text);
                         }
                         clust::messages::ContentBlockStart::ThinkingContentBlock(thinking) => {
@@ -307,7 +306,7 @@ impl AnthropicModel {
                                 }),
                             )))
                             .await
-                            .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+                            .map_err(|e| LLMError::CustomError(e.to_string()))?;
                         }
                         clust::messages::ContentBlockStart::ToolUseContentBlock(tool_use_block) => {
                             tool_call_states.insert(block.index, tool_use_block.tool_use);
@@ -323,7 +322,7 @@ impl AnthropicModel {
                                 }),
                             )))
                             .await
-                            .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+                            .map_err(|e| LLMError::CustomError(e.to_string()))?;
                             stream_content.push_str(&delta.text);
                         }
                         clust::messages::ContentBlockDelta::ThinkingDeltaContentBlock(delta) => {
@@ -334,7 +333,7 @@ impl AnthropicModel {
                                 }),
                             )))
                             .await
-                            .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+                            .map_err(|e| LLMError::CustomError(e.to_string()))?;
                             stream_content.push_str(&delta.thinking);
                         }
                         clust::messages::ContentBlockDelta::SignatureDeltaContentBlock(_) => {}
@@ -408,7 +407,7 @@ impl AnthropicModel {
         request: MessagesRequestBody,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<InnerExecutionResult> {
+    ) -> LLMResult<InnerExecutionResult> {
         let system_message = request.system.clone();
         let input_messages = request.messages.clone();
 
@@ -426,7 +425,7 @@ impl AnthropicModel {
             }),
         )))
         .await
-        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+        .map_err(|e| LLMError::CustomError(e.to_string()))?;
 
         let response = async move {
             let result = self.client.create_a_message(request).await;
@@ -451,7 +450,7 @@ impl AnthropicModel {
                 JsonValue(&serde_json::to_value(usage).unwrap()).as_value(),
             );
 
-            Ok::<_, GatewayError>(response)
+            Ok::<_, LLMError>(response)
         }
         .instrument(span.clone().or_current())
         .await?;
@@ -492,14 +491,14 @@ impl AnthropicModel {
                                     .map(|m| m.to_string())
                                     .unwrap_or_default(),
                                 output: Some(content.clone()),
-                                usage: Some(usage),
+                                usage: Some(usage.clone()),
                                 finish_reason: ModelFinishReason::Stop,
                                 tool_calls: vec![],
                                 credentials_ident: self.credentials_ident.clone(),
                             }),
                         )))
                         .await
-                        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+                        .map_err(|e| LLMError::CustomError(e.to_string()))?;
 
                         Ok(InnerExecutionResult::Finish(
                             ChatCompletionMessageWithFinishReason::new(
@@ -509,6 +508,10 @@ impl AnthropicModel {
                                     ..Default::default()
                                 },
                                 ModelFinishReason::Stop,
+                                response.id.clone(),
+                                chrono::Utc::now().timestamp() as u32,
+                                response.model.to_string(),
+                                Some(usage),
                             ),
                         ))
                     }
@@ -543,14 +546,14 @@ impl AnthropicModel {
                                     .map(|m| m.to_string())
                                     .unwrap_or_default(),
                                 output: Some(final_text.clone()),
-                                usage: Some(usage),
+                                usage: Some(usage.clone()),
                                 finish_reason: ModelFinishReason::Stop,
                                 tool_calls: vec![],
                                 credentials_ident: self.credentials_ident.clone(),
                             }),
                         )))
                         .await
-                        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+                        .map_err(|e| LLMError::CustomError(e.to_string()))?;
 
                         Ok(InnerExecutionResult::Finish(
                             ChatCompletionMessageWithFinishReason::new(
@@ -560,6 +563,10 @@ impl AnthropicModel {
                                     ..Default::default()
                                 },
                                 ModelFinishReason::Stop,
+                                response.id.clone(),
+                                chrono::Utc::now().timestamp() as u32,
+                                response.model.to_string(),
+                                Some(usage),
                             ),
                         ))
                     }
@@ -604,7 +611,7 @@ impl AnthropicModel {
                 let tool_calls_str = serde_json::to_string(&tool_runs)?;
                 let tools_span = tracing::info_span!(
                     target: target!(),
-                    events::SPAN_TOOLS,
+                    SPAN_TOOLS,
                     tool_calls=tool_calls_str,
                     tool.name=tool_runs.iter().map(|t| t.name.clone()).collect::<Vec<String>>().join(",")
                 );
@@ -629,7 +636,7 @@ impl AnthropicModel {
                                 .map(|m| m.to_string())
                                 .unwrap_or_default(),
                             output: text_content.clone(),
-                            usage,
+                            usage: usage.clone(),
                             finish_reason: ModelFinishReason::ToolCalls,
                             tool_calls: tool_runs
                                 .iter()
@@ -643,7 +650,7 @@ impl AnthropicModel {
                         }),
                     )))
                     .await
-                    .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+                    .map_err(|e| LLMError::CustomError(e.to_string()))?;
 
                     Ok(InnerExecutionResult::Finish(
                         ChatCompletionMessageWithFinishReason::new(
@@ -659,7 +666,7 @@ impl AnthropicModel {
                                                 index: Some(index),
                                                 id: tool_call.id.clone(),
                                                 r#type: "function".to_string(),
-                                                function: crate::types::gateway::FunctionCall {
+                                                function: FunctionCall {
                                                     name: tool_call.name.clone(),
                                                     arguments: serde_json::to_string(
                                                         &tool_call.input,
@@ -667,11 +674,15 @@ impl AnthropicModel {
                                                 },
                                             })
                                         })
-                                        .collect::<Result<Vec<ToolCall>, GatewayError>>()?,
+                                        .collect::<Result<Vec<ToolCall>, LLMError>>()?,
                                 ),
                                 ..Default::default()
                             },
                             ModelFinishReason::ToolCalls,
+                            response.id.clone(),
+                            chrono::Utc::now().timestamp() as u32,
+                            response.model.to_string(),
+                            usage,
                         ),
                     ))
                 } else {
@@ -697,7 +708,7 @@ impl AnthropicModel {
         input_messages: Vec<ClustMessage>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<ChatCompletionMessageWithFinishReason> {
+    ) -> LLMResult<ChatCompletionMessageWithFinishReason> {
         let mut calls = vec![(system_message, input_messages)];
         let mut retries_left = self
             .execution_options
@@ -754,7 +765,7 @@ impl AnthropicModel {
         input_messages: Vec<ClustMessage>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<()> {
+    ) -> LLMResult<()> {
         let mut calls = vec![(system_message, input_messages)];
         let mut retries_left = self
             .execution_options
@@ -831,7 +842,7 @@ impl AnthropicModel {
         }
     }
 
-    fn map_tool_call(t: &ToolUse) -> Result<ModelToolCall, GatewayError> {
+    fn map_tool_call(t: &ToolUse) -> Result<ModelToolCall, LLMError> {
         Ok(ModelToolCall {
             tool_id: t.id.clone(),
             tool_name: t.name.clone(),
@@ -845,7 +856,7 @@ impl AnthropicModel {
         span: Span,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<InnerExecutionResult> {
+    ) -> LLMResult<InnerExecutionResult> {
         let system_message = request.system.clone();
         let input_messages = request.messages.clone();
         let credentials_ident = self.credentials_ident.clone();
@@ -864,7 +875,7 @@ impl AnthropicModel {
             }),
         )))
         .await
-        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+        .map_err(|e| LLMError::CustomError(e.to_string()))?;
 
         let started_at = std::time::Instant::now();
         let stream = self
@@ -899,17 +910,17 @@ impl AnthropicModel {
                     .map(|m| m.to_string())
                     .unwrap_or_default(),
                 output: None,
-                usage: Some(usage),
+                usage: Some(usage.clone()),
                 finish_reason: trace_finish_reason.clone(),
                 credentials_ident: credentials_ident.clone(),
                 tool_calls: tool_calls
                     .iter()
                     .map(Self::map_tool_call)
-                    .collect::<Result<Vec<ModelToolCall>, GatewayError>>()?,
+                    .collect::<Result<Vec<ModelToolCall>, LLMError>>()?,
             }),
         )))
         .await
-        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+        .map_err(|e| LLMError::CustomError(e.to_string()))?;
 
         match stop_reason {
             StopReason::EndTurn | StopReason::StopSequence => Ok(InnerExecutionResult::Finish(
@@ -918,6 +929,10 @@ impl AnthropicModel {
                         ..Default::default()
                     },
                     ModelFinishReason::Stop,
+                    response.id.clone(),
+                                chrono::Utc::now().timestamp() as u32,
+                                response.model.to_string(),
+                                Some(usage),
                 ),
             )),
             StopReason::MaxTokens => Err(Self::handle_max_tokens_error()),
@@ -925,7 +940,7 @@ impl AnthropicModel {
                 let tool_calls_str = serde_json::to_string(&tool_calls)?;
                 let tools_span = tracing::info_span!(
                     target: target!(),
-                    events::SPAN_TOOLS,
+                    SPAN_TOOLS,
                     tool_calls=tool_calls_str,
                     tool.name=tool_calls.iter().map(|t| t.name.clone()).collect::<Vec<String>>().join(",")
                 );
@@ -941,7 +956,7 @@ impl AnthropicModel {
                         }),
                     )))
                     .await
-                    .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+                    .map_err(|e| LLMError::CustomError(e.to_string()))?;
 
                     Ok(InnerExecutionResult::Finish(
                         ChatCompletionMessageWithFinishReason::new(
@@ -949,6 +964,10 @@ impl AnthropicModel {
                                 ..Default::default()
                             },
                             ModelFinishReason::ToolCalls,
+                            response.id.clone(),
+                                chrono::Utc::now().timestamp() as u32,
+                                response.model.to_string(),
+                                Some(usage),
                         ),
                     ))
                 } else {
@@ -975,7 +994,7 @@ impl AnthropicModel {
         }
     }
 
-    fn map_previous_messages(messages_dto: Vec<Message>) -> GatewayResult<Vec<ClustMessage>> {
+    fn map_previous_messages(messages_dto: Vec<Message>) -> LLMResult<Vec<ClustMessage>> {
         // convert serde::Map into HashMap
         let mut messages: Vec<ClustMessage> = vec![];
 
@@ -1002,7 +1021,7 @@ impl AnthropicModel {
                                         ),
                                     )))
                                 })
-                                .collect::<Result<Vec<ContentBlock>, GatewayError>>()?,
+                                .collect::<Result<Vec<ContentBlock>, LLMError>>()?,
                         )));
                     } else {
                         messages.push(ClustMessage::assistant(Content::SingleText(
@@ -1042,7 +1061,7 @@ impl ModelInstance for AnthropicModel {
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<ChatCompletionMessageWithFinishReason> {
+    ) -> LLMResult<ChatCompletionMessageWithFinishReason> {
         let (system_prompt, conversational_messages) =
             self.construct_messages(input_variables, previous_messages)?;
         self.execute(system_prompt, conversational_messages, &tx, tags)
@@ -1055,7 +1074,7 @@ impl ModelInstance for AnthropicModel {
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<()> {
+    ) -> LLMResult<()> {
         let (system_prompt, conversational_messages) =
             self.construct_messages(input_variables, previous_messages)?;
         self.execute_stream(system_prompt, conversational_messages, &tx, tags)
@@ -1068,108 +1087,52 @@ impl AnthropicModel {
         &self,
         input_variables: HashMap<String, Value>,
         previous_messages: Vec<Message>,
-    ) -> GatewayResult<(Option<SystemPrompt>, Vec<ClustMessage>)> {
+    ) -> LLMResult<(Option<SystemPrompt>, Vec<ClustMessage>)> {
         let mut conversational_messages = vec![];
-        let mut system_message = self
-            .prompt
-            .messages
+        let system_message = previous_messages
             .iter()
             .find(|m| m.r#type == MessageType::SystemMessage)
-            .map(|message| map_system_message(message.to_owned(), &input_variables));
-
-        if system_message.is_none() {
-            system_message = previous_messages
-                .iter()
-                .find(|m| m.r#type == MessageType::SystemMessage)
-                .map(|message| {
-                    if let Some(content) = &message.content {
-                        SystemPrompt::new(content.clone())
-                    } else {
-                        SystemPrompt::from_content_blocks(
-                            message
-                                .content_array
-                                .iter()
-                                .map(|c| match &c.cache_control {
-                                    Some(cache_control) => {
-                                        let cache_control = clust::messages::CacheControl {
-                                            _type: clust::messages::CacheControlType::Ephemeral,
-                                            ttl: cache_control.ttl().map(|t| t.into()),
-                                        };
-                                        ContentBlock::Text(
-                                            TextContentBlock::new_with_cache_control(
-                                                c.value.clone(),
-                                                cache_control,
-                                            ),
-                                        )
-                                    }
-                                    None => {
-                                        ContentBlock::Text(TextContentBlock::new(c.value.clone()))
-                                    }
-                                })
-                                .collect(),
-                        )
-                    }
-                });
-        }
+            .map(|message| {
+                if let Some(content) = &message.content {
+                    SystemPrompt::new(render(content.clone(), &input_variables))
+                } else {
+                    SystemPrompt::from_content_blocks(
+                        message
+                            .content_array
+                            .iter()
+                            .map(|c| match &c.cache_control {
+                                Some(cache_control) => {
+                                    let cache_control = clust::messages::CacheControl {
+                                        _type: clust::messages::CacheControlType::Ephemeral,
+                                        ttl: cache_control.ttl().map(|t| t.into()),
+                                    };
+                                    ContentBlock::Text(TextContentBlock::new_with_cache_control(
+                                        render(c.value.clone(), &input_variables),
+                                        cache_control,
+                                    ))
+                                }
+                                None => ContentBlock::Text(TextContentBlock::new(c.value.clone())),
+                            })
+                            .collect(),
+                    )
+                }
+            });
 
         let previous_messages = Self::map_previous_messages(previous_messages)?;
         conversational_messages.extend(previous_messages);
-        let human_message = self
-            .prompt
-            .messages
-            .iter()
-            .find(|m| m.r#type == MessageType::HumanMessage)
-            .map(|message| map_chat_messages(message.to_owned(), &input_variables));
-        if let Some(human_message) = human_message {
-            conversational_messages.push(human_message?);
-        }
 
         Ok((system_message, conversational_messages))
     }
 }
 
-fn map_system_message(prompt: PromptMessage, variables: &HashMap<String, Value>) -> SystemPrompt {
-    let raw_message = Prompt::render(prompt.msg.clone(), variables);
-    SystemPrompt::new(raw_message)
-}
-fn map_chat_messages(
-    prompt: PromptMessage,
-    variables: &HashMap<String, Value>,
-) -> GatewayResult<ClustMessage> {
-    let message = match prompt.r#type {
-        MessageType::AIMessage => {
-            let raw_message = Prompt::render(prompt.msg.clone(), variables);
-            ClustMessage::assistant(Content::SingleText(raw_message))
-        }
-        MessageType::HumanMessage => {
-            let msg = prompt.msg;
-            let inner_message: InnerMessage = if prompt.wired {
-                let value = variables
-                    .get(&msg)
-                    .ok_or(GatewayError::CustomError(format!("{msg} not specified")))?;
-                serde_json::from_value(value.clone())?
-            } else {
-                InnerMessage::Text(Prompt::render(msg.clone(), variables))
-            };
-            construct_user_message(&inner_message)
-        }
-        _ => {
-            return Err(GatewayError::CustomError(
-                "Unexpected system message".to_string(),
-            ));
-        }
-    };
-    Ok(message)
-}
-
 fn construct_user_message(m: &InnerMessage) -> ClustMessage {
     let content = match m {
-        crate::types::threads::InnerMessage::Text(text) => Content::SingleText(text.to_owned()),
-        crate::types::threads::InnerMessage::Array(content_array) => {
+        InnerMessage::Text(text) => Content::SingleText(text.to_owned()),
+        InnerMessage::Array(content_array) => {
             let mut blocks = vec![];
             for m in content_array {
                 let msg: ContentBlock = match m.r#type {
-                    crate::types::threads::MessageContentType::Text => {
+                    MessageContentType::Text => {
                         if let Some(cache_control) = &m.cache_control {
                             let cache_control = clust::messages::CacheControl {
                                 _type: clust::messages::CacheControlType::Ephemeral,
@@ -1183,7 +1146,7 @@ fn construct_user_message(m: &InnerMessage) -> ClustMessage {
                             ContentBlock::Text(TextContentBlock::new(m.value.clone()))
                         }
                     }
-                    crate::types::threads::MessageContentType::ImageUrl => {
+                    MessageContentType::ImageUrl => {
                         let url = m.value.clone();
                         let base64_data = url
                             .split_once(',')
@@ -1193,7 +1156,7 @@ fn construct_user_message(m: &InnerMessage) -> ClustMessage {
                             base64_data,
                         )))
                     }
-                    crate::types::threads::MessageContentType::InputAudio => {
+                    MessageContentType::InputAudio => {
                         todo!()
                     }
                 };
@@ -1207,7 +1170,7 @@ fn construct_user_message(m: &InnerMessage) -> ClustMessage {
     ClustMessage::user(content)
 }
 
-pub fn record_map_err(e: impl Into<GatewayError> + ToString, span: tracing::Span) -> GatewayError {
+pub fn record_map_err(e: impl Into<LLMError> + ToString, span: tracing::Span) -> LLMError {
     span.record("error", e.to_string());
     e.into()
 }

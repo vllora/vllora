@@ -1,12 +1,17 @@
 use crate::model::ModelProviderInstance;
-use crate::models::{InferenceProvider, ModelCapability, ModelIOFormats, ModelMetadata, ModelType};
-use crate::types::credentials::Credentials;
-use crate::types::provider::{CompletionModelPrice, InferenceModelProvider, ModelPrice};
 use crate::GatewayApiError;
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use vllora_llm::types::credentials::Credentials;
+use vllora_llm::types::models::InferenceProvider;
+use vllora_llm::types::models::Limits;
+use vllora_llm::types::models::ModelCapability;
+use vllora_llm::types::models::ModelIOFormats;
+use vllora_llm::types::models::ModelMetadata;
+use vllora_llm::types::models::ModelType;
+use vllora_llm::types::provider::{CompletionModelPrice, InferenceModelProvider, ModelPrice};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct AzureDeployment {
@@ -277,7 +282,7 @@ impl ModelProviderInstance for AzureModelProvider {
                 output_formats,
                 capabilities,
                 r#type: model_type,
-                limits: crate::models::Limits::new(limits),
+                limits: Limits::new(limits),
                 description: format!("Azure OpenAI deployment of {}", model_name),
                 parameters: None,
                 benchmark_info: None,

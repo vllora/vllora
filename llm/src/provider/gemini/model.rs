@@ -1,36 +1,37 @@
-use super::super::error::ModelError;
-use super::super::types::{
-    LLMContentEvent, LLMFinishEvent, LLMStartEvent, ModelEvent, ModelEventType, ModelFinishReason,
-    ModelToolCall,
-};
-use super::super::ModelInstance;
-use super::super::Tool;
 use super::client::Client;
 use super::types::{
     Content, FinishReason, GenerateContentRequest, GenerateContentResponse, Part,
     PartFunctionResponse, UsageMetadata,
 };
-use crate::error::GatewayError;
-use crate::model::error::{AuthorizationError, ModelFinishError};
-use crate::model::gemini::types::{
+use crate::client::error::AuthorizationError;
+use crate::client::error::ModelError;
+use crate::client::tools::handler::handle_tool_call;
+use crate::client::DEFAULT_MAX_RETRIES;
+use crate::error::LLMError;
+use crate::error::LLMResult;
+use crate::error::ModelFinishError;
+use crate::provider::gemini::types::{
     Candidate, FunctionDeclaration, GenerationConfig, PartWithThought, Role, Tools,
 };
-use crate::model::handler::handle_tool_call;
-use crate::model::types::LLMFirstToken;
-use crate::model::{async_trait, CredentialsIdent, DEFAULT_MAX_RETRIES};
-use crate::telemetry::events::JsonValue;
-use crate::telemetry::events::SPAN_GEMINI;
-use crate::telemetry::events::{self, RecordResult};
 use crate::types::credentials::ApiKeyCredentials;
-use crate::types::engine::{ExecutionOptions, GeminiModelParams, Prompt};
+use crate::types::credentials_ident::CredentialsIdent;
+use crate::types::engine::render;
+use crate::types::engine::{ExecutionOptions, GeminiModelParams};
 use crate::types::gateway::{
     ChatCompletionContent, ChatCompletionMessage, ChatCompletionMessageWithFinishReason,
     CompletionModelUsage, ToolCall,
 };
-use crate::types::message::{MessageType, PromptMessage};
-use crate::types::threads::{AudioFormat, InnerMessage, Message, MessageContentPartOptions};
-use crate::{create_model_span, GatewayResult};
+use crate::types::instance::ModelInstance;
+use crate::types::message::{AudioFormat, InnerMessage, Message, MessageContentPartOptions};
+use crate::types::message::{MessageContentType, MessageType};
+use crate::types::tools::Tool;
+use crate::types::LLMFirstToken;
+use crate::types::{
+    LLMContentEvent, LLMFinishEvent, LLMStartEvent, ModelEvent, ModelEventType, ModelFinishReason,
+    ModelToolCall,
+};
 use async_openai::types::ResponseFormat;
+use async_trait::async_trait;
 use futures::Stream;
 use futures::StreamExt;
 use serde_json::Value;
@@ -40,6 +41,10 @@ use tracing::field;
 use tracing::Instrument;
 use tracing::Span;
 use valuable::Valuable;
+use vllora_telemetry::create_model_span;
+use vllora_telemetry::events::JsonValue;
+use vllora_telemetry::events::SPAN_GEMINI;
+use vllora_telemetry::events::{self, RecordResult};
 
 macro_rules! target {
     () => {
@@ -83,7 +88,6 @@ pub struct GeminiModel {
     params: GeminiModelParams,
     execution_options: ExecutionOptions,
     client: Client,
-    prompt: Prompt,
     tools: Arc<HashMap<String, Box<dyn Tool>>>,
     credentials_ident: CredentialsIdent,
 }
@@ -92,14 +96,12 @@ impl GeminiModel {
         params: GeminiModelParams,
         execution_options: ExecutionOptions,
         credentials: Option<&ApiKeyCredentials>,
-        prompt: Prompt,
         tools: HashMap<String, Box<dyn Tool>>,
     ) -> Result<Self, ModelError> {
         let client = gemini_client(credentials)?;
         Ok(Self {
             params,
             execution_options,
-            prompt,
             client,
             tools: Arc::new(tools),
             credentials_ident: credentials
@@ -130,7 +132,7 @@ impl GeminiModel {
         .await
     }
 
-    fn build_request(&self, messages: Vec<Content>) -> GatewayResult<GenerateContentRequest> {
+    fn build_request(&self, messages: Vec<Content>) -> LLMResult<GenerateContentRequest> {
         let model_params = &self.params;
         let response_schema = match &model_params.response_format {
             Some(ResponseFormat::JsonSchema { json_schema }) => {
@@ -205,10 +207,10 @@ impl GeminiModel {
 
     async fn process_stream(
         &self,
-        mut stream: impl Stream<Item = Result<Option<GenerateContentResponse>, GatewayError>> + Unpin,
+        mut stream: impl Stream<Item = Result<Option<GenerateContentResponse>, LLMError>> + Unpin,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         started_at: std::time::Instant,
-    ) -> GatewayResult<(
+    ) -> LLMResult<(
         FinishReason,
         Vec<(String, HashMap<String, Value>)>,
         Option<UsageMetadata>,
@@ -237,7 +239,7 @@ impl GeminiModel {
                                 ModelEventType::LlmFirstToken(LLMFirstToken {}),
                             )))
                             .await
-                            .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+                            .map_err(|e| LLMError::CustomError(e.to_string()))?;
                             model_version = res.model_version;
                             response_id = res.response_id;
                             Span::current().record("ttft", started_at.elapsed().as_micros());
@@ -328,7 +330,7 @@ impl GeminiModel {
         span: Span,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<InnerExecutionResult> {
+    ) -> LLMResult<InnerExecutionResult> {
         let model_name = self.params.model.as_ref().unwrap();
         let input_messages = call.contents.clone();
 
@@ -341,7 +343,7 @@ impl GeminiModel {
             }),
         )))
         .await
-        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+        .map_err(|e| LLMError::CustomError(e.to_string()))?;
 
         let response = async move {
             let result = self.client.invoke(model_name, call).await;
@@ -364,7 +366,7 @@ impl GeminiModel {
                     span.record("usage", JsonValue(&serde_json::to_value(usage)?).as_value());
                 }
             }
-            Ok::<_, GatewayError>(response)
+            Ok::<_, LLMError>(response)
         }
         .instrument(span.clone().or_current())
         .await?;
@@ -447,7 +449,7 @@ impl GeminiModel {
                             provider_name: SPAN_GEMINI.to_string(),
                             model_name: self.params.model.clone().unwrap_or_default(),
                             output: Some(text.clone()),
-                            usage,
+                            usage: usage.clone(),
                             finish_reason,
                             tool_calls: calls
                                 .iter()
@@ -458,12 +460,12 @@ impl GeminiModel {
                                         input: serde_json::to_string(params)?,
                                     })
                                 })
-                                .collect::<Result<Vec<ModelToolCall>, GatewayError>>()?,
+                                .collect::<Result<Vec<ModelToolCall>, LLMError>>()?,
                             credentials_ident: self.credentials_ident.clone(),
                         }),
                     )))
                     .await
-                    .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+                    .map_err(|e| LLMError::CustomError(e.to_string()))?;
 
                     return Ok(InnerExecutionResult::Finish(
                         ChatCompletionMessageWithFinishReason::new(
@@ -489,11 +491,15 @@ impl GeminiModel {
                                                 },
                                             })
                                         })
-                                        .collect::<Result<Vec<ToolCall>, GatewayError>>()?,
+                                        .collect::<Result<Vec<ToolCall>, LLMError>>()?,
                                 ),
                                 ..Default::default()
                             },
                             ModelFinishReason::ToolCalls,
+                            response.response_id,
+                            chrono::Utc::now().timestamp() as u32,
+                            response.model_version,
+                            usage,
                         ),
                     ));
                 }
@@ -540,14 +546,14 @@ impl GeminiModel {
                             .map(|m| m.to_string())
                             .unwrap_or_default(),
                         output: Some(text.clone()),
-                        usage,
+                        usage: usage.clone(),
                         finish_reason: finish_reason.clone(),
                         tool_calls: vec![],
                         credentials_ident: self.credentials_ident.clone(),
                     }),
                 )))
                 .await
-                .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+                .map_err(|e| LLMError::CustomError(e.to_string()))?;
 
                 Ok(InnerExecutionResult::Finish(
                     ChatCompletionMessageWithFinishReason::new(
@@ -557,6 +563,10 @@ impl GeminiModel {
                             ..Default::default()
                         },
                         finish_reason,
+                        response.response_id,
+                        chrono::Utc::now().timestamp() as u32,
+                        response.model_version,
+                        usage,
                     ),
                 ))
             }
@@ -573,7 +583,7 @@ impl GeminiModel {
         input_messages: Vec<Content>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<ChatCompletionMessageWithFinishReason> {
+    ) -> LLMResult<ChatCompletionMessageWithFinishReason> {
         let mut gemini_calls = vec![input_messages];
         let mut retries_left = self
             .execution_options
@@ -611,7 +621,7 @@ impl GeminiModel {
         unreachable!();
     }
 
-    fn handle_finish_reason(finish_reason: Option<FinishReason>) -> GatewayError {
+    fn handle_finish_reason(finish_reason: Option<FinishReason>) -> LLMError {
         ModelError::FinishError(ModelFinishError::Custom(format!("{finish_reason:?}"))).into()
     }
 
@@ -673,7 +683,7 @@ impl GeminiModel {
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         call_span: Span,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<InnerExecutionResult> {
+    ) -> LLMResult<InnerExecutionResult> {
         let model_name = self.params.model.as_ref().unwrap();
         let input_messages = call.contents.clone();
         let started_at = std::time::Instant::now();
@@ -693,7 +703,7 @@ impl GeminiModel {
             }),
         )))
         .await
-        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+        .map_err(|e| LLMError::CustomError(e.to_string()))?;
 
         let (finish_reason, tool_calls, usage, output) = self
             .process_stream(stream, &tx, started_at)
@@ -722,14 +732,14 @@ impl GeminiModel {
                     .map(|m| m.to_string())
                     .unwrap_or_default(),
                 output: None,
-                usage,
+                usage: usage.clone(),
                 finish_reason: trace_finish_reason.clone(),
                 tool_calls: tool_calls.iter().map(Self::map_tool_call).collect(),
                 credentials_ident: self.credentials_ident.clone(),
             }),
         )))
         .await
-        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+        .map_err(|e| LLMError::CustomError(e.to_string()))?;
 
         call_span.record("output", serde_json::to_string(&output)?);
         if !tool_calls.is_empty() {
@@ -772,6 +782,10 @@ impl GeminiModel {
                                 ..Default::default()
                             },
                             ModelFinishReason::ToolCalls,
+                            output.as_ref().map(|r| r.response_id.clone()).unwrap_or_default(),
+                            chrono::Utc::now().timestamp() as u32,
+                            output.as_ref().map(|r| r.model_version.clone()).unwrap_or_default(),
+                            usage,
                         ),
                     ));
                 }
@@ -799,6 +813,10 @@ impl GeminiModel {
                         ..Default::default()
                     },
                     Self::map_finish_reason(&finish_reason, !tool_calls.is_empty()),
+                    output.as_ref().map(|r| r.response_id.clone()).unwrap_or_default(),
+                    chrono::Utc::now().timestamp() as u32,
+                    output.as_ref().map(|r| r.model_version.clone()).unwrap_or_default(),
+                    usage,
                 ),
             )),
             other => Err(Self::handle_finish_reason(Some(other))),
@@ -810,7 +828,7 @@ impl GeminiModel {
         input_messages: Vec<Content>,
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<()> {
+    ) -> LLMResult<()> {
         let mut gemini_calls = vec![input_messages];
 
         let mut retries_left = self
@@ -850,7 +868,10 @@ impl GeminiModel {
         Ok(())
     }
 
-    fn map_previous_messages(messages_dto: Vec<Message>) -> GatewayResult<Vec<Content>> {
+    fn map_previous_messages(
+        messages_dto: Vec<Message>,
+        input_variables: HashMap<String, Value>,
+    ) -> LLMResult<Vec<Content>> {
         // convert serde::Map into HashMap
         let mut messages = vec![];
         let mut tool_results_remaining = 0;
@@ -858,9 +879,10 @@ impl GeminiModel {
         for m in messages_dto.iter() {
             let request_message = {
                 match m.r#type {
-                    MessageType::SystemMessage => {
-                        Some(Content::user(m.content.clone().unwrap_or_default()))
-                    }
+                    MessageType::SystemMessage => Some(Content::user(render(
+                        m.content.clone().unwrap_or_default(),
+                        &input_variables,
+                    ))),
 
                     MessageType::AIMessage => {
                         if let Some(tool_calls) = &m.tool_calls {
@@ -882,7 +904,7 @@ impl GeminiModel {
                                         }
                                         .into())
                                     })
-                                    .collect::<Result<Vec<PartWithThought>, GatewayError>>()?,
+                                    .collect::<Result<Vec<PartWithThought>, LLMError>>()?,
                             })
                         } else {
                             match &m.content {
@@ -941,7 +963,7 @@ impl ModelInstance for GeminiModel {
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<ChatCompletionMessageWithFinishReason> {
+    ) -> LLMResult<ChatCompletionMessageWithFinishReason> {
         let conversational_messages =
             self.construct_messages(input_variables, previous_messages)?;
         self.execute(conversational_messages, &tx, tags).await
@@ -953,7 +975,7 @@ impl ModelInstance for GeminiModel {
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<()> {
+    ) -> LLMResult<()> {
         let conversational_messages =
             self.construct_messages(input_variables, previous_messages)?;
         self.execute_stream(conversational_messages, tx, tags).await
@@ -965,74 +987,24 @@ impl GeminiModel {
         &self,
         input_variables: HashMap<String, Value>,
         previous_messages: Vec<Message>,
-    ) -> GatewayResult<Vec<Content>> {
+    ) -> LLMResult<Vec<Content>> {
         let mut conversational_messages = vec![];
-        let system_message = self
-            .prompt
-            .messages
-            .iter()
-            .find(|m| m.r#type == MessageType::SystemMessage)
-            .map(|message| map_chat_messages(message.to_owned(), &input_variables));
-        if let Some(system_message) = system_message {
-            conversational_messages.push(system_message?);
-        }
-        let previous_messages = Self::map_previous_messages(previous_messages)?;
+        let previous_messages = Self::map_previous_messages(previous_messages, input_variables)?;
         conversational_messages.extend(previous_messages);
-        let human_message = self
-            .prompt
-            .messages
-            .iter()
-            .find(|m| m.r#type == MessageType::HumanMessage)
-            .map(|message| map_chat_messages(message.to_owned(), &input_variables));
-        if let Some(human_message) = human_message {
-            conversational_messages.push(human_message?);
-        }
 
         Ok(conversational_messages)
     }
 }
 
-fn map_chat_messages(
-    prompt: PromptMessage,
-    variables: &HashMap<String, Value>,
-) -> GatewayResult<Content> {
-    let message = match prompt.r#type {
-        MessageType::AIMessage => {
-            let raw_message = Prompt::render(prompt.msg.clone(), variables);
-            Content::model(raw_message)
-        }
-        MessageType::SystemMessage => {
-            let raw_message = Prompt::render(prompt.msg.clone(), variables);
-            Content::user(raw_message)
-        }
-        MessageType::HumanMessage => {
-            let msg = prompt.msg;
-            let inner_message: InnerMessage = if prompt.wired {
-                let value = variables
-                    .get(&msg)
-                    .ok_or(GatewayError::CustomError(format!("{msg} not specified")))?;
-                serde_json::from_value(value.clone())?
-            } else {
-                InnerMessage::Text(Prompt::render(msg.clone(), variables))
-            };
-            construct_user_message(&inner_message)
-        }
-        MessageType::ToolResult => {
-            todo!()
-        }
-    };
-    Ok(message)
-}
-
 fn construct_user_message(m: &InnerMessage) -> Content {
     match m {
-        crate::types::threads::InnerMessage::Text(text) => Content::user(text.to_string()),
-        crate::types::threads::InnerMessage::Array(content_array) => {
+        InnerMessage::Text(text) => Content::user(text.to_string()),
+        InnerMessage::Array(content_array) => {
             let mut parts = vec![];
             for m in content_array {
                 let msg: Part = match m.r#type {
-                    crate::types::threads::MessageContentType::Text => Part::Text(m.value.clone()),
-                    crate::types::threads::MessageContentType::ImageUrl => {
+                    MessageContentType::Text => Part::Text(m.value.clone()),
+                    MessageContentType::ImageUrl => {
                         let url = m.value.clone();
                         let base64_data = url
                             .split_once(',')
@@ -1042,7 +1014,7 @@ fn construct_user_message(m: &InnerMessage) -> Content {
                             data: base64_data.to_string(),
                         }
                     }
-                    crate::types::threads::MessageContentType::InputAudio => {
+                    MessageContentType::InputAudio => {
                         let mut format = "mp3".to_string();
 
                         if let Some(MessageContentPartOptions::Audio(a)) = &m.additional_options {
@@ -1068,7 +1040,7 @@ fn construct_user_message(m: &InnerMessage) -> Content {
     }
 }
 
-pub fn record_map_err(e: impl Into<GatewayError> + ToString, span: tracing::Span) -> GatewayError {
+pub fn record_map_err(e: impl Into<LLMError> + ToString, span: tracing::Span) -> LLMError {
     span.record("error", e.to_string());
     e.into()
 }

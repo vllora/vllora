@@ -1,14 +1,14 @@
-use crate::model::async_trait;
-use crate::model::error::ModelError;
-use crate::model::openai_spec_client::openai_spec_client;
-use crate::model::types::ModelEvent;
-use crate::types::credentials::ApiKeyCredentials;
-use crate::types::gateway::CreateImageRequest;
 use crate::types::image::ImagesResponse;
 use crate::GatewayResult;
 use async_openai::config::OpenAIConfig;
 use async_openai::Client;
+use async_trait::async_trait;
 use std::collections::HashMap;
+use vllora_llm::client::error::ModelError;
+use vllora_llm::provider::openai_spec_client::openai_spec_client;
+use vllora_llm::types::credentials::ApiKeyCredentials;
+use vllora_llm::types::gateway::CreateImageRequest;
+use vllora_llm::types::ModelEvent;
 
 use super::openai::OpenAIImageGeneration;
 use super::ImageGenerationModelInstance;

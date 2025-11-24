@@ -1,8 +1,4 @@
 use crate::metadata::schema::models;
-use crate::models::{
-    InferenceProvider, Limits, ModelCapability, ModelIOFormats, ModelMetadata, ModelType,
-};
-use crate::types::provider::{CompletionModelPrice, InferenceModelProvider, ModelPrice};
 use chrono::NaiveDate;
 use diesel::helper_types::AsSelect;
 use diesel::helper_types::Select;
@@ -17,6 +13,13 @@ use diesel::{BoolExpressionMethods, ExpressionMethods};
 use diesel::{Identifiable, Queryable};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
+use vllora_llm::types::models::InferenceProvider;
+use vllora_llm::types::models::Limits;
+use vllora_llm::types::models::ModelCapability;
+use vllora_llm::types::models::ModelIOFormats;
+use vllora_llm::types::models::ModelMetadata;
+use vllora_llm::types::models::ModelType;
+use vllora_llm::types::provider::{CompletionModelPrice, InferenceModelProvider, ModelPrice};
 
 #[derive(
     QueryableByName,

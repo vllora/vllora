@@ -1,86 +1,60 @@
-use crate::events::CustomEventType;
 use crate::executor::context::ExecutorContext;
-use crate::model::bedrock::BedrockModel;
+use crate::handler::find_model_by_full_name;
 use crate::model::cached::CachedModel;
-use crate::model::error::ModelError;
-use crate::model::types::CustomEvent;
-use crate::telemetry::events::{JsonValue, RecordResult, SPAN_MODEL_CALL};
-use crate::types::engine::{CompletionEngineParams, CompletionModelParams};
-use crate::types::engine::{CompletionModelDefinition, ModelTools, ModelType};
-use crate::types::gateway::{
-    ChatCompletionContent, ChatCompletionMessage, ChatCompletionMessageWithFinishReason,
-    CompletionModelUsage, ContentType, Extra, GuardOrName, GuardWithParameters, Usage,
-};
+use crate::model::proxy::OpenAISpecModel;
 use crate::types::guardrails::service::GuardrailsEvaluator;
 use crate::types::guardrails::{GuardError, GuardResult, GuardStage};
 use crate::types::metadata::services::model::ModelService;
-use crate::types::provider::ModelPrice;
-use crate::types::threads::Message;
-use crate::GatewayResult;
-use anthropic::AnthropicModel;
+use crate::GatewayApiError;
 use async_openai::config::OpenAIConfig;
 use async_openai::Client;
-use async_trait::async_trait;
 use futures::future::join;
-use gemini::GeminiModel;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::sync::Arc;
 use tokio::sync::mpsc::{self, channel};
-use tools::Tool;
 use tracing::{info_span, Instrument};
-use types::{ModelEvent, ModelEventType};
 use valuable::Valuable;
-pub mod handler;
-use self::openai::OpenAIModel;
-use crate::handler::find_model_by_full_name;
-use crate::model::proxy::OpenAISpecModel;
-use crate::models::ModelMetadata;
-use crate::GatewayApiError;
+use vllora_llm::client::error::ModelError;
+use vllora_llm::client::{ModelInstance, VlloraLLMClient};
+use vllora_llm::error::{LLMError, LLMResult};
+use vllora_llm::provider::anthropic::AnthropicModel;
+use vllora_llm::provider::bedrock::BedrockModel;
+use vllora_llm::provider::gemini::GeminiModel;
+use vllora_llm::provider::openai::OpenAIModel;
+use vllora_llm::types::credentials_ident::CredentialsIdent;
+use vllora_llm::types::engine::CompletionModelDefinition;
+use vllora_llm::types::engine::{CompletionEngineParams, CompletionModelParams};
+use vllora_llm::types::events::CustomEventType;
+use vllora_llm::types::gateway::{
+    ChatCompletionContent, ChatCompletionMessage, ChatCompletionMessageWithFinishReason,
+    ChatCompletionRequest, CompletionModelUsage, ContentType, Extra, GuardOrName,
+    GuardWithParameters, Usage,
+};
+use vllora_llm::types::message::Message;
+use vllora_llm::types::models::ModelMetadata;
+use vllora_llm::types::models::ModelType;
+use vllora_llm::types::provider::ModelPrice;
+use vllora_llm::types::tools::ModelTools;
+use vllora_llm::types::tools::Tool;
+use vllora_llm::types::{CustomEvent, ModelEvent, ModelEventType};
+use vllora_telemetry::events::{JsonValue, RecordResult, SPAN_MODEL_CALL};
 
-pub mod anthropic;
 pub mod azure;
 pub mod bedrock;
 pub mod cached;
 pub mod embeddings;
-pub mod error;
-pub mod gemini;
 pub mod google_vertex;
 pub mod image_generation;
-pub mod mcp;
-pub mod openai;
-pub mod openai_spec_client;
 pub mod proxy;
 pub mod tools;
-pub mod types;
 
-#[async_trait]
-pub trait ModelInstance: Sync + Send {
-    async fn invoke(
-        &self,
-        input_vars: HashMap<String, Value>,
-        tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
-        previous_messages: Vec<Message>,
-        tags: HashMap<String, String>,
-    ) -> GatewayResult<ChatCompletionMessageWithFinishReason>;
-
-    async fn stream(
-        &self,
-        input_vars: HashMap<String, Value>,
-        tx: mpsc::Sender<Option<ModelEvent>>,
-        previous_messages: Vec<Message>,
-        tags: HashMap<String, String>,
-    ) -> GatewayResult<()>;
-}
-
-#[async_trait]
+#[async_trait::async_trait]
 pub trait ModelProviderInstance: Sync + Send {
     async fn get_private_models(&self) -> Result<Vec<ModelMetadata>, GatewayApiError>;
 }
-
-pub const DEFAULT_MAX_RETRIES: u32 = 0;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ResponseCacheState {
@@ -99,7 +73,7 @@ impl Display for ResponseCacheState {
     }
 }
 
-pub struct TracedModel<Inner: ModelInstance> {
+pub struct TracedModel<Inner: ModelInstance + Clone> {
     inner: Inner,
     definition: CompletionModelDefinition,
     executor_context: ExecutorContext,
@@ -107,6 +81,7 @@ pub struct TracedModel<Inner: ModelInstance> {
     extra: Option<Extra>,
     initial_messages: Vec<ChatCompletionMessage>,
     response_cache_state: Option<ResponseCacheState>,
+    request: ChatCompletionRequest,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -121,6 +96,7 @@ pub async fn init_completion_model_instance(
     initial_messages: Vec<ChatCompletionMessage>,
     cached_model: Option<CachedModel>,
     cache_state: Option<ResponseCacheState>,
+    request: ChatCompletionRequest,
 ) -> Result<Box<dyn ModelInstance>, ModelError> {
     if let Some(cached_model) = cached_model {
         return Ok(Box::new(TracedModel {
@@ -131,6 +107,7 @@ pub async fn init_completion_model_instance(
             extra: extra.cloned(),
             initial_messages: initial_messages.clone(),
             response_cache_state: cache_state,
+            request: request.clone(),
         }));
     }
 
@@ -145,7 +122,6 @@ pub async fn init_completion_model_instance(
                 params.clone(),
                 execution_options.clone(),
                 credentials.as_ref(),
-                definition.prompt.clone(),
                 tools,
             )
             .await?,
@@ -155,6 +131,7 @@ pub async fn init_completion_model_instance(
             extra: extra.cloned(),
             initial_messages: initial_messages.clone(),
             response_cache_state: cache_state,
+            request: request.clone(),
         })),
         CompletionEngineParams::OpenAi {
             params,
@@ -171,7 +148,6 @@ pub async fn init_completion_model_instance(
                             params.clone(),
                             credentials.as_ref(),
                             execution_options.clone(),
-                            definition.prompt.clone(),
                             tools,
                             ep,
                         )?,
@@ -181,6 +157,7 @@ pub async fn init_completion_model_instance(
                         extra: extra.cloned(),
                         initial_messages: initial_messages.clone(),
                         response_cache_state: cache_state,
+                        request: request.clone(),
                     }));
                 }
             }
@@ -191,7 +168,6 @@ pub async fn init_completion_model_instance(
                     params.clone(),
                     credentials.as_ref(),
                     execution_options.clone(),
-                    definition.prompt.clone(),
                     tools,
                     None::<Client<OpenAIConfig>>,
                     endpoint.as_ref().map(|x| x.as_str()),
@@ -202,6 +178,7 @@ pub async fn init_completion_model_instance(
                 extra: extra.cloned(),
                 initial_messages: initial_messages.clone(),
                 response_cache_state: cache_state,
+                request: request.clone(),
             }))
         }
         CompletionEngineParams::Proxy {
@@ -215,7 +192,6 @@ pub async fn init_completion_model_instance(
                     params.clone(),
                     credentials.as_ref(),
                     execution_options.clone(),
-                    definition.prompt.clone(),
                     tools,
                     endpoint,
                     provider_name,
@@ -226,6 +202,7 @@ pub async fn init_completion_model_instance(
                 extra: extra.cloned(),
                 initial_messages: initial_messages.clone(),
                 response_cache_state: cache_state,
+                request: request.clone(),
             }))
         }
         CompletionEngineParams::Anthropic {
@@ -237,7 +214,6 @@ pub async fn init_completion_model_instance(
                 params.clone(),
                 execution_options.clone(),
                 credentials.as_ref(),
-                definition.prompt.clone(),
                 tools,
             )?,
             definition,
@@ -246,6 +222,7 @@ pub async fn init_completion_model_instance(
             extra: extra.cloned(),
             initial_messages: initial_messages.clone(),
             response_cache_state: cache_state,
+            request: request.clone(),
         })),
         CompletionEngineParams::Gemini {
             credentials,
@@ -256,7 +233,6 @@ pub async fn init_completion_model_instance(
                 params.clone(),
                 execution_options.clone(),
                 credentials.as_ref(),
-                definition.prompt.clone(),
                 tools,
             )?,
             definition,
@@ -265,33 +241,9 @@ pub async fn init_completion_model_instance(
             extra: extra.cloned(),
             initial_messages: initial_messages.clone(),
             response_cache_state: cache_state,
+            request: request.clone(),
         })),
     }
-}
-
-pub async fn initialize_completion(
-    definition: CompletionModelDefinition,
-    executor_context: &ExecutorContext,
-    provider_name: Option<&str>,
-    router_span: tracing::Span,
-    extra: Option<&Extra>,
-    initial_messages: Vec<ChatCompletionMessage>,
-) -> Result<Box<dyn ModelInstance>, ModelError> {
-    let tools: HashMap<_, Box<dyn Tool + 'static>> = HashMap::new();
-
-    init_completion_model_instance(
-        definition,
-        tools,
-        executor_context,
-        None,
-        provider_name,
-        router_span,
-        extra,
-        initial_messages,
-        None,
-        None,
-    )
-    .await
 }
 
 #[derive(Clone, Serialize)]
@@ -307,7 +259,7 @@ struct TraceModelDefinition {
 }
 
 impl TraceModelDefinition {
-    pub fn sanitize_json(&self) -> GatewayResult<Value> {
+    pub fn sanitize_json(&self) -> LLMResult<Value> {
         let mut model = self.clone();
 
         match &mut model.model_params.engine {
@@ -362,23 +314,23 @@ impl From<CompletionModelDefinition> for TraceModelDefinition {
     }
 }
 
-impl<Inner: ModelInstance> TracedModel<Inner> {
-    fn clean_input_trace(&self, input_vars: &HashMap<String, Value>) -> GatewayResult<String> {
+impl<Inner: ModelInstance + Clone + 'static> TracedModel<Inner> {
+    fn clean_input_trace(&self, input_vars: &HashMap<String, Value>) -> LLMResult<String> {
         let input_vars = input_vars.clone();
         let str = serde_json::to_string(&json!(input_vars))?;
         Ok(str)
     }
 }
 
-#[async_trait]
-impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
+#[async_trait::async_trait]
+impl<Inner: ModelInstance + Clone + 'static> ModelInstance for TracedModel<Inner> {
     async fn invoke(
         &self,
         input_vars: HashMap<String, Value>,
         outer_tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
-        previous_messages: Vec<Message>,
+        _previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<ChatCompletionMessageWithFinishReason> {
+    ) -> LLMResult<ChatCompletionMessageWithFinishReason> {
         let credentials_ident = credentials_identifier(&self.definition.model_params);
         let traced_model: TraceModelDefinition = self.definition.clone().into();
         let model = traced_model.sanitize_json()?;
@@ -420,7 +372,8 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
             GuardStage::Input,
         )
         .instrument(span.clone())
-        .await?;
+        .await
+        .map_err(|e| LLMError::BoxedError(Box::new(e)))?;
 
         outer_tx
             .send(Some(ModelEvent::new(
@@ -502,9 +455,16 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
         );
 
         async {
-            let result = self
-                .inner
-                .invoke(input_vars, tx, previous_messages, tags)
+            let vllora_llm_client = VlloraLLMClient::new_with_instance(Arc::new(Box::new(
+                self.inner.clone(),
+            )
+                as Box<dyn ModelInstance>));
+            let result = vllora_llm_client
+                .completions()
+                .with_input_variables(input_vars.clone())
+                .with_tx(tx.clone())
+                .with_tags(tags.clone())
+                .create(self.request.clone())
                 .await;
             let _ = result
                 .as_ref()
@@ -534,7 +494,8 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
                     GuardStage::Output,
                 )
                 .instrument(span.clone())
-                .await?;
+                .await
+                .map_err(|e| LLMError::BoxedError(Box::new(e)))?;
             }
 
             result
@@ -547,9 +508,9 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
         &self,
         input_vars: HashMap<String, Value>,
         outer_tx: mpsc::Sender<Option<ModelEvent>>,
-        previous_messages: Vec<Message>,
+        _previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<()> {
+    ) -> LLMResult<()> {
         let credentials_ident = credentials_identifier(&self.definition.model_params);
         let traced_model: TraceModelDefinition = self.definition.clone().into();
         let model = traced_model.sanitize_json()?;
@@ -592,7 +553,8 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
             GuardStage::Input,
         )
         .instrument(span.clone())
-        .await?;
+        .await
+        .map_err(|e| LLMError::BoxedError(Box::new(e)))?;
 
         outer_tx
             .send(Some(ModelEvent::new(
@@ -608,10 +570,20 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
             let (tx, mut rx) = channel(outer_tx.max_capacity());
             let mut output = String::new();
             let mut start_time = None;
+            let vllora_llm_client = VlloraLLMClient::new_with_instance(Arc::new(Box::new(
+                self.inner.clone(),
+            )
+                as Box<dyn ModelInstance>));
+
             let result = join(
-                self.inner
-                    .stream(input_vars, tx, previous_messages, tags.clone())
-                    .instrument(span.clone()),
+                execute_stream(
+                    vllora_llm_client,
+                    self.request.clone(),
+                    input_vars.clone(),
+                    tx.clone(),
+                    tags.clone(),
+                )
+                .instrument(span.clone()),
                 async {
                     while let Some(Some(msg)) = rx.recv().await {
                         match &msg.event {
@@ -662,6 +634,7 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
             .instrument(span.clone())
             .await
             .0;
+
             let span = tracing::Span::current();
             span.record(
                 "tags",
@@ -677,6 +650,25 @@ impl<Inner: ModelInstance> ModelInstance for TracedModel<Inner> {
     }
 }
 
+async fn execute_stream(
+    vllora_llm_client: VlloraLLMClient,
+    request: ChatCompletionRequest,
+    input_vars: HashMap<String, Value>,
+    tx: mpsc::Sender<Option<ModelEvent>>,
+    tags: HashMap<String, String>,
+) -> LLMResult<()> {
+    let client = vllora_llm_client
+        .completions()
+        .with_input_variables(input_vars.clone())
+        .with_tx(tx.clone())
+        .with_tags(tags.clone());
+    let result = client.create_stream(request.clone()).await;
+    tx.send(None)
+        .await
+        .map_err(|e| LLMError::BoxedError(Box::new(e)))?;
+    result
+}
+
 pub fn credentials_identifier(model_params: &CompletionModelParams) -> CredentialsIdent {
     let vllora_creds = match &model_params.engine {
         CompletionEngineParams::Bedrock { credentials, .. } => credentials.is_none(),
@@ -690,21 +682,6 @@ pub fn credentials_identifier(model_params: &CompletionModelParams) -> Credentia
         CredentialsIdent::Vllora
     } else {
         CredentialsIdent::Own
-    }
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub enum CredentialsIdent {
-    Vllora,
-    Own,
-}
-
-impl Display for CredentialsIdent {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CredentialsIdent::Vllora => write!(f, "vllora"),
-            CredentialsIdent::Own => write!(f, "own"),
-        }
     }
 }
 
@@ -753,7 +730,7 @@ pub async fn apply_guardrails(
     Ok(())
 }
 
-#[async_trait]
+#[async_trait::async_trait]
 pub trait ModelMetadataFactory: Send + Sync {
     async fn get_model_metadata(
         &self,
@@ -791,7 +768,7 @@ impl DefaultModelMetadataFactory {
     }
 }
 
-#[async_trait]
+#[async_trait::async_trait]
 impl ModelMetadataFactory for DefaultModelMetadataFactory {
     #[tracing::instrument(skip_all)]
 

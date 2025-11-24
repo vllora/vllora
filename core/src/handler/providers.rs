@@ -1,7 +1,6 @@
 use crate::credentials::KeyStorage;
 use crate::credentials::ProviderCredentialsId;
 use crate::metadata::pool::DbPool;
-use crate::types::credentials::Credentials;
 use crate::types::metadata::project::Project;
 use crate::types::metadata::provider::ProviderInfo;
 use crate::types::metadata::services::provider::ProviderService;
@@ -10,6 +9,7 @@ use actix_web::HttpMessage;
 use actix_web::HttpRequest;
 use actix_web::{web, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
+use vllora_llm::types::credentials::Credentials;
 
 use crate::ok_json;
 

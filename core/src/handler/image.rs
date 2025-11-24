@@ -1,14 +1,15 @@
 use crate::executor::image_generation::handle_image_generation;
 use crate::handler::record_map_err;
 use crate::handler::CallbackHandlerFn;
-use crate::types::gateway::CreateImageRequest;
 use crate::types::metadata::services::model::ModelService;
-use crate::types::{credentials::Credentials, gateway::CostCalculator};
 use crate::GatewayApiError;
 use actix_web::HttpMessage;
 use actix_web::{web, HttpRequest, HttpResponse};
 use tracing::Span;
 use tracing_futures::Instrument;
+use vllora_llm::types::credentials::Credentials;
+use vllora_llm::types::gateway::CostCalculator;
+use vllora_llm::types::gateway::CreateImageRequest;
 
 use super::can_execute_llm_for_request;
 use super::extract_tags;

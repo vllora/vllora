@@ -6,7 +6,6 @@ use crate::metadata::models::provider_credential::{
 use crate::metadata::pool::DbPool;
 use crate::metadata::schema::provider_credentials as pc;
 use crate::metadata::schema::provider_credentials::dsl::provider_credentials;
-use crate::types::credentials::Credentials;
 use crate::types::metadata::provider_credential::ProviderCredentialsInfo;
 use crate::types::metadata::services::provider_credential::ProviderCredentialsService;
 use diesel::dsl::count;
@@ -15,6 +14,8 @@ use diesel::ExpressionMethods;
 use diesel::OptionalExtension;
 use diesel::{QueryDsl, RunQueryDsl};
 use std::collections::HashMap;
+use vllora_llm::types::credentials::Credentials;
+use vllora_llm::types::models::ModelMetadata;
 
 impl ProviderCredentialsService for ProviderCredentialsServiceImpl {
     fn get_provider_credentials(
@@ -232,7 +233,7 @@ impl ProviderCredentialsService for ProviderCredentialsServiceImpl {
     fn list_available_providers(
         &self,
         project_id_param: Option<&str>,
-        available_models: &[crate::models::ModelMetadata],
+        available_models: &[ModelMetadata],
     ) -> Result<Vec<ProviderCredentialsInfo>, DatabaseError> {
         // Extract unique providers from available models
         let mut unique_providers = std::collections::HashSet::new();

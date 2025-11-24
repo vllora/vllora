@@ -1,12 +1,13 @@
 use crate::events::callback_handler::GatewayEvent;
 use crate::events::{map_cloud_event_to_agui_events, Event};
-use crate::events::{CustomEventType, EventRunContext};
-use crate::telemetry::Span;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
 use tokio::sync::{broadcast, Mutex};
+use vllora_llm::types::events::CustomEventType;
+use vllora_llm::types::events::EventRunContext;
+use vllora_telemetry::Span;
 
 #[derive(Clone)]
 pub struct EventsUIBroadcaster {

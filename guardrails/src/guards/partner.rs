@@ -1,7 +1,8 @@
 use vllora_core::types::guardrails::partner::GuardPartner;
 use vllora_core::types::guardrails::{evaluator::Evaluator, Guard, GuardResult};
 
-use vllora_core::{model::ModelInstance, types::gateway::ChatCompletionMessage};
+use vllora_llm::types::gateway::ChatCompletionMessage;
+use vllora_llm::types::instance::ModelInstance;
 
 #[async_trait::async_trait]
 pub trait GuardModelInstanceFactory: Send + Sync {

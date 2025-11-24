@@ -1,3 +1,4 @@
+use crate::error::ModelFinishError;
 use async_openai::error::OpenAIError;
 use aws_sdk_bedrock::error::DisplayErrorContext;
 use thiserror::Error;
@@ -60,39 +61,6 @@ impl From<BedrockError> for ModelError {
     fn from(value: BedrockError) -> Self {
         ModelError::Bedrock(Box::new(value))
     }
-}
-
-#[derive(Error, Debug)]
-pub enum ModelFinishError {
-    #[error("Content filter blocked the completion")]
-    ContentFilter,
-
-    #[error("The maximum number of tokens specified in the request was reached")]
-    MaxTokens,
-
-    #[error("Guardrail intervened and stopped this execution")]
-    GuardrailIntervened,
-
-    #[error("Tool missing content")]
-    ToolMissingContent,
-
-    #[error("Tool use doesnt have message")]
-    ToolUseDoesntHaveMessage,
-
-    #[error("Tool not found: {0}")]
-    ToolNotFound(String),
-
-    #[error("No output provided")]
-    NoOutputProvided,
-
-    #[error("No choices")]
-    NoChoices,
-
-    #[error("Content block is not in a text format. Currently only TEXT format supported")]
-    ContentBlockNotInTextFormat,
-
-    #[error("{0}")]
-    Custom(String),
 }
 
 #[derive(Error, Debug)]

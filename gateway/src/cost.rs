@@ -1,11 +1,9 @@
-use vllora_core::model::CredentialsIdent;
-use vllora_core::{
-    pricing::calculator::{calculate_image_price, calculate_tokens_cost},
-    types::{
-        gateway::{CostCalculationResult, CostCalculator, CostCalculatorError, Usage},
-        provider::ModelPrice,
-    },
+use vllora_core::pricing::calculator::{calculate_image_price, calculate_tokens_cost};
+use vllora_llm::types::credentials_ident::CredentialsIdent;
+use vllora_llm::types::gateway::{
+    CostCalculationResult, CostCalculator, CostCalculatorError, Usage,
 };
+use vllora_llm::types::provider::ModelPrice;
 
 #[derive(Clone)]
 pub struct GatewayCostCalculator {
@@ -29,7 +27,7 @@ impl CostCalculator for GatewayCostCalculator {
         _credentials_ident: &CredentialsIdent,
     ) -> Result<CostCalculationResult, CostCalculatorError> {
         match usage {
-            vllora_core::types::gateway::Usage::ImageGenerationModelUsage(usage) => {
+            vllora_llm::types::gateway::Usage::ImageGenerationModelUsage(usage) => {
                 if let ModelPrice::ImageGeneration(p) = &price {
                     Ok(calculate_image_price(p, usage, self.default_image_cost))
                 } else {
@@ -38,7 +36,7 @@ impl CostCalculator for GatewayCostCalculator {
                     ))
                 }
             }
-            vllora_core::types::gateway::Usage::CompletionModelUsage(usage) => {
+            vllora_llm::types::gateway::Usage::CompletionModelUsage(usage) => {
                 let (input_price, cached_input_price, cached_input_write_price, output_price) =
                     match price {
                         ModelPrice::Completion(c) => (

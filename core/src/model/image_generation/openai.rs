@@ -1,25 +1,23 @@
 use std::collections::HashMap;
 
-use crate::model::error::ModelError;
-use crate::telemetry::events::SPAN_OPENAI;
 use async_openai::config::Config;
 use async_openai::{config::OpenAIConfig, Client};
+use vllora_llm::client::error::ModelError;
+use vllora_telemetry::events::SPAN_OPENAI;
 
-use crate::model::types::ModelEventType;
 use crate::{
-    error::GatewayError,
-    model::{
-        openai::openai_client,
-        types::{ImageGenerationFinishEvent, ModelEvent},
-        CredentialsIdent,
-    },
-    types::{
-        credentials::ApiKeyCredentials,
-        gateway::{CreateImageRequest, ImageQuality, ImageResponseFormat, ImageSize, ImageStyle},
-        image::ImagesResponse,
-    },
-    GatewayResult,
+    error::GatewayError, model::CredentialsIdent, types::image::ImagesResponse, GatewayResult,
 };
+
+use vllora_llm::provider::openai::openai_client;
+use vllora_llm::types::credentials::ApiKeyCredentials;
+use vllora_llm::types::gateway::CreateImageRequest;
+use vllora_llm::types::gateway::ImageQuality;
+use vllora_llm::types::gateway::ImageResponseFormat;
+use vllora_llm::types::gateway::ImageSize;
+use vllora_llm::types::gateway::ImageStyle;
+use vllora_llm::types::ImageGenerationFinishEvent;
+use vllora_llm::types::{ModelEvent, ModelEventType};
 
 use super::ImageGenerationModelInstance;
 use crate::model::JsonValue;
@@ -86,22 +84,22 @@ impl OpenAIImageGeneration {
         size: Option<&ImageSize>,
     ) -> Option<Result<async_openai::types::ImageSize, GatewayError>> {
         size.map(|s| match s {
-            crate::types::gateway::ImageSize::Size256x256 => {
+            vllora_llm::types::gateway::ImageSize::Size256x256 => {
                 Ok(async_openai::types::ImageSize::S256x256)
             }
-            crate::types::gateway::ImageSize::Size512x512 => {
+            vllora_llm::types::gateway::ImageSize::Size512x512 => {
                 Ok(async_openai::types::ImageSize::S512x512)
             }
-            crate::types::gateway::ImageSize::Size1024x1024 => {
+            vllora_llm::types::gateway::ImageSize::Size1024x1024 => {
                 Ok(async_openai::types::ImageSize::S1024x1024)
             }
-            crate::types::gateway::ImageSize::Size1792x1024 => {
+            vllora_llm::types::gateway::ImageSize::Size1792x1024 => {
                 Ok(async_openai::types::ImageSize::S1792x1024)
             }
-            crate::types::gateway::ImageSize::Size1024x1792 => {
+            vllora_llm::types::gateway::ImageSize::Size1024x1792 => {
                 Ok(async_openai::types::ImageSize::S1024x1792)
             }
-            crate::types::gateway::ImageSize::Other((width, height)) => Err(
+            vllora_llm::types::gateway::ImageSize::Other((width, height)) => Err(
                 GatewayError::CustomError(format!("Unsupported image size: {width}x{height}")),
             ),
         })
@@ -112,8 +110,10 @@ impl OpenAIImageGeneration {
         quality: Option<&ImageQuality>,
     ) -> Option<async_openai::types::ImageQuality> {
         quality.map(|q| match q {
-            crate::types::gateway::ImageQuality::SD => async_openai::types::ImageQuality::Standard,
-            crate::types::gateway::ImageQuality::HD => async_openai::types::ImageQuality::HD,
+            vllora_llm::types::gateway::ImageQuality::SD => {
+                async_openai::types::ImageQuality::Standard
+            }
+            vllora_llm::types::gateway::ImageQuality::HD => async_openai::types::ImageQuality::HD,
         })
     }
 }
@@ -157,10 +157,10 @@ impl ImageGenerationModelInstance for OpenAIImageGeneration {
                 ImageStyle::Natural => async_openai::types::ImageStyle::Natural,
             }),
             moderation: request.moderation.as_ref().map(|m| match m {
-                crate::types::gateway::ImageModeration::Auto => {
+                vllora_llm::types::gateway::ImageModeration::Auto => {
                     async_openai::types::ImageModeration::Auto
                 }
-                crate::types::gateway::ImageModeration::Low => {
+                vllora_llm::types::gateway::ImageModeration::Low => {
                     async_openai::types::ImageModeration::Low
                 }
             }),

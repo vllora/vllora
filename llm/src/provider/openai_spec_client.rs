@@ -2,7 +2,7 @@ use async_openai::{config::OpenAIConfig, Client};
 
 use crate::types::credentials::ApiKeyCredentials;
 
-use super::error::ModelError;
+use crate::client::error::ModelError;
 
 pub fn openai_spec_client(
     credentials: Option<&ApiKeyCredentials>,

@@ -1,4 +1,3 @@
-use crate::telemetry::AdditionalContext;
 use crate::types::threads::CompletionsThreadId;
 use actix_web::dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform};
 use actix_web::HttpMessage;
@@ -6,6 +5,7 @@ use std::collections::HashMap;
 use std::future::{ready, Future, Ready};
 use std::pin::Pin;
 use uuid::Uuid;
+use vllora_telemetry::AdditionalContext;
 
 pub struct ThreadId;
 

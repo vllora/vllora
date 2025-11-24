@@ -142,7 +142,7 @@ async fn main() -> Result<(), CliError> {
             info!("Found {} models in database\n", db_models.len());
 
             // Convert DbModel to ModelMetadata and display as table
-            let models: Vec<vllora_core::models::ModelMetadata> =
+            let models: Vec<vllora_llm::types::models::ModelMetadata> =
                 db_models.into_iter().map(|m| m.into()).collect();
 
             run::table::pretty_print_models(models);

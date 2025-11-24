@@ -1,23 +1,19 @@
 use std::collections::HashMap;
 
 use clust::messages::StopSequence;
+use vllora_llm::types::models::ModelMetadata;
 
-use crate::{
-    models::ModelMetadata,
-    types::{
-        credentials::{ApiKeyCredentials, Credentials},
-        engine::{
-            AnthropicModelParams, BedrockModelParams, ClaudeModel, CompletionEngineParams,
-            EmbeddingsEngineParams, ExecutionOptions, GeminiModelParams,
-            ImageGenerationEngineParams, OpenAiModelParams,
-        },
-        gateway::{
-            ChatCompletionRequest, CreateEmbeddingRequest, CreateImageRequest,
-            ProviderSpecificRequest,
-        },
-        provider::{BedrockProvider, InferenceModelProvider},
-    },
+use vllora_llm::types::credentials::ApiKeyCredentials;
+use vllora_llm::types::credentials::Credentials;
+use vllora_llm::types::engine::{
+    AnthropicModelParams, BedrockModelParams, ClaudeModel, CompletionEngineParams,
+    EmbeddingsEngineParams, ExecutionOptions, GeminiModelParams, ImageGenerationEngineParams,
+    OpenAiModelParams,
 };
+use vllora_llm::types::gateway::{
+    ChatCompletionRequest, CreateEmbeddingRequest, CreateImageRequest, ProviderSpecificRequest,
+};
+use vllora_llm::types::provider::InferenceModelProvider;
 
 use crate::error::GatewayError;
 
@@ -89,12 +85,6 @@ impl Provider {
             }
             InferenceModelProvider::Bedrock => {
                 let aws_creds = credentials.and_then(|cred| cred.to_bedrock_credentials());
-                let provider = match model.model_provider.as_str() {
-                    "cohere" => BedrockProvider::Cohere,
-                    "meta" => BedrockProvider::Meta,
-                    "mistral" => BedrockProvider::Mistral,
-                    p => BedrockProvider::Other(p.to_string()),
-                };
                 Ok(CompletionEngineParams::Bedrock {
                     credentials: aws_creds,
                     execution_options: execution_options.unwrap_or_default(),
@@ -106,7 +96,6 @@ impl Provider {
                         stop_sequences: request.stop.clone(),
                         additional_parameters: HashMap::new(),
                     },
-                    provider,
                 })
             }
             InferenceModelProvider::Anthropic => {

@@ -1,14 +1,5 @@
 use super::CredentialsIdent;
-use crate::model::bedrock::bedrock_client;
-use crate::model::error::ModelError;
-use crate::model::types::{
-    LLMFinishEvent, LLMStartEvent, ModelEvent, ModelEventType, ModelFinishReason,
-};
-use crate::telemetry::events::{JsonValue, SPAN_BEDROCK};
-use crate::types::credentials::BedrockCredentials;
 use crate::types::embed::EmbeddingResult;
-use crate::types::gateway::{CompletionModelUsage, CreateEmbeddingRequest, Input};
-use crate::{create_model_span, GatewayResult};
 use async_openai::types::{CreateEmbeddingResponse, Embedding, EmbeddingUsage};
 use aws_sdk_bedrockruntime::Client;
 use aws_smithy_types::Blob;
@@ -19,6 +10,17 @@ use tracing::field;
 use tracing::Span;
 use tracing_futures::Instrument;
 use valuable::Valuable;
+use vllora_llm::client::error::ModelError;
+use vllora_llm::error::LLMResult;
+use vllora_llm::provider::bedrock::bedrock_client;
+use vllora_llm::types::credentials::BedrockCredentials;
+use vllora_llm::types::gateway::{CompletionModelUsage, CreateEmbeddingRequest, Input};
+use vllora_llm::types::{
+    LLMFinishEvent, LLMStartEvent, ModelEvent, ModelEventType, ModelFinishReason,
+};
+use vllora_telemetry::create_model_span;
+use vllora_telemetry::events::JsonValue;
+use vllora_telemetry::events::SPAN_BEDROCK;
 
 use super::EmbeddingsModelInstance;
 
@@ -94,7 +96,7 @@ impl BedrockEmbeddings {
         &self,
         request: &CreateEmbeddingRequest,
         outer_tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
-    ) -> GatewayResult<EmbeddingResult> {
+    ) -> LLMResult<EmbeddingResult> {
         let span = Span::current();
         let _ = outer_tx.try_send(Some(ModelEvent::new(
             &span,
@@ -167,7 +169,7 @@ impl EmbeddingsModelInstance for BedrockEmbeddings {
         request: &CreateEmbeddingRequest,
         outer_tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<EmbeddingResult> {
+    ) -> LLMResult<EmbeddingResult> {
         let span = create_model_span!(
             SPAN_BEDROCK,
             target!("embedding"),

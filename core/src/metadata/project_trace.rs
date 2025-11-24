@@ -1,9 +1,9 @@
 use crate::metadata::services::project::ProjectServiceImpl;
-use crate::telemetry::TraceTenantResolver;
 use crate::types::metadata::services::project::ProjectService;
 use std::{collections::HashMap, sync::Arc};
 use tonic::metadata::MetadataMap;
 use uuid::Uuid;
+use vllora_telemetry::TraceTenantResolver;
 
 struct InMemoryCache {
     values: HashMap<String, String>,

@@ -1,23 +1,22 @@
-use super::error::ModelError;
-use super::openai_spec_client::openai_spec_client;
-use super::tools::Tool;
-use super::types::ModelEvent;
-use super::ModelInstance;
-use crate::model::async_trait;
 use crate::model::OpenAIModel;
-use crate::types::credentials::ApiKeyCredentials;
-use crate::types::engine::ExecutionOptions;
-use crate::types::engine::OpenAiModelParams;
-use crate::types::engine::Prompt;
-use crate::types::gateway::ChatCompletionMessageWithFinishReason;
-use crate::types::threads::Message;
-use crate::GatewayResult;
 use async_openai::config::OpenAIConfig;
 use async_openai::Client;
+use async_trait::async_trait;
 use serde_json::Value;
 use std::collections::HashMap;
 use tracing::Span;
 use tracing_futures::Instrument;
+use vllora_llm::client::error::ModelError;
+use vllora_llm::error::LLMResult;
+use vllora_llm::provider::openai_spec_client::openai_spec_client;
+use vllora_llm::types::credentials::ApiKeyCredentials;
+use vllora_llm::types::engine::ExecutionOptions;
+use vllora_llm::types::engine::OpenAiModelParams;
+use vllora_llm::types::gateway::ChatCompletionMessageWithFinishReason;
+use vllora_llm::types::instance::ModelInstance;
+use vllora_llm::types::message::Message;
+use vllora_llm::types::tools::Tool;
+use vllora_llm::types::ModelEvent;
 
 #[derive(Clone)]
 pub struct OpenAISpecModel {
@@ -30,7 +29,6 @@ impl OpenAISpecModel {
         mut params: OpenAiModelParams,
         credentials: Option<&ApiKeyCredentials>,
         execution_options: ExecutionOptions,
-        prompt: Prompt,
         tools: HashMap<String, Box<dyn Tool>>,
         endpoint: Option<&str>,
         provider_name: &str,
@@ -50,7 +48,6 @@ impl OpenAISpecModel {
             params,
             credentials,
             execution_options,
-            prompt,
             tools,
             Some(client),
             None,
@@ -68,7 +65,7 @@ impl ModelInstance for OpenAISpecModel {
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<ChatCompletionMessageWithFinishReason> {
+    ) -> LLMResult<ChatCompletionMessageWithFinishReason> {
         let span = Span::current();
         self.openai_model
             .invoke(input_variables, tx, previous_messages, tags)
@@ -82,7 +79,7 @@ impl ModelInstance for OpenAISpecModel {
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<()> {
+    ) -> LLMResult<()> {
         let span = Span::current();
         self.openai_model
             .stream(input_variables, tx, previous_messages, tags)

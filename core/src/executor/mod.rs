@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::types::credentials::{ApiKeyCredentials, Credentials};
+use vllora_llm::types::credentials::{ApiKeyCredentials, Credentials};
 
 pub mod chat_completion;
 pub mod context;

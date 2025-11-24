@@ -9,7 +9,6 @@ pub mod llm_gateway;
 pub mod mcp;
 pub mod metadata;
 pub mod model;
-pub mod models;
 pub mod pricing;
 pub mod responses;
 pub mod routing;
@@ -17,7 +16,6 @@ pub mod telemetry;
 pub mod types;
 
 use crate::error::GatewayError;
-use crate::types::gateway::CostCalculatorError;
 use actix_web::http::header::ContentType;
 use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
@@ -25,6 +23,8 @@ use executor::chat_completion::routed_executor::RoutedExecutorError;
 use serde_json::json;
 use thiserror::Error;
 use tracing::Span;
+use vllora_llm::error::LLMError;
+use vllora_llm::types::gateway::CostCalculatorError;
 
 pub use dashmap;
 
@@ -45,6 +45,9 @@ pub enum GatewayApiError {
 
     #[error(transparent)]
     GatewayError(#[from] GatewayError),
+
+    #[error(transparent)]
+    LLMError(#[from] LLMError),
 
     #[error("{0}")]
     CustomError(String),
@@ -99,6 +102,7 @@ impl actix_web::error::ResponseError for GatewayApiError {
         match self {
             GatewayApiError::JsonParseError(_) => StatusCode::BAD_REQUEST,
             GatewayApiError::GatewayError(e) => e.status_code(),
+            GatewayApiError::LLMError(_) => StatusCode::BAD_REQUEST,
             GatewayApiError::CustomError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             GatewayApiError::CostCalculatorError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             GatewayApiError::RouteError(_) => StatusCode::INTERNAL_SERVER_ERROR,

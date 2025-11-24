@@ -1,33 +1,28 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::model::types::LLMFinishEvent;
-use crate::model::types::ModelEvent;
 use futures::future::join;
 use futures::StreamExt;
 use futures::TryStreamExt;
+use vllora_llm::types::gateway::{ChatCompletionDelta, FunctionCall, ToolCall};
+use vllora_llm::types::instance::ModelInstance;
+use vllora_llm::types::message::Message;
+use vllora_llm::types::LLMFinishEvent;
+use vllora_llm::types::ModelEvent;
+use vllora_llm::types::ModelEventType;
+use vllora_llm::types::ModelFinishReason;
 
-use crate::{
-    model::{
-        types::{ModelEventType, ModelFinishReason},
-        ModelInstance,
-    },
-    types::{
-        engine::ParentCompletionOptions,
-        gateway::{ChatCompletionDelta, FunctionCall, ToolCall},
-        threads::Message,
-    },
-};
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::Span;
 use tracing_futures::Instrument;
+use vllora_llm::types::engine::ParentCompletionOptions;
 
 use super::stream_wrapper::wrap_stream;
 use crate::executor::chat_completion::ChatCompletionStream;
 use crate::handler::{CallbackHandlerFn, ModelEventWithDetails};
-use crate::types::engine::CompletionModelDefinition;
-use crate::types::engine::ParentDefinition;
 use crate::GatewayApiError;
+use vllora_llm::types::engine::CompletionModelDefinition;
+use vllora_llm::types::engine::ParentDefinition;
 
 #[derive(Default)]
 pub struct StreamCacheContext {
@@ -83,8 +78,7 @@ pub async fn stream_chunks(
             let (result, _) = join(result_fut, forward_fut).await;
             if let Err(e) = result {
                 let error_message = format!("{e:?}");
-                if let Err(send_error) = outer_tx.send(Err(GatewayApiError::GatewayError(e))).await
-                {
+                if let Err(send_error) = outer_tx.send(Err(GatewayApiError::LLMError(e))).await {
                     tracing::error!("Error in sending error: {send_error}. Error: {error_message}");
                 }
             }

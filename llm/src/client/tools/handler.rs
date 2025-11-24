@@ -1,15 +1,11 @@
 use std::collections::HashMap;
 
-use crate::{
-    error::GatewayError,
-    telemetry::events::{JsonValue, RecordResult},
-    GatewayResult,
-};
+use crate::error::LLMError;
+use crate::error::LLMResult;
+use vllora_telemetry::events::{JsonValue, RecordResult};
 
-use super::{
-    types::{ModelEvent, ModelEventType, ModelToolCall, ToolResultEvent, ToolStartEvent},
-    Tool,
-};
+use crate::types::tools::Tool;
+use crate::types::{ModelEvent, ModelEventType, ModelToolCall, ToolResultEvent, ToolStartEvent};
 use opentelemetry::propagation::Injector;
 use serde_json::Value;
 use tracing::Span;
@@ -40,12 +36,12 @@ impl Injector for LlmToolCallCarrier<'_> {
     }
 }
 
-pub(crate) async fn handle_tool_call(
+pub async fn handle_tool_call(
     tool_use: &ModelToolCall,
     tools: &HashMap<String, Box<dyn Tool>>,
     tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
     mut tags: HashMap<String, String>,
-) -> GatewayResult<String> {
+) -> LLMResult<String> {
     let tool_name = tool_use.tool_name.clone();
     let arguments = tool_use.input.clone();
     let arguments_value = serde_json::from_str::<HashMap<String, Value>>(&arguments)?;
@@ -59,9 +55,7 @@ pub(crate) async fn handle_tool_call(
     // );
     let tool = tools
         .get(&tool_name)
-        .ok_or(GatewayError::CustomError(format!(
-            "Tool Not Found {tool_name}"
-        )))?;
+        .ok_or(LLMError::CustomError(format!("Tool Not Found {tool_name}")))?;
 
     async {
         tx.send(Some(ModelEvent::new(
@@ -73,7 +67,7 @@ pub(crate) async fn handle_tool_call(
             }),
         )))
         .await
-        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+        .map_err(|e| LLMError::CustomError(e.to_string()))?;
         let span_context = Span::current().context();
         opentelemetry::global::get_text_map_propagator(|propagator| {
             propagator.inject_context(&span_context, &mut LlmToolCallCarrier::new(&mut tags))
@@ -95,7 +89,7 @@ pub(crate) async fn handle_tool_call(
             }),
         )))
         .await
-        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+        .map_err(|e| LLMError::CustomError(e.to_string()))?;
         result
     }
     // .instrument(span.or_current())

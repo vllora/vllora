@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["gateway", "core", "guardrails"]
+members = ["gateway", "core", "guardrails", "telemetry", "llm"]
 default-members = ["gateway"]
 
 [workspace.dependencies]
@@ -12,7 +12,8 @@ serde_yaml = "0.9"
 regex = "1.12"
 lazy_static = "1.4"
 async-trait = "0.1"
-tokio = { version = "1.48.0", features = ["rt", "rt-multi-thread", "sync"] }
+tokio = { version = "1.48.0", features = ["rt", "rt-multi-thread", "sync", "io-std"] }
+tokio-stream = { version = "0.1.17", features = ["io-util"] }
 chrono = { version = "0.4", features = ["serde"] }
 
 tracing = { version = "0.1.41", features = ["log", "valuable"] }
@@ -31,3 +32,25 @@ opentelemetry_sdk = { version = "0.30", features = ["rt-tokio"] }
 valuable = { version = "0.1", features = ["derive"] }
 
 tonic = "0.13.0"
+
+rmcp = { version = "0.8.3", default-features = true, features = [
+  "reqwest",
+  "client",
+  "server",
+  "transport-streamable-http-client-reqwest",
+  "transport-sse-client-reqwest"
+] }
+rmcp-macros = { version = "0.8.3", default-features = true}
+rmcp-actix-web = { version = "0.8.11", default-features = false, features = ["transport-streamable-http"] }
+
+reqwest-eventsource = "0.6.0"
+reqwest = { version = "0.12.24", default-features = false, features = [
+  "json",
+  "stream",
+] }
+
+base64 = "0.22.1"
+uuid = { version = "1.18.1", features = ["serde", "v4"] }
+dashmap = "6.1.0"
+bytemuck = { version = "1.24", features = ["derive"] }
+futures = "0.3.30"

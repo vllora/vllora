@@ -1,5 +1,6 @@
 use prettytable::{row, Table};
-use vllora_core::{models::ModelMetadata, types::provider::ModelPrice};
+use vllora_llm::types::models::ModelMetadata;
+use vllora_llm::types::provider::ModelPrice;
 
 pub fn pretty_print_models(models: Vec<ModelMetadata>) {
     let mut table = Table::new();

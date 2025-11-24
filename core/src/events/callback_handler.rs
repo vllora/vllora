@@ -1,11 +1,13 @@
-use crate::events::serialize_option_span_id;
-use crate::events::serialize_span_id;
 use crate::events::ui_broadcaster::EventsUIBroadcaster;
 use crate::handler::ModelEventWithDetails;
 use opentelemetry::{trace::TraceContextExt, SpanId};
 use serde::Serialize;
 use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
+use vllora_llm::types::events::serialize_option_span_id;
+use vllora_llm::types::events::serialize_span_id;
+use vllora_llm::types::events::string_to_span_id;
+use vllora_llm::types::events::EventRunContext;
 
 #[derive(Debug, Clone)]
 pub struct GatewayModelEventWithDetails {
@@ -15,6 +17,17 @@ pub struct GatewayModelEventWithDetails {
     pub usage_identifiers: Vec<(String, String)>,
     pub run_id: Option<String>,
     pub thread_id: Option<String>,
+}
+
+impl From<GatewayModelEventWithDetails> for EventRunContext {
+    fn from(val: GatewayModelEventWithDetails) -> Self {
+        EventRunContext {
+            run_id: val.run_id.clone(),
+            thread_id: val.thread_id.clone(),
+            span_id: None,
+            parent_span_id: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -100,6 +113,28 @@ impl GatewayEvent {
         match self {
             GatewayEvent::SpanStartEvent(event) => event.tenant_name.clone(),
             GatewayEvent::ChatEvent(event) => event.tenant_name.clone(),
+        }
+    }
+}
+
+impl From<GatewayEvent> for EventRunContext {
+    fn from(val: GatewayEvent) -> Self {
+        match val {
+            GatewayEvent::SpanStartEvent(event) => EventRunContext {
+                run_id: event.run_id.clone(),
+                thread_id: event.thread_id.clone(),
+                span_id: Some(event.span_id),
+                parent_span_id: event.parent_span_id,
+            },
+            GatewayEvent::ChatEvent(event) => EventRunContext {
+                run_id: event.run_id.clone(),
+                thread_id: event.thread_id.clone(),
+                span_id: string_to_span_id(&event.event.event.span_id),
+                parent_span_id: event.event.event.parent_span_id.as_ref().and_then(|s| {
+                    let span_id = s.clone();
+                    string_to_span_id(&span_id)
+                }),
+            },
         }
     }
 }

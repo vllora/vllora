@@ -4,15 +4,10 @@ use vllora_core::types::guardrails::{evaluator::Evaluator, Guard, GuardResult};
 use serde_json::Value;
 use std::collections::HashMap;
 use tokio::sync::mpsc;
-use vllora_core::{
-    error::GatewayError,
-    llm_gateway::message_mapper::MessageMapper,
-    model::ModelInstance,
-    types::{
-        gateway::{ChatCompletionContent, ChatCompletionMessage, ContentType},
-        threads::Message,
-    },
-};
+use vllora_llm::client::message_mapper::{MessageMapper, MessageMapperError};
+use vllora_llm::types::gateway::{ChatCompletionContent, ChatCompletionMessage, ContentType};
+use vllora_llm::types::instance::ModelInstance;
+use vllora_llm::types::message::Message;
 
 use super::config::{default_suffix, load_prompts_from_yaml};
 
@@ -113,7 +108,7 @@ impl Evaluator for LlmJudgeEvaluator {
                         "judge",
                     )
                 })
-                .collect::<Result<Vec<Message>, GatewayError>>()
+                .collect::<Result<Vec<Message>, MessageMapperError>>()
                 .map_err(|e| e.to_string())?;
 
             // Call the model

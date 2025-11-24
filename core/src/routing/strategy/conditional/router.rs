@@ -15,10 +15,10 @@ impl ConditionalRouter {
     pub async fn get_target(
         &self,
         factory: Box<dyn InterceptorFactory>,
-        request: &crate::types::gateway::ChatCompletionRequest,
+        request: &vllora_llm::types::gateway::ChatCompletionRequest,
         headers: &std::collections::HashMap<String, String>,
         metadata: &std::collections::HashMap<String, serde_json::Value>,
-        extra: Option<&crate::types::gateway::Extra>,
+        extra: Option<&vllora_llm::types::gateway::Extra>,
     ) -> Option<&TargetSpec> {
         let referenced = referenced_pre_request_interceptors(&self.routing.routes);
 

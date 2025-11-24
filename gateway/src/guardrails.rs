@@ -4,13 +4,7 @@ use serde_json::{Map, Value};
 use tracing::Span;
 use vllora_core::executor::chat_completion::resolve_model_instance;
 use vllora_core::executor::context::ExecutorContext;
-use vllora_core::model::ModelInstance;
 use vllora_core::routing::RoutingStrategy;
-use vllora_core::types::engine::ModelTools;
-use vllora_core::types::gateway::ChatCompletionMessage;
-use vllora_core::types::gateway::ChatCompletionRequest;
-use vllora_core::types::gateway::ChatCompletionRequestWithTools;
-use vllora_core::types::gateway::DynamicRouter;
 use vllora_core::types::guardrails::evaluator::Evaluator;
 use vllora_core::types::guardrails::service::GuardrailsEvaluator;
 use vllora_core::types::guardrails::Guard;
@@ -29,6 +23,12 @@ use vllora_guardrails::guards::LlmJudgeEvaluator;
 use vllora_guardrails::guards::RegexEvaluator;
 use vllora_guardrails::guards::SchemaEvaluator;
 use vllora_guardrails::guards::WordCountEvaluator;
+use vllora_llm::types::gateway::ChatCompletionMessage;
+use vllora_llm::types::gateway::ChatCompletionRequest;
+use vllora_llm::types::gateway::ChatCompletionRequestWithTools;
+use vllora_llm::types::gateway::DynamicRouter;
+use vllora_llm::types::instance::ModelInstance;
+use vllora_llm::types::tools::ModelTools;
 
 pub struct GuardModelFactory {
     executor_context: ExecutorContext,

@@ -10,24 +10,25 @@ use tracing::Span;
 use tracing_futures::Instrument;
 use valuable::Valuable;
 
-use crate::{
-    create_model_span,
-    error::GatewayError,
-    model::{
-        embeddings::EmbeddingsModelInstance,
-        error::{AuthorizationError, ModelError},
-        openai::{azure_openai_client, openai_client},
-        types::{LLMFinishEvent, LLMStartEvent, ModelEvent, ModelEventType, ModelFinishReason},
-        CredentialsIdent,
-    },
-    telemetry::events::{JsonValue, SPAN_OPENAI},
-    types::{
-        credentials::ApiKeyCredentials,
-        embed::EmbeddingResult,
-        gateway::{CompletionModelUsage, CreateEmbeddingRequest, EncodingFormat, Input},
-    },
-    GatewayResult,
+use crate::{model::embeddings::EmbeddingsModelInstance, types::embed::EmbeddingResult};
+use vllora_llm::client::error::AuthorizationError;
+use vllora_llm::client::error::ModelError;
+use vllora_llm::error::LLMError;
+use vllora_llm::error::LLMResult;
+use vllora_llm::provider::openai::{azure_openai_client, openai_client};
+use vllora_llm::types::credentials::ApiKeyCredentials;
+use vllora_llm::types::credentials_ident::CredentialsIdent;
+use vllora_llm::types::gateway::{
+    CompletionModelUsage, CreateEmbeddingRequest, EncodingFormat, Input,
 };
+use vllora_llm::types::LLMFinishEvent;
+use vllora_llm::types::LLMStartEvent;
+use vllora_llm::types::ModelEvent;
+use vllora_llm::types::ModelEventType;
+use vllora_llm::types::ModelFinishReason;
+use vllora_telemetry::create_model_span;
+use vllora_telemetry::events::JsonValue;
+use vllora_telemetry::events::SPAN_OPENAI;
 
 macro_rules! target {
     () => {
@@ -85,7 +86,7 @@ impl<C: Config> OpenAIEmbeddings<C> {
         encoding_format: &EncodingFormat,
         model_name: &str,
         outer_tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
-    ) -> GatewayResult<EmbeddingResult> {
+    ) -> LLMResult<EmbeddingResult> {
         let span = Span::current();
         let _ = outer_tx.try_send(Some(ModelEvent::new(
             &span,
@@ -131,7 +132,7 @@ impl<C: Config> OpenAIEmbeddings<C> {
                     credentials_ident: self.credentials_ident.clone(),
                 }),
             )))
-            .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+            .map_err(|e| LLMError::CustomError(e.to_string()))?;
 
         span.record(
             "raw_usage",
@@ -163,7 +164,7 @@ impl<C: Config + std::marker::Sync + std::marker::Send> EmbeddingsModelInstance
         request: &CreateEmbeddingRequest,
         outer_tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<EmbeddingResult> {
+    ) -> LLMResult<EmbeddingResult> {
         let embedding_request = async_openai::types::CreateEmbeddingRequest {
             model: request.model.clone(),
             input: match &request.input {

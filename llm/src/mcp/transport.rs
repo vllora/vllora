@@ -1,5 +1,7 @@
-use std::collections::HashMap;
-
+use crate::{
+    mcp::McpServerError,
+    types::gateway::{McpDefinition, McpTransportType},
+};
 use reqwest::header::HeaderMap;
 use rmcp::{
     service::{DynService, RunningService},
@@ -9,11 +11,7 @@ use rmcp::{
     },
     RoleClient, ServiceExt,
 };
-
-use crate::{
-    model::mcp::McpServerError,
-    types::gateway::{McpDefinition, McpTransportType},
-};
+use std::collections::HashMap;
 
 pub struct McpTransport {
     definition: McpDefinition,

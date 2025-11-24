@@ -3,11 +3,10 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use chrono::{DateTime, Utc};
+use vllora_core::handler::CallbackHandlerFn;
 use vllora_core::usage::InMemoryStorage;
-use vllora_core::{
-    handler::CallbackHandlerFn, model::types::ModelEventType,
-    types::gateway::ImageGenerationModelUsage,
-};
+use vllora_llm::types::gateway::ImageGenerationModelUsage;
+use vllora_llm::types::ModelEventType;
 
 use crate::{cost::GatewayCostCalculator, usage::update_usage};
 
@@ -99,7 +98,9 @@ pub fn init_callback_handler(
                                     &model_name,
                                     &model.provider_name,
                                     usage
-                                        .map(vllora_core::types::gateway::Usage::CompletionModelUsage)
+                                        .map(
+                                            vllora_llm::types::gateway::Usage::CompletionModelUsage,
+                                        )
                                         .as_ref(),
                                     duration.map(|d| d as u64),
                                     ttft.map(|t| t as u64),
@@ -121,7 +122,7 @@ pub fn init_callback_handler(
                                     &model_name,
                                     &model.provider_name,
                                     Some(
-                                        &vllora_core::types::gateway::Usage::ImageGenerationModelUsage(
+                                        &vllora_llm::types::gateway::Usage::ImageGenerationModelUsage(
                                             ImageGenerationModelUsage {
                                                 quality: finish_event.quality.clone(),
                                                 size: finish_event.size.clone().into(),

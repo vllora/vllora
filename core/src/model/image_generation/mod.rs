@@ -1,25 +1,27 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::model::error::ModelError;
 use openai::OpenAIImageGeneration;
 use serde::Serialize;
 use serde_json::Value;
 use tracing::info_span;
 use tracing_futures::Instrument;
 use valuable::Valuable;
+use vllora_llm::client::error::ModelError;
 use vllora_open::OpenAISpecModel;
 
-use crate::model::types::ModelEventType;
-use crate::telemetry::events::{JsonValue, RecordResult, SPAN_MODEL_CALL};
-use crate::types::engine::{ImageGenerationEngineParams, ImageGenerationModelDefinition};
-use crate::types::gateway::{CostCalculator, CreateImageRequest, ImageGenerationModelUsage, Usage};
 use crate::types::image::ImagesResponse;
 use crate::GatewayResult;
+use vllora_llm::types::engine::{ImageGenerationEngineParams, ImageGenerationModelDefinition};
+use vllora_llm::types::gateway::{
+    CostCalculator, CreateImageRequest, ImageGenerationModelUsage, Usage,
+};
+use vllora_llm::types::ModelEventType;
+use vllora_telemetry::events::{JsonValue, RecordResult, SPAN_MODEL_CALL};
 
-use super::types::ModelEvent;
-use super::CredentialsIdent;
 use tokio::sync::mpsc::channel;
+use vllora_llm::types::credentials_ident::CredentialsIdent;
+use vllora_llm::types::ModelEvent;
 
 pub mod openai;
 pub mod vllora_open;

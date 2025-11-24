@@ -1,8 +1,8 @@
 mod storage;
 
-use crate::models::ModelMetadata;
 use async_trait::async_trait;
 pub use storage::ProviderKeyResolver;
+use vllora_llm::types::models::ModelMetadata;
 
 /// Error type for key storage operations
 #[derive(Debug, thiserror::Error)]

@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
-use crate::{models::ModelCapability, types::gateway::ChatModel};
 use actix_web::{web, HttpResponse};
 use serde::Serialize;
+use vllora_llm::types::gateway::ChatModel;
+use vllora_llm::types::models::ModelCapability;
 
 use crate::GatewayApiError;
 

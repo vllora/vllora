@@ -1,14 +1,4 @@
-use crate::model::error::ModelError;
-use crate::model::openai::openai_client;
-use crate::model::types::LLMFinishEvent;
-use crate::model::types::ModelEvent;
-use crate::model::types::ModelEventType;
-use crate::model::types::ModelFinishReason;
-use crate::model::CredentialsIdent;
-use crate::telemetry::events::{JsonValue, RecordResult, SPAN_OPENAI};
-use crate::types::credentials::ApiKeyCredentials;
 use crate::types::embed::OpenAiEmbeddingParams;
-use crate::types::gateway::CompletionModelUsage;
 use crate::GatewayError;
 use crate::GatewayResult;
 use async_openai::config::OpenAIConfig;
@@ -20,6 +10,16 @@ use serde_json::Value;
 use tracing::Instrument;
 use tracing::{field, Span};
 use valuable::Valuable;
+use vllora_llm::client::error::ModelError;
+use vllora_llm::provider::openai::openai_client;
+use vllora_llm::types::credentials::ApiKeyCredentials;
+use vllora_llm::types::credentials_ident::CredentialsIdent;
+use vllora_llm::types::gateway::CompletionModelUsage;
+use vllora_llm::types::LLMFinishEvent;
+use vllora_llm::types::ModelEvent;
+use vllora_llm::types::ModelEventType;
+use vllora_llm::types::ModelFinishReason;
+use vllora_telemetry::events::{JsonValue, RecordResult, SPAN_OPENAI};
 
 macro_rules! target {
     () => {

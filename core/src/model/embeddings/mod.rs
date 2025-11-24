@@ -11,20 +11,23 @@ use crate::{
         embeddings::{
             bedrock::BedrockEmbeddings, gemini::GeminiEmbeddings, openai::OpenAIEmbeddings,
         },
-        error::ModelError,
-        types::{ModelEvent, ModelEventType},
         CredentialsIdent,
     },
-    telemetry::events::{JsonValue, RecordResult, SPAN_MODEL_CALL},
-    types::{
-        embed::EmbeddingResult,
-        engine::{EmbeddingsEngineParams, EmbeddingsModelDefinition},
-        gateway::{CompletionModelUsage, CostCalculator, CreateEmbeddingRequest, Usage},
-    },
-    GatewayResult,
+    types::embed::EmbeddingResult,
 };
-
 use tokio::sync::mpsc::channel;
+use vllora_llm::client::error::ModelError;
+use vllora_llm::error::LLMResult;
+use vllora_llm::types::engine::EmbeddingsEngineParams;
+use vllora_llm::types::engine::EmbeddingsModelDefinition;
+use vllora_llm::types::gateway::{
+    CompletionModelUsage, CostCalculator, CreateEmbeddingRequest, Usage,
+};
+use vllora_llm::types::ModelEvent;
+use vllora_llm::types::ModelEventType;
+use vllora_telemetry::events::JsonValue;
+use vllora_telemetry::events::RecordResult;
+use vllora_telemetry::events::SPAN_MODEL_CALL;
 
 pub mod bedrock;
 pub mod gemini;
@@ -37,7 +40,7 @@ pub trait EmbeddingsModelInstance: Sync + Send {
         request: &CreateEmbeddingRequest,
         outer_tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<EmbeddingResult>;
+    ) -> LLMResult<EmbeddingResult>;
 }
 
 pub async fn initialize_embeddings_model_instance(
@@ -110,7 +113,7 @@ struct TracedEmbeddingsModelDefinition {
 }
 
 impl TracedEmbeddingsModelDefinition {
-    pub fn sanitize_json(&self) -> GatewayResult<Value> {
+    pub fn sanitize_json(&self) -> LLMResult<Value> {
         let mut model = self.clone();
 
         match &mut model.model_params.engine {
@@ -175,7 +178,7 @@ impl<Inner: EmbeddingsModelInstance> EmbeddingsModelInstance for TracedEmbedding
         request: &CreateEmbeddingRequest,
         outer_tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<EmbeddingResult> {
+    ) -> LLMResult<EmbeddingResult> {
         let traced_model: TracedEmbeddingsModelDefinition = self.definition.clone().into();
         let credentials_ident = traced_model.get_credentials_owner();
         let model = traced_model.sanitize_json()?;

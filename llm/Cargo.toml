@@ -1,0 +1,68 @@
+[package]
+name = "vllora_llm"
+version = "0.1.8"
+authors = ["Vllora Team<api@vllora.dev>"]
+description = "AI gateway for managing and routing LLM requests - Govern, Secure, and Optimize your AI Traffic."
+license = "Apache-2.0"
+repository = "https://github.com/vllora/vllora"
+documentation = "https://vllora.dev/docs"
+readme = "../README.md"
+keywords = ["llm", "openai", "anthropic", "gemini", "mcp"]
+categories = ["web-programming", "network-programming"]
+edition = "2021"
+
+[lib]
+name = "vllora_llm"
+path = "src/lib.rs"
+
+
+[dependencies]
+vllora_telemetry = { path = "../telemetry", version = "0.1.7" }
+
+async-openai = { package = "async-openai-compat", version = "0.29.8" }
+clust = { version = "0.9.8", package = "langdb_clust" }
+
+aws-sdk-bedrock = "1.118.0"
+aws-sdk-bedrockruntime = "1.111.0"
+aws-smithy-types = { version = "1.3.4", features = [
+  "serde-deserialize",
+  "serde-serialize",
+] }
+aws-credential-types = "1.2.8"
+aws-smithy-runtime-api = "1.9.2"
+aws-config = { version = "1.8.8", features = ["behavior-version-latest"] }
+
+serde_with = { version = "3.15.1", features = ["json"] }
+serde_tuple = "1.1.2"
+
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+thiserror = { workspace = true }
+reqwest = { workspace = true }
+
+rmcp = { workspace = true }
+
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-opentelemetry = { workspace = true }
+tracing-futures = { workspace = true }
+opentelemetry = { workspace = true }
+valuable = { workspace = true }
+
+chrono = { workspace = true }
+base64 = { workspace = true }
+regex = { workspace = true }
+
+validator = { version = "0.20", features = ["derive"] }
+minijinja = "2.12.0"
+futures = { workspace = true }
+reqwest-eventsource = { workspace = true }
+tokio-stream = { workspace = true }
+
+[dev-dependencies]
+uuid = { workspace = true }
+
+[features]
+default = []

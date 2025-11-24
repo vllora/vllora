@@ -1,30 +1,26 @@
-use std::borrow::Cow;
-use std::{collections::HashMap, fmt::Display, ops::Deref, str::FromStr};
-
-use crate::model::CredentialsIdent;
-use crate::types::credentials::BedrockCredentials;
-use crate::types::json::JsonStringCond;
-use crate::types::provider::ModelPrice;
 use async_openai::types::ResponseFormat;
 use clust::messages as claude;
 use minijinja::Environment;
 use serde::de::IntoDeserializer;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::serde_as;
 use serde_with::OneOrMany;
+use std::borrow::Cow;
+use std::{collections::HashMap, fmt::Display, ops::Deref, str::FromStr};
 use validator::Validate;
 
-use super::message::MessageType;
-use super::message::PromptMessage;
-use super::{credentials::ApiKeyCredentials, provider::BedrockProvider};
-use serde::de::Error;
+use crate::types::credentials::ApiKeyCredentials;
+use crate::types::credentials::BedrockCredentials;
+use crate::types::credentials_ident::CredentialsIdent;
+use crate::types::models::ModelType;
+use crate::types::provider::ModelPrice;
+use crate::types::tools::ModelTools;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CompletionModelDefinition {
     pub name: String,
     pub model_params: CompletionModelParams,
-    pub prompt: Prompt,
     pub tools: ModelTools,
     pub db_model: Model,
 }
@@ -39,99 +35,20 @@ pub struct Model {
     pub credentials_ident: CredentialsIdent,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-pub struct ModelTool {
-    pub name: String,
-    pub description: Option<String>,
-    pub passed_args: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Default)]
-#[serde(transparent)]
-pub struct ModelTools(pub Vec<ModelTool>);
-impl ModelTools {
-    pub fn contains(&self, r: &String) -> bool {
-        self.0.iter().any(|tool| &tool.name == r)
+pub fn render(template: String, variables: &HashMap<String, Value>) -> String {
+    if variables.is_empty() {
+        return template;
     }
 
-    pub fn names(&self) -> impl Iterator<Item = &'_ String> {
-        self.0.iter().map(|tool| &tool.name)
-    }
+    let env = Environment::new();
+    let tmpl = env.template_from_str(&template).unwrap();
 
-    pub fn iter(&self) -> impl Iterator<Item = &ModelTool> {
-        self.0.iter()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-}
-
-impl FromIterator<ModelTool> for ModelTools {
-    fn from_iter<T: IntoIterator<Item = ModelTool>>(iter: T) -> Self {
-        Self(Vec::from_iter(iter))
-    }
-}
-
-#[serde_as]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Prompt {
-    pub name: String,
-    #[serde_as(as = "JsonStringCond")]
-    pub messages: Vec<PromptMessage>,
-    pub owning_model: Option<String>,
-}
-
-impl Prompt {
-    pub fn new(name: String, system_msg: String) -> Self {
-        let parameters = Environment::new()
-            .template_from_str(&system_msg)
-            .unwrap()
-            .undeclared_variables(false);
-
-        Prompt {
-            name,
-            messages: vec![PromptMessage {
-                r#type: MessageType::SystemMessage,
-                msg: system_msg,
-                parameters,
-                wired: false,
-            }],
-            owning_model: None,
-        }
-    }
-
-    pub fn get_variables(&self) -> Vec<Cow<'_, String>> {
-        self.messages
-            .iter()
-            .flat_map(move |msg| msg.parameters.iter())
-            .map(Cow::Borrowed)
-            .collect()
-    }
-
-    pub fn render(template: String, variables: &HashMap<String, Value>) -> String {
-        if variables.is_empty() {
-            return template;
-        }
-
-        let env = Environment::new();
-        let tmpl = env.template_from_str(&template).unwrap();
-
-        // If template rendering fail, return raw template
-        match tmpl.render(variables) {
-            Ok(rendered) => rendered,
-            Err(e) => {
-                tracing::error!("Template rendering failed: {}", e);
-                template
-            }
-        }
-    }
-
-    pub fn empty() -> Self {
-        Self {
-            name: "empty".to_string(),
-            messages: vec![],
-            owning_model: None,
+    // If template rendering fail, return raw template
+    match tmpl.render(variables) {
+        Ok(rendered) => rendered,
+        Err(e) => {
+            tracing::error!("Template rendering failed: {}", e);
+            template
         }
     }
 }
@@ -162,7 +79,7 @@ impl CompletionModelDefinition {
     pub fn provider_name(&self) -> String {
         match &self.model_params.engine {
             CompletionEngineParams::OpenAi { .. } => "openai".to_string(),
-            CompletionEngineParams::Bedrock { provider, .. } => provider.to_string(),
+            CompletionEngineParams::Bedrock { .. } => "bedrock".to_string(),
             CompletionEngineParams::Anthropic { .. } => "anthropic".to_string(),
             CompletionEngineParams::Gemini { .. } => "gemini".to_string(),
             CompletionEngineParams::Proxy { .. } => "vllora_open".to_string(),
@@ -273,33 +190,6 @@ impl Display for EngineFeature {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum ModelType {
-    #[serde(rename = "completions", alias = "Completions")]
-    Completions,
-    #[serde(rename = "embedding", alias = "Embedding")]
-    Embedding,
-    #[serde(rename = "image_generation", alias = "ImageGeneration")]
-    ImageGeneration,
-}
-
-impl FromStr for ModelType {
-    type Err = serde::de::value::Error;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::deserialize(s.into_deserializer())
-    }
-}
-
-impl Display for ModelType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ModelType::Completions => write!(f, "completions"),
-            ModelType::Embedding => write!(f, "embedding"),
-            ModelType::ImageGeneration => write!(f, "image_generation"),
-        }
-    }
-}
-
 impl EngineType {
     pub fn supports(&self, feature: EngineFeature) -> bool {
         match (self, feature) {
@@ -338,7 +228,6 @@ pub enum CompletionEngineParams {
         credentials: Option<BedrockCredentials>,
         execution_options: ExecutionOptions,
         params: BedrockModelParams,
-        provider: BedrockProvider,
     },
     Anthropic {
         credentials: Option<ApiKeyCredentials>,
@@ -371,12 +260,7 @@ impl CompletionEngineParams {
     pub fn provider_name(&self) -> &str {
         match self {
             Self::OpenAi { .. } => "openai",
-            Self::Bedrock { provider, .. } => match provider {
-                BedrockProvider::Meta => "meta",
-                BedrockProvider::Mistral => "mistral",
-                BedrockProvider::Cohere => "cohere",
-                BedrockProvider::Other(provider) => provider.as_str(),
-            },
+            Self::Bedrock { .. } => "bedrock",
             Self::Anthropic { .. } => "anthropic",
             Self::Gemini { .. } => "gemini",
             Self::Proxy { .. } => "proxy",
@@ -540,137 +424,6 @@ pub struct OpenAiModelParams {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Validate)]
-pub struct ClaudeParams {
-    anthropic_version: Option<String>,
-    top_k: Option<u16>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, Validate)]
-pub struct JurassicParams {
-    #[validate(range(min = 0.0, max = 5.0))]
-    presence_penalty: Option<f32>,
-    #[validate(range(min = 0.0, max = 500.0))]
-    frequency_penalty: Option<f32>,
-    #[validate(range(min = 0.0, max = 1.0))]
-    count_penalty: Option<f32>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, Validate)]
-pub struct JambaParams {
-    #[validate(range(min = 0.0, max = 5.0))]
-    presence_penalty: Option<f32>,
-    #[validate(range(min = 0.0, max = 500.0))]
-    frequency_penalty: Option<f32>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, Validate)]
-pub struct CohereCommandParams {
-    #[serde(alias = "top_k")]
-    #[validate(range(min = 0, max = 500))]
-    k: Option<u16>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-enum CohereCommandRPromptTruncation {
-    Off,
-    AutoPreserveHistory,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, Validate)]
-pub struct CohereCommandRParams {
-    #[serde(alias = "top_k")]
-    #[validate(range(min = 0, max = 500))]
-    k: Option<u16>,
-    preamble: Option<String>,
-    prompt_truncation: Option<CohereCommandRPromptTruncation>,
-    #[validate(range(min = 0.0, max = 1.0))]
-    frequency_penalty: Option<f32>,
-    #[validate(range(min = 0.0, max = 1.0))]
-    presence_penalty: Option<f32>,
-    seed: Option<u64>,
-    force_single_step: Option<bool>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub enum MistralToolChoice {
-    None,
-    Auto,
-    Any,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct MistralParams {
-    tool_choice: Option<MistralToolChoice>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub enum BedrockAdditionalModelFields {
-    A21Jurassic(JurassicParams),
-    A21Jamba(JambaParams),
-    AmazonTitan,
-    AnthropicClaude(ClaudeParams),
-    CohereCommand(CohereCommandParams),
-    CohereCommandR(CohereCommandRParams),
-    MetaLlama,
-    Mistral,
-    Stability,
-}
-
-impl BedrockAdditionalModelFields {
-    pub fn deserialize_with_id<'de, D: Deserializer<'de>>(
-        id: &str,
-        deserializer: D,
-        managed_provider: Option<&BedrockProvider>,
-    ) -> Result<Self, D::Error> {
-        let id = match managed_provider {
-            Some(provider) => format!("{provider}.{id}"),
-            None => id.to_string(),
-        };
-
-        Ok(if id.starts_with("a21.jamba-instruct") {
-            Self::A21Jamba(JambaParams::deserialize(deserializer)?)
-        } else if id.starts_with("a21.j2") {
-            Self::A21Jurassic(JurassicParams::deserialize(deserializer)?)
-        } else if id.starts_with("amazon.titan-text") {
-            // Unit::deserialize(deserializer)?;
-            Self::AmazonTitan
-        } else if id.starts_with("anthropic.claude-v2") || id.starts_with("anthropic.claude-3") {
-            Self::AnthropicClaude(ClaudeParams::deserialize(deserializer)?)
-        } else if id.starts_with("cohere.command-text")
-            || id.starts_with("cohere.command-light-text")
-        {
-            Self::CohereCommand(CohereCommandParams::deserialize(deserializer)?)
-        } else if id.starts_with("cohere.command-r") {
-            Self::CohereCommandR(CohereCommandRParams::deserialize(deserializer)?)
-        } else if id.starts_with("meta.llama2") || id.starts_with("meta.llama3") {
-            // Unit::deserialize(deserializer)?;
-            Self::MetaLlama
-        } else if id.starts_with("mistral") {
-            // Unit::deserialize(deserializer)?;
-            Self::Mistral
-        } else {
-            return Err(D::Error::custom(format!("Unknown model_id {id}")));
-        })
-    }
-}
-
-impl Validate for BedrockAdditionalModelFields {
-    fn validate(&self) -> Result<(), validator::ValidationErrors> {
-        match self {
-            BedrockAdditionalModelFields::A21Jurassic(p) => p.validate(),
-            BedrockAdditionalModelFields::A21Jamba(p) => p.validate(),
-            BedrockAdditionalModelFields::AmazonTitan => Ok(()),
-            BedrockAdditionalModelFields::AnthropicClaude(p) => p.validate(),
-            BedrockAdditionalModelFields::CohereCommand(p) => p.validate(),
-            BedrockAdditionalModelFields::CohereCommandR(p) => p.validate(),
-            BedrockAdditionalModelFields::MetaLlama => Ok(()),
-            BedrockAdditionalModelFields::Mistral => Ok(()),
-            BedrockAdditionalModelFields::Stability => Ok(()),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, Validate)]
 pub struct BedrockModelParams {
     #[serde(alias = "model_name")]
     pub model_id: Option<String>,
@@ -686,13 +439,6 @@ pub struct BedrockModelParams {
     pub stop_sequences: Option<Vec<String>>,
     #[serde(flatten)]
     pub additional_parameters: HashMap<String, Value>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(untagged)]
-pub enum ProviderModelParams {
-    OpenAI(Box<OpenAiModelParams>),
-    Bedrock(BedrockModelParams),
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -907,7 +653,7 @@ impl ParentDefinition {
 
     pub fn get_variables(&self) -> Vec<Cow<'_, String>> {
         match self {
-            ParentDefinition::CompletionModel(model) => model.prompt.get_variables(),
+            ParentDefinition::CompletionModel(_) => vec![],
             ParentDefinition::ImageGenerationModel(_) => vec![],
             ParentDefinition::EmbeddingsModelDefinition(_) => vec![],
         }

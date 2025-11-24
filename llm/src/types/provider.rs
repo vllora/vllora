@@ -1,48 +1,8 @@
-use std::fmt::Display;
-
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 
-use super::engine::ModelType;
+use super::models::ModelType;
 use std::collections::HashMap;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum BedrockProvider {
-    Cohere,
-    Meta,
-    Mistral,
-    Other(String),
-}
-impl BedrockProvider {
-    pub fn from_model_name(id: &str) -> Self {
-        let split = id.split('.').collect::<Vec<&str>>();
-        let provider = split[0].to_lowercase();
-        Self::from(provider.clone())
-    }
-}
-
-impl Display for BedrockProvider {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            BedrockProvider::Cohere => write!(f, "cohere"),
-            BedrockProvider::Meta => write!(f, "meta"),
-            BedrockProvider::Mistral => write!(f, "mistral"),
-            BedrockProvider::Other(provider) => write!(f, "{provider}"),
-        }
-    }
-}
-
-impl From<String> for BedrockProvider {
-    fn from(value: String) -> Self {
-        match value.to_lowercase().as_str() {
-            "cohere" => BedrockProvider::Cohere,
-            "meta" => BedrockProvider::Meta,
-            "mistral" => BedrockProvider::Mistral,
-            _ => BedrockProvider::Other(value),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase", into = "String", from = "String")]

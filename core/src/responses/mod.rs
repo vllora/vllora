@@ -1,9 +1,3 @@
-use crate::model::error::ModelError;
-use crate::model::openai::openai_client;
-use crate::model::types::ModelEvent;
-use crate::model::CredentialsIdent;
-use crate::telemetry::events::SPAN_OPENAI;
-use crate::types::credentials::ApiKeyCredentials;
 use crate::GatewayResult;
 use async_openai::config::OpenAIConfig;
 use async_openai::types::responses::CreateResponse;
@@ -11,6 +5,13 @@ use async_openai::types::responses::Response;
 use async_openai::Client;
 use tracing::Instrument;
 use tracing::{field, Span};
+use vllora_llm::client::error::ModelError;
+use vllora_llm::provider::openai::openai_client;
+use vllora_llm::types::credentials::ApiKeyCredentials;
+use vllora_llm::types::credentials_ident::CredentialsIdent;
+use vllora_llm::types::ModelEvent;
+use vllora_telemetry::events::SPAN_OPENAI;
+
 macro_rules! target {
     () => {
         "vllora::user_tracing::models::openai"

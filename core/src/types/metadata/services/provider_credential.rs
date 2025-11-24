@@ -2,9 +2,9 @@ use crate::metadata::error::DatabaseError;
 use crate::metadata::models::provider_credential::{
     DbInsertProviderCredentials, DbProviderCredentials, DbUpdateProviderCredentials,
 };
-use crate::types::credentials::Credentials;
 use crate::types::metadata::provider_credential::ProviderCredentialsInfo;
 use std::collections::HashMap;
+use vllora_llm::types::credentials::Credentials;
 
 pub trait ProviderCredentialsService {
     /// Get provider credentials by provider name and optional project ID
@@ -42,7 +42,7 @@ pub trait ProviderCredentialsService {
     fn list_available_providers(
         &self,
         project_id: Option<&str>,
-        available_models: &[crate::models::ModelMetadata],
+        available_models: &[vllora_llm::types::models::ModelMetadata],
     ) -> Result<Vec<ProviderCredentialsInfo>, DatabaseError>;
 
     /// Check if provider has credentials configured

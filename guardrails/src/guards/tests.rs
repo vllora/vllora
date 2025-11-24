@@ -227,7 +227,7 @@ impl ModelInstance for MockModelInstance {
         _tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         _previous_messages: Vec<Message>,
         _tags: HashMap<String, String>,
-    ) -> GatewayResult<ChatCompletionMessageWithFinishReason> {
+    ) -> LLMResult<ChatCompletionMessageWithFinishReason> {
         Ok(ChatCompletionMessageWithFinishReason::new(
             ChatCompletionMessage {
                 role: "assistant".to_string(),
@@ -244,7 +244,7 @@ impl ModelInstance for MockModelInstance {
         _tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         _previous_messages: Vec<Message>,
         _tags: HashMap<String, String>,
-    ) -> GatewayResult<()> {
+    ) -> LLMResult<()> {
         todo!()
     }
 }

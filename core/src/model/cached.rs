@@ -1,17 +1,19 @@
-use crate::error::GatewayError;
-use crate::model::types::{ModelEvent, ModelEventType, ModelFinishReason};
-use crate::model::ModelInstance;
-use crate::telemetry::events::{JsonValue, SPAN_CACHE};
-use crate::types::gateway::{ChatCompletionMessage, ChatCompletionMessageWithFinishReason};
-use crate::types::threads::Message;
-use crate::{create_model_span, GatewayResult};
 use async_trait::async_trait;
 use serde_json::Value;
+use uuid::Uuid;
 use std::collections::HashMap;
 use tokio::sync::mpsc;
 use tracing::field;
 use tracing_futures::Instrument;
 use valuable::Valuable;
+use vllora_llm::error::LLMError;
+use vllora_llm::error::LLMResult;
+use vllora_llm::types::gateway::{ChatCompletionMessage, ChatCompletionMessageWithFinishReason};
+use vllora_llm::types::instance::ModelInstance;
+use vllora_llm::types::message::Message;
+use vllora_llm::types::{ModelEvent, ModelEventType, ModelFinishReason};
+use vllora_telemetry::create_model_span;
+use vllora_telemetry::events::{JsonValue, SPAN_CACHE};
 
 macro_rules! target {
     () => {
@@ -22,7 +24,7 @@ macro_rules! target {
     };
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CachedModel {
     events: Vec<ModelEvent>,
     response: Option<ChatCompletionMessage>,
@@ -36,7 +38,7 @@ impl CachedModel {
     async fn inner_stream(
         &self,
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
-    ) -> GatewayResult<()> {
+    ) -> LLMResult<()> {
         for event in &self.events {
             if let ModelEventType::LlmStop(e) = &event.event {
                 let mut u = e.usage.clone();
@@ -60,7 +62,7 @@ impl CachedModel {
     async fn invoke_inner(
         &self,
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
-    ) -> GatewayResult<ChatCompletionMessageWithFinishReason> {
+    ) -> LLMResult<ChatCompletionMessageWithFinishReason> {
         for event in &self.events {
             if let ModelEventType::LlmStop(e) = &event.event {
                 let mut u = e.usage.clone();
@@ -84,10 +86,14 @@ impl CachedModel {
             return Ok(ChatCompletionMessageWithFinishReason::new(
                 response.clone(),
                 ModelFinishReason::Stop,
+                Uuid::new_v4().to_string(),
+                chrono::Utc::now().timestamp() as u32,
+                "cache".to_string(),
+                None,
             ));
         }
 
-        Err(GatewayError::CustomError(
+        Err(LLMError::CustomError(
             "Cached model response is None".to_string(),
         ))
     }
@@ -101,7 +107,7 @@ impl ModelInstance for CachedModel {
         tx: mpsc::Sender<Option<ModelEvent>>,
         _previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<()> {
+    ) -> LLMResult<()> {
         let span = create_model_span!(SPAN_CACHE, target!("chat"), &tags, 0, cache_state = "HIT");
 
         self.inner_stream(tx).instrument(span).await
@@ -113,7 +119,7 @@ impl ModelInstance for CachedModel {
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         _previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<ChatCompletionMessageWithFinishReason> {
+    ) -> LLMResult<ChatCompletionMessageWithFinishReason> {
         let span = create_model_span!(SPAN_CACHE, target!("chat"), &tags, 0, cache_state = "HIT");
 
         self.invoke_inner(tx).instrument(span).await

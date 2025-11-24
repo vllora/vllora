@@ -1,6 +1,5 @@
 use crate::metadata::pool::DbPool;
 use crate::metadata::services::mcp_config::McpConfigService;
-use crate::model::mcp::get_tools;
 use crate::rmcp::model::Tool;
 use crate::types::mcp::McpConfig;
 use crate::types::GatewayTenant;
@@ -9,6 +8,7 @@ use actix_web::{web, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+use vllora_llm::mcp::get_tools;
 
 #[derive(Deserialize)]
 pub struct CreateMcpConfigRequest {

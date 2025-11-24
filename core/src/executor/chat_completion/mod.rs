@@ -3,28 +3,32 @@ use crate::error::GatewayError;
 use crate::executor::chat_completion::basic_executor::BasicCacheContext;
 use crate::executor::chat_completion::stream_executor::{stream_chunks, StreamCacheContext};
 use crate::handler::ModelEventWithDetails;
-use crate::llm_gateway::message_mapper::MessageMapper;
 use crate::llm_gateway::provider::Provider;
 use crate::mcp::McpConfig;
 use crate::model::cached::CachedModel;
-use crate::model::mcp::get_tools;
-use crate::model::tools::{GatewayTool, Tool};
-use crate::model::types::ModelEvent;
-use crate::model::types::ModelEventType;
-use crate::model::{ModelInstance, ResponseCacheState};
-use crate::models::ModelMetadata;
-use crate::types::credentials::Credentials;
-use crate::types::engine::{
-    CompletionModelDefinition, CompletionModelParams, ExecutionOptions, Model, ModelTool,
-    ModelTools, ModelType, Prompt,
+use crate::model::tools::GatewayTool;
+use crate::model::ResponseCacheState;
+use crate::GatewayApiError;
+use vllora_llm::client::message_mapper::MessageMapper;
+use vllora_llm::error::LLMError;
+use vllora_llm::mcp::get_tools;
+use vllora_llm::types::credentials::Credentials;
+use vllora_llm::types::engine::{
+    CompletionModelDefinition, CompletionModelParams, ExecutionOptions, Model,
 };
-use crate::types::gateway::{
+use vllora_llm::types::gateway::{
     ChatCompletionMessage, ChatCompletionRequestWithTools, ChatCompletionResponse, Extra,
 };
-use crate::types::provider::InferenceModelProvider;
-use crate::GatewayApiError;
+use vllora_llm::types::instance::ModelInstance;
+use vllora_llm::types::models::ModelMetadata;
+use vllora_llm::types::models::ModelType;
+use vllora_llm::types::provider::InferenceModelProvider;
+use vllora_llm::types::tools::ModelTool;
+use vllora_llm::types::tools::ModelTools;
+use vllora_llm::types::tools::Tool;
+use vllora_llm::types::ModelEvent;
+use vllora_llm::types::ModelEventType;
 
-use crate::model::CredentialsIdent;
 use either::Either::{self, Left, Right};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -33,6 +37,7 @@ use std::fmt::Debug;
 use tracing::Span;
 use tracing_futures::Instrument;
 use uuid::Uuid;
+use vllora_llm::types::credentials_ident::CredentialsIdent;
 
 use super::context::ExecutorContext;
 use crate::executor::chat_completion::stream_wrapper::ChatCompletionStream;
@@ -114,11 +119,14 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
     let mut messages = vec![];
 
     for message in &request.messages {
-        messages.push(MessageMapper::map_completions_message_to_vllora_message(
-            message,
-            &request.model,
-            &user.to_string(),
-        )?);
+        messages.push(
+            MessageMapper::map_completions_message_to_vllora_message(
+                message,
+                &request.model,
+                &user.to_string(),
+            )
+            .map_err(LLMError::from)?,
+        );
     }
     let ch = executor_context.callbackhandler.clone();
     let db_model = resolved_model_context.db_model.clone();
@@ -295,7 +303,6 @@ pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Cl
             provider_name: llm_model.model_provider.to_string(),
             prompt_name: None,
         },
-        prompt: Prompt::empty(),
         tools,
         db_model: db_model.clone(),
     };
@@ -311,6 +318,7 @@ pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Cl
         initial_messages,
         cached_model,
         cache_state,
+        request.clone(),
     )
     .await
     .map_err(|e| GatewayApiError::CustomError(e.to_string()))?;

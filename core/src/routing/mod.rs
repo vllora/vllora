@@ -1,16 +1,16 @@
 use crate::model::ModelMetadataFactory;
 use crate::routing::metrics::MetricsRepository;
-use crate::telemetry::events::JsonValue;
+use vllora_telemetry::events::JsonValue;
 // use crate::routing::strategy::script::ScriptError;
 // use crate::routing::strategy::script::ScriptStrategy;
 use crate::routing::strategy::conditional::ConditionalRouter;
-use crate::types::gateway::{ChatCompletionRequest, Extra};
 use crate::usage::LimitPeriod;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::sync::Arc;
 use thiserror::Error;
 use valuable::Valuable;
+use vllora_llm::types::gateway::{ChatCompletionRequest, Extra};
 
 pub mod interceptor;
 pub mod metrics;

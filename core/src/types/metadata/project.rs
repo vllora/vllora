@@ -1,10 +1,10 @@
 use crate::types::project_settings::ProjectSettings;
-use crate::types::provider::ModelPrice;
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use uuid::Uuid;
+use vllora_llm::types::provider::ModelPrice;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Project {

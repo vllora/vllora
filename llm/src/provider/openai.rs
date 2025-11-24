@@ -1,25 +1,24 @@
-use super::error::{AuthorizationError, ModelError};
-use super::tools::Tool;
-use super::types::{
-    LLMContentEvent, LLMFinishEvent, LLMStartEvent, ModelEvent, ModelEventType, ModelFinishReason,
-    ModelToolCall,
-};
-use super::{CredentialsIdent, ModelInstance};
-use crate::error::GatewayError;
-use crate::model::error::ModelFinishError;
-use crate::model::handler::handle_tool_call;
-use crate::model::types::LLMFirstToken;
-use crate::model::{async_trait, DEFAULT_MAX_RETRIES};
-use crate::telemetry::events::JsonValue;
-use crate::telemetry::events::SPAN_OPENAI;
-use crate::telemetry::events::{self, RecordResult};
+use crate::client::tools::handler::handle_tool_call;
+use crate::client::DEFAULT_MAX_RETRIES;
+use async_trait::async_trait;
+
+use crate::client::error::AuthorizationError;
+use crate::client::error::ModelError;
+use crate::error::LLMError;
+use crate::error::{LLMResult, ModelFinishError};
 use crate::types::credentials::ApiKeyCredentials;
-use crate::types::engine::{ExecutionOptions, OpenAiModelParams, Prompt};
+use crate::types::credentials_ident::CredentialsIdent;
+use crate::types::engine::{render, ExecutionOptions, OpenAiModelParams};
 use crate::types::gateway::{ChatCompletionContent, ChatCompletionMessage, ToolCall};
 use crate::types::gateway::{ChatCompletionMessageWithFinishReason, CompletionModelUsage};
-use crate::types::message::{MessageType, PromptMessage};
-use crate::types::threads::{InnerMessage, Message};
-use crate::{create_model_span, GatewayResult};
+use crate::types::instance::ModelInstance;
+use crate::types::message::{ImageDetail, MessageContentType, MessageType};
+use crate::types::message::{InnerMessage, Message};
+use crate::types::tools::Tool;
+use crate::types::{
+    LLMContentEvent, LLMFinishEvent, LLMFirstToken, LLMStartEvent, ModelEvent, ModelEventType,
+    ModelFinishReason, ModelToolCall,
+};
 use async_openai::config::Config;
 use async_openai::config::{AzureConfig, OpenAIConfig};
 use async_openai::error::OpenAIError;
@@ -49,6 +48,10 @@ use tracing::Instrument;
 use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use valuable::Valuable;
+use vllora_telemetry::create_model_span;
+use vllora_telemetry::events::JsonValue;
+use vllora_telemetry::events::SPAN_OPENAI;
+use vllora_telemetry::events::{self, RecordResult};
 
 pub type StreamExecutionResult = (
     FinishReason,
@@ -125,7 +128,6 @@ pub fn azure_openai_client(
 pub struct OpenAIModel<C: Config = OpenAIConfig> {
     params: OpenAiModelParams,
     execution_options: ExecutionOptions,
-    prompt: Prompt,
     client: Client<C>,
     tools: Arc<HashMap<String, Box<dyn Tool>>>,
     credentials_ident: CredentialsIdent,
@@ -137,7 +139,6 @@ impl OpenAIModel<OpenAIConfig> {
         params: OpenAiModelParams,
         credentials: Option<&ApiKeyCredentials>,
         execution_options: ExecutionOptions,
-        prompt: Prompt,
         tools: HashMap<String, Box<dyn Tool>>,
         client: Option<Client<OpenAIConfig>>,
         endpoint: Option<&str>,
@@ -156,7 +157,6 @@ impl OpenAIModel<OpenAIConfig> {
         Ok(Self {
             params,
             execution_options,
-            prompt,
             client,
             tools: Arc::new(tools),
             credentials_ident: credentials
@@ -172,7 +172,6 @@ impl OpenAIModel<AzureConfig> {
         params: OpenAiModelParams,
         credentials: Option<&ApiKeyCredentials>,
         execution_options: ExecutionOptions,
-        prompt: Prompt,
         tools: HashMap<String, Box<dyn Tool>>,
         client: Option<Client<AzureConfig>>,
         endpoint: Option<&str>,
@@ -196,7 +195,6 @@ impl OpenAIModel<AzureConfig> {
         Ok(Self {
             params,
             execution_options,
-            prompt,
             client,
             tools: Arc::new(tools),
             credentials_ident: credentials
@@ -210,7 +208,6 @@ impl OpenAIModel<AzureConfig> {
         params: OpenAiModelParams,
         credentials: Option<&ApiKeyCredentials>,
         execution_options: ExecutionOptions,
-        prompt: Prompt,
         tools: HashMap<String, Box<dyn Tool>>,
         endpoint: &str,
     ) -> Result<Self, ModelError> {
@@ -218,7 +215,6 @@ impl OpenAIModel<AzureConfig> {
             params,
             credentials,
             execution_options,
-            prompt,
             tools,
             None,
             Some(endpoint),
@@ -280,7 +276,7 @@ impl<C: Config> OpenAIModel<C> {
         &self,
         messages: &[ChatCompletionRequestMessage],
         stream: bool,
-    ) -> GatewayResult<CreateChatCompletionRequest> {
+    ) -> LLMResult<CreateChatCompletionRequest> {
         let mut chat_completion_tools: Vec<ChatCompletionTool> = vec![];
 
         for (name, tool) in self.tools.iter() {
@@ -404,7 +400,7 @@ impl<C: Config> OpenAIModel<C> {
         mut stream: impl Stream<Item = Result<CreateChatCompletionStreamResponse, OpenAIError>> + Unpin,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         started_at: std::time::Instant,
-    ) -> GatewayResult<StreamExecutionResult> {
+    ) -> LLMResult<StreamExecutionResult> {
         let mut tool_call_states: HashMap<u32, ChatCompletionMessageToolCall> = HashMap::new();
         let mut first_chunk = None;
         let mut stream_content = String::new();
@@ -424,7 +420,7 @@ impl<C: Config> OpenAIModel<C> {
                             ModelEventType::LlmFirstToken(LLMFirstToken {}),
                         )))
                         .await
-                        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+                        .map_err(|e| LLMError::CustomError(e.to_string()))?;
                         first_chunk = Some(response.clone());
                         Span::current().record("ttft", started_at.elapsed().as_micros());
                     }
@@ -531,10 +527,10 @@ impl<C: Config> OpenAIModel<C> {
     async fn send_event(
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         event: ModelEvent,
-    ) -> GatewayResult<()> {
+    ) -> LLMResult<()> {
         tx.send(Some(event))
             .await
-            .map_err(|e| GatewayError::CustomError(e.to_string()))
+            .map_err(|e| LLMError::CustomError(e.to_string()))
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
@@ -544,7 +540,7 @@ impl<C: Config> OpenAIModel<C> {
         messages: Vec<ChatCompletionRequestMessage>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<InnerExecutionResult> {
+    ) -> LLMResult<InnerExecutionResult> {
         let call = self.build_request(&messages, false)?;
         span.record("request", serde_json::to_string(&call)?);
 
@@ -558,7 +554,7 @@ impl<C: Config> OpenAIModel<C> {
             }),
         )))
         .await
-        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+        .map_err(|e| LLMError::CustomError(e.to_string()))?;
 
         let response = async move {
             let result = self.client.chat().create(call).await;
@@ -583,7 +579,7 @@ impl<C: Config> OpenAIModel<C> {
                         .as_value(),
                 );
             }
-            Ok::<_, GatewayError>(response)
+            Ok::<_, LLMError>(response)
         }
         .instrument(span.clone().or_current())
         .await?;
@@ -641,7 +637,7 @@ impl<C: Config> OpenAIModel<C> {
                     }),
                 )))
                 .await
-                .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+                .map_err(|e| LLMError::CustomError(e.to_string()))?;
 
                 if tool.stop_at_call() {
                     Ok(InnerExecutionResult::Finish(
@@ -671,6 +667,10 @@ impl<C: Config> OpenAIModel<C> {
                                 ..Default::default()
                             },
                             finish_reason,
+                            response.id,
+                            response.created,
+                            response.model,
+                            Self::map_usage(response.usage.as_ref()),
                         ),
                     ))
                 } else {
@@ -703,20 +703,21 @@ impl<C: Config> OpenAIModel<C> {
                 );
                 let message_content = first_choice.message.content;
                 if let Some(content) = &message_content {
+                    let usage = Self::map_usage(response.usage.as_ref());
                     tx.send(Some(ModelEvent::new(
                         &span,
                         ModelEventType::LlmStop(LLMFinishEvent {
                             provider_name: SPAN_OPENAI.to_string(),
                             model_name: self.params.model.clone().unwrap_or_default(),
                             output: Some(content.clone()),
-                            usage: Self::map_usage(response.usage.as_ref()),
+                            usage: usage.clone(),
                             finish_reason: finish_reason.clone(),
                             tool_calls: vec![],
                             credentials_ident: self.credentials_ident.clone(),
                         }),
                     )))
                     .await
-                    .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+                    .map_err(|e| LLMError::CustomError(e.to_string()))?;
 
                     Ok(InnerExecutionResult::Finish(
                         ChatCompletionMessageWithFinishReason::new(
@@ -726,6 +727,10 @@ impl<C: Config> OpenAIModel<C> {
                                 ..Default::default()
                             },
                             finish_reason,
+                            response.id,
+                            response.created,
+                            response.model,
+                            usage,
                         ),
                     ))
                 } else {
@@ -745,7 +750,7 @@ impl<C: Config> OpenAIModel<C> {
         input_messages: Vec<ChatCompletionRequestMessage>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<ChatCompletionMessageWithFinishReason> {
+    ) -> LLMResult<ChatCompletionMessageWithFinishReason> {
         let mut openai_calls = vec![input_messages];
         let mut retries_left = self
             .execution_options
@@ -784,7 +789,7 @@ impl<C: Config> OpenAIModel<C> {
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
-    fn handle_finish_reason(finish_reason: Option<FinishReason>) -> GatewayError {
+    fn handle_finish_reason(finish_reason: Option<FinishReason>) -> LLMError {
         match finish_reason {
             Some(FinishReason::ContentFilter) => {
                 ModelError::FinishError(ModelFinishError::ContentFilter).into()
@@ -840,7 +845,7 @@ impl<C: Config> OpenAIModel<C> {
         input_messages: Vec<ChatCompletionRequestMessage>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<InnerExecutionResult> {
+    ) -> LLMResult<InnerExecutionResult> {
         let request = self.build_request(&input_messages, true)?;
         span.record("request", serde_json::to_string(&request)?);
 
@@ -853,7 +858,7 @@ impl<C: Config> OpenAIModel<C> {
             }),
         )))
         .await
-        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+        .map_err(|e| LLMError::CustomError(e.to_string()))?;
 
         let started_at = std::time::Instant::now();
         let stream = self
@@ -882,16 +887,17 @@ impl<C: Config> OpenAIModel<C> {
             }),
         )))
         .await
-        .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+        .map_err(|e| LLMError::CustomError(e.to_string()))?;
+        let mut completion_model_usage = None;
         if let Some(usage) = usage {
             span.record(
                 "raw_usage",
                 JsonValue(&serde_json::to_value(usage.clone()).unwrap()).as_value(),
             );
-            let usage = Self::map_usage(Some(&usage));
+            completion_model_usage = Self::map_usage(Some(&usage));
             span.record(
                 "usage",
-                JsonValue(&serde_json::to_value(usage).unwrap()).as_value(),
+                JsonValue(&serde_json::to_value(completion_model_usage.clone()).unwrap()).as_value(),
             );
         }
 
@@ -902,6 +908,10 @@ impl<C: Config> OpenAIModel<C> {
                         ..Default::default()
                     },
                     Self::map_finish_reason(&finish_reason),
+                    response.as_ref().map(|r| r.id.clone()).unwrap_or_default(),
+                    response.as_ref().map(|r| r.created).unwrap_or_default(),
+                    response.as_ref().map(|r| r.model.clone()).unwrap_or_default(),
+                    completion_model_usage,
                 ),
             )),
             FinishReason::ToolCalls => {
@@ -932,6 +942,10 @@ impl<C: Config> OpenAIModel<C> {
                                 ..Default::default()
                             },
                             Self::map_finish_reason(&finish_reason),
+                            response.as_ref().map(|r| r.id.clone()).unwrap_or_default(),
+                            response.as_ref().map(|r| r.created).unwrap_or_default(),
+                            response.as_ref().map(|r| r.model.clone()).unwrap_or_default(),
+                            completion_model_usage,
                         ),
                     ))
                 } else {
@@ -967,7 +981,7 @@ impl<C: Config> OpenAIModel<C> {
         input_messages: Vec<ChatCompletionRequestMessage>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<()> {
+    ) -> LLMResult<()> {
         let mut openai_calls = vec![input_messages];
         let mut retries_left = self
             .execution_options
@@ -1011,7 +1025,7 @@ impl<C: Config> OpenAIModel<C> {
     fn map_previous_messages(
         messages_dto: Vec<Message>,
         input_variables: HashMap<String, Value>,
-    ) -> GatewayResult<Vec<ChatCompletionRequestMessage>> {
+    ) -> LLMResult<Vec<ChatCompletionRequestMessage>> {
         // convert serde::Map into HashMap
         let mut messages: Vec<ChatCompletionRequestMessage> = vec![];
         for m in messages_dto.iter() {
@@ -1025,7 +1039,7 @@ impl<C: Config> OpenAIModel<C> {
                     ),
                     MessageType::AIMessage => {
                         let mut msg_args = ChatCompletionRequestAssistantMessageArgs::default();
-                        msg_args.content(Prompt::render(
+                        msg_args.content(render(
                             m.content.clone().unwrap_or_default(),
                             &input_variables,
                         ));
@@ -1080,7 +1094,7 @@ impl<C: Config + std::marker::Sync + std::marker::Send> ModelInstance for OpenAI
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<ChatCompletionMessageWithFinishReason> {
+    ) -> LLMResult<ChatCompletionMessageWithFinishReason> {
         let conversational_messages =
             self.construct_messages(input_variables, previous_messages.clone())?;
         self.execute(conversational_messages, &tx, tags).await
@@ -1092,7 +1106,7 @@ impl<C: Config + std::marker::Sync + std::marker::Send> ModelInstance for OpenAI
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<()> {
+    ) -> LLMResult<()> {
         let conversational_messages =
             self.construct_messages(input_variables, previous_messages.clone())?;
 
@@ -1106,74 +1120,14 @@ impl<C: Config> OpenAIModel<C> {
         &self,
         input_variables: HashMap<String, Value>,
         previous_messages: Vec<Message>,
-    ) -> GatewayResult<Vec<ChatCompletionRequestMessage>> {
+    ) -> LLMResult<Vec<ChatCompletionRequestMessage>> {
         let mut conversational_messages: Vec<ChatCompletionRequestMessage> = vec![];
-        let system_message = self
-            .prompt
-            .messages
-            .iter()
-            .find(|m| m.r#type == MessageType::SystemMessage)
-            .map(|message| map_chat_messages(message.to_owned(), &input_variables));
-        if let Some(system_message) = system_message {
-            conversational_messages.push(system_message?);
-        }
         let previous_messages =
             Self::map_previous_messages(previous_messages, input_variables.clone())?;
         conversational_messages.extend(previous_messages);
-        let human_message = self
-            .prompt
-            .messages
-            .iter()
-            .find(|m| m.r#type == MessageType::HumanMessage)
-            .map(|message| map_chat_messages(message.to_owned(), &input_variables));
-        if let Some(human_message) = human_message {
-            conversational_messages.push(human_message?);
-        }
 
         Ok(conversational_messages)
     }
-}
-
-fn map_chat_messages(
-    prompt: PromptMessage,
-    variables: &HashMap<String, Value>,
-) -> GatewayResult<ChatCompletionRequestMessage> {
-    let message = match prompt.r#type {
-        MessageType::AIMessage => {
-            let raw_message = Prompt::render(prompt.msg, variables);
-            ChatCompletionRequestMessage::Assistant(
-                ChatCompletionRequestAssistantMessageArgs::default()
-                    .content(raw_message)
-                    .build()
-                    .map_err(ModelError::OpenAIApi)?,
-            )
-        }
-        MessageType::HumanMessage => {
-            let msg = prompt.msg;
-            let inner_message: InnerMessage = if prompt.wired {
-                let value = variables
-                    .get(&msg)
-                    .ok_or(GatewayError::CustomError(format!("{msg} not specified")))?;
-                serde_json::from_value(value.clone())?
-            } else {
-                InnerMessage::Text(Prompt::render(msg, variables))
-            };
-            construct_user_message(&inner_message, variables.clone())
-        }
-        MessageType::SystemMessage => {
-            let raw_message = Prompt::render(prompt.msg, variables);
-            ChatCompletionRequestMessage::System(
-                ChatCompletionRequestSystemMessageArgs::default()
-                    .content(raw_message)
-                    .build()
-                    .map_err(ModelError::OpenAIApi)?,
-            )
-        }
-        MessageType::ToolResult => {
-            todo!()
-        }
-    };
-    Ok(message)
 }
 
 fn construct_user_message(
@@ -1181,22 +1135,17 @@ fn construct_user_message(
     variables: HashMap<String, Value>,
 ) -> ChatCompletionRequestMessage {
     let content = match m {
-        crate::types::threads::InnerMessage::Text(text) => {
-            ChatCompletionRequestUserMessageContent::Text(Prompt::render(
-                text.clone(),
-                &variables.clone(),
-            ))
+        InnerMessage::Text(text) => {
+            ChatCompletionRequestUserMessageContent::Text(render(text.clone(), &variables.clone()))
         }
-        crate::types::threads::InnerMessage::Array(content_array) => {
+        InnerMessage::Array(content_array) => {
             let mut messages = vec![];
             for m in content_array {
                 let msg = match m.r#type {
-                    crate::types::threads::MessageContentType::Text => {
-                        ChatCompletionRequestUserMessageContentPart::Text(
-                            Prompt::render(m.value.clone(), &variables).into(),
-                        )
-                    }
-                    crate::types::threads::MessageContentType::ImageUrl => {
+                    MessageContentType::Text => ChatCompletionRequestUserMessageContentPart::Text(
+                        render(m.value.clone(), &variables).into(),
+                    ),
+                    MessageContentType::ImageUrl => {
                         ChatCompletionRequestUserMessageContentPart::ImageUrl(
                             ChatCompletionRequestMessageContentPartImage {
                                 image_url: ImageUrl {
@@ -1206,13 +1155,13 @@ fn construct_user_message(
                                         .as_ref()
                                         .and_then(|o| o.as_image())
                                         .map(|o| match o {
-                                            crate::types::threads::ImageDetail::Auto => {
+                                            ImageDetail::Auto => {
                                                 async_openai::types::ImageDetail::Auto
                                             }
-                                            crate::types::threads::ImageDetail::Low => {
+                                            ImageDetail::Low => {
                                                 async_openai::types::ImageDetail::Low
                                             }
-                                            crate::types::threads::ImageDetail::High => {
+                                            ImageDetail::High => {
                                                 async_openai::types::ImageDetail::High
                                             }
                                         }),
@@ -1220,7 +1169,7 @@ fn construct_user_message(
                             },
                         )
                     }
-                    crate::types::threads::MessageContentType::InputAudio => {
+                    MessageContentType::InputAudio => {
                         todo!()
                     }
                 };
@@ -1237,7 +1186,7 @@ fn construct_user_message(
     )
 }
 
-pub fn record_map_err(e: impl Into<GatewayError> + ToString, span: tracing::Span) -> GatewayError {
+pub fn record_map_err(e: impl Into<LLMError> + ToString, span: tracing::Span) -> LLMError {
     span.record("error", e.to_string());
     e.into()
 }

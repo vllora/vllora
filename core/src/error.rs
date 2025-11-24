@@ -1,13 +1,14 @@
 use crate::http::status::GuardValidationFailed;
-use crate::model::error::ModelError;
-use crate::model::mcp::McpServerError;
-use crate::model::types::ModelEvent;
 use crate::types::guardrails::GuardError;
 use actix_web::http::header::ContentType;
 use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
 use serde_json::json;
 use thiserror::Error;
+use vllora_llm::client::error::ModelError;
+use vllora_llm::error::LLMError;
+use vllora_llm::mcp::McpServerError;
+use vllora_llm::types::ModelEvent;
 
 #[derive(Error, Debug)]
 pub enum GatewayError {
@@ -43,6 +44,8 @@ pub enum GatewayError {
     SendError(#[from] Box<tokio::sync::mpsc::error::SendError<Option<ModelEvent>>>),
     #[error("Unsupported provider: {0}")]
     UnsupportedProvider(String),
+    #[error(transparent)]
+    LLMError(#[from] LLMError),
 }
 
 impl From<ModelError> for GatewayError {

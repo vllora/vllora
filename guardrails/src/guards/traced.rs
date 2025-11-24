@@ -2,12 +2,12 @@ use tracing::field;
 use tracing::info_span;
 use tracing_futures::Instrument;
 use valuable::Valuable;
-use vllora_core::telemetry::events::JsonValue;
-use vllora_core::telemetry::events::SPAN_GUARD_EVAULATION;
-use vllora_core::types::gateway::ChatCompletionMessage;
 use vllora_core::types::guardrails::evaluator::Evaluator;
 use vllora_core::types::guardrails::Guard;
 use vllora_core::types::guardrails::GuardResult;
+use vllora_llm::types::gateway::ChatCompletionMessage;
+use vllora_telemetry::events::JsonValue;
+use vllora_telemetry::events::SPAN_GUARD_EVAULATION;
 
 pub struct TracedGuard {
     inner: Box<dyn Evaluator>,

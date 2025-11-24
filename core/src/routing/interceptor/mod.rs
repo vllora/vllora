@@ -1,9 +1,9 @@
 use crate::routing::InterceptorSpec;
-use crate::types::gateway::ChatCompletionRequest;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
+use vllora_llm::types::gateway::ChatCompletionRequest;
 
 mod factory;
 pub mod guard;
@@ -92,7 +92,7 @@ pub struct InterceptorContext {
     pub headers: HashMap<String, String>,
     pub state: Arc<tokio::sync::RwLock<InterceptorState>>,
     pub metadata: HashMap<String, serde_json::Value>,
-    pub extra: Option<crate::types::gateway::Extra>,
+    pub extra: Option<vllora_llm::types::gateway::Extra>,
     pub chain_position: usize,
     pub results: HashMap<String, InterceptorResult>,
 }
@@ -100,7 +100,7 @@ pub struct InterceptorContext {
 impl InterceptorContext {
     pub fn new(
         request: ChatCompletionRequest,
-        extra: Option<crate::types::gateway::Extra>,
+        extra: Option<vllora_llm::types::gateway::Extra>,
         headers: HashMap<String, String>,
         state: Arc<tokio::sync::RwLock<InterceptorState>>,
     ) -> Self {
@@ -120,7 +120,7 @@ impl InterceptorContext {
         self
     }
 
-    pub fn with_extra(mut self, extra: Option<crate::types::gateway::Extra>) -> Self {
+    pub fn with_extra(mut self, extra: Option<vllora_llm::types::gateway::Extra>) -> Self {
         self.extra = extra;
         self
     }
@@ -138,7 +138,7 @@ impl InterceptorContext {
         self.results.get(name)
     }
 
-    pub fn get_extra_metadata(&self) -> Option<&crate::types::gateway::Extra> {
+    pub fn get_extra_metadata(&self) -> Option<&vllora_llm::types::gateway::Extra> {
         self.extra.as_ref()
     }
 }

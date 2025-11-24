@@ -4,11 +4,11 @@ use std::sync::Arc;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Layer, Registry};
-use vllora_core::telemetry::events::{self, BaggageSpanProcessor};
-use vllora_core::telemetry::ProjectTraceMap;
 use vllora_core::telemetry::ProjectTraceSpanExporter;
 use vllora_core::telemetry::RunSpanBuffer;
 use vllora_core::telemetry::RunSpanBufferExporter;
+use vllora_telemetry::events::{self, BaggageSpanProcessor};
+use vllora_telemetry::ProjectTraceMap;
 
 pub fn init_tracing(
     project_trace_senders: Arc<ProjectTraceMap>,

@@ -13,16 +13,18 @@ pub mod spans;
 pub mod threads;
 pub mod traces;
 
-use crate::model::types::ModelEvent;
-use crate::models::ModelMetadata;
-use crate::types::engine::Model;
 use crate::types::metadata::services::model::ModelService;
 use crate::GatewayApiError;
-use crate::{error::GatewayError, model::error::ModelError};
+use crate::GatewayError;
 use actix_web::HttpRequest;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
+use vllora_llm::client::error::ModelError;
+use vllora_llm::error::LLMError;
+use vllora_llm::types::engine::Model;
+use vllora_llm::types::models::ModelMetadata;
+use vllora_llm::types::ModelEvent;
 
 /// Macro to convert a Result<T, E> into Result<HttpResponse>
 ///
@@ -73,9 +75,9 @@ pub fn find_model_by_full_name(
 
     match llm_model {
         Some(model) => Ok(model.into()),
-        None => Err(GatewayApiError::GatewayError(GatewayError::ModelError(
-            Box::new(ModelError::ModelNotFound(model_name.to_string())),
-        ))),
+        None => Err(GatewayApiError::LLMError(LLMError::ModelError(Box::new(
+            ModelError::ModelNotFound(model_name.to_string()),
+        )))),
     }
 }
 
@@ -85,7 +87,7 @@ pub fn extract_tags(req: &HttpRequest) -> Result<HashMap<String, String>, Gatewa
         Some(value) => {
             let tags_str = value
                 .to_str()
-                .map_err(|e| GatewayError::CustomError(e.to_string()))?
+                .map_err(|e| LLMError::CustomError(e.to_string()))?
                 .to_string();
             let tags: HashMap<String, String> = tags_str
                 .split('&')

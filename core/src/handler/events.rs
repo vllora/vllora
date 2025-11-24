@@ -1,10 +1,6 @@
 use crate::error::GatewayError;
 use crate::events::broadcast_channel_manager::BroadcastChannelManager;
-use crate::events::string_to_span_id;
 use crate::events::ui_broadcaster::EventsUIBroadcaster;
-use crate::events::CustomEventType;
-use crate::events::Event;
-use crate::events::EventRunContext;
 use crate::types::metadata::project::Project;
 use actix_web::{web, HttpResponse, Responder, Result};
 use futures::stream::StreamExt;
@@ -12,6 +8,10 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::{self};
 use tokio_stream::wrappers::ReceiverStream;
 use uuid::Uuid;
+use vllora_llm::types::events::string_to_span_id;
+use vllora_llm::types::events::CustomEventType;
+use vllora_llm::types::events::Event;
+use vllora_llm::types::events::EventRunContext;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CustomEvent {

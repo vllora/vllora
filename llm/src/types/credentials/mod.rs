@@ -4,6 +4,8 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
 
+pub mod aws;
+
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(untagged)]
 pub enum Credentials {

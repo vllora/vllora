@@ -2,11 +2,10 @@ use crate::metadata::models::trace::DbNewTrace;
 use crate::metadata::pool::DbPool;
 use crate::metadata::services::trace::TraceServiceImpl;
 use crate::metadata::DatabaseServiceTrait;
-use crate::telemetry::SpanWriterTransport;
 use crate::GatewayError;
-use crate::GatewayResult;
 use serde_json::Value;
 use std::collections::HashMap;
+use vllora_telemetry::SpanWriterTransport;
 
 pub struct SqliteTraceWriterTransport {
     trace_service: TraceServiceImpl,
@@ -128,7 +127,7 @@ impl SpanWriterTransport for SqliteTraceWriterTransport {
         _table_name: &str,
         _columns: &[&str],
         body: Vec<Vec<Value>>,
-    ) -> GatewayResult<String> {
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         if body.is_empty() {
             return Ok("0".to_string());
         }

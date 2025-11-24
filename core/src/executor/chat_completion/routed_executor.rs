@@ -1,23 +1,23 @@
 use crate::executor::chat_completion::basic_executor::BasicCacheContext;
 use crate::executor::context::ExecutorContext;
 use crate::handler::chat::SSOChatEvent;
-use crate::models::InferenceProvider;
-use crate::models::ModelMetadata;
 use crate::routing::metrics::InMemoryMetricsRepository;
 use crate::routing::RoutingStrategy;
-use crate::types::gateway::ChatCompletionChunk;
-use crate::types::gateway::ChatCompletionChunkChoice;
-use crate::types::gateway::ChatCompletionDelta;
-use crate::types::gateway::ChatCompletionUsage;
-use crate::types::provider::InferenceModelProvider;
 use crate::usage::InMemoryStorage;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::sync::Arc;
+use vllora_llm::types::gateway::ChatCompletionChunk;
+use vllora_llm::types::gateway::ChatCompletionChunkChoice;
+use vllora_llm::types::gateway::ChatCompletionDelta;
+use vllora_llm::types::gateway::ChatCompletionUsage;
+use vllora_llm::types::models::InferenceProvider;
+use vllora_llm::types::models::ModelMetadata;
+use vllora_llm::types::provider::InferenceModelProvider;
 
 use crate::executor::chat_completion::execute;
 use crate::routing::RouteStrategy;
-use crate::types::gateway::ChatCompletionRequestWithTools;
+use vllora_llm::types::gateway::ChatCompletionRequestWithTools;
 
 use crate::GatewayError;
 use actix_web::HttpResponse;
@@ -35,13 +35,13 @@ use tracing_futures::Instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt as _;
 
 use crate::routing::LlmRouter;
-use crate::telemetry::trace_id_uuid;
 use crate::GatewayApiError;
+use vllora_telemetry::trace_id_uuid;
 
-use crate::telemetry::events::JsonValue;
-use crate::telemetry::events::SPAN_REQUEST_ROUTING;
 use tracing::field;
 use valuable::Valuable;
+use vllora_telemetry::events::JsonValue;
+use vllora_telemetry::events::SPAN_REQUEST_ROUTING;
 
 const MAX_DEPTH: usize = 10;
 

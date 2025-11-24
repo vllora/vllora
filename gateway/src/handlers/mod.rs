@@ -6,10 +6,10 @@ pub mod threads;
 use actix_web::{web, HttpResponse};
 use chrono::NaiveTime;
 use vllora_core::handler::models::ChatModelsResponse;
-use vllora_core::models::ModelMetadata;
-use vllora_core::types::gateway::ChatModel;
 use vllora_core::types::metadata::services::model::ModelService;
 use vllora_core::GatewayApiError;
+use vllora_llm::types::gateway::ChatModel;
+use vllora_llm::types::models::ModelMetadata;
 
 /// Handler to list models from SQLite database
 pub async fn list_models_from_db(

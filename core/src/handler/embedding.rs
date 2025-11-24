@@ -1,13 +1,13 @@
 use crate::executor::embeddings::handle_embeddings;
-use crate::types::credentials::Credentials;
 use crate::types::embed::EmbeddingResult;
 use crate::types::metadata::services::model::ModelService;
 use actix_web::{web, HttpResponse};
 use actix_web::{HttpMessage, HttpRequest};
 use tracing::Span;
 use tracing_futures::Instrument;
+use vllora_llm::types::credentials::Credentials;
 
-use crate::types::gateway::{
+use vllora_llm::types::gateway::{
     CostCalculator, CreateEmbeddingRequest, CreateEmbeddingResponse, EmbeddingData, EmbeddingUsage,
 };
 

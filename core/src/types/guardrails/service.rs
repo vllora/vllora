@@ -1,5 +1,6 @@
+use vllora_llm::types::gateway::ChatCompletionMessage;
+
 use crate::executor::context::ExecutorContext;
-use crate::types::gateway::ChatCompletionMessage;
 use crate::types::guardrails::GuardResult;
 
 use super::GuardStage;

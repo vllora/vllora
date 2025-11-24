@@ -1,6 +1,6 @@
 use regex::Regex;
-use vllora_core::types::gateway::ChatCompletionMessage;
 use vllora_core::types::guardrails::{evaluator::Evaluator, Guard, GuardResult};
+use vllora_llm::types::gateway::ChatCompletionMessage;
 pub struct RegexEvaluator;
 
 #[async_trait::async_trait]

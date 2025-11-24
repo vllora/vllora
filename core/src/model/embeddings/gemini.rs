@@ -5,29 +5,28 @@ use tracing::field;
 use tracing::Span;
 use tracing_futures::Instrument;
 use valuable::Valuable;
+use vllora_llm::types::LLMFinishEvent;
 
-use crate::model::types::LLMStartEvent;
 use crate::{
-    create_model_span,
-    model::{
-        embeddings::EmbeddingsModelInstance,
-        error::ModelError,
-        gemini::{
-            client::Client,
-            model::gemini_client,
-            types::{Part, PartWithThought},
-        },
-        types::{LLMFinishEvent, ModelEvent, ModelEventType, ModelFinishReason},
-        CredentialsIdent,
-    },
-    telemetry::events::{JsonValue, SPAN_GEMINI},
-    types::{
-        credentials::ApiKeyCredentials,
-        embed::EmbeddingResult,
-        gateway::{CompletionModelUsage, CreateEmbeddingRequest, Input},
-    },
-    GatewayResult,
+    model::{embeddings::EmbeddingsModelInstance, CredentialsIdent},
+    types::embed::EmbeddingResult,
 };
+use vllora_llm::client::error::ModelError;
+use vllora_llm::error::LLMResult;
+use vllora_llm::provider::gemini::{
+    client::Client,
+    model::gemini_client,
+    types::{Part, PartWithThought},
+};
+use vllora_llm::types::credentials::ApiKeyCredentials;
+use vllora_llm::types::gateway::{CompletionModelUsage, CreateEmbeddingRequest, Input};
+use vllora_llm::types::LLMStartEvent;
+use vllora_llm::types::ModelEvent;
+use vllora_llm::types::ModelEventType;
+use vllora_llm::types::ModelFinishReason;
+use vllora_telemetry::create_model_span;
+use vllora_telemetry::events::JsonValue;
+use vllora_telemetry::events::SPAN_GEMINI;
 
 macro_rules! target {
     () => {
@@ -56,11 +55,11 @@ impl GeminiEmbeddings {
 
     async fn execute(
         &self,
-        embedding_request: crate::model::gemini::types::CreateEmbeddingRequest,
-        token_count_request: crate::model::gemini::types::CountTokensRequest,
+        embedding_request: vllora_llm::provider::gemini::types::CreateEmbeddingRequest,
+        token_count_request: vllora_llm::provider::gemini::types::CountTokensRequest,
         model_name: &str,
         outer_tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
-    ) -> GatewayResult<EmbeddingResult> {
+    ) -> LLMResult<EmbeddingResult> {
         let span = Span::current();
         let _ = outer_tx.try_send(Some(ModelEvent::new(
             &span,
@@ -125,7 +124,9 @@ impl GeminiEmbeddings {
         }))
     }
 
-    fn map_usage(usage: &crate::model::gemini::types::CountTokensResponse) -> CompletionModelUsage {
+    fn map_usage(
+        usage: &vllora_llm::provider::gemini::types::CountTokensResponse,
+    ) -> CompletionModelUsage {
         CompletionModelUsage {
             input_tokens: usage.total_tokens as u32,
             total_tokens: usage.total_tokens as u32,
@@ -141,14 +142,14 @@ impl EmbeddingsModelInstance for GeminiEmbeddings {
         request: &CreateEmbeddingRequest,
         outer_tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
-    ) -> GatewayResult<EmbeddingResult> {
+    ) -> LLMResult<EmbeddingResult> {
         let contents = match &request.input {
             Input::String(s) => vec![Part::Text(s.clone())],
             Input::Array(vec) => vec.iter().map(|s| Part::Text(s.clone())).collect(),
         };
 
-        let embedding_request = crate::model::gemini::types::CreateEmbeddingRequest {
-            content: crate::model::gemini::types::ContentPart {
+        let embedding_request = vllora_llm::provider::gemini::types::CreateEmbeddingRequest {
+            content: vllora_llm::provider::gemini::types::ContentPart {
                 parts: contents.clone(),
             },
             task_type: None,
@@ -156,8 +157,8 @@ impl EmbeddingsModelInstance for GeminiEmbeddings {
             output_dimensionality: request.dimensions,
         };
 
-        let token_count_request = crate::model::gemini::types::CountTokensRequest {
-            contents: crate::model::gemini::types::Content::user_with_multiple_parts(
+        let token_count_request = vllora_llm::provider::gemini::types::CountTokensRequest {
+            contents: vllora_llm::provider::gemini::types::Content::user_with_multiple_parts(
                 contents
                     .iter()
                     .map(|c| PartWithThought::from(c.clone()))

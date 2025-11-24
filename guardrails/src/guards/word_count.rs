@@ -1,7 +1,7 @@
 use regex::Regex;
-use vllora_core::types::gateway::{ChatCompletionContent, ChatCompletionMessage};
 use vllora_core::types::guardrails::evaluator::Evaluator;
 use vllora_core::types::guardrails::{Guard, GuardResult};
+use vllora_llm::types::gateway::{ChatCompletionContent, ChatCompletionMessage};
 
 /// Word count evaluator that checks if text meets specified word count limits
 pub struct WordCountEvaluator;

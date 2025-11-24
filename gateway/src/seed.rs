@@ -109,7 +109,7 @@ async fn load_embedded_models(db_pool: DbPool) -> Result<usize, run::models::Mod
     use crate::MODELS_DATA_JSON;
 
     // Parse embedded JSON
-    let models: Vec<vllora_core::models::ModelMetadata> =
+    let models: Vec<vllora_llm::types::models::ModelMetadata> =
         run::models::load_models_from_json(MODELS_DATA_JSON)?;
 
     // Convert to DbNewModel and insert into database

@@ -8,9 +8,9 @@ use opentelemetry::{
 };
 use opentelemetry_sdk::propagation::TraceContextPropagator;
 use std::future::Ready;
-use vllora_core::telemetry::AdditionalContext;
 use vllora_core::telemetry::HeaderExtractor;
 use vllora_core::types::metadata::project::Project;
+use vllora_telemetry::AdditionalContext;
 
 pub struct TracingContext;
 impl<S, B> Transform<S, ServiceRequest> for TracingContext

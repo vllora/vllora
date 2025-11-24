@@ -1,88 +1,36 @@
-use std::collections::HashSet;
+use crate::types::gateway::{ChatCompletionContent, ChatCompletionMessage, ContentType};
+use crate::types::message::AudioDetail;
+use crate::types::message::AudioFormat;
+use crate::types::message::Message;
+use crate::types::message::MessageContentPart;
+use crate::types::message::MessageContentPartOptions;
+use crate::types::message::MessageContentType;
+use crate::types::message::MessageType;
 
-use crate::types::{
-    gateway::{ChatCompletionContent, ChatCompletionMessage, ContentType},
-    message::{MessageType, PromptMessage},
-    threads::{
-        AudioDetail, AudioFormat, Message, MessageContentPart, MessageContentPartOptions,
-        MessageContentType,
-    },
-};
-
-use crate::GatewayError;
+#[derive(Debug, thiserror::Error)]
+pub enum MessageMapperError {
+    #[error("System message can only have one content")]
+    SystemMessageCanOnlyHaveOneContent,
+    #[error("System message content is empty")]
+    SystemMessageContentIsEmpty,
+    #[error("Image url are not supported for system messages")]
+    ImageUrlNotSupportedForSystemMessages,
+    #[error("Input audio are not supported for system messages")]
+    InputAudioNotSupportedForSystemMessages,
+    #[error("Audio data is empty")]
+    AudioDataIsEmpty,
+    #[error("Unsupported audio format: {0}")]
+    UnsupportedAudioFormat(String),
+}
 
 pub struct MessageMapper {}
 
 impl MessageMapper {
-    pub fn map_prompt_message(
-        messages: &[ChatCompletionMessage],
-    ) -> Result<Vec<PromptMessage>, GatewayError> {
-        let mut prompt_messages = vec![];
-        for message in messages.iter() {
-            if message.role.as_str() == "system" {
-                let msg = match &message.content {
-                    Some(content) => match content {
-                        ChatCompletionContent::Text(content) => content.clone(),
-                        ChatCompletionContent::Content(content) => {
-                            if content.len() > 1 {
-                                return Err(GatewayError::CustomError(
-                                    "System message can only have one content".to_string(),
-                                ));
-                            }
-
-                            let content = content.first().ok_or(GatewayError::CustomError(
-                                "System message content is empty".to_string(),
-                            ))?;
-
-                            match content.r#type {
-                                ContentType::Text => match &content.text {
-                                    Some(content) => content.clone(),
-                                    None => {
-                                        return Err(GatewayError::CustomError(
-                                            "System message content is empty".to_string(),
-                                        ))
-                                    }
-                                },
-                                ContentType::ImageUrl => {
-                                    return Err(GatewayError::CustomError(
-                                        "Image url are not supported for system messages"
-                                            .to_string(),
-                                    ))
-                                }
-                                ContentType::InputAudio => {
-                                    return Err(GatewayError::CustomError(
-                                        "Input audio are not supported for system messages"
-                                            .to_string(),
-                                    ))
-                                }
-                            }
-                        }
-                    },
-                    None => {
-                        return Err(GatewayError::CustomError(
-                            "System message content is empty".to_string(),
-                        ))
-                    }
-                };
-
-                let m = PromptMessage {
-                    r#type: MessageType::SystemMessage,
-                    msg,
-                    wired: false,
-                    parameters: HashSet::new(),
-                };
-                prompt_messages.push(m);
-            }
-        }
-
-        Ok(prompt_messages)
-    }
-
     pub fn map_completions_message_to_vllora_message(
         message: &ChatCompletionMessage,
         model_name: &str,
         user: &str,
-    ) -> Result<Message, GatewayError> {
+    ) -> Result<Message, MessageMapperError> {
         let content = if let Some(content) = &message.content {
             match content {
                 ChatCompletionContent::Text(content) => {
@@ -133,9 +81,10 @@ impl MessageMapper {
                                 cache_control: c.cache_control.clone(),
                             },
                             ContentType::InputAudio => {
-                                let audio = c.audio.as_ref().ok_or(GatewayError::CustomError(
-                                    "Audio data is empty".to_string(),
-                                ))?;
+                                let audio = c
+                                    .audio
+                                    .as_ref()
+                                    .ok_or(MessageMapperError::AudioDataIsEmpty)?;
                                 MessageContentPart {
                                     r#type: MessageContentType::InputAudio,
                                     value: audio.data.clone(),
@@ -145,9 +94,11 @@ impl MessageMapper {
                                                 "mp3" => AudioFormat::Mp3,
                                                 "wav" => AudioFormat::Wav,
                                                 f => {
-                                                    return Err(GatewayError::CustomError(format!(
-                                                        "Unsupported audio format {f}"
-                                                    )))
+                                                    return Err(
+                                                        MessageMapperError::UnsupportedAudioFormat(
+                                                            format!("Unsupported audio format {f}"),
+                                                        ),
+                                                    );
                                                 }
                                             },
                                         },
@@ -157,7 +108,7 @@ impl MessageMapper {
                             }
                         })
                     })
-                    .collect::<Result<Vec<MessageContentPart>, GatewayError>>(),
+                    .collect::<Result<Vec<MessageContentPart>, MessageMapperError>>(),
             }
         } else {
             Ok(vec![])

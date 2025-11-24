@@ -6,10 +6,10 @@ use crate::types::guardrails::service::GuardrailsEvaluator;
 use crate::{
     error::GatewayError,
     handler::{extract_tags, CallbackHandlerFn},
-    types::gateway::CostCalculator,
 };
 use actix_web::HttpRequest;
 use std::{collections::HashMap, sync::Arc};
+use vllora_llm::types::gateway::CostCalculator;
 
 use super::ProvidersConfig;
 use crate::routing::interceptor::InterceptorFactory;

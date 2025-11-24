@@ -1,7 +1,6 @@
 use crate::metadata::schema::projects;
 use crate::types::metadata::project::Project;
 use crate::types::project_settings::ProjectSettings;
-use crate::types::provider::ModelPrice;
 use chrono::{DateTime, NaiveDateTime};
 use diesel::helper_types::AsSelect;
 use diesel::helper_types::Select;
@@ -18,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use uuid::Uuid;
+use vllora_llm::types::provider::ModelPrice;
 
 #[derive(
     QueryableByName,

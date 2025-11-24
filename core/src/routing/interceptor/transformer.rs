@@ -1,8 +1,8 @@
 use crate::routing::interceptor::types::{TransformDirection, TransformRule};
 use crate::routing::interceptor::{Interceptor, InterceptorContext, InterceptorError};
-use crate::types::gateway::{ChatCompletionContent, ChatCompletionMessage};
 use regex::Regex;
 use serde_json::Value;
+use vllora_llm::types::gateway::{ChatCompletionContent, ChatCompletionMessage};
 
 /// Message transformer interceptor implementation
 pub struct MessageTransformerInterceptor {

@@ -55,13 +55,14 @@ use vllora_core::metadata::services::trace::TraceServiceImpl as MetadataTraceSer
 use vllora_core::metadata::DatabaseService;
 use vllora_core::telemetry::database::SqliteTraceWriterTransport;
 use vllora_core::telemetry::RunSpanBuffer;
-use vllora_core::telemetry::SpanWriterTransport;
-use vllora_core::telemetry::{TraceServiceImpl as TelemetryTraceServiceImpl, TraceServiceServer};
-use vllora_core::types::gateway::CostCalculator;
 use vllora_core::types::guardrails::service::GuardrailsEvaluator;
 use vllora_core::types::guardrails::Guard;
 use vllora_core::types::metadata::services::model::ModelService;
 use vllora_core::usage::InMemoryStorage;
+use vllora_llm::types::gateway::CostCalculator;
+use vllora_telemetry::SpanWriterTransport;
+use vllora_telemetry::TraceServiceImpl as TelemetryTraceServiceImpl;
+use vllora_telemetry::TraceServiceServer;
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 #[serde(crate = "serde")]

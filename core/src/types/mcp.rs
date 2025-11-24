@@ -1,6 +1,6 @@
-use crate::types::gateway::{McpDefinition, McpTransportType, ToolsFilter};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use vllora_llm::types::gateway::{McpDefinition, McpTransportType, ToolsFilter};
 
 /// Configuration for MCP servers
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

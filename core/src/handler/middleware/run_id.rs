@@ -1,4 +1,3 @@
-use crate::telemetry::AdditionalContext;
 use crate::types::threads::CompletionsRunId;
 use actix_http::h1::Payload;
 use actix_web::dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform};
@@ -12,6 +11,7 @@ use std::pin::Pin;
 use std::rc::Rc;
 use tokio_stream::StreamExt;
 use uuid::Uuid;
+use vllora_telemetry::AdditionalContext;
 
 #[derive(Deserialize, Debug)]
 struct Extra {

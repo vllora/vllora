@@ -1,12 +1,17 @@
 use crate::model::ModelProviderInstance;
-use crate::models::{InferenceProvider, ModelCapability, ModelIOFormats, ModelMetadata, ModelType};
-use crate::types::credentials::{Credentials, VertexCredentials};
-use crate::types::provider::{CompletionModelPrice, InferenceModelProvider, ModelPrice};
 use crate::GatewayApiError;
 use async_trait::async_trait;
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use serde::Deserialize;
 use serde::Serialize;
+use vllora_llm::types::credentials::{Credentials, VertexCredentials};
+use vllora_llm::types::models::InferenceProvider;
+use vllora_llm::types::models::Limits;
+use vllora_llm::types::models::ModelCapability;
+use vllora_llm::types::models::ModelIOFormats;
+use vllora_llm::types::models::ModelMetadata;
+use vllora_llm::types::models::ModelType;
+use vllora_llm::types::provider::{CompletionModelPrice, InferenceModelProvider, ModelPrice};
 
 #[derive(Clone)]
 enum GoogleClientKind {
@@ -173,7 +178,7 @@ impl ModelProviderInstance for GoogleVertexModelProvider {
                         output_formats,
                         capabilities,
                         r#type: ModelType::Completions,
-                        limits: crate::models::Limits::new(0),
+                        limits: Limits::new(0),
                         description: m.description.unwrap_or_default(),
                         parameters: None,
                         benchmark_info: None,

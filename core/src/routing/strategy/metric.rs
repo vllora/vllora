@@ -6,13 +6,13 @@ use crate::{
         metrics::MetricsRepository, strategy::conditional::evaluator::compare_values,
         MetricsDuration, RouterError,
     },
-    telemetry::events::JsonValue,
     usage::{Metrics, ModelMetrics, TimeMetrics},
 };
 use futures::future;
 use rand::seq::IteratorRandom;
 use tracing::Span;
 use valuable::Valuable;
+use vllora_telemetry::events::JsonValue;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Default, Clone, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]

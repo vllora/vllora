@@ -1,4 +1,4 @@
-use vllora_core::types::gateway::ChatCompletionMessage;
+use vllora_llm::types::gateway::ChatCompletionMessage;
 
 use vllora_core::types::guardrails::{
     evaluator::Evaluator, DatasetLoader, Guard, GuardExample, GuardResult,

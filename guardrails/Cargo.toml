@@ -13,6 +13,9 @@ categories = ["web-programming", "network-programming"]
 
 [dependencies]
 vllora_core = { path = "../core", version = "0.1.8", default-features = false }
+vllora_llm = { path = "../llm", version = "0.1.8" }
+vllora_telemetry = { path = "../telemetry", version = "0.1.8" }
+
 serde_json = { workspace = true }
 serde = { workspace = true }
 serde_yaml = { workspace = true }

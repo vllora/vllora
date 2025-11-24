@@ -4,18 +4,12 @@ use async_openai::{
     Client,
 };
 use tracing::Span;
-use vllora_core::{
-    model::error::AuthorizationError,
-    types::{
-        credentials::ApiKeyCredentials,
-        gateway::{ChatCompletionContent, ChatCompletionMessage, ContentType},
-        guardrails::{
-            partner::{GuardPartner, GuardPartnerError},
-            GuardResult,
-        },
-    },
-};
-
+use vllora_core::types::guardrails::partner::GuardPartner;
+use vllora_core::types::guardrails::partner::GuardPartnerError;
+use vllora_core::types::guardrails::GuardResult;
+use vllora_llm::client::error::AuthorizationError;
+use vllora_llm::types::credentials::ApiKeyCredentials;
+use vllora_llm::types::gateway::{ChatCompletionContent, ChatCompletionMessage, ContentType};
 pub struct OpenaiGuardrailPartner {
     api_key: String,
 }

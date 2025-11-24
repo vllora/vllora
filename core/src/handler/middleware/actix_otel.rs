@@ -1,6 +1,4 @@
 use crate::events::ui_broadcaster::EventsUIBroadcaster;
-use crate::events::{CustomEventType, Event, EventRunContext};
-use crate::telemetry::events::JsonValue;
 use crate::types::metadata::project::Project;
 use crate::types::threads::{CompletionsRunId, CompletionsThreadId};
 use actix_web::dev::forward_ready;
@@ -17,6 +15,8 @@ use tracing::{field, Span};
 use tracing_futures::Instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use valuable::Valuable;
+use vllora_llm::types::events::{CustomEventType, Event, EventRunContext};
+use vllora_telemetry::events::JsonValue;
 
 use actix_web::{web, HttpMessage, HttpRequest};
 

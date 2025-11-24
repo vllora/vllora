@@ -1,7 +1,7 @@
-use crate::telemetry::ProjectTraceMap;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 use tracing::info;
+use vllora_telemetry::ProjectTraceMap;
 
 /// Manages broadcast channels with automatic cleanup to prevent memory leaks.
 ///
@@ -34,7 +34,7 @@ impl BroadcastChannelManager {
     pub fn get_or_create_channel(
         &self,
         project_id: &str,
-    ) -> Result<broadcast::Sender<crate::telemetry::Span>, String> {
+    ) -> Result<broadcast::Sender<vllora_telemetry::Span>, String> {
         // Check if channel exists and has receivers
         if let Some(entry) = self.map.get(project_id) {
             let sender = entry.value();
