@@ -2,7 +2,7 @@ use crate::callback_handler::init_callback_handler;
 use crate::config::Config;
 use crate::cost::GatewayCostCalculator;
 use crate::guardrails::GuardrailsService;
-use crate::handlers::{models, projects, session, threads};
+use crate::handlers::{experiments, models, projects, session, threads};
 use crate::middleware::project::ProjectMiddleware;
 use crate::middleware::thread_service::ThreadsServiceMiddleware;
 use crate::middleware::trace_logger::TraceLogger;
@@ -332,6 +332,15 @@ impl ApiServer {
                     )
                     .route("/{id}", web::get().to(threads::get_thread))
                     .route("/{id}", web::put().to(threads::update_thread)),
+            )
+            .service(
+                web::scope("/experiments")
+                    .route("", web::get().to(experiments::list_experiments))
+                    .route("", web::post().to(experiments::create_experiment))
+                    .route("/{id}", web::get().to(experiments::get_experiment))
+                    .route("/{id}", web::put().to(experiments::update_experiment))
+                    .route("/{id}", web::delete().to(experiments::delete_experiment))
+                    .route("/by-span/{span_id}", web::get().to(experiments::get_experiments_by_span)),
             )
             .service(
                 web::scope("/events")

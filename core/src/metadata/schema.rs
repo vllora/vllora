@@ -36,6 +36,28 @@ diesel::table! {
 }
 
 diesel::table! {
+    experiments (id) {
+        id -> Text,
+        name -> Text,
+        description -> Nullable<Text>,
+        original_span_id -> Text,
+        original_trace_id -> Text,
+        original_request -> Text,
+        modified_request -> Text,
+        headers -> Nullable<Text>,
+        prompt_variables -> Nullable<Text>,
+        model_parameters -> Nullable<Text>,
+        result_span_id -> Nullable<Text>,
+        result_trace_id -> Nullable<Text>,
+        status -> Text,
+        project_id -> Nullable<Text>,
+        created_at -> Text,
+        updated_at -> Text,
+    }
+}
+
+
+diesel::table! {
     projects (id) {
         id -> Text,
         name -> Text,
@@ -125,7 +147,7 @@ diesel::table! {
         id -> Text,
     }
 }
-
+diesel::joinable!(experiments -> projects (project_id));
 diesel::joinable!(provider_credentials -> projects (project_id));
 
 diesel::allow_tables_to_appear_in_same_query!(

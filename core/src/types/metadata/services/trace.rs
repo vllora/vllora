@@ -37,6 +37,7 @@ pub enum GroupByKey {
 
 pub struct ListTracesQuery {
     pub project_slug: Option<String>,
+    pub span_id: Option<String>,
     pub run_ids: Option<Vec<String>>,
     pub thread_ids: Option<Vec<String>>,
     pub operation_names: Option<Vec<String>>,
@@ -134,6 +135,7 @@ impl Default for ListTracesQuery {
     fn default() -> Self {
         Self {
             project_slug: None,
+            span_id: None,
             run_ids: None,
             thread_ids: None,
             operation_names: None,
