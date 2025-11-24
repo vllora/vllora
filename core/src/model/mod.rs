@@ -662,7 +662,7 @@ async fn execute_stream(
         .with_input_variables(input_vars.clone())
         .with_tx(tx.clone())
         .with_tags(tags.clone());
-    let result = client.create_stream(request.clone()).await;
+    let result = client.create_stream(request.clone()).await.map(|_| ());
     tx.send(None)
         .await
         .map_err(|e| LLMError::BoxedError(Box::new(e)))?;

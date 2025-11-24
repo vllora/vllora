@@ -85,6 +85,7 @@ pub async fn stream_chunks(
         }
         .in_current_span(),
     );
+
     let event_stream = ReceiverStream::new(rx)
         .into_stream()
         .then(move |e| {
