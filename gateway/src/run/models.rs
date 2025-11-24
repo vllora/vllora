@@ -29,8 +29,7 @@ pub async fn fetch_and_store_models(
 ) -> Result<Vec<ModelMetadata>, ModelsLoadError> {
     let langdb_api_url = std::env::var("LANGDB_API_URL")
         .ok()
-        .unwrap_or(LANGDB_API_URL.to_string())
-        .replace("/v1", "");
+        .unwrap_or(LANGDB_API_URL.to_string());
 
     // Fetch models from API
     let client = reqwest::Client::new();
@@ -63,7 +62,7 @@ pub async fn fetch_and_store_models(
         synced_model_identifiers.insert((new_model.model_name.clone(), "langdb".to_string()));
 
         new_model.id = Some(Uuid::new_v4().to_string());
-        new_model.endpoint = Some(format!("{langdb_api_url}/v1"));
+        new_model.endpoint = Some(format!("{langdb_api_url}"));
         new_model.provider_name = "langdb".to_string();
         new_model.model_name_in_provider = Some(new_model.model_name.clone());
         langdb_models.insert(new_model.model_name.clone(), new_model);
@@ -102,8 +101,7 @@ pub async fn fetch_and_save_models_json(
 ) -> Result<Vec<ModelMetadata>, ModelsLoadError> {
     let langdb_api_url = std::env::var("LANGDB_API_URL")
         .ok()
-        .unwrap_or(LANGDB_API_URL.to_string())
-        .replace("/v1", "");
+        .unwrap_or(LANGDB_API_URL.to_string());
 
     // Fetch models from API
     let client = reqwest::Client::new();
