@@ -97,6 +97,7 @@ pub struct GenerationConfig {
 pub struct PartWithThought {
     #[serde(flatten)]
     pub part: Part,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub thought_signature: Option<String>,
 }
 

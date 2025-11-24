@@ -646,7 +646,7 @@ impl AnthropicModel {
                                     tool_id: tool_call.id.clone(),
                                     tool_name: tool_call.name.clone(),
                                     input: serde_json::to_string(&tool_call.input).unwrap(),
-                                    extra: None,
+                                    extra_content: None,
                                 })
                                 .collect(),
                             credentials_ident: self.credentials_ident.clone(),
@@ -675,7 +675,7 @@ impl AnthropicModel {
                                                         &tool_call.input,
                                                     )?,
                                                 },
-                                                extra: None,
+                                                extra_content: None,
                                             })
                                         })
                                         .collect::<Result<Vec<ToolCall>, LLMError>>()?,
@@ -852,7 +852,7 @@ impl AnthropicModel {
             tool_id: t.id.clone(),
             tool_name: t.name.clone(),
             input: serde_json::to_string(&t.input)?,
-            extra: None,
+            extra_content: None,
         })
     }
 

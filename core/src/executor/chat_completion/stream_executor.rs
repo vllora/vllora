@@ -134,7 +134,7 @@ pub async fn stream_chunks(
                                     name: tool_call.tool_name.clone(),
                                     arguments: tool_call.input.clone(),
                                 },
-                                extra: None,
+                                extra_content: None,
                             }]),
                         }),
                         None,
@@ -162,7 +162,7 @@ pub async fn stream_chunks(
                                                 name: tc.tool_name.clone(),
                                                 arguments: tc.input.clone(),
                                             },
-                                            extra: tc.extra.clone(),
+                                            extra_content: tc.extra_content.clone(),
                                         })
                                         .collect(),
                                 ),

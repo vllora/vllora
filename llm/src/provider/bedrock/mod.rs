@@ -243,7 +243,7 @@ impl BedrockModel {
             tool_id: tool_call.tool_use_id.clone(),
             tool_name: tool_call.name.clone(),
             input: serde_json::to_string(&tool_call.input)?,
-            extra: None,
+            extra_content: None,
         })
     }
     async fn handle_tool_calls(
@@ -573,7 +573,7 @@ impl BedrockModel {
                                         arguments: serde_json::to_string(tool_call.input())
                                             .unwrap_or_default(),
                                     },
-                                    extra: None,
+                                    extra_content: None,
                                 })
                                 .collect();
                             let tool_calls_str = serde_json::to_string(&tool_calls)?;

@@ -170,7 +170,7 @@ pub struct ModelToolCall {
     pub tool_name: String,
     pub input: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub extra: Option<ToolCallExtra>,
+    pub extra_content: Option<ToolCallExtra>,
 }
 
 impl ModelToolCall {
@@ -183,7 +183,7 @@ impl ModelToolCall {
                 name: self.tool_name.clone(),
                 arguments: self.input.clone(),
             },
-            extra: self.extra.clone(),
+            extra_content: self.extra_content.clone(),
         }
     }
 }

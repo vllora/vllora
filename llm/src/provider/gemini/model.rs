@@ -428,7 +428,7 @@ impl GeminiModel {
                             name: c.0.clone(),
                             arguments: serde_json::to_string(&c.1).unwrap(),
                         },
-                        extra: c.2.as_ref().map(|s| ToolCallExtra {
+                        extra_content: c.2.as_ref().map(|s| ToolCallExtra {
                             google: Some(GoogleToolCallExtra {
                                 thought_signature: s.clone(),
                             }),
@@ -474,10 +474,12 @@ impl GeminiModel {
                                         tool_id: tool_name.clone(),
                                         tool_name: tool_name.clone(),
                                         input: serde_json::to_string(params)?,
-                                        extra: thought_signature.as_ref().map(|s| ToolCallExtra {
-                                            google: Some(GoogleToolCallExtra {
-                                                thought_signature: s.clone(),
-                                            }),
+                                        extra_content: thought_signature.as_ref().map(|s| {
+                                            ToolCallExtra {
+                                                google: Some(GoogleToolCallExtra {
+                                                    thought_signature: s.clone(),
+                                                }),
+                                            }
                                         }),
                                     })
                                 })
@@ -510,13 +512,13 @@ impl GeminiModel {
                                                     name: tool_name.clone(),
                                                     arguments: serde_json::to_string(params)?,
                                                 },
-                                                extra: thought_signature.as_ref().map(|s| {
-                                                    ToolCallExtra {
+                                                extra_content: thought_signature.as_ref().map(
+                                                    |s| ToolCallExtra {
                                                         google: Some(GoogleToolCallExtra {
                                                             thought_signature: s.clone(),
                                                         }),
-                                                    }
-                                                }),
+                                                    },
+                                                ),
                                             })
                                         })
                                         .collect::<Result<Vec<ToolCall>, LLMError>>()?,
@@ -704,7 +706,7 @@ impl GeminiModel {
             tool_id: t.0.clone(),
             tool_name: t.0.clone(),
             input: serde_json::to_string(&t.1).unwrap(),
-            extra: t.2.as_ref().map(|s| ToolCallExtra {
+            extra_content: t.2.as_ref().map(|s| ToolCallExtra {
                 google: Some(GoogleToolCallExtra {
                     thought_signature: s.clone(),
                 }),
@@ -789,7 +791,7 @@ impl GeminiModel {
                         name: name.clone(),
                         arguments: serde_json::to_string(args)?,
                     },
-                    extra: thought_signature.as_ref().map(|s| ToolCallExtra {
+                    extra_content: thought_signature.as_ref().map(|s| ToolCallExtra {
                         google: Some(GoogleToolCallExtra {
                             thought_signature: s.clone(),
                         }),
@@ -957,11 +959,13 @@ impl GeminiModel {
                                                 name: c.id.clone(),
                                                 args: serde_json::from_str(args)?,
                                             },
-                                            thought_signature: c.extra.as_ref().and_then(|e| {
-                                                e.google
-                                                    .as_ref()
-                                                    .map(|g| g.thought_signature.clone())
-                                            }),
+                                            thought_signature: c.extra_content.as_ref().and_then(
+                                                |e| {
+                                                    e.google
+                                                        .as_ref()
+                                                        .map(|g| g.thought_signature.clone())
+                                                },
+                                            ),
                                         })
                                     })
                                     .collect::<Result<Vec<PartWithThought>, LLMError>>()?,

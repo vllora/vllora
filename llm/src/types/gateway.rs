@@ -281,7 +281,7 @@ fn map_message(message: &ChatCompletionRequestMessage) -> ChatCompletionMessage 
                     name: tool_call.function.name.clone(),
                     arguments: tool_call.function.arguments.clone(),
                 },
-                extra: None,
+                extra_content: None,
             }).collect()),
             tool_call_id: message.tool_calls.as_ref().and_then(|tool_calls| tool_calls.first().map(|tool_call| tool_call.id.clone())),
             cache_control: None
@@ -712,7 +712,7 @@ pub struct ToolCall {
     pub r#type: String,
     pub function: FunctionCall,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub extra: Option<ToolCallExtra>,
+    pub extra_content: Option<ToolCallExtra>,
 }
 
 impl From<ToolCall> for async_openai::types::ChatCompletionMessageToolCall {
