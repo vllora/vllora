@@ -70,7 +70,7 @@ macro_rules! target {
 }
 
 enum InnerExecutionResult {
-    Finish(ChatCompletionMessageWithFinishReason),
+    Finish(Box<ChatCompletionMessageWithFinishReason>),
     NextCall(Vec<ChatCompletionRequestMessage>),
 }
 
@@ -671,7 +671,8 @@ impl<C: Config> OpenAIModel<C> {
                             response.created,
                             response.model,
                             Self::map_usage(response.usage.as_ref()),
-                        ),
+                        )
+                        .into(),
                     ))
                 } else {
                     let mut messages: Vec<ChatCompletionRequestMessage> =
@@ -731,7 +732,8 @@ impl<C: Config> OpenAIModel<C> {
                             response.created,
                             response.model,
                             usage,
-                        ),
+                        )
+                        .into(),
                     ))
                 } else {
                     Err(ModelError::FinishError(ModelFinishError::NoOutputProvided).into())
@@ -770,7 +772,7 @@ impl<C: Config> OpenAIModel<C> {
                 .execute_inner(span.clone(), messages.clone(), tx, tags.clone())
                 .await
             {
-                Ok(InnerExecutionResult::Finish(message)) => return Ok(message),
+                Ok(InnerExecutionResult::Finish(message)) => return Ok(*message),
                 Ok(InnerExecutionResult::NextCall(messages)) => {
                     openai_calls.push(messages);
                 }
@@ -897,7 +899,8 @@ impl<C: Config> OpenAIModel<C> {
             completion_model_usage = Self::map_usage(Some(&usage));
             span.record(
                 "usage",
-                JsonValue(&serde_json::to_value(completion_model_usage.clone()).unwrap()).as_value(),
+                JsonValue(&serde_json::to_value(completion_model_usage.clone()).unwrap())
+                    .as_value(),
             );
         }
 
@@ -910,9 +913,13 @@ impl<C: Config> OpenAIModel<C> {
                     Self::map_finish_reason(&finish_reason),
                     response.as_ref().map(|r| r.id.clone()).unwrap_or_default(),
                     response.as_ref().map(|r| r.created).unwrap_or_default(),
-                    response.as_ref().map(|r| r.model.clone()).unwrap_or_default(),
+                    response
+                        .as_ref()
+                        .map(|r| r.model.clone())
+                        .unwrap_or_default(),
                     completion_model_usage,
-                ),
+                )
+                .into(),
             )),
             FinishReason::ToolCalls => {
                 let tool = self
@@ -944,9 +951,13 @@ impl<C: Config> OpenAIModel<C> {
                             Self::map_finish_reason(&finish_reason),
                             response.as_ref().map(|r| r.id.clone()).unwrap_or_default(),
                             response.as_ref().map(|r| r.created).unwrap_or_default(),
-                            response.as_ref().map(|r| r.model.clone()).unwrap_or_default(),
+                            response
+                                .as_ref()
+                                .map(|r| r.model.clone())
+                                .unwrap_or_default(),
                             completion_model_usage,
-                        ),
+                        )
+                        .into(),
                     ))
                 } else {
                     let mut messages: Vec<ChatCompletionRequestMessage> =

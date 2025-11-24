@@ -282,7 +282,7 @@ mod tests {
     use crate::metadata::models::provider_credential::UpdateProviderCredentialsDTO;
     use crate::metadata::services::project::ProjectServiceImpl;
     use crate::metadata::test_utils::setup_test_database;
-    use crate::types::credentials::{ApiKeyCredentials, Credentials};
+    use vllora_llm::types::credentials::{ApiKeyCredentials, Credentials};
     use crate::types::metadata::services::project::ProjectService;
     use uuid::Uuid;
 

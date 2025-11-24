@@ -296,7 +296,7 @@ impl Default for MetadataManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::gateway::{Extra, RequestUser};
+    use vllora_llm::types::gateway::{Extra, RequestUser};
 
     #[test]
     fn test_metadata_field_parsing() {

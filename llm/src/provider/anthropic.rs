@@ -53,7 +53,7 @@ macro_rules! target {
 }
 
 enum InnerExecutionResult {
-    Finish(ChatCompletionMessageWithFinishReason),
+    Finish(Box<ChatCompletionMessageWithFinishReason>),
     NextCall((Option<SystemPrompt>, Vec<ClustMessage>)),
 }
 
@@ -512,7 +512,8 @@ impl AnthropicModel {
                                 chrono::Utc::now().timestamp() as u32,
                                 response.model.to_string(),
                                 Some(usage),
-                            ),
+                            )
+                            .into(),
                         ))
                     }
                     Content::MultipleBlocks(blocks) => {
@@ -567,7 +568,8 @@ impl AnthropicModel {
                                 chrono::Utc::now().timestamp() as u32,
                                 response.model.to_string(),
                                 Some(usage),
-                            ),
+                            )
+                            .into(),
                         ))
                     }
                 }
@@ -683,7 +685,8 @@ impl AnthropicModel {
                             chrono::Utc::now().timestamp() as u32,
                             response.model.to_string(),
                             usage,
-                        ),
+                        )
+                        .into(),
                     ))
                 } else {
                     let result_tool_calls =
@@ -740,7 +743,7 @@ impl AnthropicModel {
                 .execute_inner(call_span.clone(), request, tx, tags.clone())
                 .await
             {
-                Ok(InnerExecutionResult::Finish(message)) => return Ok(message),
+                Ok(InnerExecutionResult::Finish(message)) => return Ok(message.deref().clone()),
                 Ok(InnerExecutionResult::NextCall((system_prompt, messages))) => {
                     calls.push((system_prompt, messages));
                 }
@@ -930,10 +933,11 @@ impl AnthropicModel {
                     },
                     ModelFinishReason::Stop,
                     response.id.clone(),
-                                chrono::Utc::now().timestamp() as u32,
-                                response.model.to_string(),
-                                Some(usage),
-                ),
+                    chrono::Utc::now().timestamp() as u32,
+                    response.model.to_string(),
+                    Some(usage),
+                )
+                .into(),
             )),
             StopReason::MaxTokens => Err(Self::handle_max_tokens_error()),
             StopReason::ToolUse => {
@@ -965,10 +969,11 @@ impl AnthropicModel {
                             },
                             ModelFinishReason::ToolCalls,
                             response.id.clone(),
-                                chrono::Utc::now().timestamp() as u32,
-                                response.model.to_string(),
-                                Some(usage),
-                        ),
+                            chrono::Utc::now().timestamp() as u32,
+                            response.model.to_string(),
+                            Some(usage),
+                        )
+                        .into(),
                     ))
                 } else {
                     let mut messages = vec![ClustMessage::assistant(Content::MultipleBlocks(

@@ -158,7 +158,7 @@ impl MessageTransformerFactory {
 mod tests {
     use super::*;
     use crate::routing::interceptor::InterceptorState;
-    use crate::types::gateway::{
+    use vllora_llm::types::gateway::{
         ChatCompletionContent, ChatCompletionMessage, ChatCompletionRequest,
     };
     use std::collections::HashMap;

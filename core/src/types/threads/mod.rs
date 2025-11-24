@@ -121,20 +121,20 @@ pub enum PageOrderType {
 #[cfg(test)]
 mod tests {
     use serde_json::json;
-
-    use crate::types::threads::MessageContentPart;
-
+    use vllora_llm::types::message::MessageContentPart;
+    use vllora_llm::types::message::MessageContentType;
+    
     #[test]
     fn message_serialization() {
         let test = vec![
             MessageContentPart {
-                r#type: super::MessageContentType::ImageUrl,
+                r#type: MessageContentType::ImageUrl,
                 value: "image/base64".to_string(),
                 additional_options: None,
                 cache_control: None,
             },
             MessageContentPart {
-                r#type: super::MessageContentType::Text,
+                r#type: MessageContentType::Text,
                 value: "How is my image".to_string(),
                 additional_options: None,
                 cache_control: None,
@@ -159,7 +159,7 @@ mod tests {
 
         let result: Vec<MessageContentPart> = serde_json::from_value(json_data).unwrap();
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].r#type, super::MessageContentType::Text);
+        assert_eq!(result[0].r#type, MessageContentType::Text);
         assert_eq!(result[0].value, "Hello world");
         assert_eq!(result[0].additional_options, None);
         assert_eq!(result[0].cache_control, None);
@@ -172,7 +172,7 @@ mod tests {
 
         let result: Vec<MessageContentPart> = serde_json::from_value(json_data).unwrap();
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].r#type, super::MessageContentType::Text);
+        assert_eq!(result[0].r#type, MessageContentType::Text);
         assert_eq!(result[0].value, "Hello world");
         assert_eq!(result[0].additional_options, None);
         assert_eq!(result[0].cache_control, None);
@@ -187,7 +187,7 @@ mod tests {
 
         let result: Vec<MessageContentPart> = serde_json::from_value(json_data).unwrap();
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].r#type, super::MessageContentType::Text);
+        assert_eq!(result[0].r#type, MessageContentType::Text);
         assert_eq!(result[0].value, "Hello world");
         assert_eq!(result[0].additional_options, None);
         assert!(result[0].cache_control.is_some());

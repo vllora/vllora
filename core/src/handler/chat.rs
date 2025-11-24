@@ -270,12 +270,7 @@ pub async fn create_chat_completion(
 
     let executor = RoutedExecutor::new(request.clone());
     executor
-        .execute(
-            &executor_context,
-            memory_storage,
-            None,
-            Some(&thread_id),
-        )
+        .execute(&executor_context, memory_storage, None, Some(&thread_id))
         .instrument(span.clone())
         .await
         .inspect_err(|e| {

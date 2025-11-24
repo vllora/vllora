@@ -79,7 +79,7 @@ pub fn gemini_client(credentials: Option<&ApiKeyCredentials>) -> Result<Client, 
 }
 
 enum InnerExecutionResult {
-    Finish(ChatCompletionMessageWithFinishReason),
+    Finish(Box<ChatCompletionMessageWithFinishReason>),
     NextCall(Vec<Content>),
 }
 
@@ -500,7 +500,8 @@ impl GeminiModel {
                             chrono::Utc::now().timestamp() as u32,
                             response.model_version,
                             usage,
-                        ),
+                        )
+                        .into(),
                     ));
                 }
             }
@@ -567,7 +568,8 @@ impl GeminiModel {
                         chrono::Utc::now().timestamp() as u32,
                         response.model_version,
                         usage,
-                    ),
+                    )
+                    .into(),
                 ))
             }
             _ => {
@@ -602,7 +604,7 @@ impl GeminiModel {
                 .await;
 
             match result.map_err(|e| record_map_err(e, span.clone())) {
-                Ok(InnerExecutionResult::Finish(message)) => return Ok(message),
+                Ok(InnerExecutionResult::Finish(message)) => return Ok(*message),
                 Ok(InnerExecutionResult::NextCall(messages)) => {
                     gemini_calls.push(messages);
                     continue;
@@ -782,11 +784,18 @@ impl GeminiModel {
                                 ..Default::default()
                             },
                             ModelFinishReason::ToolCalls,
-                            output.as_ref().map(|r| r.response_id.clone()).unwrap_or_default(),
+                            output
+                                .as_ref()
+                                .map(|r| r.response_id.clone())
+                                .unwrap_or_default(),
                             chrono::Utc::now().timestamp() as u32,
-                            output.as_ref().map(|r| r.model_version.clone()).unwrap_or_default(),
+                            output
+                                .as_ref()
+                                .map(|r| r.model_version.clone())
+                                .unwrap_or_default(),
                             usage,
-                        ),
+                        )
+                        .into(),
                     ));
                 }
             }
@@ -813,11 +822,18 @@ impl GeminiModel {
                         ..Default::default()
                     },
                     Self::map_finish_reason(&finish_reason, !tool_calls.is_empty()),
-                    output.as_ref().map(|r| r.response_id.clone()).unwrap_or_default(),
+                    output
+                        .as_ref()
+                        .map(|r| r.response_id.clone())
+                        .unwrap_or_default(),
                     chrono::Utc::now().timestamp() as u32,
-                    output.as_ref().map(|r| r.model_version.clone()).unwrap_or_default(),
+                    output
+                        .as_ref()
+                        .map(|r| r.model_version.clone())
+                        .unwrap_or_default(),
                     usage,
-                ),
+                )
+                .into(),
             )),
             other => Err(Self::handle_finish_reason(Some(other))),
         }

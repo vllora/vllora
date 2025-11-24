@@ -652,7 +652,7 @@ mod tests {
         use crate::routing::{
             ConditionOp, ConditionalRouting, InterceptorSpec, Route, RouteCondition, TargetSpec,
         };
-        use crate::types::gateway::ChatCompletionRequest;
+        use vllora_llm::types::gateway::ChatCompletionRequest;
         use std::collections::BTreeMap;
         use std::collections::HashMap;
         use std::sync::Arc;

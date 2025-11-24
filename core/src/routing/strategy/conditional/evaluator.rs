@@ -242,7 +242,7 @@ mod tests {
         Interceptor, InterceptorContext, InterceptorError, InterceptorState, LazyInterceptorManager,
     };
     use crate::routing::{ConditionOp, RouteCondition};
-    use crate::types::gateway::ChatCompletionRequest;
+    use vllora_llm::types::gateway::ChatCompletionRequest;
     use std::collections::HashMap;
     use std::sync::Arc;
 

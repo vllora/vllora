@@ -201,8 +201,8 @@ mod tests {
     use crate::provider::gemini::types::FinishReason;
     use crate::provider::gemini::types::GenerateContentResponse;
     use crate::provider::gemini::types::Part;
-    use std::collections::HashMap;
     use serde_json;
+    use std::collections::HashMap;
 
     #[test]
     fn validate_deseraliazation() {

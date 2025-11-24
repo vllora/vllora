@@ -4,9 +4,11 @@ use std::sync::Arc;
 use serde_json::Value;
 
 use crate::client::message_mapper::{MessageMapper, MessageMapperError};
-use crate::types::gateway::{ChatCompletionMessage, ChatCompletionMessageWithFinishReason, ChatCompletionRequest};
-use crate::types::ModelEvent;
+use crate::types::gateway::{
+    ChatCompletionMessage, ChatCompletionMessageWithFinishReason, ChatCompletionRequest,
+};
 use crate::types::message::Message;
+use crate::types::ModelEvent;
 use crate::{client::ModelInstance, error::LLMResult};
 
 pub struct CompletionsClient {
@@ -41,11 +43,19 @@ impl CompletionsClient {
         self
     }
 
-
-    fn map_messages(messages: &[ChatCompletionMessage], model: &str, user: Option<String>) -> Result<Vec<Message>, MessageMapperError> {
-        messages.iter()
+    fn map_messages(
+        messages: &[ChatCompletionMessage],
+        model: &str,
+        user: Option<String>,
+    ) -> Result<Vec<Message>, MessageMapperError> {
+        messages
+            .iter()
             .map(|message| {
-                MessageMapper::map_completions_message_to_vllora_message(message, model, &user.clone().unwrap_or_default())
+                MessageMapper::map_completions_message_to_vllora_message(
+                    message,
+                    model,
+                    &user.clone().unwrap_or_default(),
+                )
             })
             .collect::<Result<Vec<Message>, MessageMapperError>>()
     }
@@ -55,7 +65,7 @@ impl CompletionsClient {
         request: impl Into<ChatCompletionRequest>,
     ) -> LLMResult<ChatCompletionMessageWithFinishReason> {
         let r = request.into();
-        
+
         let messages = Self::map_messages(&r.messages, &r.model, r.user.clone())?;
 
         let tx = match &self.tx {

@@ -375,7 +375,8 @@ impl Default for InterceptorManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{routing::InterceptorType, types::gateway::ChatCompletionRequest};
+    use crate::routing::InterceptorType;
+    use vllora_llm::types::gateway::ChatCompletionRequest;
 
     struct TestInterceptor {
         name: String,

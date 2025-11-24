@@ -23,6 +23,7 @@ use crate::types::{
 use async_trait::async_trait;
 use aws_config::{BehaviorVersion, SdkConfig};
 use aws_sdk_bedrock::config::SharedTokenProvider;
+use aws_sdk_bedrock::operation::RequestId;
 use aws_sdk_bedrockruntime::operation::converse::builders::ConverseFluentBuilder;
 use aws_sdk_bedrockruntime::operation::converse_stream::builders::ConverseStreamFluentBuilder;
 use aws_sdk_bedrockruntime::operation::converse_stream::{self, ConverseStreamError};
@@ -49,7 +50,6 @@ use valuable::Valuable;
 use vllora_telemetry::create_model_span;
 use vllora_telemetry::events::RecordResult;
 use vllora_telemetry::events::{JsonValue, SPAN_BEDROCK, SPAN_TOOLS};
-use aws_sdk_bedrock::operation::RequestId;
 
 const DEFAULT_REGION: &str = "us-east-1";
 
@@ -63,7 +63,7 @@ macro_rules! target {
 }
 
 enum InnerExecutionResult {
-    Finish(ChatCompletionMessageWithFinishReason),
+    Finish(Box<ChatCompletionMessageWithFinishReason>),
     NextCall(Vec<Message>),
 }
 
@@ -381,7 +381,7 @@ impl BedrockModel {
                 .await;
 
             match response {
-                Ok(InnerExecutionResult::Finish(message)) => return Ok(message),
+                Ok(InnerExecutionResult::Finish(message)) => return Ok(*message),
                 Ok(InnerExecutionResult::NextCall(messages)) => {
                     calls.push(messages);
                 }
@@ -498,7 +498,8 @@ impl BedrockModel {
                                 chrono::Utc::now().timestamp() as u32,
                                 self.model_name.clone(),
                                 usage,
-                            ),
+                            )
+                            .into(),
                         )),
                         ContentBlock::ReasoningContent(ReasoningContentBlock::ReasoningText(
                             content,
@@ -516,7 +517,8 @@ impl BedrockModel {
                                 chrono::Utc::now().timestamp() as u32,
                                 self.model_name.clone(),
                                 usage,
-                            ),
+                            )
+                            .into(),
                         )),
                         _ => Err(ModelError::FinishError(
                             ModelFinishError::ContentBlockNotInTextFormat,
@@ -626,10 +628,11 @@ impl BedrockModel {
                                         },
                                         ModelFinishReason::ToolCalls,
                                         request_id.clone(),
-                                    chrono::Utc::now().timestamp() as u32,
-                                    self.model_name.clone(),
-                                    usage,
-                                    ),
+                                        chrono::Utc::now().timestamp() as u32,
+                                        self.model_name.clone(),
+                                        usage,
+                                    )
+                                    .into(),
                                 ))
                             } else {
                                 let tools_message = Self::handle_tool_calls(
@@ -960,7 +963,8 @@ impl BedrockModel {
                             chrono::Utc::now().timestamp() as u32,
                             self.model_name.clone(),
                             usage.clone(),
-                        ),
+                        )
+                        .into(),
                     ));
                 }
 
@@ -996,7 +1000,8 @@ impl BedrockModel {
                     chrono::Utc::now().timestamp() as u32,
                     self.model_name.clone(),
                     usage.clone(),
-                ),
+                )
+                .into(),
             )),
             other => Err(Self::handle_stop_reason(other).into()),
         }

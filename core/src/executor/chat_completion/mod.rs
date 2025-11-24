@@ -393,7 +393,7 @@ pub struct ResolvedModelContext {
 
 #[cfg(test)]
 mod tests {
-    use crate::model::mcp::get_tools;
+    use vllora_llm::mcp::get_tools;
     use crate::types::mcp::McpServerType;
     use crate::types::mcp::{McpConfig, McpServerConfig};
 

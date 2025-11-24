@@ -201,9 +201,9 @@ impl std::fmt::Display for ModelFinishReason {
     }
 }
 
-impl Into<async_openai::types::FinishReason> for ModelFinishReason {
-    fn into(self) -> async_openai::types::FinishReason {
-        match self {
+impl From<ModelFinishReason> for async_openai::types::FinishReason {
+    fn from(val: ModelFinishReason) -> async_openai::types::FinishReason {
+        match val {
             ModelFinishReason::Stop => async_openai::types::FinishReason::Stop,
             ModelFinishReason::Length => async_openai::types::FinishReason::Length,
             ModelFinishReason::ToolCalls => async_openai::types::FinishReason::ToolCalls,

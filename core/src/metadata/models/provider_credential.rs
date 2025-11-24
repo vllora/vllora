@@ -237,7 +237,7 @@ impl UpdateProviderCredentialsDTO {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::credentials::{ApiKeyCredentials, Credentials};
+    use vllora_llm::types::credentials::{ApiKeyCredentials, Credentials};
 
     fn test_provider_credentials() -> DbProviderCredentials {
         DbProviderCredentials {

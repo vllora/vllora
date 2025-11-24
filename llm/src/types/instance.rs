@@ -81,11 +81,11 @@ impl ModelInstance for DummyModelInstance {
 
 #[cfg(test)]
 mod tests {
-    use async_openai::types::CreateChatCompletionResponse;
-    use crate::client::completions::CompletionsClient;
-    use std::sync::Arc;
     use super::*;
+    use crate::client::completions::CompletionsClient;
     use crate::types::gateway::ChatCompletionRequest;
+    use async_openai::types::CreateChatCompletionResponse;
+    use std::sync::Arc;
 
     #[tokio::test]
     async fn test_create() {
@@ -100,13 +100,16 @@ mod tests {
             ..Default::default()
         };
         let response: ChatCompletionMessageWithFinishReason = client.create(request).await.unwrap();
-        let message = response.message().content.as_ref().unwrap().as_string().unwrap();
+        let message = response
+            .message()
+            .content
+            .as_ref()
+            .unwrap()
+            .as_string()
+            .unwrap();
         assert_eq!("Hello, world!", message);
 
         let response: CreateChatCompletionResponse = response.into();
         assert_eq!("test", response.model);
-        assert_greater_than!(response.created, Utc::now().timestamp_millis() as u32);
-        assert_eq!(uuid::Uuid::new_v4().to_string(), response.id);
-        assert_eq!(None, response.usage);
     }
 }

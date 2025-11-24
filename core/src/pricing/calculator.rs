@@ -112,7 +112,7 @@ pub fn calculate_tokens_cost(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::gateway::{CompletionModelUsage, PromptTokensDetails};
+    use vllora_llm::types::gateway::{CompletionModelUsage, PromptTokensDetails};
 
     #[test]
     fn test_calculate_tokens_cost_no_cache() {

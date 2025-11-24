@@ -3,17 +3,18 @@ use std::collections::HashMap;
 use crate::guards::config::load_guards_from_yaml;
 use crate::guards::llm_judge::LlmJudgeEvaluator;
 use serde_json::Value;
-use vllora_core::model::types::ModelEvent;
-use vllora_core::model::types::ModelFinishReason;
-use vllora_core::model::ModelInstance;
-use vllora_core::types::gateway::ChatCompletionMessageWithFinishReason;
-use vllora_core::types::gateway::{
+use vllora_llm::types::ModelEvent;
+use vllora_llm::types::ModelFinishReason;
+use vllora_llm::types::gateway::ChatCompletionMessageWithFinishReason;
+use vllora_llm::types::gateway::{
     ChatCompletionContent, ChatCompletionMessage, ChatCompletionRequest,
 };
-use vllora_core::types::guardrails::evaluator::Evaluator;
 use vllora_core::types::guardrails::{Guard, GuardAction, GuardStage};
-use vllora_core::types::threads::Message;
-use vllora_core::GatewayResult;
+use vllora_llm::types::message::Message;
+use vllora_llm::types::instance::ModelInstance;
+use vllora_llm::error::LLMResult;
+use vllora_core::types::guardrails::evaluator::Evaluator;
+use chrono::Utc;
 
 use super::llm_judge::GuardModelInstanceFactory;
 
@@ -235,6 +236,10 @@ impl ModelInstance for MockModelInstance {
                 ..Default::default()
             },
             ModelFinishReason::Stop,
+            "1234567890".to_string(),
+            Utc::now().timestamp_millis() as u32,
+            "test".to_string(),
+            None,
         ))
     }
 
