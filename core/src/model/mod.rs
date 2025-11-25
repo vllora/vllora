@@ -663,7 +663,10 @@ async fn execute_stream(
         .with_input_variables(input_vars.clone())
         .with_tx(tx.clone())
         .with_tags(tags.clone());
-    let mut result = client.create_stream(request.clone()).await?;
+    let mut result = client
+        .create_stream(request.clone())
+        .instrument(tracing::Span::current())
+        .await?;
     while let Some(_chunk) = result.next().await {}
     tx.send(None)
         .await

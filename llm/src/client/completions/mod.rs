@@ -17,6 +17,7 @@ use crate::types::gateway::{
 use crate::types::message::Message;
 use crate::types::ModelEvent;
 use crate::{client::ModelInstance, error::LLMResult};
+use tracing::Instrument;
 
 pub struct CompletionsClient {
     instance: Arc<Box<dyn ModelInstance>>,
@@ -123,9 +124,11 @@ impl CompletionsClient {
         let runner_tx = model_tx.clone();
         let runner_out_tx = out_tx.clone();
 
+        let span = tracing::Span::current();
         tokio::spawn(async move {
             let result = instance
                 .stream(input_variables, runner_tx.clone(), messages, tags)
+                .instrument(span.clone())
                 .await;
             if let Err(err) = result {
                 let _ = runner_out_tx.send(StreamMessage::Error(err)).await;
