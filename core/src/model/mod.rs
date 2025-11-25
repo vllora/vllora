@@ -9,6 +9,7 @@ use crate::GatewayApiError;
 use async_openai::config::OpenAIConfig;
 use async_openai::Client;
 use futures::future::join;
+use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -662,11 +663,12 @@ async fn execute_stream(
         .with_input_variables(input_vars.clone())
         .with_tx(tx.clone())
         .with_tags(tags.clone());
-    let result = client.create_stream(request.clone()).await.map(|_| ());
+    let mut result = client.create_stream(request.clone()).await?;
+    while let Some(_chunk) = result.next().await {}
     tx.send(None)
         .await
         .map_err(|e| LLMError::BoxedError(Box::new(e)))?;
-    result
+    Ok(())
 }
 
 pub fn credentials_identifier(model_params: &CompletionModelParams) -> CredentialsIdent {
