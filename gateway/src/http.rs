@@ -112,8 +112,8 @@ impl ApiServer {
 
         println!("\n🌐 Starting OTEL gRPC collector...");
         println!(
-            "   🚀 OTEL gRPC collector ready at: \x1b[36mhttp://{}:4317\x1b[0m",
-            self.config.http.host
+            "   🚀 OTEL gRPC collector ready at: \x1b[36mhttp://{}:{}\x1b[0m",
+            self.config.http.host, self.config.otel.port
         );
 
         // Add documentation and community links
@@ -200,9 +200,12 @@ impl ApiServer {
         ));
         let tonic_server = tonic::transport::Server::builder()
             .add_service(trace_service)
-            .serve_with_shutdown("[::]:4317".parse()?, async {
-                signal::ctrl_c().await.expect("failed to listen for ctrl+c");
-            });
+            .serve_with_shutdown(
+                format!("{}:{}", self.config.otel.host, self.config.otel.port).parse()?,
+                async {
+                    signal::ctrl_c().await.expect("failed to listen for ctrl+c");
+                },
+            );
 
         let tonic_fut = tonic_server.map_err(ServerError::Tonic);
 

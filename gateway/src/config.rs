@@ -29,6 +29,8 @@ pub struct Config {
     #[serde(default)]
     pub ui: UiConfig,
     #[serde(default)]
+    pub otel: OTelConfig,
+    #[serde(default)]
     pub providers: Option<ProvidersConfig>,
     #[serde(default)]
     pub guards: Option<HashMap<String, Guard>>,
@@ -55,6 +57,21 @@ impl Default for HttpConfig {
             host: "0.0.0.0".to_string(),
             port: 9090,
             cors_allowed_origins: vec!["*".to_string()],
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct OTelConfig {
+    pub host: String,
+    pub port: u16,
+}
+
+impl Default for OTelConfig {
+    fn default() -> Self {
+        Self {
+            host: "[::]".to_string(),
+            port: 4317,
         }
     }
 }
