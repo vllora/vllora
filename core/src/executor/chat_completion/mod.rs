@@ -9,6 +9,7 @@ use crate::model::cached::CachedModel;
 use crate::model::tools::GatewayTool;
 use crate::model::ResponseCacheState;
 use crate::GatewayApiError;
+use vllora_llm::client::completions::response_stream::ResultStream;
 use vllora_llm::client::message_mapper::MessageMapper;
 use vllora_llm::error::LLMError;
 use vllora_llm::mcp::get_tools;
@@ -40,17 +41,14 @@ use uuid::Uuid;
 use vllora_llm::types::credentials_ident::CredentialsIdent;
 
 use super::context::ExecutorContext;
-use crate::executor::chat_completion::stream_wrapper::ChatCompletionStream;
 
 pub mod basic_executor;
 pub mod routed_executor;
 pub mod stream_executor;
 pub mod stream_wrapper;
 
-pub type ChatCompletionExecutionResult = Either<
-    Result<ChatCompletionStream, GatewayApiError>,
-    Result<ChatCompletionResponse, GatewayApiError>,
->;
+pub type ChatCompletionExecutionResult =
+    Either<Result<ResultStream, GatewayApiError>, Result<ChatCompletionResponse, GatewayApiError>>;
 
 #[tracing::instrument(level = "debug", skip_all)]
 pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(

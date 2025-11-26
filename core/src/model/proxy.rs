@@ -6,6 +6,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use tracing::Span;
 use tracing_futures::Instrument;
+use vllora_llm::client::completions::response_stream::ResultStream;
 use vllora_llm::client::error::ModelError;
 use vllora_llm::error::LLMResult;
 use vllora_llm::provider::openai_spec_client::openai_spec_client;
@@ -79,7 +80,7 @@ impl ModelInstance for OpenAISpecModel {
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
-    ) -> LLMResult<()> {
+    ) -> LLMResult<ResultStream> {
         let span = Span::current();
         self.openai_model
             .stream(input_variables, tx, previous_messages, tags)

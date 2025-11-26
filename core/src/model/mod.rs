@@ -8,8 +8,6 @@ use crate::types::metadata::services::model::ModelService;
 use crate::GatewayApiError;
 use async_openai::config::OpenAIConfig;
 use async_openai::Client;
-use futures::future::join;
-use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -18,6 +16,7 @@ use std::sync::Arc;
 use tokio::sync::mpsc::{self, channel};
 use tracing::{info_span, Instrument};
 use valuable::Valuable;
+use vllora_llm::client::completions::response_stream::ResultStream;
 use vllora_llm::client::error::ModelError;
 use vllora_llm::client::{ModelInstance, VlloraLLMClient};
 use vllora_llm::error::{LLMError, LLMResult};
@@ -511,7 +510,7 @@ impl<Inner: ModelInstance + Clone + 'static> ModelInstance for TracedModel<Inner
         outer_tx: mpsc::Sender<Option<ModelEvent>>,
         _previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
-    ) -> LLMResult<()> {
+    ) -> LLMResult<ResultStream> {
         let credentials_ident = credentials_identifier(&self.definition.model_params);
         let traced_model: TraceModelDefinition = self.definition.clone().into();
         let model = traced_model.sanitize_json()?;
@@ -567,87 +566,79 @@ impl<Inner: ModelInstance + Clone + 'static> ModelInstance for TracedModel<Inner
             )))
             .await?;
 
-        async {
-            let (tx, mut rx) = channel(outer_tx.max_capacity());
+        let (tx, mut rx) = channel(outer_tx.max_capacity());
+        let mut start_time = None;
+        let vllora_llm_client = VlloraLLMClient::new_with_instance(Arc::new(Box::new(
+            self.inner.clone(),
+        )
+            as Box<dyn ModelInstance>));
+
+        let result = execute_stream(
+            vllora_llm_client,
+            self.request.clone(),
+            input_vars.clone(),
+            tx.clone(),
+            tags.clone(),
+        )
+        .instrument(span.clone())
+        .await;
+
+        span.record(
+            "tags",
+            JsonValue(&serde_json::to_value(tags.clone())?).as_value(),
+        );
+
+        let price = self.definition.db_model.price.clone();
+        tokio::spawn(async move {
             let mut output = String::new();
-            let mut start_time = None;
-            let vllora_llm_client = VlloraLLMClient::new_with_instance(Arc::new(Box::new(
-                self.inner.clone(),
-            )
-                as Box<dyn ModelInstance>));
-
-            let result = join(
-                execute_stream(
-                    vllora_llm_client,
-                    self.request.clone(),
-                    input_vars.clone(),
-                    tx.clone(),
-                    tags.clone(),
-                )
-                .instrument(span.clone()),
-                async {
-                    while let Some(Some(msg)) = rx.recv().await {
-                        match &msg.event {
-                            ModelEventType::LlmStart(_event) => {
-                                start_time = Some(msg.timestamp.timestamp_micros() as u64);
-                            }
-                            ModelEventType::LlmContent(event) => {
-                                output.push_str(event.content.as_str());
-                            }
-                            ModelEventType::LlmFirstToken(_) => {
-                                if let Some(start_time) = start_time {
-                                    let current_span = tracing::Span::current();
-                                    current_span.record(
-                                        "ttft",
-                                        msg.timestamp.timestamp_micros() as u64 - start_time,
-                                    );
-                                }
-                            }
-                            ModelEventType::LlmStop(llmfinish_event) => {
-                                let s = tracing::Span::current();
-                                s.record("output", serde_json::to_string(&output).unwrap());
-                                if let Some(u) = &llmfinish_event.usage {
-                                    let cost = cost_calculator
-                                        .calculate_cost(
-                                            &self.definition.db_model.price,
-                                            &Usage::CompletionModelUsage(u.clone()),
-                                            &credentials_ident,
-                                        )
-                                        .await;
-
-                                    match cost {
-                                        Ok(c) => {
-                                            s.record("cost", serde_json::to_string(&c).unwrap());
-                                        }
-                                        Err(e) => {
-                                            tracing::error!("Error calculating cost: {:?}", e);
-                                        }
-                                    }
-                                    s.record("usage", serde_json::to_string(u).unwrap());
-                                }
-                            }
-                            _ => {}
-                        }
-                        outer_tx.send(Some(msg)).await.unwrap();
+            while let Some(Some(msg)) = rx.recv().await {
+                match &msg.event {
+                    ModelEventType::LlmStart(_event) => {
+                        start_time = Some(msg.timestamp.timestamp_micros() as u64);
                     }
-                },
-            )
-            .instrument(span.clone())
-            .await
-            .0;
+                    ModelEventType::LlmContent(event) => {
+                        output.push_str(event.content.as_str());
+                    }
+                    ModelEventType::LlmFirstToken(_) => {
+                        if let Some(start_time) = start_time {
+                            let current_span = tracing::Span::current();
+                            current_span.record(
+                                "ttft",
+                                msg.timestamp.timestamp_micros() as u64 - start_time,
+                            );
+                        }
+                    }
+                    ModelEventType::LlmStop(llmfinish_event) => {
+                        let s = tracing::Span::current();
+                        s.record("output", serde_json::to_string(&output).unwrap());
+                        if let Some(u) = &llmfinish_event.usage {
+                            let cost = cost_calculator
+                                .calculate_cost(
+                                    &price,
+                                    &Usage::CompletionModelUsage(u.clone()),
+                                    &credentials_ident,
+                                )
+                                .await;
 
-            let span = tracing::Span::current();
-            span.record(
-                "tags",
-                JsonValue(&serde_json::to_value(tags.clone())?).as_value(),
-            );
-            match result {
-                Ok(()) => span.record("output", output),
-                Err(ref e) => span.record("error", tracing::field::display(e)),
-            };
-            result
-        }
-        .await
+                            match cost {
+                                Ok(c) => {
+                                    s.record("cost", serde_json::to_string(&c).unwrap());
+                                }
+                                Err(e) => {
+                                    tracing::error!("Error calculating cost: {:?}", e);
+                                }
+                            }
+                            s.record("usage", serde_json::to_string(u).unwrap());
+                        }
+                        s.record("output", output.clone());
+                    }
+                    _ => {}
+                }
+                outer_tx.send(Some(msg)).await.unwrap();
+            }
+        });
+
+        result
     }
 }
 
@@ -657,21 +648,16 @@ async fn execute_stream(
     input_vars: HashMap<String, Value>,
     tx: mpsc::Sender<Option<ModelEvent>>,
     tags: HashMap<String, String>,
-) -> LLMResult<()> {
+) -> LLMResult<ResultStream> {
     let client = vllora_llm_client
         .completions()
         .with_input_variables(input_vars.clone())
         .with_tx(tx.clone())
         .with_tags(tags.clone());
-    let mut result = client
+    client
         .create_stream(request.clone())
         .instrument(tracing::Span::current())
-        .await?;
-    while let Some(_chunk) = result.next().await {}
-    tx.send(None)
         .await
-        .map_err(|e| LLMError::BoxedError(Box::new(e)))?;
-    Ok(())
 }
 
 pub fn credentials_identifier(model_params: &CompletionModelParams) -> CredentialsIdent {

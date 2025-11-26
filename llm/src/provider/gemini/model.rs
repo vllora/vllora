@@ -3,6 +3,7 @@ use super::types::{
     Content, FinishReason, GenerateContentRequest, GenerateContentResponse, Part,
     PartFunctionResponse, UsageMetadata,
 };
+use crate::client::completions::response_stream::ResultStream;
 use crate::client::error::AuthorizationError;
 use crate::client::error::ModelError;
 use crate::client::tools::handler::handle_tool_call;
@@ -1039,10 +1040,21 @@ impl ModelInstance for GeminiModel {
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
-    ) -> LLMResult<()> {
+    ) -> LLMResult<ResultStream> {
         let conversational_messages =
             self.construct_messages(input_variables, previous_messages)?;
-        self.execute_stream(conversational_messages, tx, tags).await
+        self.execute_stream(conversational_messages.clone(), tx.clone(), tags.clone())
+            .await?;
+        let (_tx_response, rx_response) = tokio::sync::mpsc::channel(10000);
+        let model = (*self).clone();
+        let tx_clone = tx.clone();
+        tokio::spawn(async move {
+            model
+                .execute_stream(conversational_messages, tx_clone, tags)
+                .await
+                .unwrap();
+        });
+        Ok(ResultStream::create(rx_response))
     }
 }
 

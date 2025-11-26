@@ -6,8 +6,12 @@ use crate::types::tools::Tool;
 use crate::types::ModelFinishReason;
 use crate::types::ToolCallExtra;
 use async_openai::types::Base64EmbeddingVector;
+use async_openai::types::ChatChoiceStream;
 use async_openai::types::ChatCompletionRequestMessage;
+use async_openai::types::ChatCompletionStreamResponseDelta;
 use async_openai::types::CreateChatCompletionRequest;
+use async_openai::types::CreateChatCompletionStreamResponse;
+use async_openai::types::FinishReason;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -725,6 +729,30 @@ impl From<ToolCall> for async_openai::types::ChatCompletionMessageToolCall {
     }
 }
 
+impl From<async_openai::types::ChatCompletionMessageToolCall> for ToolCall {
+    fn from(val: async_openai::types::ChatCompletionMessageToolCall) -> Self {
+        ToolCall {
+            index: None,
+            id: val.id,
+            r#type: "function".to_string(),
+            function: val.function.into(),
+            extra_content: None,
+        }
+    }
+}
+
+impl From<async_openai::types::ChatCompletionMessageToolCallChunk> for ToolCall {
+    fn from(val: async_openai::types::ChatCompletionMessageToolCallChunk) -> Self {
+        ToolCall {
+            index: Some(val.index as usize),
+            id: val.id.unwrap_or_default(),
+            r#type: "function".to_string(),
+            function: val.function.map(|f| f.into()).unwrap_or_default(),
+            extra_content: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Hash, PartialEq, Eq)]
 pub struct FunctionCall {
     pub name: String,
@@ -736,6 +764,24 @@ impl From<FunctionCall> for async_openai::types::FunctionCall {
         async_openai::types::FunctionCall {
             name: val.name,
             arguments: val.arguments,
+        }
+    }
+}
+
+impl From<async_openai::types::FunctionCall> for FunctionCall {
+    fn from(val: async_openai::types::FunctionCall) -> Self {
+        FunctionCall {
+            name: val.name,
+            arguments: val.arguments,
+        }
+    }
+}
+
+impl From<async_openai::types::FunctionCallStream> for FunctionCall {
+    fn from(val: async_openai::types::FunctionCallStream) -> Self {
+        FunctionCall {
+            name: val.name.unwrap_or_default(),
+            arguments: val.arguments.unwrap_or_default(),
         }
     }
 }
@@ -785,6 +831,19 @@ pub struct ChatCompletionUsage {
     pub cost: f64,
 }
 
+impl From<async_openai::types::CompletionUsage> for ChatCompletionUsage {
+    fn from(val: async_openai::types::CompletionUsage) -> Self {
+        ChatCompletionUsage {
+            prompt_tokens: val.prompt_tokens as i32,
+            completion_tokens: val.completion_tokens as i32,
+            total_tokens: val.total_tokens as i32,
+            prompt_tokens_details: val.prompt_tokens_details.map(|p| p.into()),
+            completion_tokens_details: val.completion_tokens_details.map(|c| c.into()),
+            cost: 0.0,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatModel {
     pub id: String,
@@ -828,6 +887,21 @@ pub enum PropertyType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Chunk {
+    #[serde(rename = "openai")]
+    Openai(CreateChatCompletionStreamResponse),
+}
+
+impl From<Chunk> for ChatCompletionChunk {
+    fn from(val: Chunk) -> Self {
+        match val {
+            Chunk::Openai(val) => val.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatCompletionChunk {
     pub id: String,
     pub object: String,
@@ -839,12 +913,45 @@ pub struct ChatCompletionChunk {
     pub usage: Option<ChatCompletionUsage>,
 }
 
+impl From<CreateChatCompletionStreamResponse> for ChatCompletionChunk {
+    fn from(val: CreateChatCompletionStreamResponse) -> Self {
+        ChatCompletionChunk {
+            id: val.id,
+            object: val.object.unwrap_or("chat.completion.chunk".to_string()),
+            created: val.created as i64,
+            model: val.model,
+            choices: val.choices.into_iter().map(|c| c.into()).collect(),
+            usage: val.usage.map(|u| u.into()),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatCompletionChunkChoice {
     pub index: i32,
     pub delta: ChatCompletionDelta,
     pub finish_reason: Option<String>,
-    pub logprobs: Option<String>,
+    pub logprobs: Option<async_openai::types::ChatChoiceLogprobs>,
+}
+
+impl From<ChatChoiceStream> for ChatCompletionChunkChoice {
+    fn from(val: ChatChoiceStream) -> Self {
+        ChatCompletionChunkChoice {
+            index: val.index as i32,
+            delta: val.delta.into(),
+            finish_reason: val.finish_reason.map(|f| {
+                match f {
+                    FinishReason::Stop => "stop",
+                    FinishReason::Length => "length",
+                    FinishReason::ToolCalls => "tool_calls",
+                    FinishReason::ContentFilter => "content_filter",
+                    FinishReason::FunctionCall => "function_call",
+                }
+                .to_string()
+            }),
+            logprobs: val.logprobs,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -855,6 +962,18 @@ pub struct ChatCompletionDelta {
     pub content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<ToolCall>>,
+}
+
+impl From<ChatCompletionStreamResponseDelta> for ChatCompletionDelta {
+    fn from(val: ChatCompletionStreamResponseDelta) -> Self {
+        ChatCompletionDelta {
+            role: val.role.map(|r| r.to_string()),
+            content: val.content.map(|c| c.to_string()),
+            tool_calls: val
+                .tool_calls
+                .map(|t| t.into_iter().map(|t| t.into()).collect()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -923,6 +1042,16 @@ pub struct PromptTokensDetails {
     audio_tokens: u32,
 }
 
+impl From<async_openai::types::PromptTokensDetails> for PromptTokensDetails {
+    fn from(val: async_openai::types::PromptTokensDetails) -> Self {
+        PromptTokensDetails {
+            cached_tokens: val.cached_tokens.unwrap_or(0),
+            cache_creation_tokens: 0,
+            audio_tokens: val.audio_tokens.unwrap_or(0),
+        }
+    }
+}
+
 impl From<PromptTokensDetails> for async_openai::types::PromptTokensDetails {
     fn from(val: PromptTokensDetails) -> async_openai::types::PromptTokensDetails {
         async_openai::types::PromptTokensDetails {
@@ -939,6 +1068,17 @@ impl From<CompletionTokensDetails> for async_openai::types::CompletionTokensDeta
             audio_tokens: Some(val.audio_tokens),
             reasoning_tokens: Some(val.reasoning_tokens),
             rejected_prediction_tokens: Some(val.rejected_prediction_tokens),
+        }
+    }
+}
+
+impl From<async_openai::types::CompletionTokensDetails> for CompletionTokensDetails {
+    fn from(val: async_openai::types::CompletionTokensDetails) -> Self {
+        CompletionTokensDetails {
+            accepted_prediction_tokens: val.accepted_prediction_tokens.unwrap_or(0),
+            audio_tokens: val.audio_tokens.unwrap_or(0),
+            reasoning_tokens: val.reasoning_tokens.unwrap_or(0),
+            rejected_prediction_tokens: val.rejected_prediction_tokens.unwrap_or(0),
         }
     }
 }

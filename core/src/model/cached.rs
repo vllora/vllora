@@ -6,6 +6,7 @@ use tracing::field;
 use tracing_futures::Instrument;
 use uuid::Uuid;
 use valuable::Valuable;
+use vllora_llm::client::completions::response_stream::ResultStream;
 use vllora_llm::error::LLMError;
 use vllora_llm::error::LLMResult;
 use vllora_llm::types::gateway::{ChatCompletionMessage, ChatCompletionMessageWithFinishReason};
@@ -107,10 +108,13 @@ impl ModelInstance for CachedModel {
         tx: mpsc::Sender<Option<ModelEvent>>,
         _previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
-    ) -> LLMResult<()> {
+    ) -> LLMResult<ResultStream> {
         let span = create_model_span!(SPAN_CACHE, target!("chat"), &tags, 0, cache_state = "HIT");
 
-        self.inner_stream(tx).instrument(span).await
+        self.inner_stream(tx).instrument(span).await?;
+
+        let (_tx_response, rx) = tokio::sync::mpsc::channel(10000);
+        Ok(ResultStream::create(rx))
     }
 
     async fn invoke(

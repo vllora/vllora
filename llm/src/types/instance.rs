@@ -1,9 +1,11 @@
+use crate::client::completions::response_stream::ResultStream;
 use crate::error::LLMError;
 use crate::error::LLMResult;
 use crate::types::credentials_ident::CredentialsIdent;
 use crate::types::gateway::ChatCompletionContent;
 use crate::types::gateway::ChatCompletionMessage;
 use crate::types::gateway::ChatCompletionMessageWithFinishReason;
+use crate::types::gateway::Chunk;
 use crate::types::message::Message;
 use crate::types::LLMContentEvent;
 use crate::types::LLMFinishEvent;
@@ -46,7 +48,7 @@ pub trait ModelInstance: Sync + Send {
         tx: mpsc::Sender<Option<ModelEvent>>,
         previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
-    ) -> LLMResult<()>;
+    ) -> LLMResult<ResultStream>;
 }
 
 pub struct DummyModelInstance {}
@@ -80,43 +82,74 @@ impl ModelInstance for DummyModelInstance {
         tx: mpsc::Sender<Option<ModelEvent>>,
         previous_messages: Vec<Message>,
         _tags: HashMap<String, String>,
-    ) -> LLMResult<()> {
-        for message in previous_messages {
-            let content = message.content.unwrap_or_default();
-            let chars: Vec<char> = content.chars().collect();
+    ) -> LLMResult<ResultStream> {
+        let (tx_response, rx_response) = tokio::sync::mpsc::channel(10000);
+        tokio::spawn(async move {
+            for message in previous_messages {
+                let content = message.content.unwrap_or_default();
+                let chars: Vec<char> = content.chars().collect();
 
-            let chunks: Vec<String> = chars
-                .chunks(3)
-                .map(|chunk| chunk.iter().collect())
-                .collect();
-            for chunk in chunks {
-                tx.send(Some(ModelEvent::new(
-                    &Span::current(),
-                    ModelEventType::LlmContent(LLMContentEvent {
-                        content: chunk.to_owned(),
-                    }),
-                )))
-                .await
-                .ok();
+                let chunks: Vec<String> = chars
+                    .chunks(3)
+                    .map(|chunk| chunk.iter().collect())
+                    .collect();
+                for chunk in chunks {
+                    tx.send(Some(ModelEvent::new(
+                        &Span::current(),
+                        ModelEventType::LlmContent(LLMContentEvent {
+                            content: chunk.to_owned(),
+                        }),
+                    )))
+                    .await
+                    .ok();
+                    tx_response
+                        .send(Chunk::Openai(
+                            async_openai::types::CreateChatCompletionStreamResponse {
+                                id: "test".to_string(),
+                                object: Some("test".to_string()),
+                                created: 0,
+                                model: "test".to_string(),
+                                choices: vec![async_openai::types::ChatChoiceStream {
+                                    index: 0,
+                                    delta: async_openai::types::ChatCompletionStreamResponseDelta {
+                                        content: Some(chunk.to_owned()),
+                                        role: Some(async_openai::types::Role::Assistant),
+                                        tool_calls: None,
+                                        refusal: None,
+                                        #[allow(deprecated)]
+                                        function_call: None,
+                                    },
+                                    finish_reason: Some(async_openai::types::FinishReason::Stop),
+                                    logprobs: None,
+                                }],
+                                usage: None,
+                                service_tier: None,
+                                system_fingerprint: None,
+                            },
+                        ))
+                        .await
+                        .ok();
+                }
             }
-        }
 
-        tx.send(Some(ModelEvent::new(
-            &Span::current(),
-            ModelEventType::LlmStop(LLMFinishEvent {
-                provider_name: "dummy".to_string(),
-                model_name: "dummy_model".to_string(),
-                output: None,
-                usage: None,
-                finish_reason: ModelFinishReason::Stop,
-                tool_calls: vec![],
-                credentials_ident: CredentialsIdent::Own,
-            }),
-        )))
-        .await
-        .map_err(|e| LLMError::CustomError(e.to_string()))?;
+            tx.send(Some(ModelEvent::new(
+                &Span::current(),
+                ModelEventType::LlmStop(LLMFinishEvent {
+                    provider_name: "dummy".to_string(),
+                    model_name: "dummy_model".to_string(),
+                    output: None,
+                    usage: None,
+                    finish_reason: ModelFinishReason::Stop,
+                    tool_calls: vec![],
+                    credentials_ident: CredentialsIdent::Own,
+                }),
+            )))
+            .await
+            .map_err(|e| LLMError::CustomError(e.to_string()))
+            .unwrap();
+        });
 
-        Ok(())
+        Ok(ResultStream::create(rx_response))
     }
 }
 
@@ -124,8 +157,8 @@ impl ModelInstance for DummyModelInstance {
 mod tests {
     use super::*;
     use crate::client::completions::CompletionsClient;
+    use crate::types::gateway::ChatCompletionChunk;
     use crate::types::gateway::ChatCompletionRequest;
-    use async_openai::types::ChatCompletionResponseStream;
     use async_openai::types::CreateChatCompletionResponse;
     use futures::StreamExt;
     use std::sync::Arc;
@@ -168,8 +201,7 @@ mod tests {
             }],
             ..Default::default()
         };
-        let mut response: ChatCompletionResponseStream =
-            client.create_stream(request).await.unwrap();
+        let mut response = client.create_stream(request).await.unwrap();
         let mut chunks = vec![];
         while let Some(chunk) = response.next().await {
             chunks.push(chunk);
@@ -179,18 +211,18 @@ mod tests {
             "Hello, world!",
             chunks
                 .iter()
-                .filter_map(|c| c.as_ref().unwrap().choices[0]
-                    .delta
-                    .content
-                    .as_ref()
-                    .map(|c| c.clone()))
+                .filter_map(|c| {
+                    let chunk: ChatCompletionChunk = c.as_ref().unwrap().clone().into();
+                    chunk.choices[0].delta.content.as_ref().map(|c| c.clone())
+                })
                 .collect::<Vec<String>>()
                 .join("")
         );
 
-        let last_chunk = chunks.last().unwrap().as_ref().unwrap();
+        let last_chunk: ChatCompletionChunk =
+            chunks.last().unwrap().as_ref().unwrap().clone().into();
         assert_eq!(
-            Some(ModelFinishReason::Stop.into()),
+            Some(ModelFinishReason::Stop.to_string()),
             last_chunk.choices[0].finish_reason
         );
         assert_eq!("dummy_model", last_chunk.model);

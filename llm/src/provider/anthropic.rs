@@ -1,3 +1,4 @@
+use crate::client::completions::response_stream::ResultStream;
 use crate::client::error::AnthropicError;
 use crate::client::error::AuthorizationError;
 use crate::client::error::ModelError;
@@ -1082,11 +1083,20 @@ impl ModelInstance for AnthropicModel {
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
-    ) -> LLMResult<()> {
+    ) -> LLMResult<ResultStream> {
         let (system_prompt, conversational_messages) =
             self.construct_messages(input_variables, previous_messages)?;
-        self.execute_stream(system_prompt, conversational_messages, &tx, tags)
-            .await
+        let (_tx_response, rx_response) = tokio::sync::mpsc::channel(10000);
+        let model = (*self).clone();
+        let tx_clone = tx.clone();
+        tokio::spawn(async move {
+            model
+                .execute_stream(system_prompt, conversational_messages, &tx_clone, tags)
+                .await
+                .unwrap();
+        });
+
+        Ok(ResultStream::create(rx_response))
     }
 }
 

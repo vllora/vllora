@@ -1,3 +1,4 @@
+use crate::client::completions::response_stream::ResultStream;
 use crate::client::error::BedrockError;
 use crate::client::error::ModelError;
 use crate::client::tools::handler::handle_tool_call;
@@ -1041,12 +1042,20 @@ impl ModelInstance for BedrockModel {
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         previous_messages: Vec<LMessage>,
         tags: HashMap<String, String>,
-    ) -> LLMResult<()> {
+    ) -> LLMResult<ResultStream> {
         let (initial_messages, system_messages) =
             self.construct_messages(input_vars.clone(), previous_messages)?;
 
-        self.execute_stream(initial_messages, system_messages, &tx, tags)
-            .await
+        let (_tx_response, rx_response) = tokio::sync::mpsc::channel(10000);
+        let model = (*self).clone();
+        let tx_clone = tx.clone();
+        tokio::spawn(async move {
+            model
+                .execute_stream(initial_messages, system_messages, &tx_clone, tags)
+                .await
+                .unwrap();
+        });
+        Ok(ResultStream::create(rx_response))
     }
 }
 

@@ -3,3 +3,6 @@ pub mod bedrock;
 pub mod gemini;
 pub mod openai;
 pub mod openai_spec_client;
+
+#[cfg(test)]
+pub(crate) mod tests;
