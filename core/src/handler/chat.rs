@@ -128,7 +128,7 @@ pub(crate) async fn prepare_request(
                             }
                         };
 
-                        let cost_event = CostEvent::new(cost, usage);
+                        let cost_event = CostEvent::new(cost, usage.clone());
                         let _ = cloud_callback_handler
                             .on_message(
                                 GatewayModelEventWithDetails {
@@ -155,8 +155,11 @@ pub(crate) async fn prepare_request(
 
                         if let Some(span) = &model_event.event.span {
                             span.record("cost", serde_json::to_string(&cost).unwrap());
+                            span.record("usage", serde_json::to_string(&usage).unwrap());
                         }
+
                         span.record("cost", serde_json::to_string(&cost).unwrap());
+                        span.record("usage", serde_json::to_string(&usage).unwrap());
                     }
                 }
                 _ => {}
@@ -206,6 +209,8 @@ pub async fn create_chat_completion(
         message_id = tracing::field::Empty,
         user = tracing::field::Empty,
         title = tracing::field::Empty,
+        cost = tracing::field::Empty,
+        usage = tracing::field::Empty,
     ));
 
     let thread_title = req.headers().get("X-Thread-Title").map_or_else(
