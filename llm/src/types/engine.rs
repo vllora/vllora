@@ -240,6 +240,7 @@ pub enum CompletionEngineParams {
         credentials: Option<ApiKeyCredentials>,
         execution_options: ExecutionOptions,
         params: GeminiModelParams,
+        api_url: Option<String>,
     },
     Proxy {
         params: OpenAiModelParams,
@@ -291,6 +292,7 @@ pub struct CompletionEngineParamsBuilder {
     pub credentials: Option<Credentials>,
     pub provider_specific: Option<ProviderSpecificRequest>,
     pub execution_options: Option<ExecutionOptions>,
+    pub api_url: Option<String>,
 }
 
 impl CompletionEngineParamsBuilder {
@@ -302,6 +304,7 @@ impl CompletionEngineParamsBuilder {
             credentials: None,
             provider_specific: None,
             execution_options: None,
+            api_url: None,
         }
     }
 
@@ -322,6 +325,11 @@ impl CompletionEngineParamsBuilder {
 
     pub fn with_execution_options(mut self, execution_options: ExecutionOptions) -> Self {
         self.execution_options = Some(execution_options);
+        self
+    }
+
+    pub fn with_api_url(mut self, api_url: String) -> Self {
+        self.api_url = Some(api_url);
         self
     }
 
@@ -486,6 +494,7 @@ impl CompletionEngineParamsBuilder {
                         top_k: None,
                         response_format: self.request.response_format.clone(),
                     },
+                    api_url: self.api_url,
                 })
             }
             InferenceModelProvider::VertexAI => {
@@ -735,7 +744,7 @@ pub struct AnthropicModelParams {
     pub thinking: Option<claude::Thinking>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct GeminiModelParams {
     #[serde(alias = "model_name", alias = "model_id")]
     pub model: Option<String>,

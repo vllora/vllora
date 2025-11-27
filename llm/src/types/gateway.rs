@@ -1,3 +1,6 @@
+use crate::provider::gemini::types::Candidate;
+use crate::provider::gemini::types::Content as GeminiContent;
+use crate::provider::gemini::types::GenerateContentResponse;
 use crate::types::cache::ResponseCacheOptions;
 use crate::types::credentials_ident::CredentialsIdent;
 use crate::types::provider::ModelPrice;
@@ -844,6 +847,22 @@ impl From<async_openai::types::CompletionUsage> for ChatCompletionUsage {
     }
 }
 
+impl From<crate::provider::gemini::types::UsageMetadata> for ChatCompletionUsage {
+    fn from(val: crate::provider::gemini::types::UsageMetadata) -> Self {
+        ChatCompletionUsage {
+            prompt_tokens: val.prompt_token_count as i32,
+            completion_tokens: val.candidates_token_count.unwrap_or(0) as i32 + val.thoughts_token_count.unwrap_or(0) as i32,
+            total_tokens: val.total_token_count as i32,
+            prompt_tokens_details: None,
+            completion_tokens_details: val.thoughts_token_count.as_ref().map(|t| CompletionTokensDetails {
+               reasoning_tokens: *t,
+               ..Default::default()
+            }),
+            cost: 0.0,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatModel {
     pub id: String,
@@ -891,13 +910,21 @@ pub enum PropertyType {
 pub enum Chunk {
     #[serde(rename = "openai")]
     Openai(CreateChatCompletionStreamResponse),
+    Gemini(GenerateContentResponse),
 }
 
 impl From<Chunk> for ChatCompletionChunk {
     fn from(val: Chunk) -> Self {
         match val {
             Chunk::Openai(val) => val.into(),
+            Chunk::Gemini(val) => val.into(),
         }
+    }
+}
+
+impl From<GenerateContentResponse> for Chunk {
+    fn from(val: GenerateContentResponse) -> Self {
+        Chunk::Gemini(val)
     }
 }
 
@@ -922,6 +949,19 @@ impl From<CreateChatCompletionStreamResponse> for ChatCompletionChunk {
             model: val.model,
             choices: val.choices.into_iter().map(|c| c.into()).collect(),
             usage: val.usage.map(|u| u.into()),
+        }
+    }
+}
+
+impl From<GenerateContentResponse> for ChatCompletionChunk {
+    fn from(val: GenerateContentResponse) -> Self {
+        ChatCompletionChunk {
+            id: val.response_id,
+            object: "chat.completion.chunk".to_string(),
+            created: chrono::Utc::now().timestamp() as i64,
+            model: val.model_version,
+            choices: val.candidates.into_iter().map(|c| c.into()).collect(),
+            usage: val.usage_metadata.map(|u| u.into()),
         }
     }
 }
@@ -954,6 +994,20 @@ impl From<ChatChoiceStream> for ChatCompletionChunkChoice {
     }
 }
 
+impl From<Candidate> for ChatCompletionChunkChoice {
+    fn from(val: Candidate) -> Self {
+        ChatCompletionChunkChoice {
+            index: 0,
+            delta: val.content.into(),
+            finish_reason: val.finish_reason.as_ref().map(|f| {
+                let reason = crate::provider::gemini::model::GeminiModel::map_finish_reason(f, false);
+                reason.to_string()
+            }),
+            logprobs: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatCompletionDelta {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -972,6 +1026,101 @@ impl From<ChatCompletionStreamResponseDelta> for ChatCompletionDelta {
             tool_calls: val
                 .tool_calls
                 .map(|t| t.into_iter().map(|t| t.into()).collect()),
+        }
+    }
+}
+
+impl From<GeminiContent> for ChatCompletionDelta {
+    fn from(val: GeminiContent) -> Self {
+        let mut tool_calls = None;
+        let mut text = None;
+        let mut contents: Vec<Content> = vec![];
+        for part in val.parts {
+            let signature = part.thought_signature.clone();
+            match part.part {
+                crate::provider::gemini::types::Part::FunctionCall { name, args } => {
+                    let tool_call = ToolCall {
+                        id: name.clone(),
+                        function: FunctionCall { name: name.clone(), arguments: serde_json::to_string(&args).unwrap() },
+                        extra_content: signature.as_ref().map(|s| ToolCallExtra {
+                            google: Some(crate::types::GoogleToolCallExtra {
+                                    thought_signature: s.clone(),
+                                }),
+                            }),
+                        index: None,
+                        r#type: "function".to_string(),
+                    };
+    
+                    if tool_calls.is_none() {
+                        tool_calls = Some(vec![tool_call]);
+                    } else {
+                        tool_calls.as_mut().expect("tool_calls should be Some").push(tool_call);
+                    }
+                },
+                crate::provider::gemini::types::Part::Text(part_text) => {
+                    text = Some(part_text.clone());
+                },
+                crate::provider::gemini::types::Part::InlineData { mime_type, data } => {
+                    if mime_type.starts_with("audio/") {
+                        contents.push(Content {
+                            r#type: ContentType::InputAudio,
+                            audio: Some(InputAudio {
+                                data: data.clone(),
+                                format: mime_type.clone(),
+                            }),
+                            cache_control: None,
+                            text: None,
+                            image_url: None,
+                        });
+                    } else {
+                        unreachable!("Unexpected mime type: {mime_type}");
+                    }
+                }
+                crate::provider::gemini::types::Part::FileData { mime_type, file_uri } => {
+                    if mime_type.starts_with("image/") {
+                        contents.push(Content {
+                            r#type: ContentType::ImageUrl,
+                            image_url: Some(ImageUrl {
+                                url: file_uri.clone(),
+                            }),
+                            cache_control: None,
+                            text: None,
+                            audio: None,
+                        });
+                    } else {
+                        unreachable!("Unexpected mime type: {mime_type}");
+                    }
+                }
+                _ => {
+                    unreachable!("Unexpected part: {part:?}");
+                }
+            }
+        }
+
+        let content = if contents.is_empty() {
+            text
+        } else {
+            unreachable!("Unexpected content: {contents:?}");
+            // if let Some(text) = text {
+            //     contents.push(Content {
+            //         r#type: ContentType::Text,
+            //         text: Some(text),
+            //         cache_control: None,
+            //         image_url: None,
+            //         audio: None,
+            //     });
+            // }
+            // Some(ChatCompletionContent::Content(contents))
+        };
+
+
+        ChatCompletionDelta {
+            role: Some(match val.role {
+                crate::provider::gemini::types::Role::User => "user".to_string(),
+                crate::provider::gemini::types::Role::Model => "assistant".to_string(),
+            }),
+            content,
+            tool_calls,
         }
     }
 }

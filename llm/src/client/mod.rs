@@ -54,10 +54,8 @@ impl VlloraLLMClient {
 #[cfg(test)]
 mod tests {
     use crate::provider::tests::MockStreamServer;
-    use crate::types::credentials::ApiKeyCredentials;
     use crate::types::credentials::Credentials;
     use crate::types::engine::CompletionEngineParamsBuilder;
-    use crate::types::instance::init_model_instance;
     use crate::types::provider::InferenceModelProvider;
     use async_openai::types::{
         ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs,

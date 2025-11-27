@@ -314,7 +314,6 @@ impl RoutedExecutor {
                     }))
                     .instrument(span.clone());
 
-                tracing::error!("end stream");
                 Ok(builder.content_type("text/event-stream").streaming(result))
             }
             Right(completions_response) => Ok(builder.json(completions_response?)),

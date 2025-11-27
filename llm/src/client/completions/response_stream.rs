@@ -1,24 +1,24 @@
 use std::pin::Pin;
 
 use crate::types::gateway::Chunk;
-use async_openai::error::OpenAIError;
+use crate::error::LLMError;
 use futures::{stream, Stream};
 
 /// Wrapper type around the boxed async stream of raw `Chunk` items.
 pub struct ResultStream {
-    inner: Pin<Box<dyn Stream<Item = Result<Chunk, OpenAIError>> + Send + 'static>>,
+    inner: Pin<Box<dyn Stream<Item = Result<Chunk, LLMError>> + Send + 'static>>,
 }
 
 impl ResultStream {
     pub fn new(
-        inner: Pin<Box<dyn Stream<Item = Result<Chunk, OpenAIError>> + Send + 'static>>,
+        inner: Pin<Box<dyn Stream<Item = Result<Chunk, LLMError>> + Send + 'static>>,
     ) -> Self {
         Self { inner }
     }
 
-    pub fn create(rx: tokio::sync::mpsc::Receiver<Chunk>) -> ResultStream {
+    pub fn create(rx: tokio::sync::mpsc::Receiver<Result<Chunk, LLMError>>) -> ResultStream {
         let response_stream = stream::unfold(rx, |mut receiver| async move {
-            receiver.recv().await.map(|chunk| (Ok(chunk), receiver))
+            receiver.recv().await.map(|chunk| (chunk, receiver))
         });
 
         Self::new(Box::pin(response_stream))
@@ -26,7 +26,7 @@ impl ResultStream {
 }
 
 impl Stream for ResultStream {
-    type Item = Result<Chunk, OpenAIError>;
+    type Item = Result<Chunk, LLMError>;
 
     fn poll_next(
         mut self: Pin<&mut Self>,

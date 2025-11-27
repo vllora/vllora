@@ -402,7 +402,7 @@ impl<C: Config> OpenAIModel<C> {
         &self,
         mut stream: impl Stream<Item = Result<CreateChatCompletionStreamResponse, OpenAIError>> + Unpin,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
-        tx_response: &tokio::sync::mpsc::Sender<Chunk>,
+        tx_response: &tokio::sync::mpsc::Sender<LLMResult<Chunk>>,
         started_at: std::time::Instant,
     ) -> LLMResult<StreamExecutionResult> {
         let mut tool_call_states: HashMap<u32, ChatCompletionMessageToolCall> = HashMap::new();
@@ -417,7 +417,7 @@ impl<C: Config> OpenAIModel<C> {
             match result {
                 Ok(mut response) => {
                     let _ = tx_response
-                        .send(Chunk::Openai(response.clone()))
+                        .send(Ok(Chunk::Openai(response.clone())))
                         .await
                         .map_err(|e| LLMError::CustomError(e.to_string()));
                     if !first_response_received {
@@ -849,7 +849,7 @@ impl<C: Config> OpenAIModel<C> {
         span: Span,
         input_messages: Vec<ChatCompletionRequestMessage>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
-        tx_response: &tokio::sync::mpsc::Sender<Chunk>,
+        tx_response: &tokio::sync::mpsc::Sender<LLMResult<Chunk>>,
         tags: HashMap<String, String>,
     ) -> LLMResult<InnerExecutionResult> {
         let request = self.build_request(&input_messages, true)?;
@@ -995,7 +995,7 @@ impl<C: Config> OpenAIModel<C> {
         &self,
         input_messages: Vec<ChatCompletionRequestMessage>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
-        tx_response: &tokio::sync::mpsc::Sender<Chunk>,
+        tx_response: &tokio::sync::mpsc::Sender<LLMResult<Chunk>>,
         tags: HashMap<String, String>,
     ) -> LLMResult<()> {
         let mut openai_calls = vec![input_messages];
@@ -1379,6 +1379,7 @@ mod tests {
                     assert_eq!(event, expected_event_struct);
                     index += 1;
                 }
+                _ => unreachable!(),
             }
         }
     }

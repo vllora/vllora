@@ -19,8 +19,7 @@ use crate::types::credentials_ident::CredentialsIdent;
 use crate::types::engine::render;
 use crate::types::engine::{ExecutionOptions, GeminiModelParams};
 use crate::types::gateway::{
-    ChatCompletionContent, ChatCompletionMessage, ChatCompletionMessageWithFinishReason,
-    CompletionModelUsage, ToolCall,
+    ChatCompletionContent, ChatCompletionMessage, ChatCompletionMessageWithFinishReason, Chunk, CompletionModelUsage, ToolCall
 };
 use crate::types::instance::ModelInstance;
 use crate::types::message::{AudioFormat, InnerMessage, Message, MessageContentPartOptions};
@@ -70,13 +69,13 @@ fn map_calls_to_tool_names(calls: &[(String, HashMap<String, Value>, Option<Stri
         .join(",")
 }
 
-pub fn gemini_client(credentials: Option<&ApiKeyCredentials>) -> Result<Client, ModelError> {
+pub fn gemini_client(credentials: Option<&ApiKeyCredentials>, api_url: Option<String>) -> Result<Client, ModelError> {
     let api_key = if let Some(credentials) = credentials {
         credentials.api_key.clone()
     } else {
         std::env::var("VLLORA_GEMINI_API_KEY").map_err(|_| AuthorizationError::InvalidApiKey)?
     };
-    Ok(Client::new(api_key))
+    Ok(Client::new(api_key, api_url))
 }
 
 enum InnerExecutionResult {
@@ -98,8 +97,9 @@ impl GeminiModel {
         execution_options: ExecutionOptions,
         credentials: Option<&ApiKeyCredentials>,
         tools: HashMap<String, Arc<Box<dyn Tool>>>,
+        api_url: Option<String>,
     ) -> Result<Self, ModelError> {
-        let client = gemini_client(credentials)?;
+        let client = gemini_client(credentials, api_url)?;
         Ok(Self {
             params,
             execution_options,
@@ -214,6 +214,7 @@ impl GeminiModel {
         &self,
         mut stream: impl Stream<Item = Result<Option<GenerateContentResponse>, LLMError>> + Unpin,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
+        tx_response: &tokio::sync::mpsc::Sender<LLMResult<Chunk>>,
         started_at: std::time::Instant,
     ) -> LLMResult<(
         FinishReason,
@@ -237,6 +238,7 @@ impl GeminiModel {
             match res {
                 Ok(res) => {
                     if let Some(res) = res {
+                        tx_response.send(Ok(Chunk::Gemini(res.clone()))).await.map_err(|e| LLMError::CustomError(e.to_string()))?;
                         if !first_response_received {
                             first_response_received = true;
                             tx.send(Some(ModelEvent::new(
@@ -658,7 +660,7 @@ impl GeminiModel {
         ModelError::FinishError(ModelFinishError::Custom(format!("{finish_reason:?}"))).into()
     }
 
-    fn map_finish_reason(finish_reason: &FinishReason, has_tool_calls: bool) -> ModelFinishReason {
+    pub fn map_finish_reason(finish_reason: &FinishReason, has_tool_calls: bool) -> ModelFinishReason {
         match finish_reason {
             FinishReason::FinishReasonUnspecified => {
                 ModelFinishReason::Other("Unspecified".to_string())
@@ -719,6 +721,7 @@ impl GeminiModel {
         &self,
         call: GenerateContentRequest,
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
+        tx_response: &tokio::sync::mpsc::Sender<LLMResult<Chunk>>,
         call_span: Span,
         tags: HashMap<String, String>,
     ) -> LLMResult<InnerExecutionResult> {
@@ -744,7 +747,7 @@ impl GeminiModel {
         .map_err(|e| LLMError::CustomError(e.to_string()))?;
 
         let (finish_reason, tool_calls, usage, output) = self
-            .process_stream(stream, &tx, started_at)
+            .process_stream(stream, &tx, tx_response, started_at)
             .instrument(call_span.clone())
             .await?;
 
@@ -884,6 +887,7 @@ impl GeminiModel {
         &self,
         input_messages: Vec<Content>,
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
+        tx_response: &tokio::sync::mpsc::Sender<LLMResult<Chunk>>,
         tags: HashMap<String, String>,
     ) -> LLMResult<()> {
         let mut gemini_calls = vec![input_messages];
@@ -901,7 +905,7 @@ impl GeminiModel {
             span.record("request", serde_json::to_string(&request)?);
 
             let result = self
-                .execute_stream_inner(request, tx.clone(), span.clone(), tags.clone())
+                .execute_stream_inner(request, tx.clone(), tx_response, span.clone(), tags.clone())
                 .await;
 
             match result.map_err(|e| record_map_err(e, span.clone())) {
@@ -1043,16 +1047,17 @@ impl ModelInstance for GeminiModel {
     ) -> LLMResult<ResultStream> {
         let conversational_messages =
             self.construct_messages(input_variables, previous_messages)?;
-        self.execute_stream(conversational_messages.clone(), tx.clone(), tags.clone())
-            .await?;
-        let (_tx_response, rx_response) = tokio::sync::mpsc::channel(10000);
+        let (tx_response, rx_response) = tokio::sync::mpsc::channel(10000);
         let model = (*self).clone();
         let tx_clone = tx.clone();
         tokio::spawn(async move {
-            model
-                .execute_stream(conversational_messages, tx_clone, tags)
-                .await
-                .unwrap();
+            let result = model
+                .execute_stream(conversational_messages, tx_clone, &tx_response, tags)
+                .await;
+
+            if let Err(e) = result {
+                let _ = tx_response.send(Err(e)).await;
+            }
         });
         Ok(ResultStream::create(rx_response))
     }
@@ -1308,4 +1313,78 @@ fn normalize_nullable_types(schema: Value) -> Value {
     // Start the recursive normalization
     normalize(&mut result);
     result
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::provider::tests::MockStreamServer;
+
+    fn get_instance(url: &str) -> GeminiModel {
+        GeminiModel::new(
+            GeminiModelParams {
+                model: Some("gemini-2.0-flash".to_string()),
+                ..Default::default()
+            },
+            ExecutionOptions::default(),
+            Some(&ApiKeyCredentials {
+                api_key: "test".to_string(),
+            }),
+            HashMap::new(),
+            Some(url.to_string()),
+        )
+        .expect("Failed to create instance")
+    }
+
+    #[tokio::test]
+    async fn test_gemini_stream() {
+        let full_events = vec![
+            r#"{"candidates": [{"content": {"parts": [{"text": "{"}],"role": "model"}}],"usageMetadata": {"promptTokenCount": 14,"totalTokenCount": 14,"promptTokensDetails": [{"modality": "TEXT","tokenCount": 14}]},"modelVersion": "gemini-2.0-flash","responseId": "2gMoabWyNcSNmNAPg6qc-Q0"}"#.to_string(),
+            r#"{"candidates": [{"content": {"parts": [{"text": "\n  \""}],"role": "model"}}],"usageMetadata": {"promptTokenCount": 14,"totalTokenCount": 14,"promptTokensDetails": [{"modality": "TEXT","tokenCount": 14}]},"modelVersion": "gemini-2.0-flash","responseId": "2gMoabWyNcSNmNAPg6qc-Q0"}"#.to_string(),
+            r#"{"candidates": [{"content": {"parts": [{"text": "message\": \"I am doing well, thank you for asking!\",\n  \""}],"role": "model"}}],"usageMetadata": {"promptTokenCount": 14,"totalTokenCount": 14,"promptTokensDetails": [{"modality": "TEXT","tokenCount": 14}]},"modelVersion": "gemini-2.0-flash","responseId": "2gMoabWyNcSNmNAPg6qc-Q0"}"#.to_string(),
+            r#"{"candidates": [{"content": {"parts": [{"text": "text\": null\n}"}],"role": "model"},"finishReason": "STOP"}],"usageMetadata": {"promptTokenCount": 30,"candidatesTokenCount": 25,"totalTokenCount": 55,"promptTokensDetails": [{"modality": "TEXT","tokenCount": 30}],"candidatesTokensDetails": [{"modality": "TEXT","tokenCount": 25}]},"modelVersion": "gemini-2.0-flash","responseId": "2gMoabWyNcSNmNAPg6qc-Q0"}"#.to_string(),
+        ];
+        
+        let server = MockStreamServer::start()
+            .await
+            .expect("Failed to start mock server");
+        let server_url = server.url();
+
+        // Set some test events (you can modify these later)
+        server.set_events(full_events.clone()).await;
+
+        let instance = get_instance(&server_url);
+
+        let (tx, _rx) = tokio::sync::mpsc::channel(100);
+        let mut stream = instance
+            .stream(HashMap::new(), tx, vec![], HashMap::new())
+            .await
+            .expect("Failed to stream");
+
+        let mut index = 0;
+        while let Some(Ok(event)) = stream.next().await {
+            match event {
+                Chunk::Gemini(event) => {
+                    let expected_event = full_events[index].clone();
+                    let expected_event_struct: GenerateContentResponse =
+                        serde_json::from_str(&expected_event).unwrap();
+
+                    let Part::Text(expected_text) = expected_event_struct.candidates[0].content.parts[0].part.clone() else {
+                        unreachable!();
+                    };
+
+                    let Part::Text(actual_text) = event.candidates[0].content.parts[0].part.clone() else {
+                        unreachable!();
+                    };
+
+                    assert_eq!(actual_text, expected_text);
+                    index += 1;
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        assert_eq!(index, full_events.len());
+    }
 }

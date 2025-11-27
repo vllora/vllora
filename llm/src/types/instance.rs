@@ -123,12 +123,14 @@ pub async fn init_model_instance(
             params,
             execution_options,
             credentials,
+            api_url,
             ..
         } => Box::new(GeminiModel::new(
             params.clone(),
             execution_options.clone(),
             credentials.as_ref(),
             tools,
+            api_url,
         )?) as Box<dyn ModelInstance>,
         CompletionEngineParams::Proxy {
             params,
@@ -201,7 +203,7 @@ impl ModelInstance for DummyModelInstance {
                     .await
                     .ok();
                     tx_response
-                        .send(Chunk::Openai(
+                        .send(Ok(Chunk::Openai(
                             async_openai::types::CreateChatCompletionStreamResponse {
                                 id: "test".to_string(),
                                 object: Some("test".to_string()),
@@ -224,7 +226,7 @@ impl ModelInstance for DummyModelInstance {
                                 service_tier: None,
                                 system_fingerprint: None,
                             },
-                        ))
+                        )))
                         .await
                         .ok();
                 }
