@@ -125,7 +125,6 @@ diesel::table! {
         id -> Text,
     }
 }
-
 diesel::joinable!(provider_credentials -> projects (project_id));
 
 diesel::allow_tables_to_appear_in_same_query!(

@@ -38,6 +38,11 @@ impl TraceService for TraceServiceImpl {
             db_query = db_query.filter(traces::project_id.eq(project_slug.clone()));
         }
 
+        // Apply span_id filter (specific span lookup)
+        if let Some(span_id) = &query.span_id {
+            db_query = db_query.filter(traces::span_id.eq(span_id.clone()));
+        }
+
         // Apply run_ids filter
         if query.filter_null_run {
             db_query = db_query.filter(traces::run_id.is_null());
@@ -206,6 +211,11 @@ impl TraceService for TraceServiceImpl {
         // Apply project_id filter
         if let Some(project_id) = &query.project_slug {
             db_query = db_query.filter(traces::project_id.eq(project_id));
+        }
+
+        // Apply span_id filter (specific span lookup)
+        if let Some(span_id) = &query.span_id {
+            db_query = db_query.filter(traces::span_id.eq(span_id.clone()));
         }
 
         // Apply run_ids filter
