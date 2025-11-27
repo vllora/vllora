@@ -1,4 +1,3 @@
-pub mod experiment;
 pub mod mcp_config;
 pub mod model;
 pub mod project;
