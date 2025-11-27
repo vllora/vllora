@@ -52,21 +52,6 @@ where
             let elapsed = start_time.elapsed();
             let status = res.status().as_u16();
 
-            let provider = res
-                .headers()
-                .get("X-Provider-Name")
-                .and_then(|h| h.to_str().ok());
-            let model = res
-                .headers()
-                .get("X-Model-Name")
-                .and_then(|h| h.to_str().ok());
-
-            let model_log = match (provider, model) {
-                (Some(provider), Some(model)) => format!("{provider}/{model}"),
-                (Some(name), None) | (None, Some(name)) => name.to_string(),
-                _ => "".to_string(),
-            };
-
             if status >= 400 {
                 tracing::error!(
                     "{} {} {}ms",
@@ -76,8 +61,7 @@ where
                 );
             } else {
                 tracing::info!(
-                    "{} \"{}\" {} {}ms",
-                    model_log,
+                    "{} {} {}ms",
                     format!("{} {} HTTP/1.1", method, uri),
                     status,
                     elapsed.as_millis(),

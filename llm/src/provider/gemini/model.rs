@@ -89,7 +89,7 @@ pub struct GeminiModel {
     params: GeminiModelParams,
     execution_options: ExecutionOptions,
     client: Client,
-    tools: Arc<HashMap<String, Box<dyn Tool>>>,
+    tools: HashMap<String, Arc<Box<dyn Tool>>>,
     credentials_ident: CredentialsIdent,
 }
 impl GeminiModel {
@@ -97,14 +97,14 @@ impl GeminiModel {
         params: GeminiModelParams,
         execution_options: ExecutionOptions,
         credentials: Option<&ApiKeyCredentials>,
-        tools: HashMap<String, Box<dyn Tool>>,
+        tools: HashMap<String, Arc<Box<dyn Tool>>>,
     ) -> Result<Self, ModelError> {
         let client = gemini_client(credentials)?;
         Ok(Self {
             params,
             execution_options,
             client,
-            tools: Arc::new(tools),
+            tools,
             credentials_ident: credentials
                 .map(|_c| CredentialsIdent::Own)
                 .unwrap_or(CredentialsIdent::Vllora),
@@ -113,7 +113,7 @@ impl GeminiModel {
 
     async fn handle_tool_calls(
         function_calls: impl Iterator<Item = &(String, HashMap<String, Value>, Option<String>)>,
-        tools: &HashMap<String, Box<dyn Tool>>,
+        tools: &HashMap<String, Arc<Box<dyn Tool>>>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
     ) -> Vec<PartWithThought> {

@@ -1,5 +1,5 @@
 use async_openai::types::ResponseFormat;
-use clust::messages as claude;
+use clust::messages::{self as claude, StopSequence};
 use minijinja::Environment;
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Serialize};
@@ -10,11 +10,13 @@ use std::borrow::Cow;
 use std::{collections::HashMap, fmt::Display, ops::Deref, str::FromStr};
 use validator::Validate;
 
-use crate::types::credentials::ApiKeyCredentials;
+use crate::error::LLMError;
 use crate::types::credentials::BedrockCredentials;
+use crate::types::credentials::{ApiKeyCredentials, Credentials};
 use crate::types::credentials_ident::CredentialsIdent;
+use crate::types::gateway::{ChatCompletionRequest, ProviderSpecificRequest};
 use crate::types::models::ModelType;
-use crate::types::provider::ModelPrice;
+use crate::types::provider::{InferenceModelProvider, ModelPrice};
 use crate::types::tools::ModelTools;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -243,6 +245,8 @@ pub enum CompletionEngineParams {
         params: OpenAiModelParams,
         execution_options: ExecutionOptions,
         credentials: Option<ApiKeyCredentials>,
+        endpoint: Option<String>,
+        provider_name: String,
     },
 }
 
@@ -276,6 +280,217 @@ impl CompletionEngineParams {
             Self::Anthropic { params, .. } => params.model.as_ref().map(|m| m.string.as_str()),
             Self::Gemini { params, .. } => params.model.as_deref(),
             Self::Proxy { params, .. } => params.model.as_deref(),
+        }
+    }
+}
+
+pub struct CompletionEngineParamsBuilder {
+    pub provider: InferenceModelProvider,
+    pub request: ChatCompletionRequest,
+    pub model_name: Option<String>,
+    pub credentials: Option<Credentials>,
+    pub provider_specific: Option<ProviderSpecificRequest>,
+    pub execution_options: Option<ExecutionOptions>,
+}
+
+impl CompletionEngineParamsBuilder {
+    pub fn new(provider: InferenceModelProvider, request: ChatCompletionRequest) -> Self {
+        Self {
+            provider,
+            request,
+            model_name: None,
+            credentials: None,
+            provider_specific: None,
+            execution_options: None,
+        }
+    }
+
+    pub fn with_model_name(mut self, model_name: String) -> Self {
+        self.model_name = Some(model_name);
+        self
+    }
+
+    pub fn with_credentials(mut self, credentials: Credentials) -> Self {
+        self.credentials = Some(credentials);
+        self
+    }
+
+    pub fn with_provider_specific(mut self, provider_specific: ProviderSpecificRequest) -> Self {
+        self.provider_specific = Some(provider_specific);
+        self
+    }
+
+    pub fn with_execution_options(mut self, execution_options: ExecutionOptions) -> Self {
+        self.execution_options = Some(execution_options);
+        self
+    }
+
+    pub fn build(self) -> Result<CompletionEngineParams, LLMError> {
+        match &self.provider {
+            InferenceModelProvider::OpenAI | InferenceModelProvider::Proxy(_) => {
+                let params = OpenAiModelParams {
+                    model: self
+                        .model_name
+                        .clone()
+                        .or_else(|| Some(self.request.model.clone())),
+                    frequency_penalty: self.request.frequency_penalty,
+                    logit_bias: self.request.logit_bias.clone(),
+                    logprobs: None,
+                    top_logprobs: None,
+                    max_tokens: self.request.max_tokens,
+                    presence_penalty: self.request.presence_penalty,
+                    seed: self.request.seed,
+                    stop: self.request.stop.clone(),
+                    temperature: self.request.temperature,
+                    top_p: self.request.top_p,
+                    user: self.request.user.clone(),
+                    response_format: self.request.response_format.clone(),
+                    prompt_cache_key: self.request.prompt_cache_key.clone(),
+                };
+                let mut custom_endpoint = None;
+                let api_key_credentials = self.credentials.and_then(|cred| match cred {
+                    Credentials::ApiKey(key) => Some(key),
+                    Credentials::ApiKeyWithEndpoint {
+                        api_key: key,
+                        endpoint,
+                    } => {
+                        custom_endpoint = Some(endpoint);
+                        Some(ApiKeyCredentials { api_key: key })
+                    }
+                    _ => None,
+                });
+                match &self.provider {
+                    InferenceModelProvider::OpenAI => Ok(CompletionEngineParams::OpenAi {
+                        params,
+                        execution_options: self.execution_options.unwrap_or_default(),
+                        credentials: api_key_credentials,
+                        endpoint: None,
+                    }),
+                    InferenceModelProvider::Proxy(proxy_provider) => {
+                        if proxy_provider == "azure" {
+                            Ok(CompletionEngineParams::OpenAi {
+                                params,
+                                execution_options: self.execution_options.unwrap_or_default(),
+                                credentials: api_key_credentials,
+                                endpoint: custom_endpoint,
+                            })
+                        } else {
+                            Ok(CompletionEngineParams::Proxy {
+                                params,
+                                execution_options: self.execution_options.unwrap_or_default(),
+                                credentials: api_key_credentials,
+                                provider_name: proxy_provider.clone(),
+                                endpoint: custom_endpoint,
+                            })
+                        }
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            InferenceModelProvider::Bedrock => {
+                let aws_creds = self
+                    .credentials
+                    .and_then(|cred| cred.to_bedrock_credentials());
+                Ok(CompletionEngineParams::Bedrock {
+                    credentials: aws_creds,
+                    execution_options: self.execution_options.unwrap_or_default(),
+                    params: BedrockModelParams {
+                        model_id: self
+                            .model_name
+                            .clone()
+                            .or_else(|| Some(self.request.model.clone())),
+                        max_tokens: self.request.max_tokens.map(|x| x as i32),
+                        temperature: self.request.temperature,
+                        top_p: self.request.top_p,
+                        stop_sequences: self.request.stop.clone(),
+                        additional_parameters: HashMap::new(),
+                    },
+                })
+            }
+            InferenceModelProvider::Anthropic => {
+                let api_key_credentials = self.credentials.and_then(|cred| match cred {
+                    Credentials::ApiKey(key) => Some(key),
+                    _ => None,
+                });
+                let original_model_name = self
+                    .model_name
+                    .clone()
+                    .unwrap_or(self.request.model.clone());
+                let model_name = get_anthropic_model(&original_model_name);
+                let model = serde_json::from_str::<ClaudeModel>(&format!("\"{model_name}\""))?;
+                Ok(CompletionEngineParams::Anthropic {
+                    credentials: api_key_credentials,
+                    execution_options: self.execution_options.unwrap_or_default(),
+                    params: AnthropicModelParams {
+                        model: Some(model.clone()),
+                        max_tokens: match self.request.max_tokens {
+                            Some(x) => Some(clust::messages::MaxTokens::new(x, model.model)?),
+                            None => None,
+                        },
+                        stop_sequences: self
+                            .request
+                            .stop
+                            .as_ref()
+                            .map(|s| s.iter().map(StopSequence::new).collect()),
+                        stream: None,
+                        temperature: match self.request.temperature {
+                            Some(t) => Some(clust::messages::Temperature::new(t)?),
+                            None => None,
+                        },
+                        top_p: match self.request.top_p {
+                            Some(p) => Some(clust::messages::TopP::new(p)?),
+                            None => None,
+                        },
+                        top_k: self
+                            .provider_specific
+                            .as_ref()
+                            .and_then(|ps| ps.top_k.map(clust::messages::TopK::new)),
+                        thinking: self.provider_specific.as_ref().and_then(|ps| {
+                            ps.thinking
+                                .as_ref()
+                                .map(|thinking| clust::messages::Thinking {
+                                    r#type: thinking.r#type.clone(),
+                                    budget_tokens: thinking.budget_tokens,
+                                })
+                        }),
+                    },
+                })
+            }
+            InferenceModelProvider::Gemini => {
+                let api_key_credentials = self.credentials.and_then(|cred| match cred {
+                    Credentials::ApiKey(key) => Some(key),
+                    _ => None,
+                });
+                Ok(CompletionEngineParams::Gemini {
+                    credentials: api_key_credentials,
+                    execution_options: self.execution_options.unwrap_or_default(),
+                    params: GeminiModelParams {
+                        model: self
+                            .model_name
+                            .clone()
+                            .or_else(|| Some(self.request.model.clone())),
+                        max_output_tokens: self.request.max_tokens.map(|x| x as i32),
+                        temperature: self.request.temperature,
+                        top_p: self.request.top_p,
+                        stop_sequences: self.request.stop.clone(),
+                        candidate_count: self.request.n,
+                        presence_penalty: self.request.presence_penalty,
+                        frequency_penalty: self.request.frequency_penalty,
+                        seed: self.request.seed,
+                        // Not supported by request inteface
+                        // response_logprobs: request.response_logprobs,
+                        // logprobs: request.logprobs,
+                        // top_k: request.top_k,
+                        response_logprobs: None,
+                        logprobs: None,
+                        top_k: None,
+                        response_format: self.request.response_format.clone(),
+                    },
+                })
+            }
+            InferenceModelProvider::VertexAI => {
+                unimplemented!()
+            }
         }
     }
 }
@@ -683,4 +898,22 @@ pub struct EmbeddingsModelDefinition {
     pub name: String,
     pub engine: EmbeddingsEngineParams,
     pub db_model: Model,
+}
+
+/// Handles Anthropic model names without versions.
+///
+/// This function attempts to parse the given model name into a `ClaudeModel` enum variant.
+/// It's designed to handle model names that may not include specific version numbers.
+///
+/// # Arguments
+///
+/// * `model_name` - A string slice that holds the name of the Anthropic model.
+fn get_anthropic_model(model_name: &str) -> &str {
+    match model_name {
+        "claude-3-opus" => "claude-3-opus-20240229",
+        "claude-3-sonnet" => "claude-3-sonnet-20240229",
+        "claude-3-haiku" => "claude-3-haiku-20240307",
+        "claude-3-5-sonnet" => "claude-3-5-sonnet-20240620",
+        n => n,
+    }
 }

@@ -149,7 +149,9 @@ impl RoutedExecutor {
                 }
             } else {
                 let result =
-                    Self::execute_request(&request, executor_context, project_id, thread_id).await;
+                    Self::execute_request(&request, executor_context, project_id, thread_id)
+                        .instrument(span.clone())
+                        .await;
 
                 match result {
                     Ok(response) => return Ok(response),
@@ -309,8 +311,10 @@ impl RoutedExecutor {
                     })
                     .chain(futures::stream::once(async {
                         Ok::<_, GatewayApiError>(Bytes::from("data: [DONE]\n\n"))
-                    }));
+                    }))
+                    .instrument(span.clone());
 
+                tracing::error!("end stream");
                 Ok(builder.content_type("text/event-stream").streaming(result))
             }
             Right(completions_response) => Ok(builder.json(completions_response?)),

@@ -77,7 +77,7 @@ pub struct BedrockModel {
     pub client: Client,
     pub execution_options: ExecutionOptions,
     params: BedrockModelParams,
-    pub tools: Arc<HashMap<String, Box<dyn VlloraTool>>>,
+    pub tools: HashMap<String, Arc<Box<dyn VlloraTool>>>,
     pub model_name: String,
     pub credentials_ident: CredentialsIdent,
 }
@@ -127,7 +127,7 @@ impl BedrockModel {
         model_params: BedrockModelParams,
         execution_options: ExecutionOptions,
         credentials: Option<&BedrockCredentials>,
-        tools: HashMap<String, Box<dyn VlloraTool>>,
+        tools: HashMap<String, Arc<Box<dyn VlloraTool>>>,
     ) -> Result<Self, ModelError> {
         let client = bedrock_client(credentials).await?;
 
@@ -137,7 +137,7 @@ impl BedrockModel {
             client,
             execution_options,
             params: model_params,
-            tools: Arc::new(tools),
+            tools,
             model_name: model_id,
             credentials_ident: credentials
                 .map(|_c| CredentialsIdent::Own)
@@ -249,7 +249,7 @@ impl BedrockModel {
     }
     async fn handle_tool_calls(
         tool_uses: Vec<ToolUseBlock>,
-        tools: &HashMap<String, Box<dyn VlloraTool>>,
+        tools: &HashMap<String, Arc<Box<dyn VlloraTool>>>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
     ) -> LLMResult<Message> {

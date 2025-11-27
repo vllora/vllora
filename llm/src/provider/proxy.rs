@@ -1,23 +1,24 @@
-use crate::model::OpenAIModel;
+use crate::client::completions::response_stream::ResultStream;
+use crate::client::error::ModelError;
+use crate::error::LLMResult;
+use crate::provider::openai::OpenAIModel;
+use crate::provider::openai_spec_client::openai_spec_client;
+use crate::types::credentials::ApiKeyCredentials;
+use crate::types::engine::ExecutionOptions;
+use crate::types::engine::OpenAiModelParams;
+use crate::types::gateway::ChatCompletionMessageWithFinishReason;
+use crate::types::instance::ModelInstance;
+use crate::types::message::Message;
+use crate::types::tools::Tool;
+use crate::types::ModelEvent;
 use async_openai::config::OpenAIConfig;
 use async_openai::Client;
 use async_trait::async_trait;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::sync::Arc;
 use tracing::Span;
 use tracing_futures::Instrument;
-use vllora_llm::client::completions::response_stream::ResultStream;
-use vllora_llm::client::error::ModelError;
-use vllora_llm::error::LLMResult;
-use vllora_llm::provider::openai_spec_client::openai_spec_client;
-use vllora_llm::types::credentials::ApiKeyCredentials;
-use vllora_llm::types::engine::ExecutionOptions;
-use vllora_llm::types::engine::OpenAiModelParams;
-use vllora_llm::types::gateway::ChatCompletionMessageWithFinishReason;
-use vllora_llm::types::instance::ModelInstance;
-use vllora_llm::types::message::Message;
-use vllora_llm::types::tools::Tool;
-use vllora_llm::types::ModelEvent;
 
 #[derive(Clone)]
 pub struct OpenAISpecModel {
@@ -30,7 +31,7 @@ impl OpenAISpecModel {
         mut params: OpenAiModelParams,
         credentials: Option<&ApiKeyCredentials>,
         execution_options: ExecutionOptions,
-        tools: HashMap<String, Box<dyn Tool>>,
+        tools: HashMap<String, Arc<Box<dyn Tool>>>,
         endpoint: Option<&str>,
         provider_name: &str,
     ) -> Result<Self, ModelError> {

@@ -1,16 +1,20 @@
 use crate::events::ui_broadcaster::EventsUIBroadcaster;
 use crate::types::metadata::project::Project;
 use crate::types::threads::{CompletionsRunId, CompletionsThreadId};
+use actix_web::body::{BodySize, BoxBody, MessageBody};
 use actix_web::dev::forward_ready;
 use actix_web::{
     dev::{Service, ServiceRequest, ServiceResponse, Transform},
     Error,
 };
+use bytes::Bytes;
 use opentelemetry::trace::TraceContextExt;
+use pin_project_lite::pin_project;
 use std::collections::HashMap;
 use std::future::{ready, Future, Ready};
 use std::pin::Pin;
 use std::rc::Rc;
+use std::task::{Context, Poll};
 use tracing::{field, Span};
 use tracing_futures::Instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -51,8 +55,10 @@ impl<S, B> Transform<S, ServiceRequest> for ActixOtelMiddleware
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
     S::Future: 'static,
+    B: MessageBody + 'static,
+    B::Error: std::fmt::Display,
 {
-    type Response = ServiceResponse<B>;
+    type Response = ServiceResponse<BoxBody>;
     type Error = Error;
     type InitError = ();
     type Transform = ActixOtelMiddlewareService<S>;
@@ -82,8 +88,10 @@ impl<S, B> Service<ServiceRequest> for ActixOtelMiddlewareService<S>
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
     S::Future: 'static,
+    B: MessageBody + 'static,
+    B::Error: std::fmt::Display,
 {
-    type Response = ServiceResponse<B>;
+    type Response = ServiceResponse<BoxBody>;
     type Error = Error;
     type Future = LocalBoxFuture<Result<Self::Response, Self::Error>>;
 
@@ -97,15 +105,14 @@ where
             let thread_id = req.extensions().get::<CompletionsThreadId>().cloned();
             let broadcaster: Option<web::Data<EventsUIBroadcaster>> = req.app_data().cloned();
             let project = req.extensions().get::<Project>().cloned();
-            let context = req.extensions().get::<opentelemetry::Context>().cloned();
+            let request_context = req.extensions().get::<opentelemetry::Context>().cloned();
 
-            let is_remote_context = if let Some(context) = context.as_ref() {
+            let is_remote_context = if let Some(context) = request_context.as_ref() {
                 context.span().span_context().is_remote()
             } else {
                 false
             };
 
-            let mut parent_span_id = None;
             let mut run_span = None;
 
             if !is_remote_context {
@@ -119,7 +126,7 @@ where
                 run_span = Some(span.clone());
 
                 if let (Some(run_id), Some(thread_id)) = (run_id.as_ref(), thread_id.as_ref()) {
-                    parent_span_id = Some(span.context().span().span_context().span_id());
+                    let parent_span_id = Some(span.context().span().span_context().span_id());
                     let event = Event::RunStarted {
                         run_context: EventRunContext {
                             run_id: Some(run_id.value()),
@@ -143,8 +150,11 @@ where
                 }
             }
 
-            async {
-                let span = tracing::info_span!(
+            let run_span_for_future = run_span.clone();
+            let mut run_span_for_body = run_span;
+
+            async move {
+                let span: Span = tracing::info_span!(
                     target: "vllora::user_tracing::cloud_api",
                     "cloud_api_invoke",
                     http.request.method = req.method().to_string(),
@@ -163,23 +173,17 @@ where
                     ip = get_client_ip(req.request())
                 );
 
-                if let Some(parent_span_id) = parent_span_id {
-                    span.follows_from(tracing::Id::from_u64(u64::from_be_bytes(
-                        parent_span_id.to_bytes(),
-                    )));
-                }
-
-                let parent_span_id = match context {
+                let parent_span_id = match request_context {
                     Some(context) => {
                         let context_span = context.span();
                         let span_context = context_span.span_context();
                         if span_context.is_valid() {
                             Some(span_context.span_id())
                         } else {
-                            parent_span_id
+                            None
                         }
                     }
-                    None => parent_span_id,
+                    None => None,
                 };
 
                 if let (Some(run_id), Some(thread_id)) = (run_id, thread_id) {
@@ -215,7 +219,17 @@ where
                             span.record("error", error.to_string());
                         }
 
-                        Ok(ok_res)
+                        let span_for_body = span.clone();
+                        let instrumented = ok_res.map_body(move |_, body| {
+                            let run_span = run_span_for_body.take();
+                            BoxBody::new(SpanInstrumentedBody::new(
+                                body,
+                                span_for_body.clone(),
+                                run_span,
+                            ))
+                        });
+
+                        Ok(instrumented)
                     }
                     Err(err) => {
                         span.record("error", err.to_string());
@@ -223,8 +237,68 @@ where
                         Err(err)
                     }
                 }
-            }.instrument(run_span.unwrap_or(Span::current()))
+            }.instrument(run_span_for_future.unwrap_or(Span::current()))
             .await
         })
+    }
+}
+
+pin_project! {
+    struct SpanInstrumentedBody<B> {
+        #[pin]
+        inner: B,
+        span: Span,
+        run_span: Option<Span>,
+        finished: bool,
+    }
+}
+
+impl<B> SpanInstrumentedBody<B> {
+    fn new(inner: B, span: Span, run_span: Option<Span>) -> Self {
+        Self {
+            inner,
+            span,
+            run_span,
+            finished: false,
+        }
+    }
+}
+
+impl<B> MessageBody for SpanInstrumentedBody<B>
+where
+    B: MessageBody,
+    B::Error: std::fmt::Display,
+{
+    type Error = B::Error;
+
+    fn size(&self) -> BodySize {
+        self.inner.size()
+    }
+
+    fn poll_next(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Bytes, Self::Error>>> {
+        let this = self.project();
+        let _entered = this.span.enter();
+
+        match this.inner.poll_next(cx) {
+            Poll::Ready(None) => {
+                if !*this.finished {
+                    this.span.record("status", "completed");
+                    *this.finished = true;
+                }
+                Poll::Ready(None)
+            }
+            Poll::Ready(Some(Err(err))) => {
+                this.span.record("error", err.to_string());
+                if !*this.finished {
+                    this.span.record("status", "error");
+                    *this.finished = true;
+                }
+                Poll::Ready(Some(Err(err)))
+            }
+            other => other,
+        }
     }
 }

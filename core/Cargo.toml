@@ -81,6 +81,8 @@ rmcp = { workspace = true }
 rmcp-macros = { workspace = true }
 rmcp-actix-web = { workspace = true }
 
+pin-project-lite = "0.2.11"
+
 [features]
 default = ["sqlite"]
 postgres = ["diesel/postgres"]

@@ -93,7 +93,7 @@ pub struct AnthropicModel {
     params: AnthropicModelParams,
     execution_options: ExecutionOptions,
     client: Client,
-    tools: Arc<HashMap<String, Box<dyn Tool>>>,
+    tools: HashMap<String, Arc<Box<dyn Tool>>>,
     credentials_ident: CredentialsIdent,
 }
 
@@ -102,14 +102,14 @@ impl AnthropicModel {
         params: AnthropicModelParams,
         execution_options: ExecutionOptions,
         credentials: Option<&ApiKeyCredentials>,
-        tools: HashMap<String, Box<dyn Tool>>,
+        tools: HashMap<String, Arc<Box<dyn Tool>>>,
     ) -> Result<Self, ModelError> {
         let client: Client = anthropic_client(credentials)?;
         Ok(Self {
             params,
             execution_options,
             client,
-            tools: Arc::new(tools),
+            tools,
             credentials_ident: credentials
                 .map(|_c| CredentialsIdent::Own)
                 .unwrap_or(CredentialsIdent::Vllora),
@@ -118,7 +118,7 @@ impl AnthropicModel {
 
     async fn handle_tool_calls(
         function_calls: impl Iterator<Item = &ToolUse>,
-        tools: &HashMap<String, Box<dyn Tool>>,
+        tools: &HashMap<String, Arc<Box<dyn Tool>>>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
     ) -> Vec<ClustMessage> {
@@ -208,7 +208,7 @@ impl AnthropicModel {
         let builder = if !self.tools.is_empty() {
             let mut tools: Vec<ToolDefinition> = vec![];
             for (_, tool) in self.tools.clone().iter() {
-                tools.push(tool_definition(tool.deref()));
+                tools.push(tool_definition(tool.deref().as_ref()));
             }
 
             builder.tools(tools)

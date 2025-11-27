@@ -37,6 +37,12 @@ pub enum LLMError {
     ModelError(#[from] Box<ModelError>),
     #[error(transparent)]
     MessageMapperError(#[from] MessageMapperError),
+    #[error(transparent)]
+    ValidationErrorF32(#[from] clust::ValidationError<f32>),
+    #[error(transparent)]
+    ValidationErrorU32(#[from] clust::ValidationError<u32>),
+    #[error(transparent)]
+    ValidationErrorString(#[from] clust::ValidationError<String>),
 }
 
 #[derive(Error, Debug)]

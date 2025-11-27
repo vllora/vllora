@@ -1,12 +1,20 @@
 use crate::client::completions::response_stream::ResultStream;
+use crate::client::error::ModelError;
 use crate::error::LLMError;
 use crate::error::LLMResult;
+use crate::provider::anthropic::AnthropicModel;
+use crate::provider::bedrock::BedrockModel;
+use crate::provider::gemini::GeminiModel;
+use crate::provider::openai::OpenAIModel;
+use crate::provider::proxy::OpenAISpecModel;
 use crate::types::credentials_ident::CredentialsIdent;
+use crate::types::engine::CompletionEngineParams;
 use crate::types::gateway::ChatCompletionContent;
 use crate::types::gateway::ChatCompletionMessage;
 use crate::types::gateway::ChatCompletionMessageWithFinishReason;
 use crate::types::gateway::Chunk;
 use crate::types::message::Message;
+use crate::types::tools::Tool;
 use crate::types::LLMContentEvent;
 use crate::types::LLMFinishEvent;
 use crate::types::ModelEvent;
@@ -16,6 +24,7 @@ use async_trait::async_trait;
 use chrono::Utc;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::Span;
 
@@ -49,6 +58,95 @@ pub trait ModelInstance: Sync + Send {
         previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
     ) -> LLMResult<ResultStream>;
+}
+
+pub async fn init_model_instance(
+    engine: CompletionEngineParams,
+    tools: HashMap<String, Arc<Box<dyn Tool + 'static>>>,
+) -> Result<Box<dyn ModelInstance>, ModelError> {
+    let instance = match engine {
+        CompletionEngineParams::OpenAi {
+            params,
+            execution_options,
+            credentials,
+            endpoint,
+        } => {
+            // Check if the endpoint is an Azure OpenAI endpoint
+            if let Some(ep) = endpoint.as_ref() {
+                if ep.contains("azure.com") {
+                    // Use the Azure implementation
+                    return Ok(Box::new(OpenAIModel::from_azure_url(
+                        params.clone(),
+                        credentials.as_ref(),
+                        execution_options.clone(),
+                        tools,
+                        ep,
+                    )?));
+                }
+            }
+
+            Box::new(OpenAIModel::new(
+                params.clone(),
+                credentials.as_ref(),
+                execution_options.clone(),
+                tools,
+                None,
+                endpoint.as_deref(),
+            )?) as Box<dyn ModelInstance>
+        }
+        CompletionEngineParams::Bedrock {
+            params,
+            execution_options,
+            credentials,
+            ..
+        } => Box::new(
+            BedrockModel::new(
+                params.clone(),
+                execution_options.clone(),
+                credentials.as_ref(),
+                tools,
+            )
+            .await?,
+        ) as Box<dyn ModelInstance>,
+        CompletionEngineParams::Anthropic {
+            params,
+            execution_options,
+            credentials,
+            ..
+        } => Box::new(AnthropicModel::new(
+            params.clone(),
+            execution_options.clone(),
+            credentials.as_ref(),
+            tools,
+        )?) as Box<dyn ModelInstance>,
+        CompletionEngineParams::Gemini {
+            params,
+            execution_options,
+            credentials,
+            ..
+        } => Box::new(GeminiModel::new(
+            params.clone(),
+            execution_options.clone(),
+            credentials.as_ref(),
+            tools,
+        )?) as Box<dyn ModelInstance>,
+        CompletionEngineParams::Proxy {
+            params,
+            execution_options,
+            credentials,
+            provider_name,
+            endpoint,
+        } => Box::new(OpenAISpecModel::new(
+            params.clone(),
+            credentials.as_ref(),
+            execution_options.clone(),
+            tools,
+            endpoint.as_deref(),
+            &provider_name,
+        )?) as Box<dyn ModelInstance>,
+    };
+
+    Ok(instance)
 }
 
 pub struct DummyModelInstance {}

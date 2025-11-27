@@ -131,7 +131,7 @@ pub struct OpenAIModel<C: Config = OpenAIConfig> {
     params: OpenAiModelParams,
     execution_options: ExecutionOptions,
     client: Client<C>,
-    tools: Arc<HashMap<String, Box<dyn Tool>>>,
+    tools: HashMap<String, Arc<Box<dyn Tool>>>,
     credentials_ident: CredentialsIdent,
 }
 
@@ -141,7 +141,7 @@ impl OpenAIModel<OpenAIConfig> {
         params: OpenAiModelParams,
         credentials: Option<&ApiKeyCredentials>,
         execution_options: ExecutionOptions,
-        tools: HashMap<String, Box<dyn Tool>>,
+        tools: HashMap<String, Arc<Box<dyn Tool>>>,
         client: Option<Client<OpenAIConfig>>,
         endpoint: Option<&str>,
     ) -> Result<Self, ModelError> {
@@ -160,7 +160,7 @@ impl OpenAIModel<OpenAIConfig> {
             params,
             execution_options,
             client,
-            tools: Arc::new(tools),
+            tools,
             credentials_ident: credentials
                 .map(|_c| CredentialsIdent::Own)
                 .unwrap_or(CredentialsIdent::Vllora),
@@ -174,7 +174,7 @@ impl OpenAIModel<AzureConfig> {
         params: OpenAiModelParams,
         credentials: Option<&ApiKeyCredentials>,
         execution_options: ExecutionOptions,
-        tools: HashMap<String, Box<dyn Tool>>,
+        tools: HashMap<String, Arc<Box<dyn Tool>>>,
         client: Option<Client<AzureConfig>>,
         endpoint: Option<&str>,
     ) -> Result<Self, ModelError> {
@@ -198,7 +198,7 @@ impl OpenAIModel<AzureConfig> {
             params,
             execution_options,
             client,
-            tools: Arc::new(tools),
+            tools,
             credentials_ident: credentials
                 .map(|_c| CredentialsIdent::Own)
                 .unwrap_or(CredentialsIdent::Vllora),
@@ -210,7 +210,7 @@ impl OpenAIModel<AzureConfig> {
         params: OpenAiModelParams,
         credentials: Option<&ApiKeyCredentials>,
         execution_options: ExecutionOptions,
-        tools: HashMap<String, Box<dyn Tool>>,
+        tools: HashMap<String, Arc<Box<dyn Tool>>>,
         endpoint: &str,
     ) -> Result<Self, ModelError> {
         Self::new_azure(
@@ -237,7 +237,7 @@ impl<C: Config> OpenAIModel<C> {
 
     async fn handle_tool_calls(
         function_calls: impl Iterator<Item = &ChatCompletionMessageToolCall>,
-        tools: &HashMap<String, Box<dyn Tool>>,
+        tools: &HashMap<String, Arc<Box<dyn Tool>>>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
     ) -> HashMap<String, String> {
@@ -416,19 +416,19 @@ impl<C: Config> OpenAIModel<C> {
         while let Some(result) = stream.next().await {
             match result {
                 Ok(mut response) => {
-                    tx_response
+                    let _ = tx_response
                         .send(Chunk::Openai(response.clone()))
                         .await
-                        .map_err(|e| LLMError::CustomError(e.to_string()))?;
+                        .map_err(|e| LLMError::CustomError(e.to_string()));
                     if !first_response_received {
                         first_response_received = true;
                         Span::current().add_event("llm.first_token", vec![]);
-                        tx.send(Some(ModelEvent::new(
-                            &Span::current(),
-                            ModelEventType::LlmFirstToken(LLMFirstToken {}),
-                        )))
-                        .await
-                        .map_err(|e| LLMError::CustomError(e.to_string()))?;
+                        let _ = tx
+                            .send(Some(ModelEvent::new(
+                                &Span::current(),
+                                ModelEventType::LlmFirstToken(LLMFirstToken {}),
+                            )))
+                            .await;
                         first_chunk = Some(response.clone());
                         Span::current().record("ttft", started_at.elapsed().as_micros());
                     }
@@ -495,7 +495,7 @@ impl<C: Config> OpenAIModel<C> {
                                 }),
                             ),
                         )
-                        .await?;
+                        .await;
                         stream_content.push_str(content);
                     }
 
@@ -531,14 +531,8 @@ impl<C: Config> OpenAIModel<C> {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip_all)]
-    async fn send_event(
-        tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
-        event: ModelEvent,
-    ) -> LLMResult<()> {
-        tx.send(Some(event))
-            .await
-            .map_err(|e| LLMError::CustomError(e.to_string()))
+    async fn send_event(tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>, event: ModelEvent) {
+        let _ = tx.send(Some(event)).await;
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
@@ -553,16 +547,16 @@ impl<C: Config> OpenAIModel<C> {
         span.record("request", serde_json::to_string(&call)?);
 
         let input_messages = call.messages.clone();
-        tx.send(Some(ModelEvent::new(
-            &span,
-            ModelEventType::LlmStart(LLMStartEvent {
-                provider_name: SPAN_OPENAI.to_string(),
-                model_name: self.params.model.clone().unwrap_or_default(),
-                input: serde_json::to_string(&input_messages)?,
-            }),
-        )))
-        .await
-        .map_err(|e| LLMError::CustomError(e.to_string()))?;
+        let _ = tx
+            .send(Some(ModelEvent::new(
+                &span,
+                ModelEventType::LlmStart(LLMStartEvent {
+                    provider_name: SPAN_OPENAI.to_string(),
+                    model_name: self.params.model.clone().unwrap_or_default(),
+                    input: serde_json::to_string(&input_messages)?,
+                }),
+            )))
+            .await;
 
         let response = async move {
             let result = self.client.chat().create(call).await;
@@ -632,20 +626,20 @@ impl<C: Config> OpenAIModel<C> {
                 let finish_reason = Self::map_finish_reason(
                     &finish_reason.expect("Finish reason is already checked"),
                 );
-                tx.send(Some(ModelEvent::new(
-                    &span,
-                    ModelEventType::LlmStop(LLMFinishEvent {
-                        provider_name: SPAN_OPENAI.to_string(),
-                        model_name: self.params.model.clone().unwrap_or_default(),
-                        output: content.clone(),
-                        usage: Self::map_usage(response.usage.as_ref()),
-                        finish_reason: finish_reason.clone(),
-                        tool_calls: tool_calls.iter().map(Self::map_tool_call).collect(),
-                        credentials_ident: self.credentials_ident.clone(),
-                    }),
-                )))
-                .await
-                .map_err(|e| LLMError::CustomError(e.to_string()))?;
+                let _ = tx
+                    .send(Some(ModelEvent::new(
+                        &span,
+                        ModelEventType::LlmStop(LLMFinishEvent {
+                            provider_name: SPAN_OPENAI.to_string(),
+                            model_name: self.params.model.clone().unwrap_or_default(),
+                            output: content.clone(),
+                            usage: Self::map_usage(response.usage.as_ref()),
+                            finish_reason: finish_reason.clone(),
+                            tool_calls: tool_calls.iter().map(Self::map_tool_call).collect(),
+                            credentials_ident: self.credentials_ident.clone(),
+                        }),
+                    )))
+                    .await;
 
                 if tool.stop_at_call() {
                     Ok(InnerExecutionResult::Finish(
@@ -714,20 +708,20 @@ impl<C: Config> OpenAIModel<C> {
                 let message_content = first_choice.message.content;
                 if let Some(content) = &message_content {
                     let usage = Self::map_usage(response.usage.as_ref());
-                    tx.send(Some(ModelEvent::new(
-                        &span,
-                        ModelEventType::LlmStop(LLMFinishEvent {
-                            provider_name: SPAN_OPENAI.to_string(),
-                            model_name: self.params.model.clone().unwrap_or_default(),
-                            output: Some(content.clone()),
-                            usage: usage.clone(),
-                            finish_reason: finish_reason.clone(),
-                            tool_calls: vec![],
-                            credentials_ident: self.credentials_ident.clone(),
-                        }),
-                    )))
-                    .await
-                    .map_err(|e| LLMError::CustomError(e.to_string()))?;
+                    let _ = tx
+                        .send(Some(ModelEvent::new(
+                            &span,
+                            ModelEventType::LlmStop(LLMFinishEvent {
+                                provider_name: SPAN_OPENAI.to_string(),
+                                model_name: self.params.model.clone().unwrap_or_default(),
+                                output: Some(content.clone()),
+                                usage: usage.clone(),
+                                finish_reason: finish_reason.clone(),
+                                tool_calls: vec![],
+                                credentials_ident: self.credentials_ident.clone(),
+                            }),
+                        )))
+                        .await;
 
                     Ok(InnerExecutionResult::Finish(
                         ChatCompletionMessageWithFinishReason::new(
@@ -861,16 +855,16 @@ impl<C: Config> OpenAIModel<C> {
         let request = self.build_request(&input_messages, true)?;
         span.record("request", serde_json::to_string(&request)?);
 
-        tx.send(Some(ModelEvent::new(
-            &span,
-            ModelEventType::LlmStart(LLMStartEvent {
-                provider_name: "openai".to_string(),
-                model_name: self.params.model.clone().unwrap_or_default(),
-                input: serde_json::to_string(&input_messages)?,
-            }),
-        )))
-        .await
-        .map_err(|e| LLMError::CustomError(e.to_string()))?;
+        let _ = tx
+            .send(Some(ModelEvent::new(
+                &span,
+                ModelEventType::LlmStart(LLMStartEvent {
+                    provider_name: "openai".to_string(),
+                    model_name: self.params.model.clone().unwrap_or_default(),
+                    input: serde_json::to_string(&input_messages)?,
+                }),
+            )))
+            .await;
 
         let started_at = std::time::Instant::now();
         let stream = self
@@ -886,20 +880,20 @@ impl<C: Config> OpenAIModel<C> {
 
         span.record("output", serde_json::to_string(&response)?);
         let trace_finish_reason = Self::map_finish_reason(&finish_reason);
-        tx.send(Some(ModelEvent::new(
-            &span,
-            ModelEventType::LlmStop(LLMFinishEvent {
-                provider_name: SPAN_OPENAI.to_string(),
-                model_name: self.params.model.clone().unwrap_or_default(),
-                output: None,
-                usage: Self::map_usage(usage.as_ref()),
-                finish_reason: trace_finish_reason.clone(),
-                tool_calls: tool_calls.iter().map(Self::map_tool_call).collect(),
-                credentials_ident: self.credentials_ident.clone(),
-            }),
-        )))
-        .await
-        .map_err(|e| LLMError::CustomError(e.to_string()))?;
+        let _ = tx
+            .send(Some(ModelEvent::new(
+                &span,
+                ModelEventType::LlmStop(LLMFinishEvent {
+                    provider_name: SPAN_OPENAI.to_string(),
+                    model_name: self.params.model.clone().unwrap_or_default(),
+                    output: None,
+                    usage: Self::map_usage(usage.as_ref()),
+                    finish_reason: trace_finish_reason.clone(),
+                    tool_calls: tool_calls.iter().map(Self::map_tool_call).collect(),
+                    credentials_ident: self.credentials_ident.clone(),
+                }),
+            )))
+            .await;
         let mut completion_model_usage = None;
         if let Some(usage) = usage {
             span.record(

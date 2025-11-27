@@ -3,7 +3,6 @@ use crate::error::GatewayError;
 use crate::executor::chat_completion::basic_executor::BasicCacheContext;
 use crate::executor::chat_completion::stream_executor::{stream_chunks, StreamCacheContext};
 use crate::handler::ModelEventWithDetails;
-use crate::llm_gateway::provider::Provider;
 use crate::mcp::McpConfig;
 use crate::model::cached::CachedModel;
 use crate::model::tools::GatewayTool;
@@ -15,7 +14,8 @@ use vllora_llm::error::LLMError;
 use vllora_llm::mcp::get_tools;
 use vllora_llm::types::credentials::Credentials;
 use vllora_llm::types::engine::{
-    CompletionModelDefinition, CompletionModelParams, ExecutionOptions, Model,
+    CompletionEngineParamsBuilder, CompletionModelDefinition, CompletionModelParams,
+    ExecutionOptions, Model,
 };
 use vllora_llm::types::gateway::{
     ChatCompletionMessage, ChatCompletionRequestWithTools, ChatCompletionResponse, Extra,
@@ -35,6 +35,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::sync::Arc;
 use tracing::Span;
 use tracing_futures::Instrument;
 use uuid::Uuid;
@@ -246,7 +247,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
 pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Clone>(
     executor_context: &ExecutorContext,
     request: &ChatCompletionRequestWithTools<T>,
-    tools_map: HashMap<String, Box<dyn Tool>>,
+    tools_map: HashMap<String, Arc<Box<dyn Tool>>>,
     tools: ModelTools,
     router_span: Span,
     extra: Option<&Extra>,
@@ -266,13 +267,26 @@ pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Cl
 
     let request = request.request.clone();
 
-    let engine = Provider::get_completion_engine_for_model(
-        llm_model,
-        &request,
-        key.cloned(),
-        provider_specific.as_ref(),
-        Some(execution_options.clone()),
-    )?;
+    let mut builder = CompletionEngineParamsBuilder::new(
+        llm_model.inference_provider.provider.clone(),
+        request.clone(),
+    );
+
+    builder = builder.with_model_name(llm_model.inference_provider.model_name.clone());
+
+    if let Some(credentials) = key {
+        builder = builder.with_credentials(credentials.clone());
+    }
+
+    if let Some(provider_specific) = provider_specific {
+        builder = builder.with_provider_specific(provider_specific.clone());
+    }
+
+    if let Some(execution_options) = Some(execution_options.clone()) {
+        builder = builder.with_execution_options(execution_options.clone());
+    }
+
+    let engine = builder.build()?;
 
     let credentials_ident = if llm_model.inference_provider.provider
         == InferenceModelProvider::Proxy("vllora".to_string())
@@ -309,8 +323,6 @@ pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Cl
         completion_model_definition.clone(),
         tools_map,
         executor_context,
-        llm_model.inference_provider.endpoint.as_deref(),
-        Some(&llm_model.inference_provider.provider.to_string()),
         router_span.clone(),
         extra,
         initial_messages,
@@ -332,7 +344,7 @@ pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Cl
 pub async fn resolve_mcp_tools<T: Serialize + DeserializeOwned + Debug + Clone>(
     mcp_config: Option<&McpConfig>,
     request: &ChatCompletionRequestWithTools<T>,
-) -> Result<(ModelTools, HashMap<String, Box<dyn Tool>>), GatewayApiError> {
+) -> Result<(ModelTools, HashMap<String, Arc<Box<dyn Tool>>>), GatewayApiError> {
     let mut request_tools = vec![];
     let mut tools_map = HashMap::new();
     if let Some(tools) = &request.request.tools {
@@ -345,7 +357,7 @@ pub async fn resolve_mcp_tools<T: Serialize + DeserializeOwned + Debug + Clone>(
 
             tools_map.insert(
                 tool.function.name.clone(),
-                Box::new(GatewayTool { def: tool.clone() }) as Box<dyn Tool>,
+                Arc::new(Box::new(GatewayTool { def: tool.clone() }) as Box<dyn Tool>),
             );
         }
     }
@@ -359,7 +371,10 @@ pub async fn resolve_mcp_tools<T: Serialize + DeserializeOwned + Debug + Clone>(
 
     for server_tools in mcp_tools {
         for tool in server_tools.tools {
-            tools_map.insert(tool.name(), Box::new(tool.clone()) as Box<dyn Tool>);
+            tools_map.insert(
+                tool.name(),
+                Arc::new(Box::new(tool.clone()) as Box<dyn Tool>),
+            );
             request_tools.push(tool.into());
         }
     }
@@ -372,7 +387,10 @@ pub async fn resolve_mcp_tools<T: Serialize + DeserializeOwned + Debug + Clone>(
                 .map_err(|e| GatewayError::McpServerError(Box::new(e)))?;
             for server_tools in tools {
                 for tool in server_tools.tools {
-                    tools_map.insert(tool.name(), Box::new(tool.clone()) as Box<dyn Tool>);
+                    tools_map.insert(
+                        tool.name(),
+                        Arc::new(Box::new(tool.clone()) as Box<dyn Tool>),
+                    );
                     request_tools.push(tool.into());
                 }
             }
