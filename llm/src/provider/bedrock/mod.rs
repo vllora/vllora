@@ -1,3 +1,4 @@
+use crate::client::completions::response_stream::ResultStream;
 use crate::client::error::BedrockError;
 use crate::client::error::ModelError;
 use crate::client::tools::handler::handle_tool_call;
@@ -8,6 +9,9 @@ use crate::types::credentials::aws::{get_shared_config, get_user_shared_config};
 use crate::types::credentials::BedrockCredentials;
 use crate::types::credentials_ident::CredentialsIdent;
 use crate::types::engine::{render, BedrockModelParams, ExecutionOptions};
+use crate::types::gateway::ChatCompletionChunk;
+use crate::types::gateway::ChatCompletionChunkChoice;
+use crate::types::gateway::ChatCompletionDelta;
 use crate::types::gateway::{
     ChatCompletionContent, ChatCompletionMessage, ChatCompletionMessageWithFinishReason,
     CompletionModelUsage, FunctionCall, ToolCall,
@@ -76,7 +80,7 @@ pub struct BedrockModel {
     pub client: Client,
     pub execution_options: ExecutionOptions,
     params: BedrockModelParams,
-    pub tools: Arc<HashMap<String, Box<dyn VlloraTool>>>,
+    pub tools: HashMap<String, Arc<Box<dyn VlloraTool>>>,
     pub model_name: String,
     pub credentials_ident: CredentialsIdent,
 }
@@ -126,7 +130,7 @@ impl BedrockModel {
         model_params: BedrockModelParams,
         execution_options: ExecutionOptions,
         credentials: Option<&BedrockCredentials>,
-        tools: HashMap<String, Box<dyn VlloraTool>>,
+        tools: HashMap<String, Arc<Box<dyn VlloraTool>>>,
     ) -> Result<Self, ModelError> {
         let client = bedrock_client(credentials).await?;
 
@@ -136,7 +140,7 @@ impl BedrockModel {
             client,
             execution_options,
             params: model_params,
-            tools: Arc::new(tools),
+            tools,
             model_name: model_id,
             credentials_ident: credentials
                 .map(|_c| CredentialsIdent::Own)
@@ -248,7 +252,7 @@ impl BedrockModel {
     }
     async fn handle_tool_calls(
         tool_uses: Vec<ToolUseBlock>,
-        tools: &HashMap<String, Box<dyn VlloraTool>>,
+        tools: &HashMap<String, Arc<Box<dyn VlloraTool>>>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
     ) -> LLMResult<Message> {
@@ -330,8 +334,6 @@ impl BedrockModel {
             .set_top_p(model_params.top_p)
             .set_stop_sequences(model_params.stop_sequences.clone())
             .build();
-
-        tracing::warn!("Bedrock Model name: {}", self.model_name);
 
         Ok(self
             .client
@@ -669,7 +671,9 @@ impl BedrockModel {
         &self,
         stream: converse_stream::ConverseStreamOutput,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
+        tx_response: &tokio::sync::mpsc::Sender<LLMResult<ChatCompletionChunk>>,
         started_at: std::time::Instant,
+        response_id: &str,
     ) -> LLMResult<(
         StopReason,
         Option<(ConversationRole, Vec<ToolUseBlock>)>,
@@ -694,6 +698,16 @@ impl BedrockModel {
                 .map_err(|e| LLMError::CustomError(e.to_string()))?;
                 Span::current().record("ttft", started_at.elapsed().as_micros());
             }
+
+            let chunk = ChatCompletionChunk {
+                id: response_id.to_string(),
+                object: "chat.completion.chunk".to_string(),
+                created: chrono::Utc::now().timestamp(),
+                model: self.model_name.clone(),
+                choices: vec![],
+                usage: None,
+            };
+
             match output {
                 ConverseStreamOutput::ContentBlockDelta(a) => {
                     match a.delta {
@@ -702,10 +716,19 @@ impl BedrockModel {
                             accumulated_text.push_str(&t);
                             tx.send(Some(ModelEvent::new(
                                 &Span::current(),
-                                ModelEventType::LlmContent(LLMContentEvent { content: t }),
+                                ModelEventType::LlmContent(LLMContentEvent { content: t.clone() }),
                             )))
                             .await
                             .unwrap();
+
+                            let mut chunk_clone = chunk.clone();
+                            chunk_clone.choices.push(ChatCompletionChunkChoice {
+                                index: 0,
+                                delta: ChatCompletionDelta::from_assistant_text(t),
+                                finish_reason: None,
+                                logprobs: None,
+                            });
+                            let _ = tx_response.send(Ok(chunk_clone)).await;
                         }
                         Some(ContentBlockDelta::ToolUse(tool_use)) => {
                             tool_uses.entry(a.content_block_index).and_modify(|t| {
@@ -771,6 +794,37 @@ impl BedrockModel {
                         .set_content(Some(content_blocks))
                         .build()
                         .map_err(build_err)?;
+
+                    if !tool_uses.is_empty() {
+                        let mut chunk_clone = chunk.clone();
+                        chunk_clone.choices.push(ChatCompletionChunkChoice {
+                            index: 0,
+                            delta: ChatCompletionDelta {
+                                role: Some("assistant".to_string()),
+                                content: None,
+                                tool_calls: Some(
+                                    tool_uses
+                                        .iter()
+                                        .map(|(index, tool_use)| ToolCall {
+                                            index: Some(*index as usize),
+                                            id: tool_use.tool_use_id.clone(),
+                                            r#type: "function".to_string(),
+                                            function: FunctionCall {
+                                                name: tool_use.name.clone(),
+                                                arguments: serde_json::to_string(&tool_use.input)
+                                                    .unwrap_or_default(),
+                                            },
+                                            extra_content: None,
+                                        })
+                                        .collect(),
+                                ),
+                            },
+                            finish_reason: None,
+                            logprobs: None,
+                        });
+                        let _ = tx_response.send(Ok(chunk_clone)).await;
+                    }
+
                     let response = ConverseOutput::Message(message);
                     return Ok((
                         event.stop_reason,
@@ -818,6 +872,7 @@ impl BedrockModel {
         input_messages: Vec<Message>,
         system_messages: Vec<SystemContentBlock>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
+        tx_response: &tokio::sync::mpsc::Sender<LLMResult<ChatCompletionChunk>>,
         tags: HashMap<String, String>,
     ) -> LLMResult<()> {
         let mut calls = vec![input_messages];
@@ -851,7 +906,7 @@ impl BedrockModel {
                 .set_messages(Some(input_messages.clone()));
 
             let response = self
-                .execute_stream_inner(builder, span.clone(), tx, tags.clone())
+                .execute_stream_inner(builder, span.clone(), tx, tx_response, tags.clone())
                 .await;
 
             match response {
@@ -879,6 +934,7 @@ impl BedrockModel {
         builder: ConverseStreamFluentBuilder,
         span: Span,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
+        tx_response: &tokio::sync::mpsc::Sender<LLMResult<ChatCompletionChunk>>,
         tags: HashMap<String, String>,
     ) -> LLMResult<InnerExecutionResult> {
         let input_messages = builder.get_messages().clone().unwrap_or_default();
@@ -897,13 +953,38 @@ impl BedrockModel {
         let started_at = std::time::Instant::now();
         let response = builder.send().await.map_err(map_converse_stream_error)?;
         let request_id = response.request_id().unwrap_or_default().to_string();
+        let response_id = uuid::Uuid::new_v4().to_string();
         let (stop_reason, msg, usage, response_message) = self
-            .process_stream(response, tx, started_at)
+            .process_stream(response, tx, tx_response, started_at, &response_id)
             .instrument(span.clone())
             .await?;
 
         span.record("output", format!("{response_message:?}"));
         let trace_finish_reason = Self::map_finish_reason(&stop_reason);
+
+        let chunk = ChatCompletionChunk {
+            id: response_id.clone(),
+            object: "chat.completion.chunk".to_string(),
+            created: chrono::Utc::now().timestamp(),
+            model: self.model_name.clone(),
+            choices: vec![],
+            usage: None,
+        };
+
+        let mut chunk_clone = chunk.clone();
+
+        chunk_clone.choices.push(ChatCompletionChunkChoice {
+            index: 0,
+            delta: ChatCompletionDelta::default(),
+            finish_reason: Some(trace_finish_reason.to_string()),
+            logprobs: None,
+        });
+        let _ = tx_response.send(Ok(chunk_clone)).await;
+
+        let mut chunk_clone = chunk.clone();
+        chunk_clone.usage = usage.clone().map(|u| u.into());
+        let _ = tx_response.send(Ok(chunk_clone)).await;
+
         let usage = Self::map_usage(usage.as_ref());
         if let Some(usage) = &usage {
             span.record(
@@ -1041,12 +1122,29 @@ impl ModelInstance for BedrockModel {
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         previous_messages: Vec<LMessage>,
         tags: HashMap<String, String>,
-    ) -> LLMResult<()> {
+    ) -> LLMResult<ResultStream> {
         let (initial_messages, system_messages) =
             self.construct_messages(input_vars.clone(), previous_messages)?;
 
-        self.execute_stream(initial_messages, system_messages, &tx, tags)
-            .await
+        let (tx_response, rx_response) = tokio::sync::mpsc::channel(10000);
+        let model = (*self).clone();
+        let tx_clone = tx.clone();
+        tokio::spawn(
+            async move {
+                model
+                    .execute_stream(
+                        initial_messages,
+                        system_messages,
+                        &tx_clone,
+                        &tx_response,
+                        tags,
+                    )
+                    .await
+                    .unwrap();
+            }
+            .instrument(tracing::Span::current()),
+        );
+        Ok(ResultStream::create(rx_response))
     }
 }
 

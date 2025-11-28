@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::error::LLMError;
 use crate::error::LLMResult;
@@ -38,7 +39,7 @@ impl Injector for LlmToolCallCarrier<'_> {
 
 pub async fn handle_tool_call(
     tool_use: &ModelToolCall,
-    tools: &HashMap<String, Box<dyn Tool>>,
+    tools: &HashMap<String, Arc<Box<dyn Tool>>>,
     tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
     mut tags: HashMap<String, String>,
 ) -> LLMResult<String> {

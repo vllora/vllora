@@ -1,3 +1,4 @@
+use crate::client::completions::response_stream::ResultStream;
 use crate::client::error::AnthropicError;
 use crate::client::error::AuthorizationError;
 use crate::client::error::ModelError;
@@ -7,6 +8,9 @@ use crate::error::{LLMError, LLMResult, ModelFinishError};
 use crate::types::credentials::ApiKeyCredentials;
 use crate::types::credentials_ident::CredentialsIdent;
 use crate::types::engine::{render, AnthropicModelParams, ExecutionOptions};
+use crate::types::gateway::ChatCompletionChunk;
+use crate::types::gateway::ChatCompletionChunkChoice;
+use crate::types::gateway::ChatCompletionDelta;
 use crate::types::gateway::{
     ChatCompletionContent, ChatCompletionMessage, ChatCompletionMessageWithFinishReason,
     FunctionCall, ToolCall,
@@ -92,7 +96,7 @@ pub struct AnthropicModel {
     params: AnthropicModelParams,
     execution_options: ExecutionOptions,
     client: Client,
-    tools: Arc<HashMap<String, Box<dyn Tool>>>,
+    tools: HashMap<String, Arc<Box<dyn Tool>>>,
     credentials_ident: CredentialsIdent,
 }
 
@@ -101,14 +105,14 @@ impl AnthropicModel {
         params: AnthropicModelParams,
         execution_options: ExecutionOptions,
         credentials: Option<&ApiKeyCredentials>,
-        tools: HashMap<String, Box<dyn Tool>>,
+        tools: HashMap<String, Arc<Box<dyn Tool>>>,
     ) -> Result<Self, ModelError> {
         let client: Client = anthropic_client(credentials)?;
         Ok(Self {
             params,
             execution_options,
             client,
-            tools: Arc::new(tools),
+            tools,
             credentials_ident: credentials
                 .map(|_c| CredentialsIdent::Own)
                 .unwrap_or(CredentialsIdent::Vllora),
@@ -117,7 +121,7 @@ impl AnthropicModel {
 
     async fn handle_tool_calls(
         function_calls: impl Iterator<Item = &ToolUse>,
-        tools: &HashMap<String, Box<dyn Tool>>,
+        tools: &HashMap<String, Arc<Box<dyn Tool>>>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
     ) -> Vec<ClustMessage> {
@@ -207,7 +211,7 @@ impl AnthropicModel {
         let builder = if !self.tools.is_empty() {
             let mut tools: Vec<ToolDefinition> = vec![];
             for (_, tool) in self.tools.clone().iter() {
-                tools.push(tool_definition(tool.deref()));
+                tools.push(tool_definition(tool.deref().as_ref()));
             }
 
             builder.tools(tools)
@@ -257,6 +261,7 @@ impl AnthropicModel {
         &self,
         stream: impl Stream<Item = Result<MessageChunk, StreamError>>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
+        tx_response: &tokio::sync::mpsc::Sender<LLMResult<ChatCompletionChunk>>,
         started_at: std::time::Instant,
     ) -> LLMResult<(StopReason, Vec<ToolUse>, Usage, MessagesResponseBody)> {
         let mut tool_call_states: HashMap<u32, ToolUse> = HashMap::new();
@@ -284,113 +289,213 @@ impl AnthropicModel {
                     .await;
                 Span::current().record("ttft", started_at.elapsed().as_micros());
             }
+
             match r {
-                Ok(Some(result)) => match result {
-                    MessageChunk::ContentBlockStart(block) => match block.content_block {
-                        clust::messages::ContentBlockStart::TextContentBlock(block) => {
-                            tx.send(Some(ModelEvent::new(
-                                &tracing::Span::current(),
-                                ModelEventType::LlmContent(LLMContentEvent {
-                                    content: block.text.clone(),
-                                }),
-                            )))
-                            .await
-                            .map_err(|e| LLMError::CustomError(e.to_string()))?;
-                            stream_content.push_str(&block.text);
-                        }
-                        clust::messages::ContentBlockStart::ThinkingContentBlock(thinking) => {
-                            tx.send(Some(ModelEvent::new(
-                                &tracing::Span::current(),
-                                ModelEventType::LlmContent(LLMContentEvent {
-                                    content: format!("thinking: {}", thinking.thinking),
-                                }),
-                            )))
-                            .await
-                            .map_err(|e| LLMError::CustomError(e.to_string()))?;
-                        }
-                        clust::messages::ContentBlockStart::ToolUseContentBlock(tool_use_block) => {
-                            tool_call_states.insert(block.index, tool_use_block.tool_use);
-                            json_states.insert(block.index, String::new());
-                        }
-                    },
-                    MessageChunk::ContentBlockDelta(block) => match block.delta {
-                        clust::messages::ContentBlockDelta::TextDeltaContentBlock(delta) => {
-                            tx.send(Some(ModelEvent::new(
-                                &tracing::Span::current(),
-                                ModelEventType::LlmContent(LLMContentEvent {
-                                    content: delta.text.clone(),
-                                }),
-                            )))
-                            .await
-                            .map_err(|e| LLMError::CustomError(e.to_string()))?;
-                            stream_content.push_str(&delta.text);
-                        }
-                        clust::messages::ContentBlockDelta::ThinkingDeltaContentBlock(delta) => {
-                            tx.send(Some(ModelEvent::new(
-                                &tracing::Span::current(),
-                                ModelEventType::LlmContent(LLMContentEvent {
-                                    content: delta.thinking.clone(),
-                                }),
-                            )))
-                            .await
-                            .map_err(|e| LLMError::CustomError(e.to_string()))?;
-                            stream_content.push_str(&delta.thinking);
-                        }
-                        clust::messages::ContentBlockDelta::SignatureDeltaContentBlock(_) => {}
-                        clust::messages::ContentBlockDelta::InputJsonDeltaBlock(
-                            input_json_block,
-                        ) => {
-                            json_states
-                                .entry(block.index)
-                                .and_modify(|v| {
-                                    v.push_str(&input_json_block.partial_json);
-                                })
-                                .or_default();
-                        }
-                    },
-                    MessageChunk::MessageStart(start) => {
-                        response_id = start.message.id;
-                        usage.input_tokens = start.message.usage.input_tokens;
-                        usage.cache_read_input_tokens = start.message.usage.cache_read_input_tokens;
-                        usage.cache_creation_input_tokens =
-                            start.message.usage.cache_creation_input_tokens;
-                        usage.cache_creation = start.message.usage.cache_creation;
-                    }
+                Ok(Some(result)) => {
+                    let chunk = ChatCompletionChunk {
+                        id: response_id.clone(),
+                        object: "chat.completion.chunk".to_string(),
+                        created: chrono::Utc::now().timestamp(),
+                        model: self
+                            .params
+                            .model
+                            .clone()
+                            .expect("model is required")
+                            .to_string(),
+                        choices: vec![],
+                        usage: None,
+                    };
 
-                    MessageChunk::Ping(_) => {}
-                    MessageChunk::ContentBlockStop(stop_block) => {
-                        let json = json_states.get(&stop_block.index);
-                        if let Some(json) = json {
-                            let input: Value =
-                                serde_json::from_str(json).unwrap_or(serde_json::json!({}));
-                            tool_call_states.entry(stop_block.index).and_modify(|t| {
-                                t.input = input;
-                            });
-                        }
-                    }
-                    MessageChunk::MessageDelta(delta) => {
-                        usage.output_tokens = delta.usage.output_tokens;
+                    // let _ = tx_response.send(Ok(Chunk::Anthropic(result.clone()))).await;
+                    match result {
+                        MessageChunk::ContentBlockStart(block) => match block.content_block {
+                            clust::messages::ContentBlockStart::TextContentBlock(block) => {
+                                tx.send(Some(ModelEvent::new(
+                                    &tracing::Span::current(),
+                                    ModelEventType::LlmContent(LLMContentEvent {
+                                        content: block.text.clone(),
+                                    }),
+                                )))
+                                .await
+                                .map_err(|e| LLMError::CustomError(e.to_string()))?;
+                                stream_content.push_str(&block.text);
 
-                        if let Some(stop_reason) = delta.delta.stop_reason {
-                            let response = self.build_response(
-                                response_id.clone(),
-                                &tool_call_states.values().cloned().collect::<Vec<_>>(),
-                                usage,
-                                stream_content,
-                                &stop_reason,
-                            );
-                            return Ok((
-                                stop_reason,
-                                tool_call_states.values().cloned().collect(),
-                                usage,
-                                response,
-                            ));
+                                let mut chunk_clone = chunk.clone();
+                                chunk_clone.choices.push(ChatCompletionChunkChoice {
+                                    index: 0,
+                                    delta: ChatCompletionDelta {
+                                        role: Some("assistant".to_string()),
+                                        content: Some(block.text.clone()),
+                                        tool_calls: None,
+                                    },
+                                    finish_reason: None,
+                                    logprobs: None,
+                                });
+                                let _ = tx_response.send(Ok(chunk_clone)).await;
+                            }
+                            clust::messages::ContentBlockStart::ThinkingContentBlock(thinking) => {
+                                tx.send(Some(ModelEvent::new(
+                                    &tracing::Span::current(),
+                                    ModelEventType::LlmContent(LLMContentEvent {
+                                        content: format!("thinking: {}", thinking.thinking),
+                                    }),
+                                )))
+                                .await
+                                .map_err(|e| LLMError::CustomError(e.to_string()))?;
+
+                                let mut chunk_clone = chunk.clone();
+                                chunk_clone.choices.push(ChatCompletionChunkChoice {
+                                    index: 0,
+                                    delta: ChatCompletionDelta {
+                                        role: Some("assistant".to_string()),
+                                        content: Some(format!("thinking: {}", thinking.thinking)),
+                                        tool_calls: None,
+                                    },
+                                    finish_reason: None,
+                                    logprobs: None,
+                                });
+                                let _ = tx_response.send(Ok(chunk_clone)).await;
+                            }
+                            clust::messages::ContentBlockStart::ToolUseContentBlock(
+                                tool_use_block,
+                            ) => {
+                                tool_call_states.insert(block.index, tool_use_block.tool_use);
+                                json_states.insert(block.index, String::new());
+                            }
+                        },
+                        MessageChunk::ContentBlockDelta(block) => match block.delta {
+                            clust::messages::ContentBlockDelta::TextDeltaContentBlock(delta) => {
+                                tx.send(Some(ModelEvent::new(
+                                    &tracing::Span::current(),
+                                    ModelEventType::LlmContent(LLMContentEvent {
+                                        content: delta.text.clone(),
+                                    }),
+                                )))
+                                .await
+                                .map_err(|e| LLMError::CustomError(e.to_string()))?;
+                                stream_content.push_str(&delta.text);
+
+                                let mut chunk_clone = chunk.clone();
+                                chunk_clone.choices.push(ChatCompletionChunkChoice {
+                                    index: 0,
+                                    delta: ChatCompletionDelta {
+                                        role: Some("assistant".to_string()),
+                                        content: Some(delta.text.clone()),
+                                        tool_calls: None,
+                                    },
+                                    finish_reason: None,
+                                    logprobs: None,
+                                });
+                                let _ = tx_response.send(Ok(chunk_clone)).await;
+                            }
+                            clust::messages::ContentBlockDelta::ThinkingDeltaContentBlock(
+                                delta,
+                            ) => {
+                                tx.send(Some(ModelEvent::new(
+                                    &tracing::Span::current(),
+                                    ModelEventType::LlmContent(LLMContentEvent {
+                                        content: delta.thinking.clone(),
+                                    }),
+                                )))
+                                .await
+                                .map_err(|e| LLMError::CustomError(e.to_string()))?;
+                                stream_content.push_str(&delta.thinking);
+
+                                let mut chunk_clone = chunk.clone();
+                                chunk_clone.choices.push(ChatCompletionChunkChoice {
+                                    index: 0,
+                                    delta: ChatCompletionDelta {
+                                        role: Some("assistant".to_string()),
+                                        content: Some(delta.thinking.clone()),
+                                        tool_calls: None,
+                                    },
+                                    finish_reason: None,
+                                    logprobs: None,
+                                });
+                                let _ = tx_response.send(Ok(chunk_clone)).await;
+                            }
+                            clust::messages::ContentBlockDelta::SignatureDeltaContentBlock(_) => {}
+                            clust::messages::ContentBlockDelta::InputJsonDeltaBlock(
+                                input_json_block,
+                            ) => {
+                                json_states
+                                    .entry(block.index)
+                                    .and_modify(|v| {
+                                        v.push_str(&input_json_block.partial_json);
+                                    })
+                                    .or_default();
+                            }
+                        },
+                        MessageChunk::MessageStart(start) => {
+                            response_id = start.message.id;
+                            usage.input_tokens = start.message.usage.input_tokens;
+                            usage.cache_read_input_tokens =
+                                start.message.usage.cache_read_input_tokens;
+                            usage.cache_creation_input_tokens =
+                                start.message.usage.cache_creation_input_tokens;
+                            usage.cache_creation = start.message.usage.cache_creation;
+                        }
+
+                        MessageChunk::Ping(_) => {}
+                        MessageChunk::ContentBlockStop(stop_block) => {
+                            let json = json_states.get(&stop_block.index);
+                            if let Some(json) = json {
+                                let input: Value =
+                                    serde_json::from_str(json).unwrap_or(serde_json::json!({}));
+                                tool_call_states.entry(stop_block.index).and_modify(|t| {
+                                    t.input = input;
+                                });
+                            }
+
+                            if let Some(tool_call) = tool_call_states.get(&stop_block.index) {
+                                let mut chunk_clone = chunk.clone();
+                                chunk_clone.choices.push(ChatCompletionChunkChoice {
+                                    index: 0,
+                                    delta: ChatCompletionDelta {
+                                        role: Some("assistant".to_string()),
+                                        content: None,
+                                        tool_calls: Some(vec![ToolCall {
+                                            index: Some(stop_block.index as usize),
+                                            id: tool_call.id.clone(),
+                                            r#type: "function".to_string(),
+                                            function: FunctionCall {
+                                                name: tool_call.name.clone(),
+                                                arguments: serde_json::to_string(&tool_call.input)
+                                                    .unwrap(),
+                                            },
+                                            extra_content: None,
+                                        }]),
+                                    },
+                                    finish_reason: None,
+                                    logprobs: None,
+                                });
+                                let _ = tx_response.send(Ok(chunk_clone)).await;
+                            }
+                        }
+                        MessageChunk::MessageDelta(delta) => {
+                            usage.output_tokens = delta.usage.output_tokens;
+
+                            if let Some(stop_reason) = delta.delta.stop_reason {
+                                let response = self.build_response(
+                                    response_id.clone(),
+                                    &tool_call_states.values().cloned().collect::<Vec<_>>(),
+                                    usage,
+                                    stream_content,
+                                    &stop_reason,
+                                );
+                                return Ok((
+                                    stop_reason,
+                                    tool_call_states.values().cloned().collect(),
+                                    usage,
+                                    response,
+                                ));
+                            }
+                        }
+                        MessageChunk::MessageStop(s) => {
+                            tracing::error!("Stream ended with error: {:#?}", s);
                         }
                     }
-                    MessageChunk::MessageStop(s) => {
-                        tracing::error!("Stream ended with error: {:#?}", s);
-                    }
-                },
+                }
                 last_result => {
                     tracing::error!("Error in stream: {last_result:?}");
                     break;
@@ -769,6 +874,7 @@ impl AnthropicModel {
         system_message: Option<SystemPrompt>,
         input_messages: Vec<ClustMessage>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
+        tx_response: &tokio::sync::mpsc::Sender<LLMResult<ChatCompletionChunk>>,
         tags: HashMap<String, String>,
     ) -> LLMResult<()> {
         let mut calls = vec![(system_message, input_messages)];
@@ -799,7 +905,7 @@ impl AnthropicModel {
             }
 
             match self
-                .execute_stream_inner(request, call_span.clone(), tx, tags.clone())
+                .execute_stream_inner(request, call_span.clone(), tx, tx_response, tags.clone())
                 .await
             {
                 Ok(InnerExecutionResult::Finish(_)) => return Ok(()),
@@ -861,6 +967,7 @@ impl AnthropicModel {
         request: MessagesRequestBody,
         span: Span,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
+        tx_response: &tokio::sync::mpsc::Sender<LLMResult<ChatCompletionChunk>>,
         tags: HashMap<String, String>,
     ) -> LLMResult<InnerExecutionResult> {
         let system_message = request.system.clone();
@@ -890,12 +997,36 @@ impl AnthropicModel {
             .await
             .map_err(custom_err)?;
         let (stop_reason, tool_calls, usage, response) = self
-            .process_stream(stream, tx, started_at)
+            .process_stream(stream, tx, tx_response, started_at)
             .instrument(span.clone())
             .await?;
 
         span.record("output", serde_json::to_string(&response)?);
         let trace_finish_reason = Self::map_finish_reason(&stop_reason);
+
+        let chunk = ChatCompletionChunk {
+            id: response.id.clone(),
+            object: "chat.completion.chunk".to_string(),
+            created: chrono::Utc::now().timestamp(),
+            model: response.model.to_string(),
+            choices: vec![],
+            usage: None,
+        };
+
+        let mut chunk_clone = chunk.clone();
+
+        chunk_clone.choices.push(ChatCompletionChunkChoice {
+            index: 0,
+            delta: ChatCompletionDelta::default(),
+            finish_reason: Some(trace_finish_reason.to_string()),
+            logprobs: None,
+        });
+        let _ = tx_response.send(Ok(chunk_clone)).await;
+
+        let mut chunk_clone = chunk.clone();
+        chunk_clone.usage = Some(usage.into());
+        let _ = tx_response.send(Ok(chunk_clone)).await;
+
         span.record(
             "raw_usage",
             JsonValue(&serde_json::to_value(usage).unwrap()).as_value(),
@@ -1082,11 +1213,29 @@ impl ModelInstance for AnthropicModel {
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
-    ) -> LLMResult<()> {
+    ) -> LLMResult<ResultStream> {
         let (system_prompt, conversational_messages) =
             self.construct_messages(input_variables, previous_messages)?;
-        self.execute_stream(system_prompt, conversational_messages, &tx, tags)
-            .await
+        let (tx_response, rx_response) = tokio::sync::mpsc::channel(10000);
+        let model = (*self).clone();
+        let tx_clone = tx.clone();
+        tokio::spawn(
+            async move {
+                model
+                    .execute_stream(
+                        system_prompt,
+                        conversational_messages,
+                        &tx_clone,
+                        &tx_response,
+                        tags,
+                    )
+                    .await
+                    .unwrap();
+            }
+            .instrument(tracing::Span::current()),
+        );
+
+        Ok(ResultStream::create(rx_response))
     }
 }
 

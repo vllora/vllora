@@ -1,3 +1,5 @@
+use crate::provider::gemini::types::Candidate;
+use crate::provider::gemini::types::Content as GeminiContent;
 use crate::types::cache::ResponseCacheOptions;
 use crate::types::credentials_ident::CredentialsIdent;
 use crate::types::provider::ModelPrice;
@@ -6,8 +8,14 @@ use crate::types::tools::Tool;
 use crate::types::ModelFinishReason;
 use crate::types::ToolCallExtra;
 use async_openai::types::Base64EmbeddingVector;
+use async_openai::types::ChatChoiceStream;
 use async_openai::types::ChatCompletionRequestMessage;
+use async_openai::types::ChatCompletionStreamResponseDelta;
 use async_openai::types::CreateChatCompletionRequest;
+use async_openai::types::CreateChatCompletionStreamResponse;
+use async_openai::types::FinishReason;
+use aws_sdk_bedrockruntime::types::TokenUsage;
+use clust::messages::DeltaUsage;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -725,6 +733,42 @@ impl From<ToolCall> for async_openai::types::ChatCompletionMessageToolCall {
     }
 }
 
+impl From<&async_openai::types::ChatCompletionMessageToolCall> for ToolCall {
+    fn from(val: &async_openai::types::ChatCompletionMessageToolCall) -> Self {
+        val.clone().into()
+    }
+}
+
+impl From<async_openai::types::ChatCompletionMessageToolCall> for ToolCall {
+    fn from(val: async_openai::types::ChatCompletionMessageToolCall) -> Self {
+        ToolCall {
+            index: None,
+            id: val.id,
+            r#type: "function".to_string(),
+            function: val.function.into(),
+            extra_content: None,
+        }
+    }
+}
+
+impl From<&async_openai::types::ChatCompletionMessageToolCallChunk> for ToolCall {
+    fn from(val: &async_openai::types::ChatCompletionMessageToolCallChunk) -> Self {
+        val.clone().into()
+    }
+}
+
+impl From<async_openai::types::ChatCompletionMessageToolCallChunk> for ToolCall {
+    fn from(val: async_openai::types::ChatCompletionMessageToolCallChunk) -> Self {
+        ToolCall {
+            index: Some(val.index as usize),
+            id: val.id.unwrap_or_default(),
+            r#type: "function".to_string(),
+            function: val.function.map(|f| f.into()).unwrap_or_default(),
+            extra_content: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Hash, PartialEq, Eq)]
 pub struct FunctionCall {
     pub name: String,
@@ -736,6 +780,24 @@ impl From<FunctionCall> for async_openai::types::FunctionCall {
         async_openai::types::FunctionCall {
             name: val.name,
             arguments: val.arguments,
+        }
+    }
+}
+
+impl From<async_openai::types::FunctionCall> for FunctionCall {
+    fn from(val: async_openai::types::FunctionCall) -> Self {
+        FunctionCall {
+            name: val.name,
+            arguments: val.arguments,
+        }
+    }
+}
+
+impl From<async_openai::types::FunctionCallStream> for FunctionCall {
+    fn from(val: async_openai::types::FunctionCallStream) -> Self {
+        FunctionCall {
+            name: val.name.unwrap_or_default(),
+            arguments: val.arguments.unwrap_or_default(),
         }
     }
 }
@@ -783,6 +845,55 @@ pub struct ChatCompletionUsage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub completion_tokens_details: Option<CompletionTokensDetails>,
     pub cost: f64,
+}
+
+impl From<async_openai::types::CompletionUsage> for ChatCompletionUsage {
+    fn from(val: async_openai::types::CompletionUsage) -> Self {
+        ChatCompletionUsage {
+            prompt_tokens: val.prompt_tokens as i32,
+            completion_tokens: val.completion_tokens as i32,
+            total_tokens: val.total_tokens as i32,
+            prompt_tokens_details: val.prompt_tokens_details.map(|p| p.into()),
+            completion_tokens_details: val.completion_tokens_details.map(|c| c.into()),
+            cost: 0.0,
+        }
+    }
+}
+
+impl From<crate::provider::gemini::types::UsageMetadata> for ChatCompletionUsage {
+    fn from(val: crate::provider::gemini::types::UsageMetadata) -> Self {
+        ChatCompletionUsage {
+            prompt_tokens: val.prompt_token_count as i32,
+            completion_tokens: val.candidates_token_count.unwrap_or(0) as i32
+                + val.thoughts_token_count.unwrap_or(0) as i32,
+            total_tokens: val.total_token_count as i32,
+            prompt_tokens_details: None,
+            completion_tokens_details: val.thoughts_token_count.as_ref().map(|t| {
+                CompletionTokensDetails {
+                    reasoning_tokens: *t,
+                    ..Default::default()
+                }
+            }),
+            cost: 0.0,
+        }
+    }
+}
+
+impl From<TokenUsage> for ChatCompletionUsage {
+    fn from(val: TokenUsage) -> Self {
+        ChatCompletionUsage {
+            prompt_tokens: val.input_tokens,
+            completion_tokens: val.output_tokens,
+            total_tokens: val.total_tokens,
+            prompt_tokens_details: Some(PromptTokensDetails::new(
+                val.cache_read_input_tokens.map(|t| t as u32),
+                val.cache_write_input_tokens.map(|t| t as u32),
+                Some(0),
+            )),
+            completion_tokens_details: None,
+            cost: 0.0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -839,15 +950,97 @@ pub struct ChatCompletionChunk {
     pub usage: Option<ChatCompletionUsage>,
 }
 
+impl From<clust::messages::Usage> for ChatCompletionUsage {
+    fn from(usage: clust::messages::Usage) -> Self {
+        let input_tokens = usage.input_tokens
+            + usage.cache_read_input_tokens.unwrap_or(0)
+            + usage.cache_creation_input_tokens.unwrap_or(0);
+
+        ChatCompletionUsage {
+            prompt_tokens: input_tokens as i32,
+            completion_tokens: usage.output_tokens as i32,
+            total_tokens: (input_tokens + usage.output_tokens) as i32,
+            prompt_tokens_details: Some(PromptTokensDetails::new(
+                usage.cache_read_input_tokens,
+                usage.cache_creation_input_tokens,
+                None,
+            )),
+            completion_tokens_details: None,
+            cost: 0.0,
+        }
+    }
+}
+
+impl From<DeltaUsage> for ChatCompletionUsage {
+    fn from(val: DeltaUsage) -> Self {
+        ChatCompletionUsage {
+            prompt_tokens: 0,
+            completion_tokens: val.output_tokens as i32,
+            total_tokens: val.output_tokens as i32,
+            prompt_tokens_details: None,
+            completion_tokens_details: None,
+            cost: 0.0,
+        }
+    }
+}
+
+impl From<CreateChatCompletionStreamResponse> for ChatCompletionChunk {
+    fn from(val: CreateChatCompletionStreamResponse) -> Self {
+        ChatCompletionChunk {
+            id: val.id,
+            object: val.object.unwrap_or("chat.completion.chunk".to_string()),
+            created: val.created as i64,
+            model: val.model,
+            choices: val.choices.into_iter().map(|c| c.into()).collect(),
+            usage: val.usage.map(|u| u.into()),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatCompletionChunkChoice {
     pub index: i32,
     pub delta: ChatCompletionDelta,
     pub finish_reason: Option<String>,
-    pub logprobs: Option<String>,
+    pub logprobs: Option<async_openai::types::ChatChoiceLogprobs>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+impl From<ChatChoiceStream> for ChatCompletionChunkChoice {
+    fn from(val: ChatChoiceStream) -> Self {
+        ChatCompletionChunkChoice {
+            index: val.index as i32,
+            delta: val.delta.into(),
+            finish_reason: val.finish_reason.map(|f| {
+                match f {
+                    FinishReason::Stop => "stop",
+                    FinishReason::Length => "length",
+                    FinishReason::ToolCalls => "tool_calls",
+                    FinishReason::ContentFilter => "content_filter",
+                    FinishReason::FunctionCall => "function_call",
+                }
+                .to_string()
+            }),
+            logprobs: val.logprobs,
+        }
+    }
+}
+
+impl From<Candidate> for ChatCompletionChunkChoice {
+    fn from(val: Candidate) -> Self {
+        ChatCompletionChunkChoice {
+            index: 0,
+            delta: val.content.into(),
+            finish_reason: val.finish_reason.as_ref().map(|f| {
+                let reason =
+                    crate::provider::gemini::model::GeminiModel::map_finish_reason(f, false);
+                reason.to_string()
+            }),
+            logprobs: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ChatCompletionDelta {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub role: Option<String>,
@@ -855,6 +1048,136 @@ pub struct ChatCompletionDelta {
     pub content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<ToolCall>>,
+}
+
+impl ChatCompletionDelta {
+    pub fn from_assistant_text(text: String) -> Self {
+        ChatCompletionDelta {
+            role: Some("assistant".to_string()),
+            content: Some(text),
+            tool_calls: None,
+        }
+    }
+
+    pub fn from_tool_use(tool_call: ToolCall) -> Self {
+        ChatCompletionDelta {
+            role: Some("tool".to_string()),
+            content: None,
+            tool_calls: Some(vec![tool_call]),
+        }
+    }
+}
+
+impl From<ChatCompletionStreamResponseDelta> for ChatCompletionDelta {
+    fn from(val: ChatCompletionStreamResponseDelta) -> Self {
+        ChatCompletionDelta {
+            role: val.role.map(|r| r.to_string()),
+            content: val.content.map(|c| c.to_string()),
+            tool_calls: val
+                .tool_calls
+                .map(|t| t.into_iter().map(|t| t.into()).collect()),
+        }
+    }
+}
+
+impl From<GeminiContent> for ChatCompletionDelta {
+    fn from(val: GeminiContent) -> Self {
+        let mut tool_calls: Option<Vec<ToolCall>> = None;
+        let mut text = None;
+        let mut contents: Vec<Content> = vec![];
+        for part in val.parts {
+            let signature = part.thought_signature.clone();
+            match part.part {
+                crate::provider::gemini::types::Part::FunctionCall { name, args } => {
+                    let tool_call = ToolCall {
+                        id: name.clone(),
+                        function: FunctionCall {
+                            name: name.clone(),
+                            arguments: serde_json::to_string(&args).unwrap(),
+                        },
+                        extra_content: signature.as_ref().map(|s| ToolCallExtra {
+                            google: Some(crate::types::GoogleToolCallExtra {
+                                thought_signature: s.clone(),
+                            }),
+                        }),
+                        index: None,
+                        r#type: "function".to_string(),
+                    };
+
+                    if let Some(tool_calls) = &mut tool_calls {
+                        tool_calls.push(tool_call);
+                    } else {
+                        tool_calls = Some(vec![tool_call]);
+                    }
+                }
+                crate::provider::gemini::types::Part::Text(part_text) => {
+                    text = Some(part_text.clone());
+                }
+                crate::provider::gemini::types::Part::InlineData { mime_type, data } => {
+                    if mime_type.starts_with("audio/") {
+                        contents.push(Content {
+                            r#type: ContentType::InputAudio,
+                            audio: Some(InputAudio {
+                                data: data.clone(),
+                                format: mime_type.clone(),
+                            }),
+                            cache_control: None,
+                            text: None,
+                            image_url: None,
+                        });
+                    } else {
+                        unreachable!("Unexpected mime type: {mime_type}");
+                    }
+                }
+                crate::provider::gemini::types::Part::FileData {
+                    mime_type,
+                    file_uri,
+                } => {
+                    if mime_type.starts_with("image/") {
+                        contents.push(Content {
+                            r#type: ContentType::ImageUrl,
+                            image_url: Some(ImageUrl {
+                                url: file_uri.clone(),
+                            }),
+                            cache_control: None,
+                            text: None,
+                            audio: None,
+                        });
+                    } else {
+                        unreachable!("Unexpected mime type: {mime_type}");
+                    }
+                }
+                _ => {
+                    unreachable!("Unexpected part: {part:?}");
+                }
+            }
+        }
+
+        let content = if contents.is_empty() {
+            text
+        } else {
+            unreachable!("Unexpected content: {contents:?}");
+            // if let Some(text) = text {
+            //     contents.push(Content {
+            //         r#type: ContentType::Text,
+            //         text: Some(text),
+            //         cache_control: None,
+            //         image_url: None,
+            //         audio: None,
+            //     });
+            // }
+            // Some(ChatCompletionContent::Content(contents))
+        };
+
+        ChatCompletionDelta {
+            role: Some(match val.role {
+                crate::provider::gemini::types::Role::User => "user".to_string(),
+                crate::provider::gemini::types::Role::Model => "assistant".to_string(),
+            }),
+            content,
+            tool_calls,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -923,6 +1246,16 @@ pub struct PromptTokensDetails {
     audio_tokens: u32,
 }
 
+impl From<async_openai::types::PromptTokensDetails> for PromptTokensDetails {
+    fn from(val: async_openai::types::PromptTokensDetails) -> Self {
+        PromptTokensDetails {
+            cached_tokens: val.cached_tokens.unwrap_or(0),
+            cache_creation_tokens: 0,
+            audio_tokens: val.audio_tokens.unwrap_or(0),
+        }
+    }
+}
+
 impl From<PromptTokensDetails> for async_openai::types::PromptTokensDetails {
     fn from(val: PromptTokensDetails) -> async_openai::types::PromptTokensDetails {
         async_openai::types::PromptTokensDetails {
@@ -939,6 +1272,17 @@ impl From<CompletionTokensDetails> for async_openai::types::CompletionTokensDeta
             audio_tokens: Some(val.audio_tokens),
             reasoning_tokens: Some(val.reasoning_tokens),
             rejected_prediction_tokens: Some(val.rejected_prediction_tokens),
+        }
+    }
+}
+
+impl From<async_openai::types::CompletionTokensDetails> for CompletionTokensDetails {
+    fn from(val: async_openai::types::CompletionTokensDetails) -> Self {
+        CompletionTokensDetails {
+            accepted_prediction_tokens: val.accepted_prediction_tokens.unwrap_or(0),
+            audio_tokens: val.audio_tokens.unwrap_or(0),
+            reasoning_tokens: val.reasoning_tokens.unwrap_or(0),
+            rejected_prediction_tokens: val.rejected_prediction_tokens.unwrap_or(0),
         }
     }
 }

@@ -1,5 +1,9 @@
+use crate::client::completions::response_stream::ResultStream;
 use crate::client::tools::handler::handle_tool_call;
 use crate::client::DEFAULT_MAX_RETRIES;
+use crate::types::gateway::ChatCompletionChunk;
+use crate::types::gateway::ChatCompletionChunkChoice;
+use crate::types::gateway::ChatCompletionDelta;
 use async_trait::async_trait;
 
 use crate::client::error::AuthorizationError;
@@ -129,7 +133,7 @@ pub struct OpenAIModel<C: Config = OpenAIConfig> {
     params: OpenAiModelParams,
     execution_options: ExecutionOptions,
     client: Client<C>,
-    tools: Arc<HashMap<String, Box<dyn Tool>>>,
+    tools: HashMap<String, Arc<Box<dyn Tool>>>,
     credentials_ident: CredentialsIdent,
 }
 
@@ -139,7 +143,7 @@ impl OpenAIModel<OpenAIConfig> {
         params: OpenAiModelParams,
         credentials: Option<&ApiKeyCredentials>,
         execution_options: ExecutionOptions,
-        tools: HashMap<String, Box<dyn Tool>>,
+        tools: HashMap<String, Arc<Box<dyn Tool>>>,
         client: Option<Client<OpenAIConfig>>,
         endpoint: Option<&str>,
     ) -> Result<Self, ModelError> {
@@ -158,7 +162,7 @@ impl OpenAIModel<OpenAIConfig> {
             params,
             execution_options,
             client,
-            tools: Arc::new(tools),
+            tools,
             credentials_ident: credentials
                 .map(|_c| CredentialsIdent::Own)
                 .unwrap_or(CredentialsIdent::Vllora),
@@ -172,7 +176,7 @@ impl OpenAIModel<AzureConfig> {
         params: OpenAiModelParams,
         credentials: Option<&ApiKeyCredentials>,
         execution_options: ExecutionOptions,
-        tools: HashMap<String, Box<dyn Tool>>,
+        tools: HashMap<String, Arc<Box<dyn Tool>>>,
         client: Option<Client<AzureConfig>>,
         endpoint: Option<&str>,
     ) -> Result<Self, ModelError> {
@@ -196,7 +200,7 @@ impl OpenAIModel<AzureConfig> {
             params,
             execution_options,
             client,
-            tools: Arc::new(tools),
+            tools,
             credentials_ident: credentials
                 .map(|_c| CredentialsIdent::Own)
                 .unwrap_or(CredentialsIdent::Vllora),
@@ -208,7 +212,7 @@ impl OpenAIModel<AzureConfig> {
         params: OpenAiModelParams,
         credentials: Option<&ApiKeyCredentials>,
         execution_options: ExecutionOptions,
-        tools: HashMap<String, Box<dyn Tool>>,
+        tools: HashMap<String, Arc<Box<dyn Tool>>>,
         endpoint: &str,
     ) -> Result<Self, ModelError> {
         Self::new_azure(
@@ -235,7 +239,7 @@ impl<C: Config> OpenAIModel<C> {
 
     async fn handle_tool_calls(
         function_calls: impl Iterator<Item = &ChatCompletionMessageToolCall>,
-        tools: &HashMap<String, Box<dyn Tool>>,
+        tools: &HashMap<String, Arc<Box<dyn Tool>>>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
     ) -> HashMap<String, String> {
@@ -400,6 +404,7 @@ impl<C: Config> OpenAIModel<C> {
         &self,
         mut stream: impl Stream<Item = Result<CreateChatCompletionStreamResponse, OpenAIError>> + Unpin,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
+        tx_response: &tokio::sync::mpsc::Sender<LLMResult<ChatCompletionChunk>>,
         started_at: std::time::Instant,
     ) -> LLMResult<StreamExecutionResult> {
         let mut tool_call_states: HashMap<u32, ChatCompletionMessageToolCall> = HashMap::new();
@@ -416,15 +421,26 @@ impl<C: Config> OpenAIModel<C> {
                     if !first_response_received {
                         first_response_received = true;
                         Span::current().add_event("llm.first_token", vec![]);
-                        tx.send(Some(ModelEvent::new(
-                            &Span::current(),
-                            ModelEventType::LlmFirstToken(LLMFirstToken {}),
-                        )))
-                        .await
-                        .map_err(|e| LLMError::CustomError(e.to_string()))?;
+                        let _ = tx
+                            .send(Some(ModelEvent::new(
+                                &Span::current(),
+                                ModelEventType::LlmFirstToken(LLMFirstToken {}),
+                            )))
+                            .await;
                         first_chunk = Some(response.clone());
                         Span::current().record("ttft", started_at.elapsed().as_micros());
                     }
+
+                    let chunk = ChatCompletionChunk {
+                        id: response.id.clone(),
+                        object: response
+                            .object
+                            .unwrap_or("chat.completion.chunk".to_string()),
+                        created: response.created as i64,
+                        model: response.model.clone(),
+                        choices: vec![],
+                        usage: None,
+                    };
 
                     if response.choices.is_empty() {
                         // XAI bug workaround
@@ -444,6 +460,7 @@ impl<C: Config> OpenAIModel<C> {
                                 stream_content,
                                 &reason,
                             );
+
                             return Ok((reason, tool_calls.clone(), Some(usage.clone()), response));
                         }
 
@@ -451,8 +468,10 @@ impl<C: Config> OpenAIModel<C> {
                     }
 
                     let chat_choice = response.choices.remove(0);
-                    if let Some(tool_calls) = chat_choice.delta.tool_calls {
-                        for tool_call in tool_calls.into_iter() {
+                    let mut has_content = false;
+                    if let Some(tool_calls) = &chat_choice.delta.tool_calls {
+                        has_content = true;
+                        for tool_call in tool_calls.iter() {
                             let ChatCompletionMessageToolCallChunk {
                                 index,
                                 id,
@@ -462,23 +481,24 @@ impl<C: Config> OpenAIModel<C> {
                             else {
                                 continue;
                             };
-                            let state = tool_call_states.entry(index).or_insert_with(|| {
+                            let state = tool_call_states.entry(*index).or_insert_with(|| {
                                 ChatCompletionMessageToolCall {
-                                    id: id.unwrap(),
+                                    id: id.clone().unwrap(),
                                     r#type: ChatCompletionToolType::Function,
                                     function: FunctionCall {
-                                        name: name.unwrap(),
+                                        name: name.clone().unwrap(),
                                         arguments: Default::default(),
                                     },
                                 }
                             });
                             if let Some(arguments) = arguments {
-                                state.function.arguments.push_str(&arguments);
+                                state.function.arguments.push_str(arguments);
                             }
                         }
                     }
 
                     if let Some(content) = &chat_choice.delta.content {
+                        has_content = true;
                         Self::send_event(
                             tx,
                             ModelEvent::new(
@@ -488,8 +508,27 @@ impl<C: Config> OpenAIModel<C> {
                                 }),
                             ),
                         )
-                        .await?;
+                        .await;
                         stream_content.push_str(content);
+                    }
+
+                    if has_content {
+                        let mut chunk_clone = chunk.clone();
+                        chunk_clone.choices.push(ChatCompletionChunkChoice {
+                            index: chat_choice.index as i32,
+                            delta: ChatCompletionDelta {
+                                content: chat_choice.delta.content.clone(),
+                                role: chat_choice.delta.role.map(|r| r.to_string()),
+                                tool_calls: chat_choice
+                                    .delta
+                                    .tool_calls
+                                    .as_ref()
+                                    .map(|t| t.iter().map(|t| t.into()).collect()),
+                            },
+                            finish_reason: None,
+                            logprobs: chat_choice.logprobs.clone(),
+                        });
+                        let _ = tx_response.send(Ok(chunk_clone)).await;
                     }
 
                     if let Some(reason) = &chat_choice.finish_reason {
@@ -524,14 +563,8 @@ impl<C: Config> OpenAIModel<C> {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip_all)]
-    async fn send_event(
-        tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
-        event: ModelEvent,
-    ) -> LLMResult<()> {
-        tx.send(Some(event))
-            .await
-            .map_err(|e| LLMError::CustomError(e.to_string()))
+    async fn send_event(tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>, event: ModelEvent) {
+        let _ = tx.send(Some(event)).await;
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
@@ -546,16 +579,16 @@ impl<C: Config> OpenAIModel<C> {
         span.record("request", serde_json::to_string(&call)?);
 
         let input_messages = call.messages.clone();
-        tx.send(Some(ModelEvent::new(
-            &span,
-            ModelEventType::LlmStart(LLMStartEvent {
-                provider_name: SPAN_OPENAI.to_string(),
-                model_name: self.params.model.clone().unwrap_or_default(),
-                input: serde_json::to_string(&input_messages)?,
-            }),
-        )))
-        .await
-        .map_err(|e| LLMError::CustomError(e.to_string()))?;
+        let _ = tx
+            .send(Some(ModelEvent::new(
+                &span,
+                ModelEventType::LlmStart(LLMStartEvent {
+                    provider_name: SPAN_OPENAI.to_string(),
+                    model_name: self.params.model.clone().unwrap_or_default(),
+                    input: serde_json::to_string(&input_messages)?,
+                }),
+            )))
+            .await;
 
         let response = async move {
             let result = self.client.chat().create(call).await;
@@ -625,20 +658,20 @@ impl<C: Config> OpenAIModel<C> {
                 let finish_reason = Self::map_finish_reason(
                     &finish_reason.expect("Finish reason is already checked"),
                 );
-                tx.send(Some(ModelEvent::new(
-                    &span,
-                    ModelEventType::LlmStop(LLMFinishEvent {
-                        provider_name: SPAN_OPENAI.to_string(),
-                        model_name: self.params.model.clone().unwrap_or_default(),
-                        output: content.clone(),
-                        usage: Self::map_usage(response.usage.as_ref()),
-                        finish_reason: finish_reason.clone(),
-                        tool_calls: tool_calls.iter().map(Self::map_tool_call).collect(),
-                        credentials_ident: self.credentials_ident.clone(),
-                    }),
-                )))
-                .await
-                .map_err(|e| LLMError::CustomError(e.to_string()))?;
+                let _ = tx
+                    .send(Some(ModelEvent::new(
+                        &span,
+                        ModelEventType::LlmStop(LLMFinishEvent {
+                            provider_name: SPAN_OPENAI.to_string(),
+                            model_name: self.params.model.clone().unwrap_or_default(),
+                            output: content.clone(),
+                            usage: Self::map_usage(response.usage.as_ref()),
+                            finish_reason: finish_reason.clone(),
+                            tool_calls: tool_calls.iter().map(Self::map_tool_call).collect(),
+                            credentials_ident: self.credentials_ident.clone(),
+                        }),
+                    )))
+                    .await;
 
                 if tool.stop_at_call() {
                     Ok(InnerExecutionResult::Finish(
@@ -707,20 +740,20 @@ impl<C: Config> OpenAIModel<C> {
                 let message_content = first_choice.message.content;
                 if let Some(content) = &message_content {
                     let usage = Self::map_usage(response.usage.as_ref());
-                    tx.send(Some(ModelEvent::new(
-                        &span,
-                        ModelEventType::LlmStop(LLMFinishEvent {
-                            provider_name: SPAN_OPENAI.to_string(),
-                            model_name: self.params.model.clone().unwrap_or_default(),
-                            output: Some(content.clone()),
-                            usage: usage.clone(),
-                            finish_reason: finish_reason.clone(),
-                            tool_calls: vec![],
-                            credentials_ident: self.credentials_ident.clone(),
-                        }),
-                    )))
-                    .await
-                    .map_err(|e| LLMError::CustomError(e.to_string()))?;
+                    let _ = tx
+                        .send(Some(ModelEvent::new(
+                            &span,
+                            ModelEventType::LlmStop(LLMFinishEvent {
+                                provider_name: SPAN_OPENAI.to_string(),
+                                model_name: self.params.model.clone().unwrap_or_default(),
+                                output: Some(content.clone()),
+                                usage: usage.clone(),
+                                finish_reason: finish_reason.clone(),
+                                tool_calls: vec![],
+                                credentials_ident: self.credentials_ident.clone(),
+                            }),
+                        )))
+                        .await;
 
                     Ok(InnerExecutionResult::Finish(
                         ChatCompletionMessageWithFinishReason::new(
@@ -848,21 +881,22 @@ impl<C: Config> OpenAIModel<C> {
         span: Span,
         input_messages: Vec<ChatCompletionRequestMessage>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
+        tx_response: &tokio::sync::mpsc::Sender<LLMResult<ChatCompletionChunk>>,
         tags: HashMap<String, String>,
     ) -> LLMResult<InnerExecutionResult> {
         let request = self.build_request(&input_messages, true)?;
         span.record("request", serde_json::to_string(&request)?);
 
-        tx.send(Some(ModelEvent::new(
-            &span,
-            ModelEventType::LlmStart(LLMStartEvent {
-                provider_name: "openai".to_string(),
-                model_name: self.params.model.clone().unwrap_or_default(),
-                input: serde_json::to_string(&input_messages)?,
-            }),
-        )))
-        .await
-        .map_err(|e| LLMError::CustomError(e.to_string()))?;
+        let _ = tx
+            .send(Some(ModelEvent::new(
+                &span,
+                ModelEventType::LlmStart(LLMStartEvent {
+                    provider_name: "openai".to_string(),
+                    model_name: self.params.model.clone().unwrap_or_default(),
+                    input: serde_json::to_string(&input_messages)?,
+                }),
+            )))
+            .await;
 
         let started_at = std::time::Instant::now();
         let stream = self
@@ -872,26 +906,41 @@ impl<C: Config> OpenAIModel<C> {
             .await
             .map_err(ModelError::OpenAIApi)?;
         let (finish_reason, tool_calls, usage, response) = self
-            .process_stream(stream, tx, started_at)
+            .process_stream(stream, tx, tx_response, started_at)
             .instrument(span.clone())
             .await?;
 
-        span.record("output", serde_json::to_string(&response)?);
-        let trace_finish_reason = Self::map_finish_reason(&finish_reason);
-        tx.send(Some(ModelEvent::new(
-            &span,
-            ModelEventType::LlmStop(LLMFinishEvent {
-                provider_name: SPAN_OPENAI.to_string(),
-                model_name: self.params.model.clone().unwrap_or_default(),
-                output: None,
-                usage: Self::map_usage(usage.as_ref()),
-                finish_reason: trace_finish_reason.clone(),
-                tool_calls: tool_calls.iter().map(Self::map_tool_call).collect(),
-                credentials_ident: self.credentials_ident.clone(),
-            }),
-        )))
-        .await
-        .map_err(|e| LLMError::CustomError(e.to_string()))?;
+        if let Some(response) = &response {
+            let chunk = ChatCompletionChunk {
+                id: response.id.clone(),
+                object: response
+                    .object
+                    .clone()
+                    .unwrap_or("chat.completion.chunk".to_string()),
+                created: response.created as i64,
+                model: response.model.clone(),
+                choices: vec![],
+                usage: None,
+            };
+
+            let mut chunk_clone = chunk.clone();
+            let model_finish_reason = Self::map_finish_reason(&finish_reason);
+
+            chunk_clone.choices.push(ChatCompletionChunkChoice {
+                index: 0,
+                delta: ChatCompletionDelta::default(),
+                finish_reason: Some(model_finish_reason.to_string()),
+                logprobs: None,
+            });
+            let _ = tx_response.send(Ok(chunk_clone)).await;
+
+            if let Some(usage) = &usage {
+                let mut chunk_clone = chunk.clone();
+                chunk_clone.usage = Some(usage.clone().into());
+                let _ = tx_response.send(Ok(chunk_clone)).await;
+            }
+        }
+
         let mut completion_model_usage = None;
         if let Some(usage) = usage {
             span.record(
@@ -993,6 +1042,7 @@ impl<C: Config> OpenAIModel<C> {
         &self,
         input_messages: Vec<ChatCompletionRequestMessage>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
+        tx_response: &tokio::sync::mpsc::Sender<LLMResult<ChatCompletionChunk>>,
         tags: HashMap<String, String>,
     ) -> LLMResult<()> {
         let mut openai_calls = vec![input_messages];
@@ -1011,7 +1061,13 @@ impl<C: Config> OpenAIModel<C> {
             );
 
             match self
-                .execute_stream_inner(span.clone(), input_messages.clone(), tx, tags.clone())
+                .execute_stream_inner(
+                    span.clone(),
+                    input_messages.clone(),
+                    tx,
+                    tx_response,
+                    tags.clone(),
+                )
                 .await
             {
                 Ok(InnerExecutionResult::Finish(_)) => {
@@ -1100,7 +1156,10 @@ impl<C: Config> OpenAIModel<C> {
 }
 
 #[async_trait]
-impl<C: Config + std::marker::Sync + std::marker::Send> ModelInstance for OpenAIModel<C> {
+impl<C> ModelInstance for OpenAIModel<C>
+where
+    C: Config + std::marker::Sync + std::marker::Send + Clone + 'static,
+{
     async fn invoke(
         &self,
         input_variables: HashMap<String, Value>,
@@ -1119,12 +1178,25 @@ impl<C: Config + std::marker::Sync + std::marker::Send> ModelInstance for OpenAI
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
-    ) -> LLMResult<()> {
+    ) -> LLMResult<ResultStream> {
         let conversational_messages =
             self.construct_messages(input_variables, previous_messages.clone())?;
 
-        self.execute_stream(conversational_messages, &tx, tags)
-            .await
+        let (tx_response, rx_response) = tokio::sync::mpsc::channel(10000);
+        let model = (*self).clone();
+        let tx_clone = tx.clone();
+        tokio::spawn(
+            async move {
+                model
+                    .execute_stream(conversational_messages, &tx_clone, &tx_response, tags)
+                    .instrument(tracing::Span::current())
+                    .await
+                    .unwrap();
+            }
+            .instrument(tracing::Span::current()),
+        );
+
+        Ok(ResultStream::create(rx_response))
     }
 }
 
@@ -1212,4 +1284,152 @@ fn map_tool_names(tool_calls: &[ChatCompletionMessageToolCall]) -> String {
         .into_iter()
         .collect::<Vec<String>>()
         .join(",")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::provider::tests::MockStreamServer;
+
+    fn get_instance(url: &str) -> OpenAIModel {
+        OpenAIModel::new(
+            OpenAiModelParams {
+                model: Some("gpt-3.5-turbo-0125".to_string()),
+                ..Default::default()
+            },
+            Some(&ApiKeyCredentials {
+                api_key: "test".to_string(),
+            }),
+            ExecutionOptions::default(),
+            HashMap::new(),
+            None,
+            Some(url),
+        )
+        .expect("Failed to create instance")
+    }
+
+    #[tokio::test]
+    async fn test_stream_request() {
+        // Start the mock server
+        let server = MockStreamServer::start()
+            .await
+            .expect("Failed to start mock server");
+        let server_url = server.url();
+
+        // Set some test events (you can modify these later)
+        server.set_events(vec![
+            r#"{"id":"chatcmpl-123","object":"chat.completion.chunk","created":1694268190,"model":"gpt-3.5-turbo-0125","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}"#.to_string(),
+            r#"{"id":"chatcmpl-123","object":"chat.completion.chunk","created":1694268190,"model":"gpt-3.5-turbo-0125","choices":[{"index":0,"delta":{"content":" world"},"finish_reason":null}]}"#.to_string(),
+            r#"{"id":"chatcmpl-123","object":"chat.completion.chunk","created":1694268190,"model":"gpt-3.5-turbo-0125","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}"#.to_string(),
+        ]).await;
+
+        // Give the server a moment to start
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+        let instance = get_instance(&server_url);
+
+        let (tx, mut rx) = tokio::sync::mpsc::channel(100);
+        instance
+            .stream(HashMap::new(), tx, vec![], HashMap::new())
+            .await
+            .expect("Failed to stream");
+
+        let mut index = 0;
+        while let Some(event) = rx.recv().await {
+            match index {
+                0 => assert!(matches!(
+                    event.unwrap().event,
+                    ModelEventType::LlmStart(LLMStartEvent { .. })
+                )),
+                1 => assert!(matches!(
+                    event.unwrap().event,
+                    ModelEventType::LlmFirstToken(LLMFirstToken { .. })
+                )),
+                2 => assert!(matches!(
+                    event.unwrap().event,
+                    ModelEventType::LlmContent(LLMContentEvent { .. })
+                )),
+                3 => assert!(matches!(
+                    event.unwrap().event,
+                    ModelEventType::LlmContent(LLMContentEvent { .. })
+                )),
+                4 => assert!(matches!(
+                    event.unwrap().event,
+                    ModelEventType::LlmStop(LLMFinishEvent { .. })
+                )),
+                _ => panic!("Unexpected event: {:?}", event),
+            }
+            index += 1;
+        }
+
+        drop(server);
+    }
+
+    #[tokio::test]
+    async fn test_full_stream_response() {
+        let full_events = vec![
+            r#"{"id":"chatcmpl-CfmyXmcrxfYmjtAtj7KUUoqPBFb0H","object":"chat.completion.chunk","created":1764075745,"model":"gpt-4.1-mini-2025-04-14","service_tier":"default","system_fingerprint":"fp_24710c7f06","choices":[{"index":0,"delta":{"role":"assistant","content":"","refusal":null},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"UrWxwbIG"}"#.to_string(),
+            r#"{"id":"chatcmpl-CfmyXmcrxfYmjtAtj7KUUoqPBFb0H","object":"chat.completion.chunk","created":1764075745,"model":"gpt-4.1-mini-2025-04-14","service_tier":"default","system_fingerprint":"fp_24710c7f06","choices":[{"index":0,"delta":{"content":"1"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"Kpm8omvXB"}"#.to_string(),
+            r#"{"id":"chatcmpl-CfmyXmcrxfYmjtAtj7KUUoqPBFb0H","object":"chat.completion.chunk","created":1764075745,"model":"gpt-4.1-mini-2025-04-14","service_tier":"default","system_fingerprint":"fp_24710c7f06","choices":[{"index":0,"delta":{"content":","},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"HAjYtiWhe"}"#.to_string(),
+            r#"{"id":"chatcmpl-CfmyXmcrxfYmjtAtj7KUUoqPBFb0H","object":"chat.completion.chunk","created":1764075745,"model":"gpt-4.1-mini-2025-04-14","service_tier":"default","system_fingerprint":"fp_24710c7f06","choices":[{"index":0,"delta":{"content":" "},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"o9rUpaADh"}"#.to_string(),
+            r#"{"id":"chatcmpl-CfmyXmcrxfYmjtAtj7KUUoqPBFb0H","object":"chat.completion.chunk","created":1764075745,"model":"gpt-4.1-mini-2025-04-14","service_tier":"default","system_fingerprint":"fp_24710c7f06","choices":[{"index":0,"delta":{"content":"2"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"IfuuGcDFo"}"#.to_string(),
+            r#"{"id":"chatcmpl-CfmyXmcrxfYmjtAtj7KUUoqPBFb0H","object":"chat.completion.chunk","created":1764075745,"model":"gpt-4.1-mini-2025-04-14","service_tier":"default","system_fingerprint":"fp_24710c7f06","choices":[{"index":0,"delta":{"content":","},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"HF62XYh2s"}"#.to_string(),
+            r#"{"id":"chatcmpl-CfmyXmcrxfYmjtAtj7KUUoqPBFb0H","object":"chat.completion.chunk","created":1764075745,"model":"gpt-4.1-mini-2025-04-14","service_tier":"default","system_fingerprint":"fp_24710c7f06","choices":[{"index":0,"delta":{"content":" "},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"IsVZP6OlJ"}"#.to_string(),
+            r#"{"id":"chatcmpl-CfmyXmcrxfYmjtAtj7KUUoqPBFb0H","object":"chat.completion.chunk","created":1764075745,"model":"gpt-4.1-mini-2025-04-14","service_tier":"default","system_fingerprint":"fp_24710c7f06","choices":[{"index":0,"delta":{"content":"3"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"4jKTiIO0f"}"#.to_string(),
+            r#"{"id":"chatcmpl-CfmyXmcrxfYmjtAtj7KUUoqPBFb0H","object":"chat.completion.chunk","created":1764075745,"model":"gpt-4.1-mini-2025-04-14","service_tier":"default","system_fingerprint":"fp_24710c7f06","choices":[{"index":0,"delta":{"content":","},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"Fv8DQ9p8n"}"#.to_string(),
+            r#"{"id":"chatcmpl-CfmyXmcrxfYmjtAtj7KUUoqPBFb0H","object":"chat.completion.chunk","created":1764075745,"model":"gpt-4.1-mini-2025-04-14","service_tier":"default","system_fingerprint":"fp_24710c7f06","choices":[{"index":0,"delta":{"content":" "},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"n6gzpfrwP"}"#.to_string(),
+            r#"{"id":"chatcmpl-CfmyXmcrxfYmjtAtj7KUUoqPBFb0H","object":"chat.completion.chunk","created":1764075745,"model":"gpt-4.1-mini-2025-04-14","service_tier":"default","system_fingerprint":"fp_24710c7f06","choices":[{"index":0,"delta":{"content":"4"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"EPqVtBGbK"}"#.to_string(),
+            r#"{"id":"chatcmpl-CfmyXmcrxfYmjtAtj7KUUoqPBFb0H","object":"chat.completion.chunk","created":1764075745,"model":"gpt-4.1-mini-2025-04-14","service_tier":"default","system_fingerprint":"fp_24710c7f06","choices":[{"index":0,"delta":{"content":","},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"W2BvNvF9B"}"#.to_string(),
+            r#"{"id":"chatcmpl-CfmyXmcrxfYmjtAtj7KUUoqPBFb0H","object":"chat.completion.chunk","created":1764075745,"model":"gpt-4.1-mini-2025-04-14","service_tier":"default","system_fingerprint":"fp_24710c7f06","choices":[{"index":0,"delta":{"content":" "},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"5zJpxm411"}"#.to_string(),
+            r#"{"id":"chatcmpl-CfmyXmcrxfYmjtAtj7KUUoqPBFb0H","object":"chat.completion.chunk","created":1764075745,"model":"gpt-4.1-mini-2025-04-14","service_tier":"default","system_fingerprint":"fp_24710c7f06","choices":[{"index":0,"delta":{"content":"5"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"Rx3LyH4eA"}"#.to_string(),
+            r#"{"id":"chatcmpl-CfmyXmcrxfYmjtAtj7KUUoqPBFb0H","object":"chat.completion.chunk","created":1764075745,"model":"gpt-4.1-mini-2025-04-14","service_tier":"default","system_fingerprint":"fp_24710c7f06","choices":[{"index":0,"delta":{"content":","},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"UhmQ5ihpa"}"#.to_string(),
+            r#"{"id":"chatcmpl-CfmyXmcrxfYmjtAtj7KUUoqPBFb0H","object":"chat.completion.chunk","created":1764075745,"model":"gpt-4.1-mini-2025-04-14","service_tier":"default","system_fingerprint":"fp_24710c7f06","choices":[{"index":0,"delta":{"content":" "},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"572keklmp"}"#.to_string(),
+            r#"{"id":"chatcmpl-CfmyXmcrxfYmjtAtj7KUUoqPBFb0H","object":"chat.completion.chunk","created":1764075745,"model":"gpt-4.1-mini-2025-04-14","service_tier":"default","system_fingerprint":"fp_24710c7f06","choices":[{"index":0,"delta":{"content":"6"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"iO7FCu6k4"}"#.to_string(),
+            r#"{"id":"chatcmpl-CfmyXmcrxfYmjtAtj7KUUoqPBFb0H","object":"chat.completion.chunk","created":1764075745,"model":"gpt-4.1-mini-2025-04-14","service_tier":"default","system_fingerprint":"fp_24710c7f06","choices":[{"index":0,"delta":{"content":","},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"jO2XoB91u"}"#.to_string(),
+            r#"{"id":"chatcmpl-CfmyXmcrxfYmjtAtj7KUUoqPBFb0H","object":"chat.completion.chunk","created":1764075745,"model":"gpt-4.1-mini-2025-04-14","service_tier":"default","system_fingerprint":"fp_24710c7f06","choices":[{"index":0,"delta":{"content":" "},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"znTy9g65Q"}"#.to_string(),
+            r#"{"id":"chatcmpl-CfmyXmcrxfYmjtAtj7KUUoqPBFb0H","object":"chat.completion.chunk","created":1764075745,"model":"gpt-4.1-mini-2025-04-14","service_tier":"default","system_fingerprint":"fp_24710c7f06","choices":[{"index":0,"delta":{"content":"7"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"AaCu0Oytg"}"#.to_string(),
+            r#"{"id":"chatcmpl-CfmyXmcrxfYmjtAtj7KUUoqPBFb0H","object":"chat.completion.chunk","created":1764075745,"model":"gpt-4.1-mini-2025-04-14","service_tier":"default","system_fingerprint":"fp_24710c7f06","choices":[{"index":0,"delta":{"content":","},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"oBt7KU0h9"}"#.to_string(),
+            r#"{"id":"chatcmpl-CfmyXmcrxfYmjtAtj7KUUoqPBFb0H","object":"chat.completion.chunk","created":1764075745,"model":"gpt-4.1-mini-2025-04-14","service_tier":"default","system_fingerprint":"fp_24710c7f06","choices":[{"index":0,"delta":{"content":" "},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"Rhlwkyv6j"}"#.to_string(),
+            r#"{"id":"chatcmpl-CfmyXmcrxfYmjtAtj7KUUoqPBFb0H","object":"chat.completion.chunk","created":1764075745,"model":"gpt-4.1-mini-2025-04-14","service_tier":"default","system_fingerprint":"fp_24710c7f06","choices":[{"index":0,"delta":{"content":"8"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"LdmUtSFMy"}"#.to_string(),
+            r#"{"id":"chatcmpl-CfmyXmcrxfYmjtAtj7KUUoqPBFb0H","object":"chat.completion.chunk","created":1764075745,"model":"gpt-4.1-mini-2025-04-14","service_tier":"default","system_fingerprint":"fp_24710c7f06","choices":[{"index":0,"delta":{"content":","},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"SRhaiALc6"}"#.to_string(),
+            r#"{"id":"chatcmpl-CfmyXmcrxfYmjtAtj7KUUoqPBFb0H","object":"chat.completion.chunk","created":1764075745,"model":"gpt-4.1-mini-2025-04-14","service_tier":"default","system_fingerprint":"fp_24710c7f06","choices":[{"index":0,"delta":{"content":" "},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"963hPzLZg"}"#.to_string(),
+            r#"{"id":"chatcmpl-CfmyXmcrxfYmjtAtj7KUUoqPBFb0H","object":"chat.completion.chunk","created":1764075745,"model":"gpt-4.1-mini-2025-04-14","service_tier":"default","system_fingerprint":"fp_24710c7f06","choices":[{"index":0,"delta":{"content":"9"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"jNXCllQFW"}"#.to_string(),
+            r#"{"id":"chatcmpl-CfmyXmcrxfYmjtAtj7KUUoqPBFb0H","object":"chat.completion.chunk","created":1764075745,"model":"gpt-4.1-mini-2025-04-14","service_tier":"default","system_fingerprint":"fp_24710c7f06","choices":[{"index":0,"delta":{"content":","},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"TdsZ5Llz6"}"#.to_string(),
+            r#"{"id":"chatcmpl-CfmyXmcrxfYmjtAtj7KUUoqPBFb0H","object":"chat.completion.chunk","created":1764075745,"model":"gpt-4.1-mini-2025-04-14","service_tier":"default","system_fingerprint":"fp_24710c7f06","choices":[{"index":0,"delta":{"content":" "},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"dPjdjeoAt"}"#.to_string(),
+            r#"{"id":"chatcmpl-CfmyXmcrxfYmjtAtj7KUUoqPBFb0H","object":"chat.completion.chunk","created":1764075745,"model":"gpt-4.1-mini-2025-04-14","service_tier":"default","system_fingerprint":"fp_24710c7f06","choices":[{"index":0,"delta":{"content":"10"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"veOOsAWI"}"#.to_string(),
+            r#"{"id":"chatcmpl-CfmyXmcrxfYmjtAtj7KUUoqPBFb0H","object":"chat.completion.chunk","created":1764075745,"model":"gpt-4.1-mini-2025-04-14","service_tier":"default","system_fingerprint":"fp_24710c7f06","choices":[{"index":0,"delta":{},"logprobs":null,"finish_reason":"stop"}],"usage":null,"obfuscation":"gDye"}"#.to_string(),
+            r#"{"id":"chatcmpl-CfmyXmcrxfYmjtAtj7KUUoqPBFb0H","object":"chat.completion.chunk","created":1764075745,"model":"gpt-4.1-mini-2025-04-14","service_tier":"default","system_fingerprint":"fp_24710c7f06","choices":[],"usage":{"prompt_tokens":17,"completion_tokens":28,"total_tokens":45,"prompt_tokens_details":{"cached_tokens":0,"audio_tokens":0},"completion_tokens_details":{"reasoning_tokens":0,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0}},"obfuscation":"V7Hj72nHk"}"#.to_string(),
+        ];
+
+        // Start the mock server
+        let server = MockStreamServer::start()
+            .await
+            .expect("Failed to start mock server");
+        let server_url = server.url();
+
+        // Set some test events (you can modify these later)
+        server.set_events(full_events.clone()).await;
+
+        let instance = get_instance(&server_url);
+
+        let (tx, _rx) = tokio::sync::mpsc::channel(100);
+        let mut stream = instance
+            .stream(HashMap::new(), tx, vec![], HashMap::new())
+            .await
+            .expect("Failed to stream");
+
+        let mut index = 0;
+        while let Some(Ok(event)) = stream.next().await {
+            let expected_event = full_events[index].clone();
+            let expected_event_struct: CreateChatCompletionStreamResponse =
+                serde_json::from_str(&expected_event).unwrap();
+
+            if let Some(choice) = expected_event_struct.choices.first() {
+                assert_eq!(event.choices[0].delta.content, choice.delta.content);
+            } else {
+                assert_eq!(event.choices.len(), 0);
+            }
+            index += 1;
+        }
+    }
 }

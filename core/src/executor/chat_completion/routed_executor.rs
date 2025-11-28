@@ -1,16 +1,15 @@
 use crate::executor::chat_completion::basic_executor::BasicCacheContext;
 use crate::executor::context::ExecutorContext;
-use crate::handler::chat::SSOChatEvent;
 use crate::routing::metrics::InMemoryMetricsRepository;
 use crate::routing::RoutingStrategy;
 use crate::usage::InMemoryStorage;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::sync::Arc;
+use vllora_llm::types::credentials_ident::CredentialsIdent;
 use vllora_llm::types::gateway::ChatCompletionChunk;
-use vllora_llm::types::gateway::ChatCompletionChunkChoice;
-use vllora_llm::types::gateway::ChatCompletionDelta;
-use vllora_llm::types::gateway::ChatCompletionUsage;
+use vllora_llm::types::gateway::CompletionModelUsage;
+use vllora_llm::types::gateway::Usage;
 use vllora_llm::types::models::InferenceProvider;
 use vllora_llm::types::models::ModelMetadata;
 use vllora_llm::types::provider::InferenceModelProvider;
@@ -150,7 +149,9 @@ impl RoutedExecutor {
                 }
             } else {
                 let result =
-                    Self::execute_request(&request, executor_context, project_id, thread_id).await;
+                    Self::execute_request(&request, executor_context, project_id, thread_id)
+                        .instrument(span.clone())
+                        .await;
 
                 match result {
                     Ok(response) => return Ok(response),
@@ -244,7 +245,8 @@ impl RoutedExecutor {
                 let first = match stream.as_mut().next().await {
                     Some(Ok(delta)) => delta,
                     Some(Err(e)) => {
-                        return Err(e);
+                        //todo: Fix
+                        return Err(GatewayApiError::CustomError(e.to_string()));
                     }
                     None => {
                         return Err(GatewayApiError::GatewayError(GatewayError::CustomError(
@@ -253,16 +255,64 @@ impl RoutedExecutor {
                     }
                 };
 
-                let model_name = model_name.clone();
+                let price = llm_model.price.clone();
+                let cost_calculator = executor_context.cost_calculator.clone();
+                let model_name = llm_model.model.clone();
                 let result = futures::stream::once(async { Ok(first) })
                     .chain(stream)
                     .then(move |delta| {
+                        let price = price.clone();
+                        let cost_calculator = cost_calculator.clone();
                         let model_name = model_name.clone();
-                        async move { Self::map_sso_event(delta, model_name) }
+                        async move {
+                            let r = match delta {
+                                Ok(delta) => {
+                                    let mut delta: ChatCompletionChunk = delta;
+                                    delta.model = model_name.clone();
+                                    if let Some(usage) = delta.usage.as_mut() {
+                                        let u = CompletionModelUsage {
+                                            input_tokens: usage.prompt_tokens as u32,
+                                            output_tokens: usage.completion_tokens as u32,
+                                            total_tokens: usage.total_tokens as u32,
+                                            prompt_tokens_details: usage
+                                                .prompt_tokens_details
+                                                .clone(),
+                                            completion_tokens_details: usage
+                                                .completion_tokens_details
+                                                .clone(),
+                                            ..Default::default()
+                                        };
+                                        usage.cost = cost_calculator
+                                            .calculate_cost(
+                                                &price,
+                                                &Usage::CompletionModelUsage(u),
+                                                &CredentialsIdent::Own,
+                                            )
+                                            .await?
+                                            .cost;
+                                    }
+                                    let json_str = serde_json::to_string(&delta).unwrap();
+                                    format!("data: {json_str}\n\n")
+                                }
+                                Err(e) => {
+                                    let result = serde_json::to_string(&HashMap::from([(
+                                        "error",
+                                        e.to_string(),
+                                    )]))
+                                    .unwrap_or_else(|e| {
+                                        format!("{{\"error\": \"Failed to serialize chunk: {e}\"}}")
+                                    });
+
+                                    format!("data: {result}\n\n")
+                                }
+                            };
+                            Ok(Bytes::from(r))
+                        }
                     })
                     .chain(futures::stream::once(async {
                         Ok::<_, GatewayApiError>(Bytes::from("data: [DONE]\n\n"))
-                    }));
+                    }))
+                    .instrument(span.clone());
 
                 Ok(builder.content_type("text/event-stream").streaming(result))
             }
@@ -288,97 +338,5 @@ impl RoutedExecutor {
 
         serde_json::from_value(request_value)
             .map_err(RoutedExecutorError::FailedToDeserializeRequestResult)
-    }
-
-    pub fn map_sso_event(
-        delta: Result<SSOChatEvent, GatewayApiError>,
-        model_name: String,
-    ) -> Result<Bytes, GatewayApiError> {
-        let model_name = model_name.clone();
-        let chunks = match delta {
-            Ok((None, usage, Some(finish_reason))) => {
-                let mut chunks = vec![];
-                chunks.push(ChatCompletionChunk {
-                    id: uuid::Uuid::new_v4().to_string(),
-                    object: "chat.completion.chunk".to_string(),
-                    created: chrono::Utc::now().timestamp(),
-                    model: model_name.clone(),
-                    choices: vec![ChatCompletionChunkChoice {
-                        index: 0,
-                        delta: ChatCompletionDelta {
-                            content: None,
-                            role: None,
-                            tool_calls: None,
-                        },
-                        finish_reason: Some(finish_reason.clone()),
-                        logprobs: None,
-                    }],
-                    usage: None,
-                });
-
-                if let Some(u) = &usage {
-                    chunks.push(ChatCompletionChunk {
-                        id: uuid::Uuid::new_v4().to_string(),
-                        object: "chat.completion.chunk".to_string(),
-                        created: chrono::Utc::now().timestamp(),
-                        model: model_name.clone(),
-                        choices: vec![],
-                        usage: Some(ChatCompletionUsage {
-                            prompt_tokens: u.input_tokens as i32,
-                            completion_tokens: u.output_tokens as i32,
-                            total_tokens: u.total_tokens as i32,
-                            prompt_tokens_details: u.prompt_tokens_details.clone(),
-                            completion_tokens_details: u.completion_tokens_details.clone(),
-                            cost: 0.0,
-                        }),
-                    });
-                }
-
-                Ok(chunks)
-            }
-            Ok((delta, _, finish_reason)) => {
-                let chunk = ChatCompletionChunk {
-                    id: uuid::Uuid::new_v4().to_string(),
-                    object: "chat.completion.chunk".to_string(),
-                    created: chrono::Utc::now().timestamp(),
-                    model: model_name.clone(),
-                    choices: delta.as_ref().map_or(vec![], |d| {
-                        vec![ChatCompletionChunkChoice {
-                            index: 0,
-                            delta: d.clone(),
-                            finish_reason,
-                            logprobs: None,
-                        }]
-                    }),
-                    usage: None,
-                };
-
-                Ok(vec![chunk])
-            }
-            Err(e) => Err(e),
-        };
-
-        let mut result_combined = String::new();
-        match chunks {
-            Ok(chunks) => {
-                for c in chunks {
-                    let json_str = serde_json::to_string(&c).unwrap_or_else(|e| {
-                        format!("{{\"error\": \"Failed to serialize chunk: {e}\"}}")
-                    });
-
-                    result_combined.push_str(&format!("data: {json_str}\n\n"));
-                }
-            }
-            Err(e) => {
-                let result = serde_json::to_string(&HashMap::from([("error", e.to_string())]))
-                    .unwrap_or_else(|e| {
-                        format!("{{\"error\": \"Failed to serialize chunk: {e}\"}}")
-                    });
-
-                result_combined.push_str(&format!("data: {result}\n\n"));
-            }
-        }
-
-        Ok(Bytes::from(result_combined))
     }
 }

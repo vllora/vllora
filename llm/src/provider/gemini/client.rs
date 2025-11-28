@@ -21,6 +21,7 @@ pub struct Client {
     api_key: String,
     /// Internal HTTP client.
     client: reqwest::Client,
+    api_url: String,
 }
 
 enum Method {
@@ -28,10 +29,11 @@ enum Method {
     Get,
 }
 impl Client {
-    pub fn new(api_key: String) -> Self {
+    pub fn new(api_key: String, api_url: Option<String>) -> Self {
         Self {
             api_key,
             client: reqwest::Client::new(),
+            api_url: api_url.unwrap_or_else(|| API_URL.to_string()),
         }
     }
 
@@ -41,7 +43,7 @@ impl Client {
         payload: Option<P>,
         method: Method,
     ) -> LLMResult<T> {
-        let url = format!("{API_URL}{path}?key={}", self.api_key);
+        let url = format!("{}{path}?key={}", self.api_url, self.api_key);
 
         let resp = match method {
             Method::Get => self.client.get(url),
@@ -135,8 +137,8 @@ impl Client {
         payload: GenerateContentRequest,
     ) -> LLMResult<impl Stream<Item = Result<Option<GenerateContentResponse>, LLMError>>> {
         let stream_url = format!(
-            "{API_URL}/{model_name}:streamGenerateContent?alt=sse&key={}",
-            self.api_key
+            "{}/{model_name}:streamGenerateContent?alt=sse&key={}",
+            self.api_url, self.api_key
         );
         tracing::debug!(target: "gemini", "Invoking model: {model_name} on {stream_url} with payload: {}", serde_json::to_string(&payload).unwrap());
         let span = tracing::Span::current();

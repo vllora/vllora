@@ -1,15 +1,10 @@
 use crate::executor::context::ExecutorContext;
 use crate::handler::find_model_by_full_name;
 use crate::model::cached::CachedModel;
-use crate::model::proxy::OpenAISpecModel;
 use crate::types::guardrails::service::GuardrailsEvaluator;
 use crate::types::guardrails::{GuardError, GuardResult, GuardStage};
 use crate::types::metadata::services::model::ModelService;
 use crate::GatewayApiError;
-use async_openai::config::OpenAIConfig;
-use async_openai::Client;
-use futures::future::join;
-use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -18,13 +13,10 @@ use std::sync::Arc;
 use tokio::sync::mpsc::{self, channel};
 use tracing::{info_span, Instrument};
 use valuable::Valuable;
+use vllora_llm::client::completions::response_stream::ResultStream;
 use vllora_llm::client::error::ModelError;
 use vllora_llm::client::{ModelInstance, VlloraLLMClient};
 use vllora_llm::error::{LLMError, LLMResult};
-use vllora_llm::provider::anthropic::AnthropicModel;
-use vllora_llm::provider::bedrock::BedrockModel;
-use vllora_llm::provider::gemini::GeminiModel;
-use vllora_llm::provider::openai::OpenAIModel;
 use vllora_llm::types::credentials_ident::CredentialsIdent;
 use vllora_llm::types::engine::CompletionModelDefinition;
 use vllora_llm::types::engine::{CompletionEngineParams, CompletionModelParams};
@@ -34,6 +26,7 @@ use vllora_llm::types::gateway::{
     ChatCompletionRequest, CompletionModelUsage, ContentType, Extra, GuardOrName,
     GuardWithParameters, Usage,
 };
+use vllora_llm::types::instance::init_model_instance;
 use vllora_llm::types::message::Message;
 use vllora_llm::types::models::ModelMetadata;
 use vllora_llm::types::models::ModelType;
@@ -49,7 +42,6 @@ pub mod cached;
 pub mod embeddings;
 pub mod google_vertex;
 pub mod image_generation;
-pub mod proxy;
 pub mod tools;
 
 #[async_trait::async_trait]
@@ -74,8 +66,7 @@ impl Display for ResponseCacheState {
     }
 }
 
-pub struct TracedModel<Inner: ModelInstance + Clone> {
-    inner: Inner,
+pub struct TracedModel {
     definition: CompletionModelDefinition,
     executor_context: ExecutorContext,
     router_span: tracing::Span,
@@ -83,15 +74,14 @@ pub struct TracedModel<Inner: ModelInstance + Clone> {
     initial_messages: Vec<ChatCompletionMessage>,
     response_cache_state: Option<ResponseCacheState>,
     request: ChatCompletionRequest,
+    tools: HashMap<String, Arc<Box<dyn Tool + 'static>>>,
 }
 
 #[allow(clippy::too_many_arguments)]
 pub async fn init_completion_model_instance(
     definition: CompletionModelDefinition,
-    tools: HashMap<String, Box<dyn Tool + 'static>>,
+    tools: HashMap<String, Arc<Box<dyn Tool + 'static>>>,
     executor_context: &ExecutorContext,
-    endpoint: Option<&str>,
-    provider_name: Option<&str>,
     router_span: tracing::Span,
     extra: Option<&Extra>,
     initial_messages: Vec<ChatCompletionMessage>,
@@ -99,9 +89,9 @@ pub async fn init_completion_model_instance(
     cache_state: Option<ResponseCacheState>,
     request: ChatCompletionRequest,
 ) -> Result<Box<dyn ModelInstance>, ModelError> {
-    if let Some(cached_model) = cached_model {
+    if let Some(_cached_model) = cached_model {
         return Ok(Box::new(TracedModel {
-            inner: cached_model,
+            tools,
             definition,
             executor_context: executor_context.clone(),
             router_span: router_span.clone(),
@@ -112,139 +102,16 @@ pub async fn init_completion_model_instance(
         }));
     }
 
-    match &definition.model_params.engine {
-        CompletionEngineParams::Bedrock {
-            params,
-            execution_options,
-            credentials,
-            ..
-        } => Ok(Box::new(TracedModel {
-            inner: BedrockModel::new(
-                params.clone(),
-                execution_options.clone(),
-                credentials.as_ref(),
-                tools,
-            )
-            .await?,
-            definition,
-            executor_context: executor_context.clone(),
-            router_span: router_span.clone(),
-            extra: extra.cloned(),
-            initial_messages: initial_messages.clone(),
-            response_cache_state: cache_state,
-            request: request.clone(),
-        })),
-        CompletionEngineParams::OpenAi {
-            params,
-            execution_options,
-            credentials,
-            endpoint,
-        } => {
-            // Check if the endpoint is an Azure OpenAI endpoint
-            if let Some(ep) = endpoint.as_ref() {
-                if ep.contains("azure.com") {
-                    // Use the Azure implementation
-                    return Ok(Box::new(TracedModel {
-                        inner: OpenAIModel::from_azure_url(
-                            params.clone(),
-                            credentials.as_ref(),
-                            execution_options.clone(),
-                            tools,
-                            ep,
-                        )?,
-                        definition,
-                        executor_context: executor_context.clone(),
-                        router_span: router_span.clone(),
-                        extra: extra.cloned(),
-                        initial_messages: initial_messages.clone(),
-                        response_cache_state: cache_state,
-                        request: request.clone(),
-                    }));
-                }
-            }
-
-            // Default OpenAI implementation
-            Ok(Box::new(TracedModel {
-                inner: OpenAIModel::new(
-                    params.clone(),
-                    credentials.as_ref(),
-                    execution_options.clone(),
-                    tools,
-                    None::<Client<OpenAIConfig>>,
-                    endpoint.as_ref().map(|x| x.as_str()),
-                )?,
-                definition,
-                executor_context: executor_context.clone(),
-                router_span: router_span.clone(),
-                extra: extra.cloned(),
-                initial_messages: initial_messages.clone(),
-                response_cache_state: cache_state,
-                request: request.clone(),
-            }))
-        }
-        CompletionEngineParams::Proxy {
-            params,
-            execution_options,
-            credentials,
-        } => {
-            let provider_name = provider_name.expect("provider_name is expected here");
-            Ok(Box::new(TracedModel {
-                inner: OpenAISpecModel::new(
-                    params.clone(),
-                    credentials.as_ref(),
-                    execution_options.clone(),
-                    tools,
-                    endpoint,
-                    provider_name,
-                )?,
-                definition,
-                executor_context: executor_context.clone(),
-                router_span: router_span.clone(),
-                extra: extra.cloned(),
-                initial_messages: initial_messages.clone(),
-                response_cache_state: cache_state,
-                request: request.clone(),
-            }))
-        }
-        CompletionEngineParams::Anthropic {
-            credentials,
-            execution_options,
-            params,
-        } => Ok(Box::new(TracedModel {
-            inner: AnthropicModel::new(
-                params.clone(),
-                execution_options.clone(),
-                credentials.as_ref(),
-                tools,
-            )?,
-            definition,
-            executor_context: executor_context.clone(),
-            router_span: router_span.clone(),
-            extra: extra.cloned(),
-            initial_messages: initial_messages.clone(),
-            response_cache_state: cache_state,
-            request: request.clone(),
-        })),
-        CompletionEngineParams::Gemini {
-            credentials,
-            execution_options,
-            params,
-        } => Ok(Box::new(TracedModel {
-            inner: GeminiModel::new(
-                params.clone(),
-                execution_options.clone(),
-                credentials.as_ref(),
-                tools,
-            )?,
-            definition,
-            executor_context: executor_context.clone(),
-            router_span: router_span.clone(),
-            extra: extra.cloned(),
-            initial_messages: initial_messages.clone(),
-            response_cache_state: cache_state,
-            request: request.clone(),
-        })),
-    }
+    Ok(Box::new(TracedModel {
+        tools,
+        definition,
+        executor_context: executor_context.clone(),
+        router_span: router_span.clone(),
+        extra: extra.cloned(),
+        initial_messages: initial_messages.clone(),
+        response_cache_state: cache_state,
+        request: request.clone(),
+    }))
 }
 
 #[derive(Clone, Serialize)]
@@ -315,7 +182,7 @@ impl From<CompletionModelDefinition> for TraceModelDefinition {
     }
 }
 
-impl<Inner: ModelInstance + Clone + 'static> TracedModel<Inner> {
+impl TracedModel {
     fn clean_input_trace(&self, input_vars: &HashMap<String, Value>) -> LLMResult<String> {
         let input_vars = input_vars.clone();
         let str = serde_json::to_string(&json!(input_vars))?;
@@ -324,7 +191,7 @@ impl<Inner: ModelInstance + Clone + 'static> TracedModel<Inner> {
 }
 
 #[async_trait::async_trait]
-impl<Inner: ModelInstance + Clone + 'static> ModelInstance for TracedModel<Inner> {
+impl ModelInstance for TracedModel {
     async fn invoke(
         &self,
         input_vars: HashMap<String, Value>,
@@ -455,11 +322,11 @@ impl<Inner: ModelInstance + Clone + 'static> ModelInstance for TracedModel<Inner
             .instrument(span.clone()),
         );
 
+        let tools = self.tools.clone();
         async {
-            let vllora_llm_client = VlloraLLMClient::new_with_instance(Arc::new(Box::new(
-                self.inner.clone(),
-            )
-                as Box<dyn ModelInstance>));
+            let instance =
+                init_model_instance(self.definition.model_params.engine.clone(), tools).await?;
+            let vllora_llm_client = VlloraLLMClient::new_with_instance(instance);
             let result = vllora_llm_client
                 .completions()
                 .with_input_variables(input_vars.clone())
@@ -511,7 +378,7 @@ impl<Inner: ModelInstance + Clone + 'static> ModelInstance for TracedModel<Inner
         outer_tx: mpsc::Sender<Option<ModelEvent>>,
         _previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
-    ) -> LLMResult<()> {
+    ) -> LLMResult<ResultStream> {
         let credentials_ident = credentials_identifier(&self.definition.model_params);
         let traced_model: TraceModelDefinition = self.definition.clone().into();
         let model = traced_model.sanitize_json()?;
@@ -567,87 +434,79 @@ impl<Inner: ModelInstance + Clone + 'static> ModelInstance for TracedModel<Inner
             )))
             .await?;
 
-        async {
-            let (tx, mut rx) = channel(outer_tx.max_capacity());
+        let (tx, mut rx) = channel(outer_tx.max_capacity());
+        let mut start_time = None;
+        let tools = self.tools.clone();
+        let instance =
+            init_model_instance(self.definition.model_params.engine.clone(), tools).await?;
+        let vllora_llm_client = VlloraLLMClient::new_with_instance(instance);
+
+        let result = execute_stream(
+            vllora_llm_client,
+            self.request.clone(),
+            input_vars.clone(),
+            tx.clone(),
+            tags.clone(),
+        )
+        .instrument(span.clone())
+        .await;
+
+        span.record(
+            "tags",
+            JsonValue(&serde_json::to_value(tags.clone())?).as_value(),
+        );
+
+        let price = self.definition.db_model.price.clone();
+        tokio::spawn(async move {
             let mut output = String::new();
-            let mut start_time = None;
-            let vllora_llm_client = VlloraLLMClient::new_with_instance(Arc::new(Box::new(
-                self.inner.clone(),
-            )
-                as Box<dyn ModelInstance>));
-
-            let result = join(
-                execute_stream(
-                    vllora_llm_client,
-                    self.request.clone(),
-                    input_vars.clone(),
-                    tx.clone(),
-                    tags.clone(),
-                )
-                .instrument(span.clone()),
-                async {
-                    while let Some(Some(msg)) = rx.recv().await {
-                        match &msg.event {
-                            ModelEventType::LlmStart(_event) => {
-                                start_time = Some(msg.timestamp.timestamp_micros() as u64);
-                            }
-                            ModelEventType::LlmContent(event) => {
-                                output.push_str(event.content.as_str());
-                            }
-                            ModelEventType::LlmFirstToken(_) => {
-                                if let Some(start_time) = start_time {
-                                    let current_span = tracing::Span::current();
-                                    current_span.record(
-                                        "ttft",
-                                        msg.timestamp.timestamp_micros() as u64 - start_time,
-                                    );
-                                }
-                            }
-                            ModelEventType::LlmStop(llmfinish_event) => {
-                                let s = tracing::Span::current();
-                                s.record("output", serde_json::to_string(&output).unwrap());
-                                if let Some(u) = &llmfinish_event.usage {
-                                    let cost = cost_calculator
-                                        .calculate_cost(
-                                            &self.definition.db_model.price,
-                                            &Usage::CompletionModelUsage(u.clone()),
-                                            &credentials_ident,
-                                        )
-                                        .await;
-
-                                    match cost {
-                                        Ok(c) => {
-                                            s.record("cost", serde_json::to_string(&c).unwrap());
-                                        }
-                                        Err(e) => {
-                                            tracing::error!("Error calculating cost: {:?}", e);
-                                        }
-                                    }
-                                    s.record("usage", serde_json::to_string(u).unwrap());
-                                }
-                            }
-                            _ => {}
-                        }
-                        outer_tx.send(Some(msg)).await.unwrap();
+            while let Some(Some(msg)) = rx.recv().await {
+                match &msg.event {
+                    ModelEventType::LlmStart(_event) => {
+                        start_time = Some(msg.timestamp.timestamp_micros() as u64);
                     }
-                },
-            )
-            .instrument(span.clone())
-            .await
-            .0;
+                    ModelEventType::LlmContent(event) => {
+                        output.push_str(event.content.as_str());
+                    }
+                    ModelEventType::LlmFirstToken(_) => {
+                        if let Some(start_time) = start_time {
+                            let current_span = tracing::Span::current();
+                            current_span.record(
+                                "ttft",
+                                msg.timestamp.timestamp_micros() as u64 - start_time,
+                            );
+                        }
+                    }
+                    ModelEventType::LlmStop(llmfinish_event) => {
+                        let s = tracing::Span::current();
+                        s.record("output", serde_json::to_string(&output).unwrap());
+                        if let Some(u) = &llmfinish_event.usage {
+                            let cost = cost_calculator
+                                .calculate_cost(
+                                    &price,
+                                    &Usage::CompletionModelUsage(u.clone()),
+                                    &credentials_ident,
+                                )
+                                .await;
 
-            let span = tracing::Span::current();
-            span.record(
-                "tags",
-                JsonValue(&serde_json::to_value(tags.clone())?).as_value(),
-            );
-            match result {
-                Ok(()) => span.record("output", output),
-                Err(ref e) => span.record("error", tracing::field::display(e)),
-            };
-            result
-        }
-        .await
+                            match cost {
+                                Ok(c) => {
+                                    s.record("cost", serde_json::to_string(&c).unwrap());
+                                }
+                                Err(e) => {
+                                    tracing::error!("Error calculating cost: {:?}", e);
+                                }
+                            }
+                            s.record("usage", serde_json::to_string(u).unwrap());
+                        }
+                        s.record("output", output.clone());
+                    }
+                    _ => {}
+                }
+                outer_tx.send(Some(msg)).await.unwrap();
+            }
+        });
+
+        result
     }
 }
 
@@ -657,21 +516,16 @@ async fn execute_stream(
     input_vars: HashMap<String, Value>,
     tx: mpsc::Sender<Option<ModelEvent>>,
     tags: HashMap<String, String>,
-) -> LLMResult<()> {
+) -> LLMResult<ResultStream> {
     let client = vllora_llm_client
         .completions()
         .with_input_variables(input_vars.clone())
         .with_tx(tx.clone())
         .with_tags(tags.clone());
-    let mut result = client
+    client
         .create_stream(request.clone())
         .instrument(tracing::Span::current())
-        .await?;
-    while let Some(_chunk) = result.next().await {}
-    tx.send(None)
         .await
-        .map_err(|e| LLMError::BoxedError(Box::new(e)))?;
-    Ok(())
 }
 
 pub fn credentials_identifier(model_params: &CompletionModelParams) -> CredentialsIdent {

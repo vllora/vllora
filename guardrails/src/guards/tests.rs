@@ -6,6 +6,7 @@ use chrono::Utc;
 use serde_json::Value;
 use vllora_core::types::guardrails::evaluator::Evaluator;
 use vllora_core::types::guardrails::{Guard, GuardAction, GuardStage};
+use vllora_llm::client::completions::response_stream::ResultStream;
 use vllora_llm::error::LLMResult;
 use vllora_llm::types::gateway::ChatCompletionMessageWithFinishReason;
 use vllora_llm::types::gateway::{
@@ -249,7 +250,7 @@ impl ModelInstance for MockModelInstance {
         _tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         _previous_messages: Vec<Message>,
         _tags: HashMap<String, String>,
-    ) -> LLMResult<()> {
+    ) -> LLMResult<ResultStream> {
         todo!()
     }
 }

@@ -1,28 +1,16 @@
-use std::collections::HashMap;
-use std::sync::Arc;
-
-use futures::future::join;
-use futures::StreamExt;
-use futures::TryStreamExt;
-use vllora_llm::types::gateway::{ChatCompletionDelta, FunctionCall, ToolCall};
-use vllora_llm::types::instance::ModelInstance;
-use vllora_llm::types::message::Message;
-use vllora_llm::types::LLMFinishEvent;
-use vllora_llm::types::ModelEvent;
-use vllora_llm::types::ModelEventType;
-use vllora_llm::types::ModelFinishReason;
-
-use tokio_stream::wrappers::ReceiverStream;
-use tracing::Span;
-use tracing_futures::Instrument;
-use vllora_llm::types::engine::ParentCompletionOptions;
-
-use super::stream_wrapper::wrap_stream;
-use crate::executor::chat_completion::ChatCompletionStream;
 use crate::handler::{CallbackHandlerFn, ModelEventWithDetails};
 use crate::GatewayApiError;
+use std::collections::HashMap;
+use std::sync::Arc;
+use tracing::Span;
+use tracing_futures::Instrument;
+use vllora_llm::client::completions::response_stream::ResultStream;
 use vllora_llm::types::engine::CompletionModelDefinition;
+use vllora_llm::types::engine::ParentCompletionOptions;
 use vllora_llm::types::engine::ParentDefinition;
+use vllora_llm::types::instance::ModelInstance;
+use vllora_llm::types::message::Message;
+use vllora_llm::types::{ModelEvent, ModelEventType};
 
 #[derive(Default)]
 pub struct StreamCacheContext {
@@ -37,8 +25,8 @@ pub async fn stream_chunks(
     callback_handler: Arc<CallbackHandlerFn>,
     tags: HashMap<String, String>,
     input_vars: HashMap<String, serde_json::Value>,
-    cached_context: StreamCacheContext,
-) -> Result<ChatCompletionStream, GatewayApiError> {
+    _cached_context: StreamCacheContext,
+) -> Result<ResultStream, GatewayApiError> {
     let parent_definition =
         ParentDefinition::CompletionModel(Box::new(completion_model_definition.clone()));
     let model_options = ParentCompletionOptions {
@@ -48,141 +36,28 @@ pub async fn stream_chunks(
     };
 
     let db_model = model_options.definition.get_db_model();
-    let (outer_tx, rx) = tokio::sync::mpsc::channel(10000);
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<Option<ModelEvent>>(10000);
 
-    tokio::spawn(
-        async move {
-            let (tx, mut rx) = tokio::sync::mpsc::channel::<Option<ModelEvent>>(10000);
-            let forward_fut = async {
-                let mut assistant_msg = String::new();
-                while let Some(Some(mut msg)) = rx.recv().await {
-                    if let ModelEventType::LlmContent(event) = &mut msg.event {
-                        assistant_msg.push_str(event.content.as_str());
-                    }
-
-                    callback_handler.on_message(ModelEventWithDetails::new(
-                        msg.clone(),
-                        Some(db_model.clone()),
-                    ));
-                    let _e = outer_tx.send(Ok(msg)).await;
-                }
-
-                let span = Span::current();
-                span.record("response", assistant_msg.clone());
-            };
-
-            let result_fut = model
-                .stream(input_vars, tx, messages, tags)
-                .instrument(Span::current());
-
-            let (result, _) = join(result_fut, forward_fut).await;
-            if let Err(e) = result {
-                let error_message = format!("{e:?}");
-                if let Err(send_error) = outer_tx.send(Err(GatewayApiError::LLMError(e))).await {
-                    tracing::error!("Error in sending error: {send_error}. Error: {error_message}");
-                }
+    tokio::spawn(async move {
+        let mut assistant_msg = String::new();
+        while let Some(Some(mut msg)) = rx.recv().await {
+            if let ModelEventType::LlmContent(event) = &mut msg.event {
+                assistant_msg.push_str(event.content.as_str());
             }
+
+            callback_handler.on_message(ModelEventWithDetails::new(
+                msg.clone(),
+                Some(db_model.clone()),
+            ));
         }
-        .in_current_span(),
-    );
 
-    let event_stream = ReceiverStream::new(rx)
-        .into_stream()
-        .then(move |e| {
-            let events_sender = cached_context.events_sender.clone();
-            async move {
-                if let Ok(event) = &e {
-                    if let Some(events_sender) = events_sender {
-                        events_sender.send(Some(event.clone())).await.unwrap();
-                    }
-                }
+        let span = Span::current();
+        span.record("response", assistant_msg.clone());
+    });
 
-                e
-            }
-        })
-        .filter_map(|e: Result<ModelEvent, GatewayApiError>| async move {
-            e.map_or_else(
-                |e| Some(Err(e)),
-                |model_event| match model_event.event {
-                    ModelEventType::LlmContent(_)
-                    | ModelEventType::ToolStart(_)
-                    | ModelEventType::LlmStop(_) => Some(Ok(model_event)),
-                    _ => None,
-                },
-            )
-        })
-        .then(move |e: Result<ModelEvent, GatewayApiError>| async move {
-            match e {
-                Ok(e) => match e.event {
-                    ModelEventType::LlmContent(content) => Ok((
-                        Some(ChatCompletionDelta {
-                            role: Some("assistant".to_string()),
-                            content: Some(content.content),
-                            tool_calls: None,
-                        }),
-                        None,
-                        None,
-                    )),
-                    ModelEventType::ToolStart(tool_call) => Ok((
-                        Some(ChatCompletionDelta {
-                            role: Some("assistant".to_string()),
-                            content: None,
-                            tool_calls: Some(vec![ToolCall {
-                                index: Some(0),
-                                id: tool_call.tool_id.clone(),
-                                r#type: "function".into(),
-                                function: FunctionCall {
-                                    name: tool_call.tool_name.clone(),
-                                    arguments: tool_call.input.clone(),
-                                },
-                                extra_content: None,
-                            }]),
-                        }),
-                        None,
-                        None,
-                    )),
-                    ModelEventType::LlmStop(LLMFinishEvent {
-                        usage,
-                        finish_reason,
-                        tool_calls,
-                        ..
-                    }) => {
-                        let ev = match finish_reason {
-                            ModelFinishReason::ToolCalls => Some(ChatCompletionDelta {
-                                role: Some("assistant".to_string()),
-                                content: None,
-                                tool_calls: Some(
-                                    tool_calls
-                                        .into_iter()
-                                        .enumerate()
-                                        .map(|(index, tc)| ToolCall {
-                                            index: Some(index),
-                                            id: tc.tool_id.clone(),
-                                            r#type: "function".into(),
-                                            function: FunctionCall {
-                                                name: tc.tool_name.clone(),
-                                                arguments: tc.input.clone(),
-                                            },
-                                            extra_content: tc.extra_content.clone(),
-                                        })
-                                        .collect(),
-                                ),
-                            }),
-                            _ => None,
-                        };
-
-                        Ok((ev, usage, Some(finish_reason.to_string())))
-                    }
-                    _ => Err(GatewayApiError::CustomError(
-                        "Unsupported event".to_string(),
-                    )),
-                },
-                Err(e) => {
-                    tracing::error!("Error in event: {e}");
-                    Err(e)
-                }
-            }
-        });
-
-    Ok(wrap_stream(event_stream))
+    model
+        .stream(input_vars, tx, messages, tags)
+        .instrument(Span::current())
+        .await
+        .map_err(GatewayApiError::LLMError)
 }

@@ -44,7 +44,7 @@ pub struct GeminiEmbeddings {
 
 impl GeminiEmbeddings {
     pub fn new(credentials: Option<&ApiKeyCredentials>) -> Result<Self, ModelError> {
-        let client = gemini_client(credentials)?;
+        let client = gemini_client(credentials, None)?;
         Ok(GeminiEmbeddings {
             client,
             credentials_ident: credentials

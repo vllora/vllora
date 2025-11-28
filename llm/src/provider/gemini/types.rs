@@ -199,10 +199,10 @@ pub struct CitationMetadata {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct UsageMetadata {
-    pub candidates_token_count: Option<i32>,
-    pub prompt_token_count: i32,
-    pub total_token_count: i32,
-    pub thoughts_token_count: Option<i32>,
+    pub candidates_token_count: Option<u32>,
+    pub prompt_token_count: u32,
+    pub total_token_count: u32,
+    pub thoughts_token_count: Option<u32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
