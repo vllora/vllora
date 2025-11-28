@@ -9,10 +9,12 @@ use crate::provider::openai::OpenAIModel;
 use crate::provider::proxy::OpenAISpecModel;
 use crate::types::credentials_ident::CredentialsIdent;
 use crate::types::engine::CompletionEngineParams;
+use crate::types::gateway::ChatCompletionChunk;
+use crate::types::gateway::ChatCompletionChunkChoice;
 use crate::types::gateway::ChatCompletionContent;
+use crate::types::gateway::ChatCompletionDelta;
 use crate::types::gateway::ChatCompletionMessage;
 use crate::types::gateway::ChatCompletionMessageWithFinishReason;
-use crate::types::gateway::Chunk;
 use crate::types::message::Message;
 use crate::types::tools::Tool;
 use crate::types::LLMContentEvent;
@@ -203,30 +205,23 @@ impl ModelInstance for DummyModelInstance {
                     .await
                     .ok();
                     tx_response
-                        .send(Ok(Chunk::Openai(
-                            async_openai::types::CreateChatCompletionStreamResponse {
-                                id: "test".to_string(),
-                                object: Some("test".to_string()),
-                                created: 0,
-                                model: "test".to_string(),
-                                choices: vec![async_openai::types::ChatChoiceStream {
-                                    index: 0,
-                                    delta: async_openai::types::ChatCompletionStreamResponseDelta {
-                                        content: Some(chunk.to_owned()),
-                                        role: Some(async_openai::types::Role::Assistant),
-                                        tool_calls: None,
-                                        refusal: None,
-                                        #[allow(deprecated)]
-                                        function_call: None,
-                                    },
-                                    finish_reason: Some(async_openai::types::FinishReason::Stop),
-                                    logprobs: None,
-                                }],
-                                usage: None,
-                                service_tier: None,
-                                system_fingerprint: None,
-                            },
-                        )))
+                        .send(Ok(ChatCompletionChunk {
+                            id: "test".to_string(),
+                            object: "test".to_string(),
+                            created: 0,
+                            model: "test".to_string(),
+                            choices: vec![ChatCompletionChunkChoice {
+                                index: 0,
+                                delta: ChatCompletionDelta {
+                                    content: Some(chunk.to_owned()),
+                                    role: Some("assistant".to_string()),
+                                    tool_calls: None,
+                                },
+                                finish_reason: Some("stop".to_string()),
+                                logprobs: None,
+                            }],
+                            usage: None,
+                        }))
                         .await
                         .ok();
                 }
@@ -293,7 +288,7 @@ mod tests {
     async fn test_create_stream() {
         let client = CompletionsClient::new(Arc::new(Box::new(DummyModelInstance {})));
         let request = ChatCompletionRequest {
-            model: "dummy_model".to_string(),
+            model: "test".to_string(),
             messages: vec![ChatCompletionMessage {
                 role: "user".to_string(),
                 content: Some(ChatCompletionContent::Text("Hello, world!".to_string())),
@@ -306,7 +301,7 @@ mod tests {
         while let Some(chunk) = response.next().await {
             chunks.push(chunk);
         }
-        assert_eq!(6, chunks.len());
+        assert_eq!(5, chunks.len());
         assert_eq!(
             "Hello, world!",
             chunks
@@ -325,6 +320,6 @@ mod tests {
             Some(ModelFinishReason::Stop.to_string()),
             last_chunk.choices[0].finish_reason
         );
-        assert_eq!("dummy_model", last_chunk.model);
+        assert_eq!("test", last_chunk.model);
     }
 }

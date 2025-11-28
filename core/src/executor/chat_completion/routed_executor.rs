@@ -267,7 +267,7 @@ impl RoutedExecutor {
                         async move {
                             let r = match delta {
                                 Ok(delta) => {
-                                    let mut delta: ChatCompletionChunk = delta.into();
+                                    let mut delta: ChatCompletionChunk = delta;
                                     delta.model = model_name.clone();
                                     if let Some(usage) = delta.usage.as_mut() {
                                         let u = CompletionModelUsage {

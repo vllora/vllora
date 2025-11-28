@@ -19,8 +19,8 @@ use crate::types::credentials_ident::CredentialsIdent;
 use crate::types::engine::render;
 use crate::types::engine::{ExecutionOptions, GeminiModelParams};
 use crate::types::gateway::{
-    ChatCompletionContent, ChatCompletionMessage, ChatCompletionMessageWithFinishReason, Chunk,
-    CompletionModelUsage, ToolCall,
+    ChatCompletionChunk, ChatCompletionChunkChoice, ChatCompletionContent, ChatCompletionDelta,
+    ChatCompletionMessage, ChatCompletionMessageWithFinishReason, CompletionModelUsage, ToolCall,
 };
 use crate::types::instance::ModelInstance;
 use crate::types::message::{AudioFormat, InnerMessage, Message, MessageContentPartOptions};
@@ -218,7 +218,7 @@ impl GeminiModel {
         &self,
         mut stream: impl Stream<Item = Result<Option<GenerateContentResponse>, LLMError>> + Unpin,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
-        tx_response: &tokio::sync::mpsc::Sender<LLMResult<Chunk>>,
+        tx_response: &tokio::sync::mpsc::Sender<LLMResult<ChatCompletionChunk>>,
         started_at: std::time::Instant,
     ) -> LLMResult<(
         FinishReason,
@@ -242,10 +242,10 @@ impl GeminiModel {
             match res {
                 Ok(res) => {
                     if let Some(res) = res {
-                        tx_response
-                            .send(Ok(Chunk::Gemini(res.clone())))
-                            .await
-                            .map_err(|e| LLMError::CustomError(e.to_string()))?;
+                        // tx_response
+                        //     .send(Ok(Chunk::Gemini(res.clone())))
+                        //     .await
+                        //     .map_err(|e| LLMError::CustomError(e.to_string()))?;
                         if !first_response_received {
                             first_response_received = true;
                             tx.send(Some(ModelEvent::new(
@@ -258,11 +258,21 @@ impl GeminiModel {
                             response_id = res.response_id;
                             Span::current().record("ttft", started_at.elapsed().as_micros());
                         }
-                        for candidate in res.candidates {
-                            for part in candidate.content.parts {
-                                match part.part {
+
+                        let chunk = ChatCompletionChunk {
+                            id: response_id.clone(),
+                            object: "chat.completion.chunk".to_string(),
+                            created: chrono::Utc::now().timestamp(),
+                            model: model_version.clone(),
+                            choices: vec![],
+                            usage: None,
+                        };
+
+                        for candidate in &res.candidates {
+                            for part in &candidate.content.parts {
+                                match &part.part {
                                     Part::Text(text) => {
-                                        content.push_str(&text);
+                                        content.push_str(text);
                                         let _ = tx
                                             .send(Some(ModelEvent::new(
                                                 &Span::current(),
@@ -275,7 +285,7 @@ impl GeminiModel {
                                     Part::FunctionCall { name, args } => {
                                         calls.push((
                                             name.to_string(),
-                                            args,
+                                            args.clone(),
                                             part.thought_signature.clone(),
                                         ));
                                     }
@@ -289,11 +299,20 @@ impl GeminiModel {
                                 };
                             }
 
-                            if let Some(reason) = candidate.finish_reason {
-                                finish_reason = Some(reason);
+                            if let Some(reason) = &candidate.finish_reason {
+                                finish_reason = Some(reason.clone());
                             }
                         }
                         usage_metadata = res.usage_metadata;
+
+                        let mut chunk_clone = chunk.clone();
+                        chunk_clone.choices = res
+                            .candidates
+                            .clone()
+                            .into_iter()
+                            .map(|c| c.into())
+                            .collect();
+                        let _ = tx_response.send(Ok(chunk_clone)).await;
                     }
                 }
                 Err(e) => {
@@ -731,7 +750,7 @@ impl GeminiModel {
         &self,
         call: GenerateContentRequest,
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
-        tx_response: &tokio::sync::mpsc::Sender<LLMResult<Chunk>>,
+        tx_response: &tokio::sync::mpsc::Sender<LLMResult<ChatCompletionChunk>>,
         call_span: Span,
         tags: HashMap<String, String>,
     ) -> LLMResult<InnerExecutionResult> {
@@ -762,6 +781,33 @@ impl GeminiModel {
             .await?;
 
         let trace_finish_reason = Self::map_finish_reason(&finish_reason, !tool_calls.is_empty());
+        if let Some(response) = &output {
+            let chunk = ChatCompletionChunk {
+                id: response.response_id.clone(),
+                object: "chat.completion.chunk".to_string(),
+                created: chrono::Utc::now().timestamp(),
+                model: response.model_version.clone(),
+                choices: vec![],
+                usage: None,
+            };
+
+            let mut chunk_clone = chunk.clone();
+
+            chunk_clone.choices.push(ChatCompletionChunkChoice {
+                index: 0,
+                delta: ChatCompletionDelta::default(),
+                finish_reason: Some(trace_finish_reason.to_string()),
+                logprobs: None,
+            });
+            let _ = tx_response.send(Ok(chunk_clone)).await;
+
+            if let Some(usage) = &usage {
+                let mut chunk_clone = chunk.clone();
+                chunk_clone.usage = Some(usage.clone().into());
+                let _ = tx_response.send(Ok(chunk_clone)).await;
+            }
+        }
+
         call_span.record(
             "raw_usage",
             JsonValue(&serde_json::to_value(usage.clone())?).as_value(),
@@ -897,7 +943,7 @@ impl GeminiModel {
         &self,
         input_messages: Vec<Content>,
         tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
-        tx_response: &tokio::sync::mpsc::Sender<LLMResult<Chunk>>,
+        tx_response: &tokio::sync::mpsc::Sender<LLMResult<ChatCompletionChunk>>,
         tags: HashMap<String, String>,
     ) -> LLMResult<()> {
         let mut gemini_calls = vec![input_messages];
@@ -1377,32 +1423,26 @@ mod tests {
 
         let mut index = 0;
         while let Some(Ok(event)) = stream.next().await {
-            match event {
-                Chunk::Gemini(event) => {
-                    let expected_event = full_events[index].clone();
-                    let expected_event_struct: GenerateContentResponse =
-                        serde_json::from_str(&expected_event).unwrap();
+            let expected_event = full_events[index].clone();
+            let expected_event_struct: GenerateContentResponse =
+                serde_json::from_str(&expected_event).unwrap();
 
-                    let Part::Text(expected_text) =
-                        expected_event_struct.candidates[0].content.parts[0]
-                            .part
-                            .clone()
-                    else {
-                        unreachable!();
-                    };
+            let Part::Text(expected_text) = expected_event_struct.candidates[0].content.parts[0]
+                .part
+                .clone()
+            else {
+                unreachable!();
+            };
 
-                    let Part::Text(actual_text) = event.candidates[0].content.parts[0].part.clone()
-                    else {
-                        unreachable!();
-                    };
+            let Some(actual_text) = event.choices[0].delta.content.clone() else {
+                unreachable!()
+            };
 
-                    assert_eq!(actual_text, expected_text);
-                    index += 1;
-                }
-                _ => unreachable!(),
-            }
+            assert_eq!(actual_text, expected_text.clone());
+            index += 1;
         }
 
         assert_eq!(index, full_events.len());
+        drop(server);
     }
 }

@@ -1,24 +1,28 @@
+use rand::Rng;
 use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
+use tokio::task::JoinHandle;
 
 /// Mock server that responds with text/event-stream
 pub struct MockStreamServer {
     port: u16,
     events: Arc<Mutex<Vec<String>>>,
+    handle: JoinHandle<()>,
 }
 
 impl MockStreamServer {
     /// Start a new mock server on an available port
     pub async fn start() -> Result<Self, Box<dyn std::error::Error>> {
-        let listener = TcpListener::bind("0.0.0.0:9999").await?;
+        let port = rand::rng().random_range(10000..65535);
+        let listener = TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
         let addr = listener.local_addr()?;
         let port = addr.port();
         let events = Arc::new(Mutex::new(Vec::new()));
 
         let events_clone = events.clone();
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             loop {
                 match listener.accept().await {
                     Ok((mut stream, _)) => {
@@ -156,7 +160,11 @@ impl MockStreamServer {
             }
         });
 
-        Ok(Self { port, events })
+        Ok(Self {
+            port,
+            events,
+            handle,
+        })
     }
 
     /// Get the base URL of the mock server
@@ -170,9 +178,16 @@ impl MockStreamServer {
         *guard = events;
     }
 
+    #[allow(dead_code)]
     /// Add an event to stream
     pub async fn add_event(&self, event: String) {
         let mut guard = self.events.lock().await;
         guard.push(event);
+    }
+}
+
+impl Drop for MockStreamServer {
+    fn drop(&mut self) {
+        self.handle.abort();
     }
 }
