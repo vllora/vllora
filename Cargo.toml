@@ -33,7 +33,7 @@ valuable = { version = "0.1", features = ["derive"] }
 
 tonic = "0.13.0"
 
-rmcp = { version = "0.8.3", default-features = true, features = [
+rmcp = { version = "0.9.1", default-features = true, features = [
   "reqwest",
   "client",
   "server",
