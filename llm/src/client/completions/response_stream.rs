@@ -1,7 +1,7 @@
 use std::pin::Pin;
 
-use crate::types::gateway::Chunk;
 use crate::error::LLMError;
+use crate::types::gateway::Chunk;
 use futures::{stream, Stream};
 
 /// Wrapper type around the boxed async stream of raw `Chunk` items.

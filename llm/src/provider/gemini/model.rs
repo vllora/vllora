@@ -19,7 +19,8 @@ use crate::types::credentials_ident::CredentialsIdent;
 use crate::types::engine::render;
 use crate::types::engine::{ExecutionOptions, GeminiModelParams};
 use crate::types::gateway::{
-    ChatCompletionContent, ChatCompletionMessage, ChatCompletionMessageWithFinishReason, Chunk, CompletionModelUsage, ToolCall
+    ChatCompletionContent, ChatCompletionMessage, ChatCompletionMessageWithFinishReason, Chunk,
+    CompletionModelUsage, ToolCall,
 };
 use crate::types::instance::ModelInstance;
 use crate::types::message::{AudioFormat, InnerMessage, Message, MessageContentPartOptions};
@@ -69,7 +70,10 @@ fn map_calls_to_tool_names(calls: &[(String, HashMap<String, Value>, Option<Stri
         .join(",")
 }
 
-pub fn gemini_client(credentials: Option<&ApiKeyCredentials>, api_url: Option<String>) -> Result<Client, ModelError> {
+pub fn gemini_client(
+    credentials: Option<&ApiKeyCredentials>,
+    api_url: Option<String>,
+) -> Result<Client, ModelError> {
     let api_key = if let Some(credentials) = credentials {
         credentials.api_key.clone()
     } else {
@@ -238,7 +242,10 @@ impl GeminiModel {
             match res {
                 Ok(res) => {
                     if let Some(res) = res {
-                        tx_response.send(Ok(Chunk::Gemini(res.clone()))).await.map_err(|e| LLMError::CustomError(e.to_string()))?;
+                        tx_response
+                            .send(Ok(Chunk::Gemini(res.clone())))
+                            .await
+                            .map_err(|e| LLMError::CustomError(e.to_string()))?;
                         if !first_response_received {
                             first_response_received = true;
                             tx.send(Some(ModelEvent::new(
@@ -456,9 +463,9 @@ impl GeminiModel {
                         .usage_metadata
                         .as_ref()
                         .map(|u| CompletionModelUsage {
-                            input_tokens: u.prompt_token_count as u32,
-                            output_tokens: (u.total_token_count - u.prompt_token_count) as u32,
-                            total_tokens: u.total_token_count as u32,
+                            input_tokens: u.prompt_token_count,
+                            output_tokens: (u.total_token_count - u.prompt_token_count),
+                            total_tokens: u.total_token_count,
                             ..Default::default()
                         });
                     let finish_reason = ModelFinishReason::ToolCalls;
@@ -559,9 +566,9 @@ impl GeminiModel {
                     .usage_metadata
                     .as_ref()
                     .map(|u| CompletionModelUsage {
-                        input_tokens: u.prompt_token_count as u32,
-                        output_tokens: (u.total_token_count - u.prompt_token_count) as u32,
-                        total_tokens: u.total_token_count as u32,
+                        input_tokens: u.prompt_token_count,
+                        output_tokens: (u.total_token_count - u.prompt_token_count),
+                        total_tokens: u.total_token_count,
                         ..Default::default()
                     });
 
@@ -660,7 +667,10 @@ impl GeminiModel {
         ModelError::FinishError(ModelFinishError::Custom(format!("{finish_reason:?}"))).into()
     }
 
-    pub fn map_finish_reason(finish_reason: &FinishReason, has_tool_calls: bool) -> ModelFinishReason {
+    pub fn map_finish_reason(
+        finish_reason: &FinishReason,
+        has_tool_calls: bool,
+    ) -> ModelFinishReason {
         match finish_reason {
             FinishReason::FinishReasonUnspecified => {
                 ModelFinishReason::Other("Unspecified".to_string())
@@ -697,9 +707,9 @@ impl GeminiModel {
 
     fn map_usage(usage: Option<&UsageMetadata>) -> Option<CompletionModelUsage> {
         usage.map(|u| CompletionModelUsage {
-            input_tokens: u.prompt_token_count as u32,
-            output_tokens: (u.total_token_count - u.prompt_token_count) as u32,
-            total_tokens: u.total_token_count as u32,
+            input_tokens: u.prompt_token_count,
+            output_tokens: (u.total_token_count - u.prompt_token_count),
+            total_tokens: u.total_token_count,
             ..Default::default()
         })
     }
@@ -1050,15 +1060,19 @@ impl ModelInstance for GeminiModel {
         let (tx_response, rx_response) = tokio::sync::mpsc::channel(10000);
         let model = (*self).clone();
         let tx_clone = tx.clone();
-        tokio::spawn(async move {
-            let result = model
-                .execute_stream(conversational_messages, tx_clone, &tx_response, tags)
-                .await;
+        tokio::spawn(
+            async move {
+                let result = model
+                    .execute_stream(conversational_messages, tx_clone, &tx_response, tags)
+                    .await;
 
-            if let Err(e) = result {
-                let _ = tx_response.send(Err(e)).await;
+                if let Err(e) = result {
+                    let _ = tx_response.send(Err(e)).await;
+                }
             }
-        });
+            .instrument(tracing::Span::current()),
+        );
+
         Ok(ResultStream::create(rx_response))
     }
 }
@@ -1315,7 +1329,6 @@ fn normalize_nullable_types(schema: Value) -> Value {
     result
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1345,7 +1358,7 @@ mod tests {
             r#"{"candidates": [{"content": {"parts": [{"text": "message\": \"I am doing well, thank you for asking!\",\n  \""}],"role": "model"}}],"usageMetadata": {"promptTokenCount": 14,"totalTokenCount": 14,"promptTokensDetails": [{"modality": "TEXT","tokenCount": 14}]},"modelVersion": "gemini-2.0-flash","responseId": "2gMoabWyNcSNmNAPg6qc-Q0"}"#.to_string(),
             r#"{"candidates": [{"content": {"parts": [{"text": "text\": null\n}"}],"role": "model"},"finishReason": "STOP"}],"usageMetadata": {"promptTokenCount": 30,"candidatesTokenCount": 25,"totalTokenCount": 55,"promptTokensDetails": [{"modality": "TEXT","tokenCount": 30}],"candidatesTokensDetails": [{"modality": "TEXT","tokenCount": 25}]},"modelVersion": "gemini-2.0-flash","responseId": "2gMoabWyNcSNmNAPg6qc-Q0"}"#.to_string(),
         ];
-        
+
         let server = MockStreamServer::start()
             .await
             .expect("Failed to start mock server");
@@ -1370,11 +1383,16 @@ mod tests {
                     let expected_event_struct: GenerateContentResponse =
                         serde_json::from_str(&expected_event).unwrap();
 
-                    let Part::Text(expected_text) = expected_event_struct.candidates[0].content.parts[0].part.clone() else {
+                    let Part::Text(expected_text) =
+                        expected_event_struct.candidates[0].content.parts[0]
+                            .part
+                            .clone()
+                    else {
                         unreachable!();
                     };
 
-                    let Part::Text(actual_text) = event.candidates[0].content.parts[0].part.clone() else {
+                    let Part::Text(actual_text) = event.candidates[0].content.parts[0].part.clone()
+                    else {
                         unreachable!();
                     };
 

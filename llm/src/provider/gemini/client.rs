@@ -138,8 +138,7 @@ impl Client {
     ) -> LLMResult<impl Stream<Item = Result<Option<GenerateContentResponse>, LLMError>>> {
         let stream_url = format!(
             "{}/{model_name}:streamGenerateContent?alt=sse&key={}",
-            self.api_url,
-            self.api_key
+            self.api_url, self.api_key
         );
         tracing::debug!(target: "gemini", "Invoking model: {model_name} on {stream_url} with payload: {}", serde_json::to_string(&payload).unwrap());
         let span = tracing::Span::current();

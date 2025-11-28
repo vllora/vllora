@@ -15,6 +15,7 @@ use async_openai::types::ChatCompletionStreamResponseDelta;
 use async_openai::types::CreateChatCompletionRequest;
 use async_openai::types::CreateChatCompletionStreamResponse;
 use async_openai::types::FinishReason;
+use clust::messages::DeltaUsage;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -851,12 +852,15 @@ impl From<crate::provider::gemini::types::UsageMetadata> for ChatCompletionUsage
     fn from(val: crate::provider::gemini::types::UsageMetadata) -> Self {
         ChatCompletionUsage {
             prompt_tokens: val.prompt_token_count as i32,
-            completion_tokens: val.candidates_token_count.unwrap_or(0) as i32 + val.thoughts_token_count.unwrap_or(0) as i32,
+            completion_tokens: val.candidates_token_count.unwrap_or(0) as i32
+                + val.thoughts_token_count.unwrap_or(0) as i32,
             total_tokens: val.total_token_count as i32,
             prompt_tokens_details: None,
-            completion_tokens_details: val.thoughts_token_count.as_ref().map(|t| CompletionTokensDetails {
-               reasoning_tokens: *t,
-               ..Default::default()
+            completion_tokens_details: val.thoughts_token_count.as_ref().map(|t| {
+                CompletionTokensDetails {
+                    reasoning_tokens: *t,
+                    ..Default::default()
+                }
             }),
             cost: 0.0,
         }
@@ -911,6 +915,8 @@ pub enum Chunk {
     #[serde(rename = "openai")]
     Openai(CreateChatCompletionStreamResponse),
     Gemini(GenerateContentResponse),
+    Anthropic(clust::messages::MessageChunk),
+    Bedrock(CreateChatCompletionStreamResponse),
 }
 
 impl From<Chunk> for ChatCompletionChunk {
@@ -918,6 +924,8 @@ impl From<Chunk> for ChatCompletionChunk {
         match val {
             Chunk::Openai(val) => val.into(),
             Chunk::Gemini(val) => val.into(),
+            Chunk::Anthropic(val) => val.into(),
+            Chunk::Bedrock(val) => val.into(),
         }
     }
 }
@@ -940,6 +948,40 @@ pub struct ChatCompletionChunk {
     pub usage: Option<ChatCompletionUsage>,
 }
 
+impl From<clust::messages::Usage> for ChatCompletionUsage {
+    fn from(usage: clust::messages::Usage) -> Self {
+        let input_tokens = usage.input_tokens
+            + usage.cache_read_input_tokens.unwrap_or(0)
+            + usage.cache_creation_input_tokens.unwrap_or(0);
+
+        ChatCompletionUsage {
+            prompt_tokens: input_tokens as i32,
+            completion_tokens: usage.output_tokens as i32,
+            total_tokens: (input_tokens + usage.output_tokens) as i32,
+            prompt_tokens_details: Some(PromptTokensDetails::new(
+                usage.cache_read_input_tokens,
+                usage.cache_creation_input_tokens,
+                None,
+            )),
+            completion_tokens_details: None,
+            cost: 0.0,
+        }
+    }
+}
+
+impl From<DeltaUsage> for ChatCompletionUsage {
+    fn from(val: DeltaUsage) -> Self {
+        ChatCompletionUsage {
+            prompt_tokens: 0,
+            completion_tokens: val.output_tokens as i32,
+            total_tokens: val.output_tokens as i32,
+            prompt_tokens_details: None,
+            completion_tokens_details: None,
+            cost: 0.0,
+        }
+    }
+}
+
 impl From<CreateChatCompletionStreamResponse> for ChatCompletionChunk {
     fn from(val: CreateChatCompletionStreamResponse) -> Self {
         ChatCompletionChunk {
@@ -953,12 +995,222 @@ impl From<CreateChatCompletionStreamResponse> for ChatCompletionChunk {
     }
 }
 
+impl From<clust::messages::MessageChunk> for ChatCompletionChunk {
+    fn from(chunk: clust::messages::MessageChunk) -> Self {
+        let created = chrono::Utc::now().timestamp();
+
+        match chunk {
+            clust::messages::MessageChunk::ContentBlockStart(start) => {
+                match start.content_block {
+                    clust::messages::ContentBlockStart::TextContentBlock(block) => {
+                        let delta = ChatCompletionDelta {
+                            role: Some("assistant".to_string()),
+                            content: Some(block.text),
+                            tool_calls: None,
+                        };
+                        let choice = ChatCompletionChunkChoice {
+                            index: 0,
+                            delta,
+                            finish_reason: None,
+                            logprobs: None,
+                        };
+
+                        ChatCompletionChunk {
+                            id: String::new(),
+                            object: "chat.completion.chunk".to_string(),
+                            created,
+                            model: String::new(),
+                            choices: vec![choice],
+                            usage: None,
+                        }
+                    }
+                    clust::messages::ContentBlockStart::ThinkingContentBlock(_thinking) => {
+                        // Do not expose thinking content in the normalized stream
+                        ChatCompletionChunk {
+                            id: String::new(),
+                            object: "chat.completion.chunk".to_string(),
+                            created,
+                            model: String::new(),
+                            choices: vec![],
+                            usage: None,
+                        }
+                    }
+                    clust::messages::ContentBlockStart::ToolUseContentBlock(tool_use_block) => {
+                        let t = tool_use_block.tool_use;
+                        let tool_call = ToolCall {
+                            index: None,
+                            id: t.id,
+                            r#type: "function".to_string(),
+                            function: FunctionCall {
+                                name: t.name,
+                                arguments: serde_json::to_string(&t.input)
+                                    .unwrap_or_else(|_| "{}".to_string()),
+                            },
+                            extra_content: None,
+                        };
+                        let delta = ChatCompletionDelta {
+                            role: Some("assistant".to_string()),
+                            content: None,
+                            tool_calls: Some(vec![tool_call]),
+                        };
+                        let choice = ChatCompletionChunkChoice {
+                            index: 0,
+                            delta,
+                            finish_reason: None,
+                            logprobs: None,
+                        };
+
+                        ChatCompletionChunk {
+                            id: String::new(),
+                            object: "chat.completion.chunk".to_string(),
+                            created,
+                            model: String::new(),
+                            choices: vec![choice],
+                            usage: None,
+                        }
+                    }
+                }
+            }
+            clust::messages::MessageChunk::ContentBlockDelta(block) => {
+                match block.delta {
+                    clust::messages::ContentBlockDelta::TextDeltaContentBlock(delta) => {
+                        let delta = ChatCompletionDelta {
+                            role: Some("assistant".to_string()),
+                            content: Some(delta.text),
+                            tool_calls: None,
+                        };
+                        let choice = ChatCompletionChunkChoice {
+                            index: 0,
+                            delta,
+                            finish_reason: None,
+                            logprobs: None,
+                        };
+
+                        ChatCompletionChunk {
+                            id: String::new(),
+                            object: "chat.completion.chunk".to_string(),
+                            created,
+                            model: String::new(),
+                            choices: vec![choice],
+                            usage: None,
+                        }
+                    }
+                    clust::messages::ContentBlockDelta::ThinkingDeltaContentBlock(_delta) => {
+                        // Do not expose thinking content in the normalized stream
+                        ChatCompletionChunk {
+                            id: String::new(),
+                            object: "chat.completion.chunk".to_string(),
+                            created,
+                            model: String::new(),
+                            choices: vec![],
+                            usage: None,
+                        }
+                    }
+                    clust::messages::ContentBlockDelta::SignatureDeltaContentBlock(_sig) => {
+                        // Signature deltas do not map to user-visible content
+                        ChatCompletionChunk {
+                            id: String::new(),
+                            object: "chat.completion.chunk".to_string(),
+                            created,
+                            model: String::new(),
+                            choices: vec![],
+                            usage: None,
+                        }
+                    }
+                    clust::messages::ContentBlockDelta::InputJsonDeltaBlock(input_json_block) => {
+                        // Stream partial tool arguments as function call arguments
+                        let tool_call = ToolCall {
+                            index: None,
+                            id: String::new(),
+                            r#type: "function".to_string(),
+                            function: FunctionCall {
+                                name: String::new(),
+                                arguments: input_json_block.partial_json,
+                            },
+                            extra_content: None,
+                        };
+                        let delta = ChatCompletionDelta {
+                            role: Some("assistant".to_string()),
+                            content: None,
+                            tool_calls: Some(vec![tool_call]),
+                        };
+                        let choice = ChatCompletionChunkChoice {
+                            index: 0,
+                            delta,
+                            finish_reason: None,
+                            logprobs: None,
+                        };
+
+                        ChatCompletionChunk {
+                            id: String::new(),
+                            object: "chat.completion.chunk".to_string(),
+                            created,
+                            model: String::new(),
+                            choices: vec![choice],
+                            usage: None,
+                        }
+                    }
+                }
+            }
+            clust::messages::MessageChunk::MessageStart(start) => ChatCompletionChunk {
+                id: start.message.id,
+                object: "chat.completion.chunk".to_string(),
+                created,
+                model: String::new(),
+                choices: vec![],
+                usage: Some(start.message.usage.into()),
+            },
+            clust::messages::MessageChunk::MessageDelta(delta) => {
+                let finish_reason = delta.delta.stop_reason.as_ref().map(|reason| {
+                    match reason {
+                        clust::messages::StopReason::EndTurn
+                        | clust::messages::StopReason::StopSequence => "stop",
+                        clust::messages::StopReason::ToolUse => "tool_calls",
+                        clust::messages::StopReason::MaxTokens => "length",
+                    }
+                    .to_string()
+                });
+
+                let choice = ChatCompletionChunkChoice {
+                    index: 0,
+                    delta: ChatCompletionDelta {
+                        role: None,
+                        content: None,
+                        tool_calls: None,
+                    },
+                    finish_reason,
+                    logprobs: None,
+                };
+
+                ChatCompletionChunk {
+                    id: String::new(),
+                    object: "chat.completion.chunk".to_string(),
+                    created,
+                    model: String::new(),
+                    choices: vec![choice],
+                    usage: Some(delta.usage.into()),
+                }
+            }
+            clust::messages::MessageChunk::ContentBlockStop(_)
+            | clust::messages::MessageChunk::Ping(_)
+            | clust::messages::MessageChunk::MessageStop(_) => ChatCompletionChunk {
+                id: String::new(),
+                object: "chat.completion.chunk".to_string(),
+                created,
+                model: String::new(),
+                choices: vec![],
+                usage: None,
+            },
+        }
+    }
+}
+
 impl From<GenerateContentResponse> for ChatCompletionChunk {
     fn from(val: GenerateContentResponse) -> Self {
         ChatCompletionChunk {
             id: val.response_id,
             object: "chat.completion.chunk".to_string(),
-            created: chrono::Utc::now().timestamp() as i64,
+            created: chrono::Utc::now().timestamp(),
             model: val.model_version,
             choices: val.candidates.into_iter().map(|c| c.into()).collect(),
             usage: val.usage_metadata.map(|u| u.into()),
@@ -1000,7 +1252,8 @@ impl From<Candidate> for ChatCompletionChunkChoice {
             index: 0,
             delta: val.content.into(),
             finish_reason: val.finish_reason.as_ref().map(|f| {
-                let reason = crate::provider::gemini::model::GeminiModel::map_finish_reason(f, false);
+                let reason =
+                    crate::provider::gemini::model::GeminiModel::map_finish_reason(f, false);
                 reason.to_string()
             }),
             logprobs: None,
@@ -1032,7 +1285,7 @@ impl From<ChatCompletionStreamResponseDelta> for ChatCompletionDelta {
 
 impl From<GeminiContent> for ChatCompletionDelta {
     fn from(val: GeminiContent) -> Self {
-        let mut tool_calls = None;
+        let mut tool_calls: Option<Vec<ToolCall>> = None;
         let mut text = None;
         let mut contents: Vec<Content> = vec![];
         for part in val.parts {
@@ -1041,25 +1294,28 @@ impl From<GeminiContent> for ChatCompletionDelta {
                 crate::provider::gemini::types::Part::FunctionCall { name, args } => {
                     let tool_call = ToolCall {
                         id: name.clone(),
-                        function: FunctionCall { name: name.clone(), arguments: serde_json::to_string(&args).unwrap() },
+                        function: FunctionCall {
+                            name: name.clone(),
+                            arguments: serde_json::to_string(&args).unwrap(),
+                        },
                         extra_content: signature.as_ref().map(|s| ToolCallExtra {
                             google: Some(crate::types::GoogleToolCallExtra {
-                                    thought_signature: s.clone(),
-                                }),
+                                thought_signature: s.clone(),
                             }),
+                        }),
                         index: None,
                         r#type: "function".to_string(),
                     };
-    
-                    if tool_calls.is_none() {
-                        tool_calls = Some(vec![tool_call]);
+
+                    if let Some(tool_calls) = &mut tool_calls {
+                        tool_calls.push(tool_call);
                     } else {
-                        tool_calls.as_mut().expect("tool_calls should be Some").push(tool_call);
+                        tool_calls = Some(vec![tool_call]);
                     }
-                },
+                }
                 crate::provider::gemini::types::Part::Text(part_text) => {
                     text = Some(part_text.clone());
-                },
+                }
                 crate::provider::gemini::types::Part::InlineData { mime_type, data } => {
                     if mime_type.starts_with("audio/") {
                         contents.push(Content {
@@ -1076,7 +1332,10 @@ impl From<GeminiContent> for ChatCompletionDelta {
                         unreachable!("Unexpected mime type: {mime_type}");
                     }
                 }
-                crate::provider::gemini::types::Part::FileData { mime_type, file_uri } => {
+                crate::provider::gemini::types::Part::FileData {
+                    mime_type,
+                    file_uri,
+                } => {
                     if mime_type.starts_with("image/") {
                         contents.push(Content {
                             r#type: ContentType::ImageUrl,
@@ -1112,7 +1371,6 @@ impl From<GeminiContent> for ChatCompletionDelta {
             // }
             // Some(ChatCompletionContent::Content(contents))
         };
-
 
         ChatCompletionDelta {
             role: Some(match val.role {
