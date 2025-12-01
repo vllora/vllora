@@ -125,6 +125,19 @@ where
 
                 run_span = Some(span.clone());
 
+                let run_parent_span_id = match request_context {
+                    Some(context) => {
+                        let context_span = context.span();
+                        let span_context = context_span.span_context();
+                        if span_context.is_valid() {
+                            Some(span_context.span_id())
+                        } else {
+                            None
+                        }
+                    }
+                    None => None,
+                };
+
                 if let (Some(run_id), Some(thread_id)) = (run_id.as_ref(), thread_id.as_ref()) {
                     let parent_span_id = Some(span.context().span().span_context().span_id());
                     let event = Event::RunStarted {
@@ -132,7 +145,7 @@ where
                             run_id: Some(run_id.value()),
                             thread_id: Some(thread_id.value()),
                             span_id: parent_span_id,
-                            parent_span_id: None,
+                            parent_span_id: run_parent_span_id,
                         },
                         timestamp: std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
@@ -153,6 +166,9 @@ where
             let run_span_for_future = run_span.clone();
             let mut run_span_for_body = run_span;
 
+            let run_span_id = run_span_for_body
+                .as_ref()
+                .map(|span| span.context().span().span_context().span_id());
             async move {
                 let span: Span = tracing::info_span!(
                     target: "vllora::user_tracing::cloud_api",
@@ -173,18 +189,6 @@ where
                     ip = get_client_ip(req.request())
                 );
 
-                let parent_span_id = match request_context {
-                    Some(context) => {
-                        let context_span = context.span();
-                        let span_context = context_span.span_context();
-                        if span_context.is_valid() {
-                            Some(span_context.span_id())
-                        } else {
-                            None
-                        }
-                    }
-                    None => None,
-                };
 
                 if let (Some(run_id), Some(thread_id)) = (run_id, thread_id) {
                     let event = Event::Custom {
@@ -192,7 +196,7 @@ where
                             run_id: Some(run_id.value()),
                             thread_id: Some(thread_id.value()),
                             span_id: Some(span.context().span().span_context().span_id()),
-                            parent_span_id,
+                            parent_span_id: run_span_id,
                         },
                         timestamp: std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
