@@ -40,8 +40,8 @@ rmcp = { version = "0.9.1", default-features = true, features = [
   "transport-streamable-http-client-reqwest",
   "transport-sse-client-reqwest"
 ] }
-rmcp-macros = { version = "0.8.3", default-features = true}
-rmcp-actix-web = { version = "0.8.11", default-features = false, features = ["transport-streamable-http"] }
+rmcp-macros = { version = "0.9.1", default-features = true}
+rmcp-actix-web = { version = "0.8.17", default-features = false, features = ["transport-streamable-http"] }
 
 reqwest-eventsource = "0.6.0"
 reqwest = { version = "0.12.24", default-features = false, features = [
