@@ -183,7 +183,7 @@ where
                                 .map(|(k, v)| (k.as_str(), v.to_str().unwrap_or_default())).collect::<HashMap<_, _>>()
                         ).unwrap_or_default()
                     ).as_value(),
-                    http.response.status_code = field::Empty,
+                    HTTP_RESPONSE_STATUS_CODE = field::Empty,
                     status = field::Empty,
                     error = field::Empty,
                     ip = get_client_ip(req.request())
@@ -219,6 +219,7 @@ where
                 match service.call(req).instrument(span.clone()).await {
                     Ok(ok_res) => {
                         span.record(HTTP_RESPONSE_STATUS_CODE, ok_res.status().as_u16() as i64);
+                        span.record("status", ok_res.status().as_u16() as i64);
                         if let Some(error) = ok_res.response().error() {
                             span.record("error", error.to_string());
                         }
@@ -289,7 +290,6 @@ where
         match this.inner.poll_next(cx) {
             Poll::Ready(None) => {
                 if !*this.finished {
-                    this.span.record("status", "completed");
                     *this.finished = true;
                 }
                 Poll::Ready(None)
@@ -297,7 +297,7 @@ where
             Poll::Ready(Some(Err(err))) => {
                 this.span.record("error", err.to_string());
                 if !*this.finished {
-                    this.span.record("status", "error");
+                    this.span.record("status", 400 as i64);
                     *this.finished = true;
                 }
                 Poll::Ready(Some(Err(err)))
