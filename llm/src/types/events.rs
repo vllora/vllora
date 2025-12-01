@@ -226,6 +226,9 @@ pub enum CustomEventType {
     Breakpoint {
         request: Box<ChatCompletionRequest>,
     },
+    BreakpointResume {
+        updated_request: Option<Box<ChatCompletionRequest>>,
+    },
 }
 
 impl Event {

@@ -115,12 +115,7 @@ impl BreakpointManager {
 
         pending
             .keys()
-            .filter_map(|id| {
-                requests
-                    .get(id)
-                    .cloned()
-                    .map(|req| (id.clone(), req))
-            })
+            .filter_map(|id| requests.get(id).cloned().map(|req| (id.clone(), req)))
             .collect()
     }
 }
@@ -180,16 +175,34 @@ pub async fn wait_for_breakpoint_action(
 
     // Wait for the action
     match rx.await {
-        Ok(action) => match action {
-            BreakpointAction::Continue => {
-                tracing::info!(breakpoint_id = %breakpoint_id, "Breakpoint: Continuing with original request");
-                Ok(request.clone())
+        Ok(action) => {
+            let span = Span::current();
+            let event = ModelEventWithDetails::new(
+                ModelEvent::new(
+                    &span,
+                    ModelEventType::Custom(CustomEvent::new(CustomEventType::BreakpointResume {
+                        updated_request: match &action {
+                            BreakpointAction::Continue => None,
+                            BreakpointAction::ModifyRequest(modified_request) => {
+                                Some(modified_request.clone())
+                            }
+                        },
+                    })),
+                ),
+                None,
+            );
+            callback_handler.on_message(event);
+            match action {
+                BreakpointAction::Continue => {
+                    tracing::info!(breakpoint_id = %breakpoint_id, "Breakpoint: Continuing with original request");
+                    Ok(request.clone())
+                }
+                BreakpointAction::ModifyRequest(modified_request) => {
+                    tracing::info!(breakpoint_id = %breakpoint_id, "Breakpoint: Continuing with modified request");
+                    Ok(*modified_request)
+                }
             }
-            BreakpointAction::ModifyRequest(modified_request) => {
-                tracing::info!(breakpoint_id = %breakpoint_id, "Breakpoint: Continuing with modified request");
-                Ok(*modified_request)
-            }
-        },
+        }
         Err(_) => {
             tracing::error!(breakpoint_id = %breakpoint_id, "Breakpoint channel closed unexpectedly");
             Err(BreakpointError::ChannelClosed)
