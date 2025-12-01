@@ -45,6 +45,18 @@ pub async fn continue_breakpoint(
     }
 }
 
+/// Continue all pending breakpoints with the original request
+pub async fn continue_all_breakpoints(
+    breakpoint_manager: web::Data<BreakpointManager>,
+) -> Result<HttpResponse, GatewayApiError> {
+    breakpoint_manager.continue_all().await;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "status": "ok",
+        "continued": "all"
+    })))
+}
+
 pub async fn set_global_breakpoint(
     breakpoint_manager: web::Data<BreakpointManager>,
     request: web::Json<GlobalBreakpointRequest>,

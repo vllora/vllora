@@ -47,6 +47,21 @@ impl BreakpointManager {
         self.intercept_all.load(Ordering::Relaxed)
     }
 
+    /// Continue all pending breakpoints with the original request
+    pub async fn continue_all(&self) {
+        let mut pending = self.pending_breakpoints.lock().await;
+
+        // Drain all pending breakpoints and send Continue to each
+        for (breakpoint_id, sender) in pending.drain() {
+            if let Err(_action) = sender.send(BreakpointAction::Continue) {
+                tracing::error!(
+                    breakpoint_id = %breakpoint_id,
+                    "Failed to continue breakpoint: receiver dropped"
+                );
+            }
+        }
+    }
+
     /// Register a breakpoint and return a receiver to wait for the action
     pub async fn register_breakpoint(
         &self,

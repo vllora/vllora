@@ -407,6 +407,10 @@ impl ApiServer {
                 web::scope("/debug")
                     .route("/continue", web::post().to(debug::continue_breakpoint))
                     .route(
+                        "/continue/all",
+                        web::post().to(debug::continue_all_breakpoints),
+                    )
+                    .route(
                         "/global_breakpoint",
                         web::post().to(debug::set_global_breakpoint),
                     ),
