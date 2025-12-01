@@ -1,6 +1,7 @@
 use opentelemetry::SpanId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::{oneshot, Mutex};
 use tracing::Span;
@@ -25,13 +26,25 @@ pub enum BreakpointAction {
 #[derive(Clone)]
 pub struct BreakpointManager {
     pending_breakpoints: Arc<Mutex<HashMap<String, oneshot::Sender<BreakpointAction>>>>,
+    intercept_all: Arc<AtomicBool>,
 }
 
 impl BreakpointManager {
     pub fn new() -> Self {
         Self {
             pending_breakpoints: Arc::new(Mutex::new(HashMap::new())),
+            intercept_all: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    /// Enable or disable intercepting all requests regardless of tags
+    pub fn set_intercept_all(&self, value: bool) {
+        self.intercept_all.store(value, Ordering::Relaxed);
+    }
+
+    /// Returns whether all requests should be intercepted regardless of tags
+    pub fn intercept_all(&self) -> bool {
+        self.intercept_all.load(Ordering::Relaxed)
     }
 
     /// Register a breakpoint and return a receiver to wait for the action
@@ -91,8 +104,8 @@ pub async fn wait_for_breakpoint_action(
     request: &ChatCompletionRequest,
     callback_handler: &CallbackHandlerFn,
 ) -> Result<ChatCompletionRequest, BreakpointError> {
-    // Check if "debug" tag is present
-    if !executor_tags.contains_key("debug") {
+    // If global intercept is disabled, only intercept when "debug" tag is present
+    if !breakpoint_manager.intercept_all() && !executor_tags.contains_key("debug") {
         return Ok(request.clone());
     }
 

@@ -11,6 +11,13 @@ pub struct ContinueRequest {
     pub action: BreakpointAction,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct GlobalBreakpointRequest {
+    /// When true, intercept all requests regardless of tags.
+    /// When false, fall back to tag-based interception.
+    pub intercept_all: bool,
+}
+
 pub async fn continue_breakpoint(
     breakpoint_manager: web::Data<BreakpointManager>,
     request: web::Json<ContinueRequest>,
@@ -36,4 +43,18 @@ pub async fn continue_breakpoint(
             "Breakpoint channel closed".to_string(),
         )),
     }
+}
+
+pub async fn set_global_breakpoint(
+    breakpoint_manager: web::Data<BreakpointManager>,
+    request: web::Json<GlobalBreakpointRequest>,
+) -> Result<HttpResponse, GatewayApiError> {
+    let GlobalBreakpointRequest { intercept_all } = request.into_inner();
+
+    breakpoint_manager.set_intercept_all(intercept_all);
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "status": "ok",
+        "intercept_all": intercept_all
+    })))
 }

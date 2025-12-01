@@ -404,7 +404,12 @@ impl ApiServer {
                     .route("/fetch_key/{session_id}", web::get().to(session::fetch_key)),
             )
             .service(
-                web::scope("/debug").route("/continue", web::post().to(debug::continue_breakpoint)),
+                web::scope("/debug")
+                    .route("/continue", web::post().to(debug::continue_breakpoint))
+                    .route(
+                        "/global_breakpoint",
+                        web::post().to(debug::set_global_breakpoint),
+                    ),
             )
             .service(mcp_scope)
             .wrap(cors)
