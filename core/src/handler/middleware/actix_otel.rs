@@ -297,7 +297,7 @@ where
             Poll::Ready(Some(Err(err))) => {
                 this.span.record("error", err.to_string());
                 if !*this.finished {
-                    this.span.record("status", 400 as i64);
+                    this.span.record("status", 400_i64);
                     *this.finished = true;
                 }
                 Poll::Ready(Some(Err(err)))
