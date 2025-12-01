@@ -39,6 +39,7 @@ use tracing_futures::Instrument;
 use vllora_llm::types::gateway::{ChatCompletionDelta, CostCalculator};
 
 use crate::credentials::KeyStorage;
+use crate::executor::chat_completion::breakpoint::BreakpointManager;
 use crate::executor::chat_completion::routed_executor::RoutedExecutor;
 
 pub type SSOChatEvent = (
@@ -199,6 +200,10 @@ pub async fn create_chat_completion(
 ) -> Result<HttpResponse, GatewayApiError> {
     can_execute_llm_for_request(&req).await?;
 
+    let breakpoint_manager = req
+        .app_data::<web::Data<BreakpointManager>>()
+        .map(|bm| bm.as_ref());
+
     let span = Span::or_current(tracing::info_span!(
         target: "vllora::user_tracing::api_invoke",
         "api_invoke",
@@ -275,7 +280,13 @@ pub async fn create_chat_completion(
 
     let executor = RoutedExecutor::new(request.clone());
     executor
-        .execute(&executor_context, memory_storage, None, Some(&thread_id))
+        .execute(
+            &executor_context,
+            memory_storage,
+            None,
+            Some(&thread_id),
+            breakpoint_manager,
+        )
         .instrument(span.clone())
         .await
         .inspect_err(|e| {

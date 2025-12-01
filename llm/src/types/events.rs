@@ -1,7 +1,7 @@
 use opentelemetry::SpanId;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::types::CostEvent;
+use crate::types::{gateway::ChatCompletionRequest, CostEvent};
 
 /// Events based on the Agent User Interaction Protocol
 /// See https://docs.ag-ui.com/concepts/events for details
@@ -222,6 +222,9 @@ pub enum CustomEventType {
     CustomEvent {
         operation: String,
         attributes: serde_json::Value,
+    },
+    Breakpoint {
+        request: Box<ChatCompletionRequest>,
     },
 }
 

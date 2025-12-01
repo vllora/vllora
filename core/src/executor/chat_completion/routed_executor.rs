@@ -1,4 +1,5 @@
 use crate::executor::chat_completion::basic_executor::BasicCacheContext;
+use crate::executor::chat_completion::breakpoint::BreakpointManager;
 use crate::executor::context::ExecutorContext;
 use crate::routing::metrics::InMemoryMetricsRepository;
 use crate::routing::RoutingStrategy;
@@ -68,6 +69,7 @@ impl RoutedExecutor {
         memory_storage: Option<Arc<Mutex<InMemoryStorage>>>,
         project_id: Option<&uuid::Uuid>,
         thread_id: Option<&String>,
+        breakpoint_manager: Option<&BreakpointManager>,
     ) -> Result<HttpResponse, GatewayApiError> {
         let span = Span::current();
 
@@ -148,10 +150,15 @@ impl RoutedExecutor {
                     }
                 }
             } else {
-                let result =
-                    Self::execute_request(&request, executor_context, project_id, thread_id)
-                        .instrument(span.clone())
-                        .await;
+                let result = Self::execute_request(
+                    &request,
+                    executor_context,
+                    project_id,
+                    thread_id,
+                    breakpoint_manager,
+                )
+                .instrument(span.clone())
+                .await;
 
                 match result {
                     Ok(response) => return Ok(response),
@@ -177,6 +184,7 @@ impl RoutedExecutor {
         executor_context: &ExecutorContext,
         project_id: Option<&uuid::Uuid>,
         thread_id: Option<&String>,
+        breakpoint_manager: Option<&BreakpointManager>,
     ) -> Result<HttpResponse, GatewayApiError> {
         let span = tracing::Span::current();
         span.record("request", &serde_json::to_string(&request)?);
@@ -217,6 +225,7 @@ impl RoutedExecutor {
             StreamCacheContext::default(),
             BasicCacheContext::default(),
             &llm_model,
+            breakpoint_manager,
         )
         .instrument(span.clone())
         .await?;

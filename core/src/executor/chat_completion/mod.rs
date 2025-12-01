@@ -42,8 +42,10 @@ use uuid::Uuid;
 use vllora_llm::types::credentials_ident::CredentialsIdent;
 
 use super::context::ExecutorContext;
+use crate::executor::chat_completion::breakpoint::{wait_for_breakpoint_action, BreakpointManager};
 
 pub mod basic_executor;
+pub mod breakpoint;
 pub mod routed_executor;
 pub mod stream_executor;
 pub mod stream_wrapper;
@@ -59,6 +61,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
     stream_cache_context: StreamCacheContext,
     basic_cache_context: BasicCacheContext,
     llm_model: &ModelMetadata,
+    breakpoint_manager: Option<&BreakpointManager>,
 ) -> Result<ChatCompletionExecutionResult, GatewayApiError> {
     let span = Span::current();
 
@@ -84,6 +87,29 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         }
     }
 
+    let mut request_to_use = request_with_tools.request.clone();
+    if let Some(breakpoint_manager) = breakpoint_manager {
+        match wait_for_breakpoint_action(
+            &executor_context.tags,
+            breakpoint_manager,
+            &request_with_tools.request,
+            &executor_context.callbackhandler,
+        )
+        .await
+        {
+            Ok(modified_request) => {
+                request_to_use = modified_request;
+            }
+            Err(e) => {
+                tracing::error!("Breakpoint error: {}", e);
+                return Err(GatewayApiError::CustomError(format!(
+                    "Breakpoint error: {}",
+                    e
+                )));
+            }
+        }
+    }
+
     let key = GatewayCredentials::extract_key_from_model(
         llm_model,
         &executor_context.project_id.to_string(),
@@ -92,14 +118,18 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
     )
     .await
     .map_err(|e| GatewayApiError::CustomError(e.to_string()))?;
+    // Create a modified request_with_tools with the potentially modified request
+    let mut modified_request_with_tools = request_with_tools.clone();
+    modified_request_with_tools.request = request_to_use.clone();
+
     let resolved_model_context = resolve_model_instance(
         executor_context,
-        request_with_tools,
+        &modified_request_with_tools,
         tools_map,
         tools,
         router_span,
         request_with_tools.extra.as_ref(),
-        request_with_tools.request.messages.clone(),
+        request_to_use.messages.clone(),
         cached_instance,
         cache_state,
         llm_model,
@@ -107,7 +137,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
     )
     .await?;
 
-    let mut request = request_with_tools.request.clone();
+    let mut request = request_to_use;
     request.model = llm_model.inference_provider.model_name.clone();
 
     let user: String = request

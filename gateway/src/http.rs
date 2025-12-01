@@ -2,7 +2,7 @@ use crate::callback_handler::init_callback_handler;
 use crate::config::Config;
 use crate::cost::GatewayCostCalculator;
 use crate::guardrails::GuardrailsService;
-use crate::handlers::{models, projects, session, threads};
+use crate::handlers::{debug, models, projects, session, threads};
 use crate::middleware::project::ProjectMiddleware;
 use crate::middleware::thread_service::ThreadsServiceMiddleware;
 use crate::middleware::trace_logger::TraceLogger;
@@ -29,6 +29,7 @@ use vllora_core::events::broadcast_channel_manager::BroadcastChannelManager;
 use vllora_core::events::callback_handler::GatewayCallbackHandlerFn;
 use vllora_core::events::ui_broadcaster::EventsSendersContainer;
 use vllora_core::events::ui_broadcaster::EventsUIBroadcaster;
+use vllora_core::executor::chat_completion::breakpoint::BreakpointManager;
 use vllora_core::handler::chat::create_chat_completion;
 use vllora_core::handler::embedding::embeddings_handler;
 use vllora_core::handler::group;
@@ -167,7 +168,9 @@ impl ApiServer {
 
         let project_traces_senders = project_trace_senders.clone();
         let session_manager = Arc::new(LocalSessionManager::default());
+        let breakpoint_manager = Arc::new(BreakpointManager::new());
 
+        let breakpoint_manager_for_closure = breakpoint_manager.clone();
         let server = HttpServer::new(move || {
             let cors = Self::get_cors(CorsOptions::Permissive);
             Self::create_app_entry(
@@ -182,6 +185,7 @@ impl ApiServer {
                 run_span_buffer.clone(),
                 session.clone(),
                 session_manager.clone(),
+                breakpoint_manager_for_closure.clone(),
             )
         })
         .bind((self.config.http.host.as_str(), self.config.http.port))?
@@ -228,6 +232,7 @@ impl ApiServer {
         run_span_buffer: Arc<RunSpanBuffer>,
         session: DbSession,
         session_manager: Arc<LocalSessionManager>,
+        breakpoint_manager: Arc<BreakpointManager>,
     ) -> App<
         impl ServiceFactory<
             ServiceRequest,
@@ -280,6 +285,7 @@ impl ApiServer {
             .app_data(Data::new(key_storage))
             .app_data(Data::new(session))
             .app_data(Data::new(database_service))
+            .app_data(Data::from(breakpoint_manager.clone()))
             .service(
                 service
                     .app_data(Data::new(model_service))
@@ -396,6 +402,9 @@ impl ApiServer {
                     .route("/track", web::post().to(session::track_session))
                     .route("/start", web::post().to(session::start_session))
                     .route("/fetch_key/{session_id}", web::get().to(session::fetch_key)),
+            )
+            .service(
+                web::scope("/debug").route("/continue", web::post().to(debug::continue_breakpoint)),
             )
             .service(mcp_scope)
             .wrap(cors)
