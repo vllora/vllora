@@ -411,6 +411,10 @@ impl ApiServer {
                         web::post().to(debug::continue_all_breakpoints),
                     )
                     .route(
+                        "/breakpoints",
+                        web::get().to(debug::list_breakpoints),
+                    )
+                    .route(
                         "/global_breakpoint",
                         web::post().to(debug::set_global_breakpoint),
                     ),

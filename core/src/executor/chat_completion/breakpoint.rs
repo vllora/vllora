@@ -26,6 +26,7 @@ pub enum BreakpointAction {
 #[derive(Clone)]
 pub struct BreakpointManager {
     pending_breakpoints: Arc<Mutex<HashMap<String, oneshot::Sender<BreakpointAction>>>>,
+    breakpoint_requests: Arc<Mutex<HashMap<String, ChatCompletionRequest>>>,
     intercept_all: Arc<AtomicBool>,
 }
 
@@ -33,6 +34,7 @@ impl BreakpointManager {
     pub fn new() -> Self {
         Self {
             pending_breakpoints: Arc::new(Mutex::new(HashMap::new())),
+            breakpoint_requests: Arc::new(Mutex::new(HashMap::new())),
             intercept_all: Arc::new(AtomicBool::new(false)),
         }
     }
@@ -50,9 +52,12 @@ impl BreakpointManager {
     /// Continue all pending breakpoints with the original request
     pub async fn continue_all(&self) {
         let mut pending = self.pending_breakpoints.lock().await;
+        let mut requests = self.breakpoint_requests.lock().await;
 
         // Drain all pending breakpoints and send Continue to each
         for (breakpoint_id, sender) in pending.drain() {
+            // Remove stored request as we're resuming execution
+            requests.remove(&breakpoint_id);
             if let Err(_action) = sender.send(BreakpointAction::Continue) {
                 tracing::error!(
                     breakpoint_id = %breakpoint_id,
@@ -66,10 +71,13 @@ impl BreakpointManager {
     pub async fn register_breakpoint(
         &self,
         breakpoint_id: String,
+        request: ChatCompletionRequest,
     ) -> oneshot::Receiver<BreakpointAction> {
         let (tx, rx) = oneshot::channel();
         let mut pending = self.pending_breakpoints.lock().await;
-        pending.insert(breakpoint_id, tx);
+        let mut requests = self.breakpoint_requests.lock().await;
+        pending.insert(breakpoint_id.clone(), tx);
+        requests.insert(breakpoint_id, request);
         rx
     }
 
@@ -80,7 +88,10 @@ impl BreakpointManager {
         action: BreakpointAction,
     ) -> Result<(), BreakpointError> {
         let mut pending = self.pending_breakpoints.lock().await;
+        let mut requests = self.breakpoint_requests.lock().await;
         if let Some(tx) = pending.remove(breakpoint_id) {
+            // remove stored request when resolved
+            requests.remove(breakpoint_id);
             tx.send(action)
                 .map_err(|_| BreakpointError::ChannelClosed)?;
             Ok(())
@@ -95,6 +106,22 @@ impl BreakpointManager {
     pub async fn has_breakpoint(&self, breakpoint_id: &str) -> bool {
         let pending = self.pending_breakpoints.lock().await;
         pending.contains_key(breakpoint_id)
+    }
+
+    /// List all currently pending breakpoints and their stored requests
+    pub async fn list_breakpoints(&self) -> Vec<(String, ChatCompletionRequest)> {
+        let pending = self.pending_breakpoints.lock().await;
+        let requests = self.breakpoint_requests.lock().await;
+
+        pending
+            .keys()
+            .filter_map(|id| {
+                requests
+                    .get(id)
+                    .cloned()
+                    .map(|req| (id.clone(), req))
+            })
+            .collect()
     }
 }
 
@@ -142,7 +169,7 @@ pub async fn wait_for_breakpoint_action(
 
     // Register the breakpoint and get the receiver
     let rx = breakpoint_manager
-        .register_breakpoint(breakpoint_id.clone())
+        .register_breakpoint(breakpoint_id.clone(), request.clone())
         .await;
 
     // Log that we're waiting for breakpoint

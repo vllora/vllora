@@ -57,6 +57,25 @@ pub async fn continue_all_breakpoints(
     })))
 }
 
+/// List all pending breakpoints and their stored requests
+pub async fn list_breakpoints(
+    breakpoint_manager: web::Data<BreakpointManager>,
+) -> Result<HttpResponse, GatewayApiError> {
+    let breakpoints = breakpoint_manager.list_breakpoints().await;
+
+    let response: Vec<_> = breakpoints
+        .into_iter()
+        .map(|(breakpoint_id, request)| {
+            serde_json::json!({
+                "breakpoint_id": breakpoint_id,
+                "request": request,
+            })
+        })
+        .collect();
+
+    Ok(HttpResponse::Ok().json(response))
+}
+
 pub async fn set_global_breakpoint(
     breakpoint_manager: web::Data<BreakpointManager>,
     request: web::Json<GlobalBreakpointRequest>,
