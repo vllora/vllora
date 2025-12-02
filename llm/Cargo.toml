@@ -1,6 +1,6 @@
 [package]
 name = "vllora_llm"
-version = "0.1.11"
+version = "0.1.12"
 authors = ["Vllora Team<api@vllora.dev>"]
 description = "AI gateway for managing and routing LLM requests - Govern, Secure, and Optimize your AI Traffic."
 license = "Apache-2.0"
@@ -17,7 +17,7 @@ path = "src/lib.rs"
 
 
 [dependencies]
-vllora_telemetry = { path = "../telemetry", version = "0.1.7" }
+vllora_telemetry = { path = "../telemetry", version = "0.1.12" }
 
 async-openai = { package = "async-openai-compat", version = "0.29.8" }
 clust = { version = "0.9.10", package = "langdb_clust" }
