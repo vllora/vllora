@@ -53,7 +53,9 @@ fi
 echo "Generating CHANGELOG..."
 npx standard-version --release-as "$NEW_VERSION" --tag-prefix "" --skip.tag true
 
-git add CHANGELOG.md core/Cargo.toml gateway/Cargo.toml guardrails/Cargo.toml telemetry/Cargo.toml llm/Cargo.toml
+cargo build --release
+
+git add CHANGELOG.md core/Cargo.toml gateway/Cargo.toml guardrails/Cargo.toml telemetry/Cargo.toml llm/Cargo.toml Cargo.lock
 git commit -m "chore: release v$NEW_VERSION"
 git push origin main
 
