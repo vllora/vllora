@@ -40,8 +40,11 @@ impl BreakpointManager {
     }
 
     /// Enable or disable intercepting all requests regardless of tags
-    pub fn set_intercept_all(&self, value: bool) {
+    pub async fn set_intercept_all(&self, value: bool) {
         self.intercept_all.store(value, Ordering::Relaxed);
+        if !value {
+            self.continue_all().await;
+        }
     }
 
     /// Returns whether all requests should be intercepted regardless of tags
@@ -142,6 +145,11 @@ pub async fn wait_for_breakpoint_action(
     callback_handler: &CallbackHandlerFn,
 ) -> Result<ChatCompletionRequest, BreakpointError> {
     // If global intercept is disabled, only intercept when "debug" tag is present
+    tracing::warn!(
+        "wait_for_breakpoint_action: intercept_all: {}, executor_tags: {:?}",
+        breakpoint_manager.intercept_all(),
+        executor_tags
+    );
     if !breakpoint_manager.intercept_all() && !executor_tags.contains_key("debug") {
         return Ok(request.clone());
     }

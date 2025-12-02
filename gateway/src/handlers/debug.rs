@@ -86,7 +86,7 @@ pub async fn set_global_breakpoint(
 ) -> Result<HttpResponse, GatewayApiError> {
     let GlobalBreakpointRequest { intercept_all } = request.into_inner();
 
-    breakpoint_manager.set_intercept_all(intercept_all);
+    breakpoint_manager.set_intercept_all(intercept_all).await;
 
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "status": "ok",
