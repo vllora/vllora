@@ -1,6 +1,6 @@
 [package]
 name = "vllora_core"
-version = "0.1.11"
+version = "0.1.12"
 edition = "2021"
 authors = ["Vllora Team<api@vllora.dev>"]
 description = "AI gateway Core for Vllora."
@@ -16,8 +16,8 @@ name = "vllora_core"
 path = "src/lib.rs"
 
 [dependencies]
-vllora_llm = { path = "../llm", version = "0.1.7" }
-vllora_telemetry = { path = "../telemetry", version = "0.1.7" }
+vllora_llm = { path = "../llm", version = "0.1.12" }
+vllora_telemetry = { path = "../telemetry", version = "0.1.12" }
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
 tracing-futures = { workspace = true }
