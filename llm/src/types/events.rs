@@ -229,6 +229,9 @@ pub enum CustomEventType {
     BreakpointResume {
         updated_request: Option<Box<ChatCompletionRequest>>,
     },
+    GlobalBreakpoint {
+        intercept_all: bool,
+    },
 }
 
 impl Event {
@@ -260,7 +263,7 @@ impl Event {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EventRunContext {
     pub run_id: Option<String>,
     pub thread_id: Option<String>,

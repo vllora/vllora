@@ -1,8 +1,12 @@
 use actix_web::{web, HttpResponse, Result};
 use serde::Deserialize;
+use vllora_core::events::callback_handler::GatewayCallbackHandlerFn;
+use vllora_core::events::callback_handler::GatewayEvent;
+use vllora_core::events::callback_handler::GlobalBreakpointStateEvent;
 use vllora_core::executor::chat_completion::breakpoint::{
     BreakpointAction, BreakpointError, BreakpointManager,
 };
+use vllora_core::types::metadata::project::Project;
 use vllora_core::GatewayApiError;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -83,10 +87,22 @@ pub async fn list_breakpoints(
 pub async fn set_global_breakpoint(
     breakpoint_manager: web::Data<BreakpointManager>,
     request: web::Json<GlobalBreakpointRequest>,
+    callback_handler: web::Data<GatewayCallbackHandlerFn>,
+    project: web::ReqData<Project>,
 ) -> Result<HttpResponse, GatewayApiError> {
     let GlobalBreakpointRequest { intercept_all } = request.into_inner();
 
     breakpoint_manager.set_intercept_all(intercept_all).await;
+
+    callback_handler
+        .on_message(GatewayEvent::GlobalBreakpointEvent(
+            GlobalBreakpointStateEvent {
+                intercept_all,
+                tenant_name: "vllora".to_string(),
+                project_id: project.slug.clone(),
+            },
+        ))
+        .await;
 
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "status": "ok",

@@ -96,9 +96,17 @@ impl GatewaySpanStartEvent {
 }
 
 #[derive(Debug, Clone)]
+pub struct GlobalBreakpointStateEvent {
+    pub intercept_all: bool,
+    pub tenant_name: String,
+    pub project_id: String,
+}
+
+#[derive(Debug, Clone)]
 pub enum GatewayEvent {
     SpanStartEvent(Box<GatewaySpanStartEvent>),
     ChatEvent(Box<GatewayModelEventWithDetails>),
+    GlobalBreakpointEvent(GlobalBreakpointStateEvent),
 }
 
 impl GatewayEvent {
@@ -106,6 +114,7 @@ impl GatewayEvent {
         match self {
             GatewayEvent::SpanStartEvent(event) => event.project_id.clone(),
             GatewayEvent::ChatEvent(event) => event.project_id.clone(),
+            GatewayEvent::GlobalBreakpointEvent(event) => event.project_id.clone(),
         }
     }
 
@@ -113,6 +122,7 @@ impl GatewayEvent {
         match self {
             GatewayEvent::SpanStartEvent(event) => event.tenant_name.clone(),
             GatewayEvent::ChatEvent(event) => event.tenant_name.clone(),
+            GatewayEvent::GlobalBreakpointEvent(event) => event.tenant_name.clone(),
         }
     }
 }
@@ -135,6 +145,7 @@ impl From<GatewayEvent> for EventRunContext {
                     string_to_span_id(&span_id)
                 }),
             },
+            GatewayEvent::GlobalBreakpointEvent(_event) => EventRunContext::default(),
         }
     }
 }

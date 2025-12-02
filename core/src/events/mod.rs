@@ -159,5 +159,17 @@ pub fn map_cloud_event_to_agui_events(value: &GatewayEvent) -> Vec<Event> {
                 },
             }]
         }
+        GatewayEvent::GlobalBreakpointEvent(event) => {
+            vec![Event::Custom {
+                run_context: value.clone().into(),
+                timestamp: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis() as u64,
+                custom_event: CustomEventType::GlobalBreakpoint {
+                    intercept_all: event.intercept_all,
+                },
+            }]
+        }
     }
 }
