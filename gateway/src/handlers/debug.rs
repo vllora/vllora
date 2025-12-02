@@ -72,8 +72,12 @@ pub async fn list_breakpoints(
             })
         })
         .collect();
+    let intercept_all = breakpoint_manager.intercept_all();
 
-    Ok(HttpResponse::Ok().json(response))
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "breakpoints": response,
+        "intercept_all": intercept_all
+    })))
 }
 
 pub async fn set_global_breakpoint(
@@ -89,3 +93,4 @@ pub async fn set_global_breakpoint(
         "intercept_all": intercept_all
     })))
 }
+
