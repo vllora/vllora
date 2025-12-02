@@ -297,10 +297,8 @@ pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Cl
 
     let request = request.request.clone();
 
-    let mut builder = CompletionEngineParamsBuilder::new(
-        llm_model.inference_provider.provider.clone(),
-        request.clone(),
-    );
+    let mut builder =
+        CompletionEngineParamsBuilder::new(llm_model.inference_provider.clone(), request.clone());
 
     builder = builder.with_model_name(llm_model.inference_provider.model_name.clone());
 

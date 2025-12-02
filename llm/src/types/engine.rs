@@ -15,7 +15,7 @@ use crate::types::credentials::BedrockCredentials;
 use crate::types::credentials::{ApiKeyCredentials, Credentials};
 use crate::types::credentials_ident::CredentialsIdent;
 use crate::types::gateway::{ChatCompletionRequest, ProviderSpecificRequest};
-use crate::types::models::ModelType;
+use crate::types::models::{InferenceProvider, ModelType};
 use crate::types::provider::{InferenceModelProvider, ModelPrice};
 use crate::types::tools::ModelTools;
 
@@ -286,7 +286,7 @@ impl CompletionEngineParams {
 }
 
 pub struct CompletionEngineParamsBuilder {
-    pub provider: InferenceModelProvider,
+    pub provider: InferenceProvider,
     pub request: ChatCompletionRequest,
     pub model_name: Option<String>,
     pub credentials: Option<Credentials>,
@@ -296,7 +296,7 @@ pub struct CompletionEngineParamsBuilder {
 }
 
 impl CompletionEngineParamsBuilder {
-    pub fn new(provider: InferenceModelProvider, request: ChatCompletionRequest) -> Self {
+    pub fn new(provider: InferenceProvider, request: ChatCompletionRequest) -> Self {
         Self {
             provider,
             request,
@@ -334,7 +334,7 @@ impl CompletionEngineParamsBuilder {
     }
 
     pub fn build(self) -> Result<CompletionEngineParams, LLMError> {
-        match &self.provider {
+        match &self.provider.provider {
             InferenceModelProvider::OpenAI | InferenceModelProvider::Proxy(_) => {
                 let params = OpenAiModelParams {
                     model: self
@@ -367,7 +367,7 @@ impl CompletionEngineParamsBuilder {
                     }
                     _ => None,
                 });
-                match &self.provider {
+                match &self.provider.provider {
                     InferenceModelProvider::OpenAI => Ok(CompletionEngineParams::OpenAi {
                         params,
                         execution_options: self.execution_options.unwrap_or_default(),
@@ -375,12 +375,13 @@ impl CompletionEngineParamsBuilder {
                         endpoint: None,
                     }),
                     InferenceModelProvider::Proxy(proxy_provider) => {
+                        let endpoint = custom_endpoint.or_else(|| self.provider.endpoint.clone());
                         if proxy_provider == "azure" {
                             Ok(CompletionEngineParams::OpenAi {
                                 params,
                                 execution_options: self.execution_options.unwrap_or_default(),
                                 credentials: api_key_credentials,
-                                endpoint: custom_endpoint,
+                                endpoint,
                             })
                         } else {
                             Ok(CompletionEngineParams::Proxy {
@@ -388,7 +389,7 @@ impl CompletionEngineParamsBuilder {
                                 execution_options: self.execution_options.unwrap_or_default(),
                                 credentials: api_key_credentials,
                                 provider_name: proxy_provider.clone(),
-                                endpoint: custom_endpoint,
+                                endpoint,
                             })
                         }
                     }

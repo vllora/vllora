@@ -54,8 +54,10 @@ impl VlloraLLMClient {
 #[cfg(test)]
 mod tests {
     use crate::provider::tests::MockStreamServer;
+    use crate::types::credentials::ApiKeyCredentials;
     use crate::types::credentials::Credentials;
     use crate::types::engine::CompletionEngineParamsBuilder;
+    use crate::types::models::InferenceProvider;
     use crate::types::provider::InferenceModelProvider;
     use async_openai::types::{
         ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs,
@@ -102,15 +104,18 @@ mod tests {
             .unwrap();
 
         let mut engine_params_builder = CompletionEngineParamsBuilder::new(
-            InferenceModelProvider::Proxy("test".to_string()),
+            InferenceProvider {
+                provider: InferenceModelProvider::Proxy("test".to_string()),
+                model_name: "test".to_string(),
+                endpoint: Some(server_url.clone()),
+            },
             openai_req.clone().into(),
         );
 
         engine_params_builder =
-            engine_params_builder.with_credentials(Credentials::ApiKeyWithEndpoint {
+            engine_params_builder.with_credentials(Credentials::ApiKey(ApiKeyCredentials {
                 api_key: "test".to_string(),
-                endpoint: server_url.clone(),
-            });
+            }));
 
         let mut stream = VlloraLLMClient::new_with_engine_params_builder(engine_params_builder)
             .await
