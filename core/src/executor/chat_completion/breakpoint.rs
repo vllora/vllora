@@ -145,11 +145,6 @@ pub async fn wait_for_breakpoint_action(
     callback_handler: &CallbackHandlerFn,
 ) -> Result<ChatCompletionRequest, BreakpointError> {
     // If global intercept is disabled, only intercept when "debug" tag is present
-    tracing::warn!(
-        "wait_for_breakpoint_action: intercept_all: {}, executor_tags: {:?}",
-        breakpoint_manager.intercept_all(),
-        executor_tags
-    );
     if !breakpoint_manager.intercept_all() && !executor_tags.contains_key("debug") {
         return Ok(request.clone());
     }
