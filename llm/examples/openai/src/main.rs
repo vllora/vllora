@@ -7,13 +7,7 @@ use async_openai_compat::types::{
 use tokio_stream::StreamExt;
 
 use vllora_llm::client::VlloraLLMClient;
-use vllora_llm::types::credentials::Credentials;
-use vllora_llm::types::engine::CompletionEngineParamsBuilder;
-use vllora_llm::types::gateway::ChatCompletionRequest;
-use vllora_llm::types::provider::InferenceModelProvider;
 use vllora_llm::error::LLMResult;
-use vllora_llm::types::models::InferenceProvider;
-use vllora_llm::types::credentials::ApiKeyCredentials;
 
 #[tokio::main]
 async fn main() -> LLMResult<()> {
@@ -35,11 +29,7 @@ async fn main() -> LLMResult<()> {
         .build()?;
 
     // 2) Construct a VlloraLLMClient
-    let client = VlloraLLMClient::new()
-        .with_credentials(Credentials::ApiKey(ApiKeyCredentials {
-            api_key: std::env::var("VLLORA_OPENAI_API_KEY")
-                .expect("VLLORA_OPENAI_API_KEY must be set")
-        }));
+    let client = VlloraLLMClient::new();
 
     // 3) Non-streaming: send the request and print the final reply
     let response = client

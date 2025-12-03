@@ -1,12 +1,71 @@
 ## Vllora LLM crate (`vllora_llm`)
 
+![Crates.io](https://img.shields.io/crates/v/vllora_llm)
+
 This crate powers the Vllora AI Gateway’s LLM layer. It provides:
 
 - **Unified chat-completions client** over multiple providers (OpenAI-compatible, Anthropic, Gemini, Bedrock, …)
 - **Gateway-native types** (`ChatCompletionRequest`, `ChatCompletionMessage`, routing & tools support)
 - **Streaming responses and telemetry hooks** via a common `ModelInstance` trait
+- **Tracing integration**: out-of-the-box `tracing` support, with a console example in `llm/examples/tracing` (spans/events to stdout) and an OTLP example in `llm/examples/tracing_otlp` (send spans to external collectors such as New Relic)
 
 Use it when you want to talk to the gateway’s LLM engine from Rust code, without worrying about provider-specific SDKs.
+
+---
+
+## Installation
+
+Run `cargo add vllora_llm` or add to your `Cargo.toml`:
+
+```toml
+[dependencies]
+vllora_llm = "0.1"
+```
+
+---
+
+## Quick start
+
+Here's a minimal example to get started:
+
+```rust
+use vllora_llm::client::VlloraLLMClient;
+use vllora_llm::types::gateway::{ChatCompletionRequest, ChatCompletionMessage};
+use vllora_llm::error::LLMResult;
+
+#[tokio::main]
+async fn main() -> LLMResult<()> {
+    // 1) Build a chat completion request using gateway-native types
+    let request = ChatCompletionRequest {
+        model: "gpt-4.1-mini".to_string(),
+        messages: vec![
+            ChatCompletionMessage::new_text(
+                "system".to_string(),
+                "You are a helpful assistant.".to_string(),
+            ),
+            ChatCompletionMessage::new_text(
+                "user".to_string(),
+                "Stream numbers 1 to 20 in separate lines.".to_string(),
+            ),
+        ],
+        ..Default::default()
+    };
+
+    // 2) Construct a VlloraLLMClient
+    let client = VlloraLLMClient::new();
+
+    // 3) Non-streaming: send the request and print the final reply
+    let response = client
+        .completions()
+        .create(request.clone())
+        .await?;
+    
+    // ... handle response
+    Ok(())
+}
+```
+
+**Note**: By default, `VlloraLLMClient::new()` fetches API keys from environment variables following the pattern `VLLORA_{PROVIDER_NAME}_API_KEY`. For example, for OpenAI, it will look for `VLLORA_OPENAI_API_KEY`.
 
 ---
 
@@ -198,6 +257,8 @@ There are runnable examples under `llm/examples/` that mirror the patterns above
 - **`gemini`**: Gemini chat completions via the unified client.
 - **`bedrock`**: AWS Bedrock chat completions (Nova etc.) via the unified client.
 - **`proxy_langdb`**: Using `InferenceModelProvider::Proxy("langdb")` to call a LangDB OpenAI-compatible endpoint.
+- **`tracing`**: Same OpenAI-style flow as `openai`, but with `tracing_subscriber::fmt()` configured to emit spans and events to the console (stdout).
+- **`tracing_otlp`**: Shows how to wire `vllora_telemetry::events::layer` to an OTLP HTTP exporter (e.g. New Relic / any OTLP collector) and emit spans from `VlloraLLMClient` calls to a remote telemetry backend.
 
 Each example is a standalone Cargo binary; you can `cd` into a directory and run:
 

@@ -2,12 +2,12 @@
 name = "vllora_llm"
 version = "0.1.13"
 authors = ["Vllora Team<api@vllora.dev>"]
-description = "AI gateway for managing and routing LLM requests - Govern, Secure, and Optimize your AI Traffic."
+description = "LLM client layer for the Vllora AI Gateway: unified chat-completions over multiple providers (OpenAI, Anthropic, Gemini, Bedrock, LangDB proxy) with optional tracing/telemetry."
 license = "Apache-2.0"
 repository = "https://github.com/vllora/vllora"
 documentation = "https://vllora.dev/docs"
 readme = "./README.md"
-keywords = ["llm", "openai", "anthropic", "gemini", "mcp"]
+keywords = ["llm", "openai", "anthropic", "gemini", "mcp", "tracing", "telemetry"]
 categories = ["web-programming", "network-programming"]
 edition = "2021"
 
@@ -64,4 +64,7 @@ uuid = { workspace = true }
 rand = "0.9.2"
 
 [features]
+# Default feature set. Telemetry is exposed via `tracing` and
+# `vllora_telemetry`; see `llm/examples/tracing` for a console
+# tracing setup.
 default = []

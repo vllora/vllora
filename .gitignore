@@ -8,3 +8,5 @@ config.yaml
 .DS_Store
 *.sqlite
 *.db
+**/target/
+**/Cargo.lock
