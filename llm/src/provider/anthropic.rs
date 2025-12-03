@@ -1221,7 +1221,7 @@ impl ModelInstance for AnthropicModel {
         let tx_clone = tx.clone();
         tokio::spawn(
             async move {
-                model
+                let result = model
                     .execute_stream(
                         system_prompt,
                         conversational_messages,
@@ -1229,8 +1229,11 @@ impl ModelInstance for AnthropicModel {
                         &tx_response,
                         tags,
                     )
-                    .await
-                    .unwrap();
+                    .await;
+
+                if let Err(e) = result {
+                    let _ = tx_response.send(Err(e)).await;
+                }
             }
             .instrument(tracing::Span::current()),
         );

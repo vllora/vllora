@@ -1202,11 +1202,14 @@ where
         let tx_clone = tx.clone();
         tokio::spawn(
             async move {
-                model
+                let result = model
                     .execute_stream(conversational_messages, &tx_clone, &tx_response, tags)
                     .instrument(tracing::Span::current())
-                    .await
-                    .unwrap();
+                    .await;
+
+                if let Err(e) = result {
+                    let _ = tx_response.send(Err(e)).await;
+                }
             }
             .instrument(tracing::Span::current()),
         );
