@@ -120,7 +120,7 @@ mod tests {
             .build()
             .unwrap();
 
-        let mut engine_params_builder = CompletionEngineParamsBuilder::new()
+        let engine_params_builder = CompletionEngineParamsBuilder::new()
             .with_provider(InferenceProvider {
                 provider: InferenceModelProvider::Proxy("test".to_string()),
                 model_name: "test".to_string(),
@@ -131,8 +131,6 @@ mod tests {
             }));
 
         let mut stream = VlloraLLMClient::new_with_engine_params_builder(engine_params_builder)
-            .await
-            .unwrap()
             .completions()
             .create_stream(openai_req)
             .await

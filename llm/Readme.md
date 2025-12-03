@@ -8,6 +8,7 @@ This crate powers the Vllora AI Gateway’s LLM layer. It provides:
 - **Gateway-native types** (`ChatCompletionRequest`, `ChatCompletionMessage`, routing & tools support)
 - **Streaming responses and telemetry hooks** via a common `ModelInstance` trait
 - **Tracing integration**: out-of-the-box `tracing` support, with a console example in `llm/examples/tracing` (spans/events to stdout) and an OTLP example in `llm/examples/tracing_otlp` (send spans to external collectors such as New Relic)
+- **Supported parameters**: See [Supported parameters](#supported-parameters) for a detailed table of which parameters are honored by each provider
 
 Use it when you want to talk to the gateway’s LLM engine from Rust code, without worrying about provider-specific SDKs.
 
@@ -204,6 +205,8 @@ Key pieces:
 
 ---
 
+---
+
 ## Streaming completions
 
 `CompletionsClient::create_stream` returns a `ResultStream` that yields streaming chunks:
@@ -248,6 +251,34 @@ The stream API mirrors OpenAI-style streaming but uses gateway-native `ChatCompl
 
 ---
 
+## Supported parameters
+
+The table below lists which `ChatCompletionRequest` (and provider-specific) parameters are honored by each provider when using `VlloraLLMClient`:
+
+| **Parameter**                            | **OpenAI / Proxy** | **Anthropic** | **Gemini** | **Bedrock** | **Notes** |
+|------------------------------------------|---------------------|---------------|------------|-------------|----------|
+| `model`                                  | yes                 | yes           | yes        | yes         | Taken from `ChatCompletionRequest.model` or engine config. |
+| `max_tokens`                             | yes                 | yes           | yes        | yes         | Mapped to provider-specific `max_tokens` / `max_output_tokens`. |
+| `temperature`                            | yes                 | yes           | yes        | yes         | Sampling temperature. |
+| `top_p`                                  | yes                 | yes           | yes        | yes         | Nucleus sampling. |
+| `n`                                      | no                  | no            | yes        | no          | For Gemini, mapped to `candidate_count`; other providers always use `n = 1`. |
+| `stop` / `stop_sequences`                | yes                 | yes           | yes        | yes         | Converted to each provider’s stop / stop-sequences field. |
+| `presence_penalty`                       | yes                 | no            | yes        | no          | OpenAI / Gemini only. |
+| `frequency_penalty`                      | yes                 | no            | yes        | no          | OpenAI / Gemini only. |
+| `logit_bias`                             | yes                 | no            | no         | no          | OpenAI-only token bias map. |
+| `user`                                   | yes                 | no            | no         | no          | OpenAI “end-user id” field. |
+| `seed`                                   | yes                 | no            | yes        | no          | Deterministic sampling where supported. |
+| `response_format` (JSON schema, etc.)    | yes                 | no            | yes        | no          | Gemini additionally normalizes JSON schema for its API. |
+| `prompt_cache_key`                       | yes                 | no            | no         | no          | OpenAI-only prompt caching hint. |
+| `provider_specific.top_k`                | no                  | yes           | no         | no          | Anthropic-only: maps to Claude `top_k`. |
+| `provider_specific.thinking`             | no                  | yes           | no         | no          | Anthropic “thinking” options (e.g. budget tokens). |
+| Bedrock `additional_parameters` map      | no                  | no            | no         | yes         | Free-form JSON, passed through to Bedrock model params. |
+
+Additionally, for **Anthropic**, the **first `system` message** in the conversation is mapped into a `SystemPrompt` (either as a single text string or as multiple `TextContentBlock`s), and any `cache_control` options on those blocks are translated into Anthropic’s ephemeral cache-control settings.
+
+All other fields on `ChatCompletionRequest` (such as `stream`, `tools`, `tool_choice`, `functions`, `function_call`) are handled at the gateway layer and/or per-provider tool integration, but are not mapped 1:1 into provider primitive parameters.
+
+
 ## Provider-specific examples
 
 There are runnable examples under `llm/examples/` that mirror the patterns above:
@@ -274,4 +305,31 @@ after setting the provider-specific environment variables noted in the example�
 - **Error handling**: All client methods return `LLMResult<T>`, which wraps rich `LLMError` variants (network, mapping, provider errors, etc.).
 - **More features**: The same types in `vllora_llm::types::gateway` are used for tools, MCP, routing, embeddings, and image generation; see the main repository docs at `https://vllora.dev/docs` for higher-level gateway features.
 
+---
 
+## Roadmap and issues
+
+- **GitHub issues / roadmap**: See [open LLM crate issues](https://github.com/vllora/vllora/issues?q=is%3Aissue%20state%3Aopen%20label%3A%22LLM%20Crate%22) for planned and outstanding work.
+- **Planned enhancements**:
+  - Integrate responses API
+  - Support builtin MCP tool calls
+  - Gemini prompt caching supported
+  - Full thinking messages support
+
+
+--- 
+
+## License
+
+<sup>
+Licensed under either of <a href="LICENSE-APACHE">Apache License, Version
+2.0</a>.
+</sup>
+
+<br>
+
+<sub>
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in this crate by you, as defined in the Apache-2.0 license, shall
+be dual licensed as above, without any additional terms or conditions.
+</sub>

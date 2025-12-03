@@ -252,15 +252,16 @@ impl ModelInstance for DummyModelInstance {
 mod tests {
     use super::*;
     use crate::client::completions::CompletionsClient;
+    use crate::types::engine::CompletionEngineParamsBuilder;
     use crate::types::gateway::ChatCompletionChunk;
     use crate::types::gateway::ChatCompletionRequest;
     use async_openai::types::CreateChatCompletionResponse;
     use futures::StreamExt;
-    use std::sync::Arc;
 
     #[tokio::test]
     async fn test_create() {
-        let client = CompletionsClient::new(Arc::new(Box::new(DummyModelInstance {})));
+        let client = CompletionsClient::new(CompletionEngineParamsBuilder::new())
+            .with_instance(Box::new(DummyModelInstance {}));
         let request = ChatCompletionRequest {
             model: "test".to_string(),
             messages: vec![ChatCompletionMessage {
@@ -286,7 +287,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_stream() {
-        let client = CompletionsClient::new(Arc::new(Box::new(DummyModelInstance {})));
+        let client = CompletionsClient::new(CompletionEngineParamsBuilder::new())
+            .with_instance(Box::new(DummyModelInstance {}));
         let request = ChatCompletionRequest {
             model: "test".to_string(),
             messages: vec![ChatCompletionMessage {
