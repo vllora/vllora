@@ -298,7 +298,7 @@ pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Cl
     let request = request.request.clone();
 
     let mut builder =
-        CompletionEngineParamsBuilder::new(llm_model.inference_provider.clone(), request.clone());
+        CompletionEngineParamsBuilder::new().with_provider(llm_model.inference_provider.clone());
 
     builder = builder.with_model_name(llm_model.inference_provider.model_name.clone());
 
@@ -314,7 +314,7 @@ pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Cl
         builder = builder.with_execution_options(execution_options.clone());
     }
 
-    let engine = builder.build()?;
+    let engine = builder.build(&request)?;
 
     let credentials_ident = if llm_model.inference_provider.provider
         == InferenceModelProvider::Proxy("vllora".to_string())

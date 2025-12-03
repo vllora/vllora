@@ -3,20 +3,19 @@ pub mod error;
 pub mod message_mapper;
 pub mod tools;
 
+use crate::types::credentials::Credentials;
 use crate::types::engine::CompletionEngineParamsBuilder;
 pub use crate::types::instance::DummyModelInstance;
 pub use crate::types::instance::ModelInstance;
 
 use crate::client::completions::CompletionsClient;
-use crate::client::error::ModelError;
-use crate::types::instance::init_model_instance;
-use std::collections::HashMap;
-use std::sync::Arc;
+use crate::types::models::InferenceProvider;
+use crate::types::provider::InferenceModelProvider;
 
 pub const DEFAULT_MAX_RETRIES: u32 = 0;
 
 pub struct VlloraLLMClient {
-    instance: Arc<Box<dyn ModelInstance>>,
+    builder: CompletionEngineParamsBuilder,
 }
 
 impl Default for VlloraLLMClient {
@@ -28,26 +27,44 @@ impl Default for VlloraLLMClient {
 impl VlloraLLMClient {
     pub fn new() -> Self {
         Self {
-            instance: Arc::new(Box::new(DummyModelInstance {})),
+            builder: CompletionEngineParamsBuilder::new(),
         }
     }
 
-    pub fn new_with_instance(instance: Box<dyn ModelInstance>) -> Self {
-        Self {
-            instance: Arc::new(instance),
-        }
-    }
-
-    pub async fn new_with_engine_params_builder(
+    pub fn new_with_engine_params_builder(
         engine_params_builder: CompletionEngineParamsBuilder,
-    ) -> Result<Self, ModelError> {
-        let instance =
-            init_model_instance(engine_params_builder.build().unwrap(), HashMap::new()).await?;
-        Ok(Self::new_with_instance(instance))
+    ) -> Self {
+        Self {
+            builder: engine_params_builder,
+        }
+    }
+
+    pub fn mut_builder(&mut self) -> &mut CompletionEngineParamsBuilder {
+        &mut self.builder
     }
 
     pub fn completions(&self) -> CompletionsClient {
-        CompletionsClient::new(self.instance.clone())
+        CompletionsClient::new(self.builder.clone())
+    }
+
+    pub fn with_provider(mut self, provider: InferenceProvider) -> Self {
+        self.builder = self.builder.with_provider(provider);
+        self
+    }
+
+    pub fn with_credentials(mut self, credentials: Credentials) -> Self {
+        self.builder = self.builder.with_credentials(credentials);
+        self
+    }
+
+    pub fn with_model_provider(mut self, model_provider: InferenceModelProvider) -> Self {
+        self.builder = self.builder.with_model_provider(model_provider);
+        self
+    }
+
+    pub fn with_inference_endpoint(mut self, inference_endpoint: String) -> Self {
+        self.builder = self.builder.with_inference_endpoint(inference_endpoint);
+        self
     }
 }
 
@@ -103,17 +120,13 @@ mod tests {
             .build()
             .unwrap();
 
-        let mut engine_params_builder = CompletionEngineParamsBuilder::new(
-            InferenceProvider {
+        let mut engine_params_builder = CompletionEngineParamsBuilder::new()
+            .with_provider(InferenceProvider {
                 provider: InferenceModelProvider::Proxy("test".to_string()),
                 model_name: "test".to_string(),
                 endpoint: Some(server_url.clone()),
-            },
-            openai_req.clone().into(),
-        );
-
-        engine_params_builder =
-            engine_params_builder.with_credentials(Credentials::ApiKey(ApiKeyCredentials {
+            })
+            .with_credentials(Credentials::ApiKey(ApiKeyCredentials {
                 api_key: "test".to_string(),
             }));
 

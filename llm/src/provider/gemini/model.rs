@@ -242,18 +242,14 @@ impl GeminiModel {
             match res {
                 Ok(res) => {
                     if let Some(res) = res {
-                        // tx_response
-                        //     .send(Ok(Chunk::Gemini(res.clone())))
-                        //     .await
-                        //     .map_err(|e| LLMError::CustomError(e.to_string()))?;
                         if !first_response_received {
                             first_response_received = true;
-                            tx.send(Some(ModelEvent::new(
-                                &Span::current(),
-                                ModelEventType::LlmFirstToken(LLMFirstToken {}),
-                            )))
-                            .await
-                            .map_err(|e| LLMError::CustomError(e.to_string()))?;
+                            let _ = tx
+                                .send(Some(ModelEvent::new(
+                                    &Span::current(),
+                                    ModelEventType::LlmFirstToken(LLMFirstToken {}),
+                                )))
+                                .await;
                             model_version = res.model_version;
                             response_id = res.response_id;
                             Span::current().record("ttft", started_at.elapsed().as_micros());
@@ -371,16 +367,16 @@ impl GeminiModel {
         let model_name = self.params.model.as_ref().unwrap();
         let input_messages = call.contents.clone();
 
-        tx.send(Some(ModelEvent::new(
-            &span,
-            ModelEventType::LlmStart(LLMStartEvent {
-                provider_name: SPAN_GEMINI.to_string(),
-                model_name: self.params.model.clone().unwrap_or_default(),
-                input: serde_json::to_string(&input_messages)?,
-            }),
-        )))
-        .await
-        .map_err(|e| LLMError::CustomError(e.to_string()))?;
+        let _ = tx
+            .send(Some(ModelEvent::new(
+                &span,
+                ModelEventType::LlmStart(LLMStartEvent {
+                    provider_name: SPAN_GEMINI.to_string(),
+                    model_name: self.params.model.clone().unwrap_or_default(),
+                    input: serde_json::to_string(&input_messages)?,
+                }),
+            )))
+            .await;
 
         let response = async move {
             let result = self.client.invoke(model_name, call).await;
@@ -488,36 +484,36 @@ impl GeminiModel {
                             ..Default::default()
                         });
                     let finish_reason = ModelFinishReason::ToolCalls;
-                    tx.send(Some(ModelEvent::new(
-                        &span,
-                        ModelEventType::LlmStop(LLMFinishEvent {
-                            provider_name: SPAN_GEMINI.to_string(),
-                            model_name: self.params.model.clone().unwrap_or_default(),
-                            output: Some(text.clone()),
-                            usage: usage.clone(),
-                            finish_reason,
-                            tool_calls: calls
-                                .iter()
-                                .map(|(tool_name, params, thought_signature)| {
-                                    Ok(ModelToolCall {
-                                        tool_id: tool_name.clone(),
-                                        tool_name: tool_name.clone(),
-                                        input: serde_json::to_string(params)?,
-                                        extra_content: thought_signature.as_ref().map(|s| {
-                                            ToolCallExtra {
-                                                google: Some(GoogleToolCallExtra {
-                                                    thought_signature: s.clone(),
-                                                }),
-                                            }
-                                        }),
+                    let _ = tx
+                        .send(Some(ModelEvent::new(
+                            &span,
+                            ModelEventType::LlmStop(LLMFinishEvent {
+                                provider_name: SPAN_GEMINI.to_string(),
+                                model_name: self.params.model.clone().unwrap_or_default(),
+                                output: Some(text.clone()),
+                                usage: usage.clone(),
+                                finish_reason,
+                                tool_calls: calls
+                                    .iter()
+                                    .map(|(tool_name, params, thought_signature)| {
+                                        Ok(ModelToolCall {
+                                            tool_id: tool_name.clone(),
+                                            tool_name: tool_name.clone(),
+                                            input: serde_json::to_string(params)?,
+                                            extra_content: thought_signature.as_ref().map(|s| {
+                                                ToolCallExtra {
+                                                    google: Some(GoogleToolCallExtra {
+                                                        thought_signature: s.clone(),
+                                                    }),
+                                                }
+                                            }),
+                                        })
                                     })
-                                })
-                                .collect::<Result<Vec<ModelToolCall>, LLMError>>()?,
-                            credentials_ident: self.credentials_ident.clone(),
-                        }),
-                    )))
-                    .await
-                    .map_err(|e| LLMError::CustomError(e.to_string()))?;
+                                    .collect::<Result<Vec<ModelToolCall>, LLMError>>()?,
+                                credentials_ident: self.credentials_ident.clone(),
+                            }),
+                        )))
+                        .await;
 
                     return Ok(InnerExecutionResult::Finish(
                         ChatCompletionMessageWithFinishReason::new(
@@ -595,25 +591,25 @@ impl GeminiModel {
                     &finish_reason.expect("Finish reason is already checked"),
                     false,
                 );
-                tx.send(Some(ModelEvent::new(
-                    &span,
-                    ModelEventType::LlmStop(LLMFinishEvent {
-                        provider_name: SPAN_GEMINI.to_string(),
-                        model_name: self
-                            .params
-                            .model
-                            .clone()
-                            .map(|m| m.to_string())
-                            .unwrap_or_default(),
-                        output: Some(text.clone()),
-                        usage: usage.clone(),
-                        finish_reason: finish_reason.clone(),
-                        tool_calls: vec![],
-                        credentials_ident: self.credentials_ident.clone(),
-                    }),
-                )))
-                .await
-                .map_err(|e| LLMError::CustomError(e.to_string()))?;
+                let _ = tx
+                    .send(Some(ModelEvent::new(
+                        &span,
+                        ModelEventType::LlmStop(LLMFinishEvent {
+                            provider_name: SPAN_GEMINI.to_string(),
+                            model_name: self
+                                .params
+                                .model
+                                .clone()
+                                .map(|m| m.to_string())
+                                .unwrap_or_default(),
+                            output: Some(text.clone()),
+                            usage: usage.clone(),
+                            finish_reason: finish_reason.clone(),
+                            tool_calls: vec![],
+                            credentials_ident: self.credentials_ident.clone(),
+                        }),
+                    )))
+                    .await;
 
                 Ok(InnerExecutionResult::Finish(
                     ChatCompletionMessageWithFinishReason::new(
@@ -759,21 +755,21 @@ impl GeminiModel {
         let started_at = std::time::Instant::now();
         let stream = self.client.stream(model_name, call).await?;
         tokio::pin!(stream);
-        tx.send(Some(ModelEvent::new(
-            &call_span,
-            ModelEventType::LlmStart(LLMStartEvent {
-                provider_name: SPAN_GEMINI.to_string(),
-                model_name: self
-                    .params
-                    .model
-                    .clone()
-                    .map(|m| m.to_string())
-                    .unwrap_or_default(),
-                input: serde_json::to_string(&input_messages)?,
-            }),
-        )))
-        .await
-        .map_err(|e| LLMError::CustomError(e.to_string()))?;
+        let _ = tx
+            .send(Some(ModelEvent::new(
+                &call_span,
+                ModelEventType::LlmStart(LLMStartEvent {
+                    provider_name: SPAN_GEMINI.to_string(),
+                    model_name: self
+                        .params
+                        .model
+                        .clone()
+                        .map(|m| m.to_string())
+                        .unwrap_or_default(),
+                    input: serde_json::to_string(&input_messages)?,
+                }),
+            )))
+            .await;
 
         let (finish_reason, tool_calls, usage, output) = self
             .process_stream(stream, &tx, tx_response, started_at)
@@ -818,25 +814,25 @@ impl GeminiModel {
             call_span.record("usage", JsonValue(&serde_json::to_value(usage)?).as_value());
         }
 
-        tx.send(Some(ModelEvent::new(
-            &call_span,
-            ModelEventType::LlmStop(LLMFinishEvent {
-                provider_name: SPAN_GEMINI.to_string(),
-                model_name: self
-                    .params
-                    .model
-                    .clone()
-                    .map(|m| m.to_string())
-                    .unwrap_or_default(),
-                output: None,
-                usage: usage.clone(),
-                finish_reason: trace_finish_reason.clone(),
-                tool_calls: tool_calls.iter().map(Self::map_tool_call).collect(),
-                credentials_ident: self.credentials_ident.clone(),
-            }),
-        )))
-        .await
-        .map_err(|e| LLMError::CustomError(e.to_string()))?;
+        let _ = tx
+            .send(Some(ModelEvent::new(
+                &call_span,
+                ModelEventType::LlmStop(LLMFinishEvent {
+                    provider_name: SPAN_GEMINI.to_string(),
+                    model_name: self
+                        .params
+                        .model
+                        .clone()
+                        .map(|m| m.to_string())
+                        .unwrap_or_default(),
+                    output: None,
+                    usage: usage.clone(),
+                    finish_reason: trace_finish_reason.clone(),
+                    tool_calls: tool_calls.iter().map(Self::map_tool_call).collect(),
+                    credentials_ident: self.credentials_ident.clone(),
+                }),
+            )))
+            .await;
 
         call_span.record("output", serde_json::to_string(&output)?);
         if !tool_calls.is_empty() {

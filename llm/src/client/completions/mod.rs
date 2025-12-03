@@ -1,35 +1,44 @@
 pub mod response_stream;
 
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use serde_json::Value;
 
 use crate::client::completions::response_stream::ResultStream;
 use crate::client::message_mapper::{MessageMapper, MessageMapperError};
+use crate::client::ModelInstance;
+use crate::error::LLMResult;
+use crate::types::engine::CompletionEngineParamsBuilder;
 use crate::types::gateway::{
     ChatCompletionMessage, ChatCompletionMessageWithFinishReason, ChatCompletionRequest,
 };
+use crate::types::instance::init_model_instance;
 use crate::types::message::Message;
 use crate::types::ModelEvent;
-use crate::{client::ModelInstance, error::LLMResult};
 use tracing::Instrument;
 
 pub struct CompletionsClient {
-    instance: Arc<Box<dyn ModelInstance>>,
+    builder: CompletionEngineParamsBuilder,
     input_variables: HashMap<String, Value>,
     tx: Option<tokio::sync::mpsc::Sender<Option<ModelEvent>>>,
     tags: HashMap<String, String>,
+    instance: Option<Box<dyn ModelInstance>>,
 }
 
 impl CompletionsClient {
-    pub fn new(instance: Arc<Box<dyn ModelInstance>>) -> Self {
+    pub fn new(builder: CompletionEngineParamsBuilder) -> Self {
         Self {
-            instance,
+            instance: None,
+            builder,
             input_variables: HashMap::new(),
             tx: None,
             tags: HashMap::new(),
         }
+    }
+
+    pub fn with_instance(mut self, instance: Box<dyn ModelInstance>) -> Self {
+        self.instance = Some(instance);
+        self
     }
 
     pub fn with_input_variables(mut self, input_variables: HashMap<String, Value>) -> Self {
@@ -80,14 +89,30 @@ impl CompletionsClient {
             }
         };
 
-        self.instance
-            .invoke(
-                self.input_variables.clone(),
-                tx,
-                messages,
-                self.tags.clone(),
-            )
-            .await
+        match &self.instance {
+            Some(instance) => {
+                instance
+                    .invoke(
+                        self.input_variables.clone(),
+                        tx,
+                        messages,
+                        self.tags.clone(),
+                    )
+                    .await
+            }
+            None => {
+                let engine = self.builder.build(&r)?;
+                let instance = init_model_instance(engine, HashMap::new()).await?;
+                instance
+                    .invoke(
+                        self.input_variables.clone(),
+                        tx,
+                        messages,
+                        self.tags.clone(),
+                    )
+                    .await
+            }
+        }
     }
 
     pub async fn create_stream(
@@ -102,19 +127,36 @@ impl CompletionsClient {
         let tx = match &self.tx {
             Some(tx) => tx.clone(),
             None => {
-                let (tx, mut _rx) = tokio::sync::mpsc::channel(100);
+                let (tx, mut _rx) = tokio::sync::mpsc::channel(10000);
                 tx
             }
         };
 
-        self.instance
-            .stream(
-                self.input_variables.clone(),
-                tx,
-                messages,
-                self.tags.clone(),
-            )
-            .instrument(tracing::Span::current())
-            .await
+        match &self.instance {
+            Some(instance) => {
+                instance
+                    .stream(
+                        self.input_variables.clone(),
+                        tx,
+                        messages,
+                        self.tags.clone(),
+                    )
+                    .instrument(tracing::Span::current())
+                    .await
+            }
+            None => {
+                let engine = self.builder.build(&r)?;
+                let instance = init_model_instance(engine, HashMap::new()).await?;
+                instance
+                    .stream(
+                        self.input_variables.clone(),
+                        tx,
+                        messages,
+                        self.tags.clone(),
+                    )
+                    .instrument(tracing::Span::current())
+                    .await
+            }
+        }
     }
 }

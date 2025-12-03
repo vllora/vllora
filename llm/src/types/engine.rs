@@ -285,9 +285,9 @@ impl CompletionEngineParams {
     }
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CompletionEngineParamsBuilder {
     pub provider: InferenceProvider,
-    pub request: ChatCompletionRequest,
     pub model_name: Option<String>,
     pub credentials: Option<Credentials>,
     pub provider_specific: Option<ProviderSpecificRequest>,
@@ -295,17 +295,41 @@ pub struct CompletionEngineParamsBuilder {
     pub api_url: Option<String>,
 }
 
+impl Default for CompletionEngineParamsBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CompletionEngineParamsBuilder {
-    pub fn new(provider: InferenceProvider, request: ChatCompletionRequest) -> Self {
+    pub fn new() -> Self {
         Self {
-            provider,
-            request,
+            provider: InferenceProvider {
+                provider: InferenceModelProvider::OpenAI,
+                model_name: "unknown".to_string(),
+                endpoint: None,
+            },
             model_name: None,
             credentials: None,
             provider_specific: None,
             execution_options: None,
             api_url: None,
         }
+    }
+
+    pub fn with_provider(mut self, provider: InferenceProvider) -> Self {
+        self.provider = provider;
+        self
+    }
+
+    pub fn with_model_provider(mut self, model_provider: InferenceModelProvider) -> Self {
+        self.provider.provider = model_provider;
+        self
+    }
+
+    pub fn with_inference_endpoint(mut self, inference_endpoint: String) -> Self {
+        self.provider.endpoint = Some(inference_endpoint);
+        self
     }
 
     pub fn with_model_name(mut self, model_name: String) -> Self {
@@ -333,30 +357,33 @@ impl CompletionEngineParamsBuilder {
         self
     }
 
-    pub fn build(self) -> Result<CompletionEngineParams, LLMError> {
+    pub fn build(
+        &self,
+        request: &ChatCompletionRequest,
+    ) -> Result<CompletionEngineParams, LLMError> {
         match &self.provider.provider {
             InferenceModelProvider::OpenAI | InferenceModelProvider::Proxy(_) => {
                 let params = OpenAiModelParams {
                     model: self
                         .model_name
                         .clone()
-                        .or_else(|| Some(self.request.model.clone())),
-                    frequency_penalty: self.request.frequency_penalty,
-                    logit_bias: self.request.logit_bias.clone(),
+                        .or_else(|| Some(request.model.clone())),
+                    frequency_penalty: request.frequency_penalty,
+                    logit_bias: request.logit_bias.clone(),
                     logprobs: None,
                     top_logprobs: None,
-                    max_tokens: self.request.max_tokens,
-                    presence_penalty: self.request.presence_penalty,
-                    seed: self.request.seed,
-                    stop: self.request.stop.clone(),
-                    temperature: self.request.temperature,
-                    top_p: self.request.top_p,
-                    user: self.request.user.clone(),
-                    response_format: self.request.response_format.clone(),
-                    prompt_cache_key: self.request.prompt_cache_key.clone(),
+                    max_tokens: request.max_tokens,
+                    presence_penalty: request.presence_penalty,
+                    seed: request.seed,
+                    stop: request.stop.clone(),
+                    temperature: request.temperature,
+                    top_p: request.top_p,
+                    user: request.user.clone(),
+                    response_format: request.response_format.clone(),
+                    prompt_cache_key: request.prompt_cache_key.clone(),
                 };
                 let mut custom_endpoint = None;
-                let api_key_credentials = self.credentials.and_then(|cred| match cred {
+                let api_key_credentials = self.credentials.clone().and_then(|cred| match cred {
                     Credentials::ApiKey(key) => Some(key),
                     Credentials::ApiKeyWithEndpoint {
                         api_key: key,
@@ -370,7 +397,7 @@ impl CompletionEngineParamsBuilder {
                 match &self.provider.provider {
                     InferenceModelProvider::OpenAI => Ok(CompletionEngineParams::OpenAi {
                         params,
-                        execution_options: self.execution_options.unwrap_or_default(),
+                        execution_options: self.execution_options.clone().unwrap_or_default(),
                         credentials: api_key_credentials,
                         endpoint: None,
                     }),
@@ -379,14 +406,20 @@ impl CompletionEngineParamsBuilder {
                         if proxy_provider == "azure" {
                             Ok(CompletionEngineParams::OpenAi {
                                 params,
-                                execution_options: self.execution_options.unwrap_or_default(),
+                                execution_options: self
+                                    .execution_options
+                                    .clone()
+                                    .unwrap_or_default(),
                                 credentials: api_key_credentials,
                                 endpoint,
                             })
                         } else {
                             Ok(CompletionEngineParams::Proxy {
                                 params,
-                                execution_options: self.execution_options.unwrap_or_default(),
+                                execution_options: self
+                                    .execution_options
+                                    .clone()
+                                    .unwrap_or_default(),
                                 credentials: api_key_credentials,
                                 provider_name: proxy_provider.clone(),
                                 endpoint,
@@ -399,54 +432,52 @@ impl CompletionEngineParamsBuilder {
             InferenceModelProvider::Bedrock => {
                 let aws_creds = self
                     .credentials
+                    .as_ref()
                     .and_then(|cred| cred.to_bedrock_credentials());
                 Ok(CompletionEngineParams::Bedrock {
                     credentials: aws_creds,
-                    execution_options: self.execution_options.unwrap_or_default(),
+                    execution_options: self.execution_options.clone().unwrap_or_default(),
                     params: BedrockModelParams {
                         model_id: self
                             .model_name
                             .clone()
-                            .or_else(|| Some(self.request.model.clone())),
-                        max_tokens: self.request.max_tokens.map(|x| x as i32),
-                        temperature: self.request.temperature,
-                        top_p: self.request.top_p,
-                        stop_sequences: self.request.stop.clone(),
+                            .or_else(|| Some(request.model.clone())),
+                        max_tokens: request.max_tokens.map(|x| x as i32),
+                        temperature: request.temperature,
+                        top_p: request.top_p,
+                        stop_sequences: request.stop.clone(),
                         additional_parameters: HashMap::new(),
                     },
                 })
             }
             InferenceModelProvider::Anthropic => {
-                let api_key_credentials = self.credentials.and_then(|cred| match cred {
+                let api_key_credentials = self.credentials.clone().and_then(|cred| match cred {
                     Credentials::ApiKey(key) => Some(key),
                     _ => None,
                 });
-                let original_model_name = self
-                    .model_name
-                    .clone()
-                    .unwrap_or(self.request.model.clone());
+                let original_model_name = self.model_name.clone().unwrap_or(request.model.clone());
                 let model_name = get_anthropic_model(&original_model_name);
                 let model = serde_json::from_str::<ClaudeModel>(&format!("\"{model_name}\""))?;
                 Ok(CompletionEngineParams::Anthropic {
                     credentials: api_key_credentials,
-                    execution_options: self.execution_options.unwrap_or_default(),
+                    execution_options: self.execution_options.clone().unwrap_or_default(),
                     params: AnthropicModelParams {
                         model: Some(model.clone()),
-                        max_tokens: match self.request.max_tokens {
+                        max_tokens: match request.max_tokens {
                             Some(x) => Some(clust::messages::MaxTokens::new(x, model.model)?),
                             None => None,
                         },
-                        stop_sequences: self
-                            .request
+                        stop_sequences: request
                             .stop
+                            .clone()
                             .as_ref()
                             .map(|s| s.iter().map(StopSequence::new).collect()),
                         stream: None,
-                        temperature: match self.request.temperature {
+                        temperature: match request.temperature {
                             Some(t) => Some(clust::messages::Temperature::new(t)?),
                             None => None,
                         },
-                        top_p: match self.request.top_p {
+                        top_p: match request.top_p {
                             Some(p) => Some(clust::messages::TopP::new(p)?),
                             None => None,
                         },
@@ -466,26 +497,26 @@ impl CompletionEngineParamsBuilder {
                 })
             }
             InferenceModelProvider::Gemini => {
-                let api_key_credentials = self.credentials.and_then(|cred| match cred {
+                let api_key_credentials = self.credentials.clone().and_then(|cred| match cred {
                     Credentials::ApiKey(key) => Some(key),
                     _ => None,
                 });
                 Ok(CompletionEngineParams::Gemini {
                     credentials: api_key_credentials,
-                    execution_options: self.execution_options.unwrap_or_default(),
+                    execution_options: self.execution_options.clone().unwrap_or_default(),
                     params: GeminiModelParams {
                         model: self
                             .model_name
                             .clone()
-                            .or_else(|| Some(self.request.model.clone())),
-                        max_output_tokens: self.request.max_tokens.map(|x| x as i32),
-                        temperature: self.request.temperature,
-                        top_p: self.request.top_p,
-                        stop_sequences: self.request.stop.clone(),
-                        candidate_count: self.request.n,
-                        presence_penalty: self.request.presence_penalty,
-                        frequency_penalty: self.request.frequency_penalty,
-                        seed: self.request.seed,
+                            .or_else(|| Some(request.model.clone())),
+                        max_output_tokens: request.max_tokens.map(|x| x as i32),
+                        temperature: request.temperature,
+                        top_p: request.top_p,
+                        stop_sequences: request.stop.clone(),
+                        candidate_count: request.n,
+                        presence_penalty: request.presence_penalty,
+                        frequency_penalty: request.frequency_penalty,
+                        seed: request.seed,
                         // Not supported by request inteface
                         // response_logprobs: request.response_logprobs,
                         // logprobs: request.logprobs,
@@ -493,9 +524,9 @@ impl CompletionEngineParamsBuilder {
                         response_logprobs: None,
                         logprobs: None,
                         top_k: None,
-                        response_format: self.request.response_format.clone(),
+                        response_format: request.response_format.clone(),
                     },
-                    api_url: self.api_url,
+                    api_url: self.api_url.clone(),
                 })
             }
             InferenceModelProvider::VertexAI => {

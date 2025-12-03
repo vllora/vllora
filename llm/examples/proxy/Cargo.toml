@@ -1,0 +1,16 @@
+[package]
+name = "proxy_example"
+version = "0.1.0"
+edition = "2021"
+
+# Standalone crate (not part of parent workspace)
+[workspace]
+
+[dependencies]
+# Use the local vllora_llm crate
+vllora_llm = { path = "../.." }
+
+# Match key versions used in vllora_llm where relevant
+async-openai-compat = { package = "async-openai-compat", version = "0.29.8" }
+tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"

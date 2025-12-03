@@ -310,14 +310,14 @@ impl AnthropicModel {
                     match result {
                         MessageChunk::ContentBlockStart(block) => match block.content_block {
                             clust::messages::ContentBlockStart::TextContentBlock(block) => {
-                                tx.send(Some(ModelEvent::new(
-                                    &tracing::Span::current(),
-                                    ModelEventType::LlmContent(LLMContentEvent {
-                                        content: block.text.clone(),
-                                    }),
-                                )))
-                                .await
-                                .map_err(|e| LLMError::CustomError(e.to_string()))?;
+                                let _ = tx
+                                    .send(Some(ModelEvent::new(
+                                        &tracing::Span::current(),
+                                        ModelEventType::LlmContent(LLMContentEvent {
+                                            content: block.text.clone(),
+                                        }),
+                                    )))
+                                    .await;
                                 stream_content.push_str(&block.text);
 
                                 let mut chunk_clone = chunk.clone();
@@ -334,14 +334,14 @@ impl AnthropicModel {
                                 let _ = tx_response.send(Ok(chunk_clone)).await;
                             }
                             clust::messages::ContentBlockStart::ThinkingContentBlock(thinking) => {
-                                tx.send(Some(ModelEvent::new(
-                                    &tracing::Span::current(),
-                                    ModelEventType::LlmContent(LLMContentEvent {
-                                        content: format!("thinking: {}", thinking.thinking),
-                                    }),
-                                )))
-                                .await
-                                .map_err(|e| LLMError::CustomError(e.to_string()))?;
+                                let _ = tx
+                                    .send(Some(ModelEvent::new(
+                                        &tracing::Span::current(),
+                                        ModelEventType::LlmContent(LLMContentEvent {
+                                            content: format!("thinking: {}", thinking.thinking),
+                                        }),
+                                    )))
+                                    .await;
 
                                 let mut chunk_clone = chunk.clone();
                                 chunk_clone.choices.push(ChatCompletionChunkChoice {
@@ -365,14 +365,14 @@ impl AnthropicModel {
                         },
                         MessageChunk::ContentBlockDelta(block) => match block.delta {
                             clust::messages::ContentBlockDelta::TextDeltaContentBlock(delta) => {
-                                tx.send(Some(ModelEvent::new(
-                                    &tracing::Span::current(),
-                                    ModelEventType::LlmContent(LLMContentEvent {
-                                        content: delta.text.clone(),
-                                    }),
-                                )))
-                                .await
-                                .map_err(|e| LLMError::CustomError(e.to_string()))?;
+                                let _ = tx
+                                    .send(Some(ModelEvent::new(
+                                        &tracing::Span::current(),
+                                        ModelEventType::LlmContent(LLMContentEvent {
+                                            content: delta.text.clone(),
+                                        }),
+                                    )))
+                                    .await;
                                 stream_content.push_str(&delta.text);
 
                                 let mut chunk_clone = chunk.clone();
@@ -391,14 +391,14 @@ impl AnthropicModel {
                             clust::messages::ContentBlockDelta::ThinkingDeltaContentBlock(
                                 delta,
                             ) => {
-                                tx.send(Some(ModelEvent::new(
-                                    &tracing::Span::current(),
-                                    ModelEventType::LlmContent(LLMContentEvent {
-                                        content: delta.thinking.clone(),
-                                    }),
-                                )))
-                                .await
-                                .map_err(|e| LLMError::CustomError(e.to_string()))?;
+                                let _ = tx
+                                    .send(Some(ModelEvent::new(
+                                        &tracing::Span::current(),
+                                        ModelEventType::LlmContent(LLMContentEvent {
+                                            content: delta.thinking.clone(),
+                                        }),
+                                    )))
+                                    .await;
                                 stream_content.push_str(&delta.thinking);
 
                                 let mut chunk_clone = chunk.clone();
@@ -516,21 +516,21 @@ impl AnthropicModel {
         let system_message = request.system.clone();
         let input_messages = request.messages.clone();
 
-        tx.send(Some(ModelEvent::new(
-            &span,
-            ModelEventType::LlmStart(LLMStartEvent {
-                provider_name: SPAN_ANTHROPIC.to_string(),
-                model_name: self
-                    .params
-                    .model
-                    .clone()
-                    .map(|m| m.to_string())
-                    .unwrap_or_default(),
-                input: serde_json::to_string(&input_messages)?,
-            }),
-        )))
-        .await
-        .map_err(|e| LLMError::CustomError(e.to_string()))?;
+        let _ = tx
+            .send(Some(ModelEvent::new(
+                &span,
+                ModelEventType::LlmStart(LLMStartEvent {
+                    provider_name: SPAN_ANTHROPIC.to_string(),
+                    model_name: self
+                        .params
+                        .model
+                        .clone()
+                        .map(|m| m.to_string())
+                        .unwrap_or_default(),
+                    input: serde_json::to_string(&input_messages)?,
+                }),
+            )))
+            .await;
 
         let response = async move {
             let result = self.client.create_a_message(request).await;
@@ -585,25 +585,25 @@ impl AnthropicModel {
 
                 match message_content {
                     Content::SingleText(content) => {
-                        tx.send(Some(ModelEvent::new(
-                            &span,
-                            ModelEventType::LlmStop(LLMFinishEvent {
-                                provider_name: SPAN_ANTHROPIC.to_string(),
-                                model_name: self
-                                    .params
-                                    .model
-                                    .clone()
-                                    .map(|m| m.to_string())
-                                    .unwrap_or_default(),
-                                output: Some(content.clone()),
-                                usage: Some(usage.clone()),
-                                finish_reason: ModelFinishReason::Stop,
-                                tool_calls: vec![],
-                                credentials_ident: self.credentials_ident.clone(),
-                            }),
-                        )))
-                        .await
-                        .map_err(|e| LLMError::CustomError(e.to_string()))?;
+                        let _ = tx
+                            .send(Some(ModelEvent::new(
+                                &span,
+                                ModelEventType::LlmStop(LLMFinishEvent {
+                                    provider_name: SPAN_ANTHROPIC.to_string(),
+                                    model_name: self
+                                        .params
+                                        .model
+                                        .clone()
+                                        .map(|m| m.to_string())
+                                        .unwrap_or_default(),
+                                    output: Some(content.clone()),
+                                    usage: Some(usage.clone()),
+                                    finish_reason: ModelFinishReason::Stop,
+                                    tool_calls: vec![],
+                                    credentials_ident: self.credentials_ident.clone(),
+                                }),
+                            )))
+                            .await;
 
                         Ok(InnerExecutionResult::Finish(
                             ChatCompletionMessageWithFinishReason::new(
@@ -641,25 +641,25 @@ impl AnthropicModel {
                             }
                         }
 
-                        tx.send(Some(ModelEvent::new(
-                            &span,
-                            ModelEventType::LlmStop(LLMFinishEvent {
-                                provider_name: SPAN_ANTHROPIC.to_string(),
-                                model_name: self
-                                    .params
-                                    .model
-                                    .clone()
-                                    .map(|m| m.to_string())
-                                    .unwrap_or_default(),
-                                output: Some(final_text.clone()),
-                                usage: Some(usage.clone()),
-                                finish_reason: ModelFinishReason::Stop,
-                                tool_calls: vec![],
-                                credentials_ident: self.credentials_ident.clone(),
-                            }),
-                        )))
-                        .await
-                        .map_err(|e| LLMError::CustomError(e.to_string()))?;
+                        let _ = tx
+                            .send(Some(ModelEvent::new(
+                                &span,
+                                ModelEventType::LlmStop(LLMFinishEvent {
+                                    provider_name: SPAN_ANTHROPIC.to_string(),
+                                    model_name: self
+                                        .params
+                                        .model
+                                        .clone()
+                                        .map(|m| m.to_string())
+                                        .unwrap_or_default(),
+                                    output: Some(final_text.clone()),
+                                    usage: Some(usage.clone()),
+                                    finish_reason: ModelFinishReason::Stop,
+                                    tool_calls: vec![],
+                                    credentials_ident: self.credentials_ident.clone(),
+                                }),
+                            )))
+                            .await;
 
                         Ok(InnerExecutionResult::Finish(
                             ChatCompletionMessageWithFinishReason::new(
@@ -732,33 +732,33 @@ impl AnthropicModel {
                         total_tokens: response.usage.input_tokens + response.usage.output_tokens,
                         ..Default::default()
                     });
-                    tx.send(Some(ModelEvent::new(
-                        &span,
-                        ModelEventType::LlmStop(LLMFinishEvent {
-                            provider_name: SPAN_ANTHROPIC.to_string(),
-                            model_name: self
-                                .params
-                                .model
-                                .clone()
-                                .map(|m| m.to_string())
-                                .unwrap_or_default(),
-                            output: text_content.clone(),
-                            usage: usage.clone(),
-                            finish_reason: ModelFinishReason::ToolCalls,
-                            tool_calls: tool_runs
-                                .iter()
-                                .map(|tool_call| ModelToolCall {
-                                    tool_id: tool_call.id.clone(),
-                                    tool_name: tool_call.name.clone(),
-                                    input: serde_json::to_string(&tool_call.input).unwrap(),
-                                    extra_content: None,
-                                })
-                                .collect(),
-                            credentials_ident: self.credentials_ident.clone(),
-                        }),
-                    )))
-                    .await
-                    .map_err(|e| LLMError::CustomError(e.to_string()))?;
+                    let _ = tx
+                        .send(Some(ModelEvent::new(
+                            &span,
+                            ModelEventType::LlmStop(LLMFinishEvent {
+                                provider_name: SPAN_ANTHROPIC.to_string(),
+                                model_name: self
+                                    .params
+                                    .model
+                                    .clone()
+                                    .map(|m| m.to_string())
+                                    .unwrap_or_default(),
+                                output: text_content.clone(),
+                                usage: usage.clone(),
+                                finish_reason: ModelFinishReason::ToolCalls,
+                                tool_calls: tool_runs
+                                    .iter()
+                                    .map(|tool_call| ModelToolCall {
+                                        tool_id: tool_call.id.clone(),
+                                        tool_name: tool_call.name.clone(),
+                                        input: serde_json::to_string(&tool_call.input).unwrap(),
+                                        extra_content: None,
+                                    })
+                                    .collect(),
+                                credentials_ident: self.credentials_ident.clone(),
+                            }),
+                        )))
+                        .await;
 
                     Ok(InnerExecutionResult::Finish(
                         ChatCompletionMessageWithFinishReason::new(
@@ -974,21 +974,21 @@ impl AnthropicModel {
         let input_messages = request.messages.clone();
         let credentials_ident = self.credentials_ident.clone();
 
-        tx.send(Some(ModelEvent::new(
-            &span,
-            ModelEventType::LlmStart(LLMStartEvent {
-                provider_name: SPAN_ANTHROPIC.to_string(),
-                model_name: self
-                    .params
-                    .model
-                    .clone()
-                    .map(|m| m.to_string())
-                    .unwrap_or_default(),
-                input: serde_json::to_string(&input_messages)?,
-            }),
-        )))
-        .await
-        .map_err(|e| LLMError::CustomError(e.to_string()))?;
+        let _ = tx
+            .send(Some(ModelEvent::new(
+                &span,
+                ModelEventType::LlmStart(LLMStartEvent {
+                    provider_name: SPAN_ANTHROPIC.to_string(),
+                    model_name: self
+                        .params
+                        .model
+                        .clone()
+                        .map(|m| m.to_string())
+                        .unwrap_or_default(),
+                    input: serde_json::to_string(&input_messages)?,
+                }),
+            )))
+            .await;
 
         let started_at = std::time::Instant::now();
         let stream = self
@@ -1036,28 +1036,28 @@ impl AnthropicModel {
             "usage",
             JsonValue(&serde_json::to_value(usage.clone())?).as_value(),
         );
-        tx.send(Some(ModelEvent::new(
-            &span,
-            ModelEventType::LlmStop(LLMFinishEvent {
-                provider_name: SPAN_ANTHROPIC.to_string(),
-                model_name: self
-                    .params
-                    .model
-                    .clone()
-                    .map(|m| m.to_string())
-                    .unwrap_or_default(),
-                output: None,
-                usage: Some(usage.clone()),
-                finish_reason: trace_finish_reason.clone(),
-                credentials_ident: credentials_ident.clone(),
-                tool_calls: tool_calls
-                    .iter()
-                    .map(Self::map_tool_call)
-                    .collect::<Result<Vec<ModelToolCall>, LLMError>>()?,
-            }),
-        )))
-        .await
-        .map_err(|e| LLMError::CustomError(e.to_string()))?;
+        let _ = tx
+            .send(Some(ModelEvent::new(
+                &span,
+                ModelEventType::LlmStop(LLMFinishEvent {
+                    provider_name: SPAN_ANTHROPIC.to_string(),
+                    model_name: self
+                        .params
+                        .model
+                        .clone()
+                        .map(|m| m.to_string())
+                        .unwrap_or_default(),
+                    output: None,
+                    usage: Some(usage.clone()),
+                    finish_reason: trace_finish_reason.clone(),
+                    credentials_ident: credentials_ident.clone(),
+                    tool_calls: tool_calls
+                        .iter()
+                        .map(Self::map_tool_call)
+                        .collect::<Result<Vec<ModelToolCall>, LLMError>>()?,
+                }),
+            )))
+            .await;
 
         match stop_reason {
             StopReason::EndTurn | StopReason::StopSequence => Ok(InnerExecutionResult::Finish(
@@ -1085,16 +1085,16 @@ impl AnthropicModel {
                 tools_span.follows_from(span.id());
                 let tool = self.tools.get(&tool_calls[0].name).unwrap();
                 if tool.stop_at_call() {
-                    tx.send(Some(ModelEvent::new(
-                        &span,
-                        ModelEventType::ToolStart(ToolStartEvent {
-                            tool_id: tool_calls[0].id.clone(),
-                            tool_name: tool_calls[0].name.clone(),
-                            input: serde_json::to_string(&tool_calls[0].input)?,
-                        }),
-                    )))
-                    .await
-                    .map_err(|e| LLMError::CustomError(e.to_string()))?;
+                    let _ = tx
+                        .send(Some(ModelEvent::new(
+                            &span,
+                            ModelEventType::ToolStart(ToolStartEvent {
+                                tool_id: tool_calls[0].id.clone(),
+                                tool_name: tool_calls[0].name.clone(),
+                                input: serde_json::to_string(&tool_calls[0].input)?,
+                            }),
+                        )))
+                        .await;
 
                     Ok(InnerExecutionResult::Finish(
                         ChatCompletionMessageWithFinishReason::new(

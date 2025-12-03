@@ -10,25 +10,22 @@ Use it when you want to talk to the gateway’s LLM engine from Rust code, witho
 
 ---
 
-## Using the async-openai-compatible types (streaming)
+## Quick start with async-openai-compatible types
 
-If you already build OpenAI-compatible requests (e.g. via `async-openai-compat`), you can stream completions through the same engine setup the gateway uses (`CompletionEngineParamsBuilder`).
+If you already build OpenAI-compatible requests (e.g. via `async-openai-compat`), you can send **both non‑streaming and streaming** completions through `VlloraLLMClient`.
 
 ```rust
 use async_openai::types::{
+    ChatCompletionRequestMessage,
     ChatCompletionRequestSystemMessageArgs,
     ChatCompletionRequestUserMessageArgs,
-    ChatCompletionRequestMessage,
     CreateChatCompletionRequestArgs,
 };
 use tokio_stream::StreamExt;
 
 use vllora_llm::client::VlloraLLMClient;
-use vllora_llm::types::credentials::Credentials;
-use vllora_llm::types::engine::CompletionEngineParamsBuilder;
-use vllora_llm::types::gateway::ChatCompletionRequest;
-use vllora_llm::types::provider::InferenceModelProvider;
 use vllora_llm::error::LLMResult;
+use vllora_llm::types::credentials::{ApiKeyCredentials, Credentials};
 
 #[tokio::main]
 async fn main() -> LLMResult<()> {
@@ -43,32 +40,36 @@ async fn main() -> LLMResult<()> {
             ),
             ChatCompletionRequestMessage::User(
                 ChatCompletionRequestUserMessageArgs::default()
-                    .content("Stream numbers 1 to 3, comma-separated.")
+                    .content("Stream numbers 1 to 20 in separate lines.")
                     .build()?,
             ),
         ])
         .build()?;
 
-    // 2) Build engine params the same way the gateway core does
-    let engine_params_builder = CompletionEngineParamsBuilder::new(
-        // Use OpenAI directly, or Proxy("name") for a routed/provider alias
-        InferenceModelProvider::OpenAI,
-        ChatCompletionRequest::from(openai_req.clone()),
-    )
-    .with_credentials(Credentials::ApiKeyWithEndpoint {
-        api_key: std::env::var("VLLORA_OPENAI_API_KEY")
-            .expect("VLLORA_OPENAI_API_KEY must be set"),
-        endpoint: "https://api.openai.com/v1".to_string(),
-    });
+    // 2) Construct a VlloraLLMClient (here: direct OpenAI key)
+    let client = VlloraLLMClient::new().with_credentials(Credentials::ApiKey(
+        ApiKeyCredentials {
+            api_key: std::env::var("VLLORA_OPENAI_API_KEY")
+                .expect("VLLORA_OPENAI_API_KEY must be set"),
+        },
+    ));
 
-    // 3) Construct a VlloraLLMClient from the engine params builder
-    let client = VlloraLLMClient::new_with_engine_params_builder(engine_params_builder)
+    // 3) Non-streaming: send the request and print the final reply
+    let response = client
+        .completions()
+        .create(openai_req.clone())
         .await?;
 
-    // 4) Stream the completion using the original OpenAI-style request
+    if let Some(content) = &response.message().content {
+        if let Some(text) = content.as_string() {
+            println!("Non-streaming reply:\\n{text}");
+        }
+    }
+
+    // 4) Streaming: send the same request and print chunks as they arrive
     let mut stream = client
         .completions()
-        .create_stream(openai_req.into())
+        .create_stream(openai_req)
         .await?;
 
     while let Some(chunk) = stream.next().await {
@@ -187,6 +188,24 @@ async fn main() -> LLMResult<()> {
 The stream API mirrors OpenAI-style streaming but uses gateway-native `ChatCompletionChunk` types.
 
 ---
+
+## Provider-specific examples
+
+There are runnable examples under `llm/examples/` that mirror the patterns above:
+
+- **`openai`**: Direct OpenAI chat completions using `VlloraLLMClient` (non-streaming + streaming).
+- **`anthropic`**: Anthropic (Claude) chat completions via the unified client.
+- **`gemini`**: Gemini chat completions via the unified client.
+- **`bedrock`**: AWS Bedrock chat completions (Nova etc.) via the unified client.
+- **`proxy_langdb`**: Using `InferenceModelProvider::Proxy("langdb")` to call a LangDB OpenAI-compatible endpoint.
+
+Each example is a standalone Cargo binary; you can `cd` into a directory and run:
+
+```bash
+cargo run
+```
+
+after setting the provider-specific environment variables noted in the example’s `main.rs`.
 
 ## Notes
 

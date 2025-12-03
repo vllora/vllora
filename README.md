@@ -54,6 +54,50 @@ curl http://localhost:9090/v1/chat/completions \
   }'
 ```
 
+### Rust streaming example (OpenAI-compatible)
+
+In `llm/examples/openai_stream_basic/src/main.rs` you can find a minimal Rust example that:
+
+- **Builds an OpenAI-style request** using `CreateChatCompletionRequestArgs` with:
+  - `model("gpt-4.1-mini")`
+  - a **system message**: `"You are a helpful assistant."`
+  - a **user message**: `"Stream numbers 1 to 20 in separate lines."`
+- **Constructs a `VlloraLLMClient`** and configures credentials via:
+
+```bash
+export VLLORA_OPENAI_API_KEY="your-openai-compatible-key"
+```
+
+Inside the example, the client is created roughly as:
+
+```rust
+let client = VlloraLLMClient::new()
+    .with_credentials(Credentials::ApiKey(ApiKeyCredentials {
+        api_key: std::env::var("VLLORA_OPENAI_API_KEY")
+            .expect("VLLORA_OPENAI_API_KEY must be set")
+    }));
+```
+
+Then it **streams the completion** using the original OpenAI-style request:
+
+```rust
+let mut stream = client
+    .completions()
+    .create_stream(openai_req)
+    .await?;
+
+while let Some(chunk) = stream.next().await {
+    let chunk = chunk?;
+    for choice in chunk.choices {
+        if let Some(delta) = choice.delta.content {
+            print!("{delta}");
+        }
+    }
+}
+```
+
+This will print the streamed response chunks (in this example, numbers 1 to 20) to stdout as they arrive.
+
 ## Features
 
 **Real-time Tracing** - Monitor AI agent interactions as they happen with live observability of calls, tool interactions, and agent workflow. See exactly what your agents are doing in real-time.

@@ -14,12 +14,13 @@ use tokio::sync::mpsc::{self, channel};
 use tracing::{info_span, Instrument};
 use valuable::Valuable;
 use vllora_llm::client::completions::response_stream::ResultStream;
+use vllora_llm::client::completions::CompletionsClient;
 use vllora_llm::client::error::ModelError;
-use vllora_llm::client::{ModelInstance, VlloraLLMClient};
+use vllora_llm::client::ModelInstance;
 use vllora_llm::error::{LLMError, LLMResult};
 use vllora_llm::types::credentials_ident::CredentialsIdent;
-use vllora_llm::types::engine::CompletionModelDefinition;
 use vllora_llm::types::engine::{CompletionEngineParams, CompletionModelParams};
+use vllora_llm::types::engine::{CompletionEngineParamsBuilder, CompletionModelDefinition};
 use vllora_llm::types::events::CustomEventType;
 use vllora_llm::types::gateway::{
     ChatCompletionContent, ChatCompletionMessage, ChatCompletionMessageWithFinishReason,
@@ -326,9 +327,9 @@ impl ModelInstance for TracedModel {
         async {
             let instance =
                 init_model_instance(self.definition.model_params.engine.clone(), tools).await?;
-            let vllora_llm_client = VlloraLLMClient::new_with_instance(instance);
+            let vllora_llm_client = CompletionsClient::new(CompletionEngineParamsBuilder::new())
+                .with_instance(instance);
             let result = vllora_llm_client
-                .completions()
                 .with_input_variables(input_vars.clone())
                 .with_tx(tx.clone())
                 .with_tags(tags.clone())
@@ -437,12 +438,14 @@ impl ModelInstance for TracedModel {
         let (tx, mut rx) = channel(outer_tx.max_capacity());
         let mut start_time = None;
         let tools = self.tools.clone();
+
         let instance =
             init_model_instance(self.definition.model_params.engine.clone(), tools).await?;
-        let vllora_llm_client = VlloraLLMClient::new_with_instance(instance);
+        let completions_client =
+            CompletionsClient::new(CompletionEngineParamsBuilder::new()).with_instance(instance);
 
         let result = execute_stream(
-            vllora_llm_client,
+            completions_client,
             self.request.clone(),
             input_vars.clone(),
             tx.clone(),
@@ -511,14 +514,13 @@ impl ModelInstance for TracedModel {
 }
 
 async fn execute_stream(
-    vllora_llm_client: VlloraLLMClient,
+    completions_client: CompletionsClient,
     request: ChatCompletionRequest,
     input_vars: HashMap<String, Value>,
     tx: mpsc::Sender<Option<ModelEvent>>,
     tags: HashMap<String, String>,
 ) -> LLMResult<ResultStream> {
-    let client = vllora_llm_client
-        .completions()
+    let client = completions_client
         .with_input_variables(input_vars.clone())
         .with_tx(tx.clone())
         .with_tags(tags.clone());

@@ -410,16 +410,16 @@ impl BedrockModel {
         tags: HashMap<String, String>,
     ) -> LLMResult<InnerExecutionResult> {
         let input_messages = builder.get_messages().clone().unwrap_or_default();
-        tx.send(Some(ModelEvent::new(
-            &span,
-            ModelEventType::LlmStart(LLMStartEvent {
-                provider_name: SPAN_BEDROCK.to_string(),
-                model_name: self.model_name.clone(),
-                input: format!("{input_messages:?}"),
-            }),
-        )))
-        .await
-        .map_err(|e| LLMError::CustomError(e.to_string()))?;
+        let _ = tx
+            .send(Some(ModelEvent::new(
+                &span,
+                ModelEventType::LlmStart(LLMStartEvent {
+                    provider_name: SPAN_BEDROCK.to_string(),
+                    model_name: self.model_name.clone(),
+                    input: format!("{input_messages:?}"),
+                }),
+            )))
+            .await;
 
         let response = async move {
             let result = builder.send().await;
@@ -465,25 +465,25 @@ impl BedrockModel {
                         _ => None,
                     };
 
-                    tx.send(Some(ModelEvent::new(
-                        &span,
-                        ModelEventType::LlmStop(LLMFinishEvent {
-                            provider_name: SPAN_BEDROCK.to_string(),
-                            model_name: self
-                                .params
-                                .model_id
-                                .clone()
-                                .map(|m| m.to_string())
-                                .unwrap_or_default(),
-                            output,
-                            usage: usage.clone(),
-                            finish_reason: ModelFinishReason::Stop,
-                            tool_calls: vec![],
-                            credentials_ident: self.credentials_ident.clone(),
-                        }),
-                    )))
-                    .await
-                    .map_err(|e| LLMError::CustomError(e.to_string()))?;
+                    let _ = tx
+                        .send(Some(ModelEvent::new(
+                            &span,
+                            ModelEventType::LlmStop(LLMFinishEvent {
+                                provider_name: SPAN_BEDROCK.to_string(),
+                                model_name: self
+                                    .params
+                                    .model_id
+                                    .clone()
+                                    .map(|m| m.to_string())
+                                    .unwrap_or_default(),
+                                output,
+                                usage: usage.clone(),
+                                finish_reason: ModelFinishReason::Stop,
+                                tool_calls: vec![],
+                                credentials_ident: self.credentials_ident.clone(),
+                            }),
+                        )))
+                        .await;
 
                     let message = message.content.first().ok_or(ModelError::CustomError(
                         "Content Block Not Found".to_string(),
@@ -598,29 +598,29 @@ impl BedrockModel {
                                         ..Default::default()
                                     });
 
-                                tx.send(Some(ModelEvent::new(
-                                    &span,
-                                    ModelEventType::LlmStop(LLMFinishEvent {
-                                        provider_name: SPAN_BEDROCK.to_string(),
-                                        model_name: self
-                                            .params
-                                            .model_id
-                                            .clone()
-                                            .map(|m| m.to_string())
-                                            .unwrap_or_default(),
-                                        output: content.clone(),
-                                        usage: usage.clone(),
-                                        finish_reason: ModelFinishReason::ToolCalls,
-                                        tool_calls: tool_uses
-                                            .iter()
-                                            .map(Self::map_tool_call)
-                                            .collect::<Result<Vec<ModelToolCall>, LLMError>>(
-                                        )?,
-                                        credentials_ident: self.credentials_ident.clone(),
-                                    }),
-                                )))
-                                .await
-                                .map_err(|e| LLMError::CustomError(e.to_string()))?;
+                                let _ = tx
+                                    .send(Some(ModelEvent::new(
+                                        &span,
+                                        ModelEventType::LlmStop(LLMFinishEvent {
+                                            provider_name: SPAN_BEDROCK.to_string(),
+                                            model_name: self
+                                                .params
+                                                .model_id
+                                                .clone()
+                                                .map(|m| m.to_string())
+                                                .unwrap_or_default(),
+                                            output: content.clone(),
+                                            usage: usage.clone(),
+                                            finish_reason: ModelFinishReason::ToolCalls,
+                                            tool_calls: tool_uses
+                                                .iter()
+                                                .map(Self::map_tool_call)
+                                                .collect::<Result<Vec<ModelToolCall>, LLMError>>(
+                                            )?,
+                                            credentials_ident: self.credentials_ident.clone(),
+                                        }),
+                                    )))
+                                    .await;
 
                                 Ok(InnerExecutionResult::Finish(
                                     ChatCompletionMessageWithFinishReason::new(
@@ -690,12 +690,12 @@ impl BedrockModel {
             let output = result.map_err(|e| ModelError::Bedrock(Box::new(e.into())))?;
             if !first_response_received {
                 first_response_received = true;
-                tx.send(Some(ModelEvent::new(
-                    &Span::current(),
-                    ModelEventType::LlmFirstToken(LLMFirstToken {}),
-                )))
-                .await
-                .map_err(|e| LLMError::CustomError(e.to_string()))?;
+                let _ = tx
+                    .send(Some(ModelEvent::new(
+                        &Span::current(),
+                        ModelEventType::LlmFirstToken(LLMFirstToken {}),
+                    )))
+                    .await;
                 Span::current().record("ttft", started_at.elapsed().as_micros());
             }
 
@@ -714,12 +714,14 @@ impl BedrockModel {
                         Some(ContentBlockDelta::Text(t)) => {
                             // Save streamed text content
                             accumulated_text.push_str(&t);
-                            tx.send(Some(ModelEvent::new(
-                                &Span::current(),
-                                ModelEventType::LlmContent(LLMContentEvent { content: t.clone() }),
-                            )))
-                            .await
-                            .unwrap();
+                            let _ = tx
+                                .send(Some(ModelEvent::new(
+                                    &Span::current(),
+                                    ModelEventType::LlmContent(LLMContentEvent {
+                                        content: t.clone(),
+                                    }),
+                                )))
+                                .await;
 
                             let mut chunk_clone = chunk.clone();
                             chunk_clone.choices.push(ChatCompletionChunkChoice {
@@ -939,16 +941,16 @@ impl BedrockModel {
     ) -> LLMResult<InnerExecutionResult> {
         let input_messages = builder.get_messages().clone().unwrap_or_default();
 
-        tx.send(Some(ModelEvent::new(
-            &span,
-            ModelEventType::LlmStart(LLMStartEvent {
-                provider_name: SPAN_BEDROCK.to_string(),
-                model_name: self.params.model_id.clone().unwrap_or_default(),
-                input: format!("{input_messages:?}"),
-            }),
-        )))
-        .await
-        .map_err(|e| LLMError::CustomError(e.to_string()))?;
+        let _ = tx
+            .send(Some(ModelEvent::new(
+                &span,
+                ModelEventType::LlmStart(LLMStartEvent {
+                    provider_name: SPAN_BEDROCK.to_string(),
+                    model_name: self.params.model_id.clone().unwrap_or_default(),
+                    input: format!("{input_messages:?}"),
+                }),
+            )))
+            .await;
 
         let started_at = std::time::Instant::now();
         let response = builder.send().await.map_err(map_converse_stream_error)?;
@@ -1005,20 +1007,20 @@ impl BedrockModel {
                     .collect::<LLMResult<Vec<_>>>()
             })
             .unwrap_or(Ok(vec![]))?;
-        tx.send(Some(ModelEvent::new(
-            &span,
-            ModelEventType::LlmStop(LLMFinishEvent {
-                provider_name: SPAN_BEDROCK.to_string(),
-                model_name: self.params.model_id.clone().unwrap_or_default(),
-                output: None,
-                usage: usage.clone(),
-                finish_reason: trace_finish_reason.clone(),
-                tool_calls: tool_calls.clone(),
-                credentials_ident: self.credentials_ident.clone(),
-            }),
-        )))
-        .await
-        .map_err(|e| LLMError::CustomError(e.to_string()))?;
+        let _ = tx
+            .send(Some(ModelEvent::new(
+                &span,
+                ModelEventType::LlmStop(LLMFinishEvent {
+                    provider_name: SPAN_BEDROCK.to_string(),
+                    model_name: self.params.model_id.clone().unwrap_or_default(),
+                    output: None,
+                    usage: usage.clone(),
+                    finish_reason: trace_finish_reason.clone(),
+                    tool_calls: tool_calls.clone(),
+                    credentials_ident: self.credentials_ident.clone(),
+                }),
+            )))
+            .await;
 
         match stop_reason {
             StopReason::ToolUse => {

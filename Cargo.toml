@@ -2,6 +2,7 @@
 resolver = "2"
 members = ["gateway", "core", "guardrails", "telemetry", "llm"]
 default-members = ["gateway"]
+exclude = ["llm/examples/*"]
 
 [workspace.dependencies]
 async-openai = { package = "async-openai-compat", version = "0.29.8" }

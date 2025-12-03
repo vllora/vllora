@@ -912,20 +912,20 @@ impl<C: Config> OpenAIModel<C> {
 
         span.record("output", serde_json::to_string(&response)?);
         let model_finish_reason = Self::map_finish_reason(&finish_reason);
-        tx.send(Some(ModelEvent::new(
-            &span,
-            ModelEventType::LlmStop(LLMFinishEvent {
-                provider_name: SPAN_OPENAI.to_string(),
-                model_name: self.params.model.clone().unwrap_or_default(),
-                output: None,
-                usage: Self::map_usage(usage.as_ref()),
-                finish_reason: model_finish_reason.clone(),
-                tool_calls: tool_calls.iter().map(Self::map_tool_call).collect(),
-                credentials_ident: self.credentials_ident.clone(),
-            }),
-        )))
-        .await
-        .map_err(|e| LLMError::CustomError(e.to_string()))?;
+        let _ = tx
+            .send(Some(ModelEvent::new(
+                &span,
+                ModelEventType::LlmStop(LLMFinishEvent {
+                    provider_name: SPAN_OPENAI.to_string(),
+                    model_name: self.params.model.clone().unwrap_or_default(),
+                    output: None,
+                    usage: Self::map_usage(usage.as_ref()),
+                    finish_reason: model_finish_reason.clone(),
+                    tool_calls: tool_calls.iter().map(Self::map_tool_call).collect(),
+                    credentials_ident: self.credentials_ident.clone(),
+                }),
+            )))
+            .await;
         if let Some(response) = &response {
             let chunk = ChatCompletionChunk {
                 id: response.id.clone(),
