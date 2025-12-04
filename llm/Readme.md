@@ -322,8 +322,7 @@ after setting the provider-specific environment variables noted in the exampleâ€
 ## License
 
 <sup>
-Licensed under either of <a href="LICENSE-APACHE">Apache License, Version
-2.0</a>.
+Licensed under <a href="LICENSE-APACHE">Apache License, Version 2.0</a>.
 </sup>
 
 <br>
