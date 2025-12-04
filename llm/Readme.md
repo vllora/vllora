@@ -287,7 +287,7 @@ There are runnable examples under `llm/examples/` that mirror the patterns above
 - **`anthropic`**: Anthropic (Claude) chat completions via the unified client.
 - **`gemini`**: Gemini chat completions via the unified client.
 - **`bedrock`**: AWS Bedrock chat completions (Nova etc.) via the unified client.
-- **`proxy_langdb`**: Using `InferenceModelProvider::Proxy("langdb")` to call a LangDB OpenAI-compatible endpoint.
+- **`proxy`**: Using `InferenceModelProvider::Proxy("proxy_name")` to call a OpenAI completions-compatible endpoint.
 - **`tracing`**: Same OpenAI-style flow as `openai`, but with `tracing_subscriber::fmt()` configured to emit spans and events to the console (stdout).
 - **`tracing_otlp`**: Shows how to wire `vllora_telemetry::events::layer` to an OTLP HTTP exporter (e.g. New Relic / any OTLP collector) and emit spans from `VlloraLLMClient` calls to a remote telemetry backend.
 
