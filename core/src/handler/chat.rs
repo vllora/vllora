@@ -59,7 +59,7 @@ pub(crate) async fn prepare_request(
     thread_id: Option<String>,
     span: Span,
     cost_calculator: Arc<Box<dyn CostCalculator>>,
-    request: &ChatCompletionRequestWithTools<RoutingStrategy>
+    request: &ChatCompletionRequestWithTools<RoutingStrategy>,
 ) -> Result<(JoinHandle<()>, CallbackHandlerFn), GatewayApiError> {
     let (tx, mut rx) = tokio::sync::broadcast::channel(10000);
     let callback_handler = CallbackHandlerFn(Some(tx));
@@ -79,7 +79,10 @@ pub(crate) async fn prepare_request(
                 run_id.clone(),
                 thread_id.clone(),
                 None,
-               Some(HashMap::from([("request".to_string(), serde_json::to_value(request.clone())?)])),
+                Some(HashMap::from([(
+                    "request".to_string(),
+                    serde_json::to_value(request.clone())?,
+                )])),
             ),
         )))
         .await;

@@ -158,7 +158,8 @@ pub fn map_cloud_event_to_agui_events(value: &GatewayEvent) -> Vec<Event> {
                     attributes: if event.attributes.is_empty() {
                         serde_json::Value::Null
                     } else {
-                        serde_json::to_value(event.attributes.clone()).expect("Failed to serialize attributes")
+                        serde_json::to_value(event.attributes.clone())
+                            .expect("Failed to serialize attributes")
                     },
                 },
             }]
