@@ -157,10 +157,12 @@ pub(crate) async fn prepare_request(
                         if let Some(span) = &model_event.event.span {
                             span.record("cost", serde_json::to_string(&cost).unwrap());
                             span.record("usage", serde_json::to_string(&usage).unwrap());
+                            span.record("response", content.clone());
                         }
 
                         span.record("cost", serde_json::to_string(&cost).unwrap());
                         span.record("usage", serde_json::to_string(&usage).unwrap());
+                        span.record("response", content.clone());
                     }
                 }
                 _ => {}
