@@ -94,3 +94,31 @@ pub async fn list_root_runs<T: RunService + DatabaseServiceTrait>(
 
     Ok(HttpResponse::Ok().json(result))
 }
+
+pub async fn run_by_id<T: RunService + DatabaseServiceTrait>(
+    run_id: web::Path<String>,
+    project: web::ReqData<Project>,
+    database_service: web::Data<DatabaseService>,
+) -> Result<HttpResponse> {
+    let run_service: T = database_service.init();
+
+    // Extract project_id from extensions (set by ProjectMiddleware)
+    let project_slug = project.slug.clone();
+
+    let list_query = ListRunsQuery {
+        project_slug: Some(project_slug),
+        run_ids: Some(vec![run_id.clone()]),
+        thread_ids: None,
+        trace_ids: None,
+        model_name: None,
+        type_filter: None,
+        start_time_min: None,
+        start_time_max: None,
+        limit: 1,
+        offset: 0,
+        include_mcp_templates: false,
+    };
+    let runs = run_service.list_root_runs(list_query.clone())?;
+
+    Ok(HttpResponse::Ok().json(runs.first()))
+}

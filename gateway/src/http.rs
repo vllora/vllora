@@ -380,6 +380,10 @@ impl ApiServer {
                     .route(
                         "/{run_id}",
                         web::get().to(traces::get_spans_by_run::<MetadataTraceServiceImpl>),
+                    )
+                    .route(
+                        "/{run_id}/details",
+                        web::get().to(runs::run_by_id::<RunServiceImpl>),
                     ),
             )
             .service(
