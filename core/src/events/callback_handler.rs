@@ -49,6 +49,7 @@ pub struct GatewaySpanStartEvent {
 }
 
 impl GatewaySpanStartEvent {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         span: &Span,
         operation_name: String,
