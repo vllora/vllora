@@ -7,7 +7,7 @@ license = "Apache-2.0"
 repository = "https://github.com/vllora/vllora"
 documentation = "https://vllora.dev/docs"
 readme = "./README.md"
-keywords = ["llm", "openai", "anthropic", "gemini", "mcp", "tracing", "telemetry"]
+keywords = ["llm", "openai", "anthropic", "gemini", "mcp"]
 categories = ["web-programming", "network-programming"]
 edition = "2021"
 
