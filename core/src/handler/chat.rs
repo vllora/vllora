@@ -59,6 +59,7 @@ pub(crate) async fn prepare_request(
     thread_id: Option<String>,
     span: Span,
     cost_calculator: Arc<Box<dyn CostCalculator>>,
+    request: &ChatCompletionRequestWithTools<RoutingStrategy>
 ) -> Result<(JoinHandle<()>, CallbackHandlerFn), GatewayApiError> {
     let (tx, mut rx) = tokio::sync::broadcast::channel(10000);
     let callback_handler = CallbackHandlerFn(Some(tx));
@@ -78,6 +79,7 @@ pub(crate) async fn prepare_request(
                 run_id.clone(),
                 thread_id.clone(),
                 None,
+               Some(HashMap::from([("request".to_string(), serde_json::to_value(request.clone())?)])),
             ),
         )))
         .await;
@@ -199,12 +201,9 @@ pub async fn create_chat_completion(
     project: web::ReqData<Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
     models_service: web::Data<Box<dyn ModelService>>,
+    breakpoint_manager: web::Data<BreakpointManager>,
 ) -> Result<HttpResponse, GatewayApiError> {
     can_execute_llm_for_request(&req).await?;
-
-    let breakpoint_manager = req
-        .app_data::<web::Data<BreakpointManager>>()
-        .map(|bm| bm.as_ref());
 
     let span = Span::or_current(tracing::info_span!(
         target: "vllora::user_tracing::api_invoke",
@@ -253,6 +252,7 @@ pub async fn create_chat_completion(
     let thread_id = thread_id.value();
 
     let cost_calculator = cost_calculator.into_inner();
+    let request = request.into_inner();
     let (_handle, callback_handler_fn) = prepare_request(
         &callback_handler.get_ref().clone(),
         "vllora",
@@ -262,6 +262,7 @@ pub async fn create_chat_completion(
         Some(thread_id.clone()),
         span.clone(),
         cost_calculator.clone(),
+        &request,
     )
     .await?;
 
@@ -287,7 +288,7 @@ pub async fn create_chat_completion(
             memory_storage,
             None,
             Some(&thread_id),
-            breakpoint_manager,
+            Some(&breakpoint_manager.into_inner()),
         )
         .instrument(span.clone())
         .await

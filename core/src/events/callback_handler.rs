@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::events::ui_broadcaster::EventsUIBroadcaster;
 use crate::handler::ModelEventWithDetails;
 use opentelemetry::{trace::TraceContextExt, SpanId};
@@ -42,6 +44,8 @@ pub struct GatewaySpanStartEvent {
     pub run_id: Option<String>,
     pub thread_id: Option<String>,
     pub operation_name: String,
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    pub attributes: HashMap<String, serde_json::Value>,
 }
 
 impl GatewaySpanStartEvent {
@@ -53,6 +57,7 @@ impl GatewaySpanStartEvent {
         run_id: Option<String>,
         thread_id: Option<String>,
         parent_span_id: Option<SpanId>,
+        attributes: Option<HashMap<String, serde_json::Value>>,
     ) -> Self {
         let parent_span_id = match parent_span_id {
             Some(parent_span_id) => Some(parent_span_id),
@@ -91,6 +96,7 @@ impl GatewaySpanStartEvent {
             tenant_name,
             run_id,
             thread_id,
+            attributes: attributes.unwrap_or_default(),
         }
     }
 }

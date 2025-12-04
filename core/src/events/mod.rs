@@ -155,7 +155,11 @@ pub fn map_cloud_event_to_agui_events(value: &GatewayEvent) -> Vec<Event> {
                     .as_millis() as u64,
                 custom_event: CustomEventType::SpanStart {
                     operation_name: event.operation_name.clone(),
-                    attributes: serde_json::Value::Null,
+                    attributes: if event.attributes.is_empty() {
+                        serde_json::Value::Null
+                    } else {
+                        serde_json::to_value(event.attributes.clone()).expect("Failed to serialize attributes")
+                    },
                 },
             }]
         }
