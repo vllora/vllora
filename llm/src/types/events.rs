@@ -261,6 +261,32 @@ impl Event {
             Event::Custom { timestamp, .. } => *timestamp,
         }
     }
+
+    pub fn thread_id(&self) -> Option<&String> {
+        match self {
+            Event::RunStarted { run_context, .. } => run_context.thread_id.as_ref(),
+            Event::RunFinished { run_context, .. } => run_context.thread_id.as_ref(),
+            Event::RunError { run_context, .. } => run_context.thread_id.as_ref(),
+            Event::AgentStarted { run_context, .. } => run_context.thread_id.as_ref(),
+            Event::AgentFinished { run_context, .. } => run_context.thread_id.as_ref(),
+            Event::TaskStarted { run_context, .. } => run_context.thread_id.as_ref(),
+            Event::TaskFinished { run_context, .. } => run_context.thread_id.as_ref(),
+            Event::StepStarted { run_context, .. } => run_context.thread_id.as_ref(),
+            Event::StepFinished { run_context, .. } => run_context.thread_id.as_ref(),
+            Event::TextMessageStart { run_context, .. } => run_context.thread_id.as_ref(),
+            Event::TextMessageContent { run_context, .. } => run_context.thread_id.as_ref(),
+            Event::TextMessageEnd { run_context, .. } => run_context.thread_id.as_ref(),
+            Event::ToolCallStart { run_context, .. } => run_context.thread_id.as_ref(),
+            Event::ToolCallArgs { run_context, .. } => run_context.thread_id.as_ref(),
+            Event::ToolCallEnd { run_context, .. } => run_context.thread_id.as_ref(),
+            Event::ToolCallResult { run_context, .. } => run_context.thread_id.as_ref(),
+            Event::StateSnapshot { run_context, .. } => run_context.thread_id.as_ref(),
+            Event::StateDelta { run_context, .. } => run_context.thread_id.as_ref(),
+            Event::MessagesSnapshot { run_context, .. } => run_context.thread_id.as_ref(),
+            Event::Raw { run_context, .. } => run_context.thread_id.as_ref(),
+            Event::Custom { run_context, .. } => run_context.thread_id.as_ref(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

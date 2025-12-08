@@ -9,6 +9,7 @@ use vllora_core::executor::chat_completion::breakpoint::{
 };
 use vllora_core::types::metadata::project::Project;
 use vllora_core::GatewayApiError;
+use vllora_llm::types::events::Event;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ContinueRequest {
@@ -21,6 +22,7 @@ pub struct ContinueRequestWithThreadId {
     pub breakpoint_id: String,
     #[serde(flatten)]
     pub request_with_thread_id: RequestWithThreadId,
+    pub events: Vec<Event>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -79,17 +81,19 @@ pub async fn continue_all_breakpoints(
 pub async fn list_breakpoints(
     breakpoint_manager: web::Data<BreakpointManager>,
 ) -> Result<HttpResponse, GatewayApiError> {
-    let breakpoints = breakpoint_manager.list_breakpoints().await;
+    let mut breakpoints = vec![];
 
-    let breakpoints = breakpoints
-        .into_iter()
-        .map(
-            |(breakpoint_id, request_with_thread_id)| ContinueRequestWithThreadId {
-                breakpoint_id,
-                request_with_thread_id,
-            },
-        )
-        .collect();
+    for (breakpoint_id, request_with_thread_id) in breakpoint_manager.list_breakpoints().await {
+        let events = match request_with_thread_id.thread_id.as_ref() {
+            Some(thread_id) => breakpoint_manager.get_events_by_thread_id(thread_id).await,
+            None => vec![],
+        };
+        breakpoints.push(ContinueRequestWithThreadId {
+            breakpoint_id,
+            request_with_thread_id,
+            events,
+        });
+    }
     let intercept_all = breakpoint_manager.intercept_all();
 
     Ok(

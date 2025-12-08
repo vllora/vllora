@@ -164,11 +164,13 @@ impl ApiServer {
         let server_config_for_closure = server_config.clone();
 
         let events_senders = Arc::new(Mutex::new(HashMap::new()));
-        let events_senders_container = Arc::new(EventsSendersContainer::new(events_senders));
-
         let project_traces_senders = project_trace_senders.clone();
         let session_manager = Arc::new(LocalSessionManager::default());
         let breakpoint_manager = Arc::new(BreakpointManager::new());
+        let events_senders_container = Arc::new(
+            EventsSendersContainer::new(events_senders)
+                .with_breakpoint_manager(breakpoint_manager.clone()),
+        );
 
         let breakpoint_manager_for_closure = breakpoint_manager.clone();
         let server = HttpServer::new(move || {

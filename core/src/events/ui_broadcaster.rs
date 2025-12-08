@@ -1,5 +1,6 @@
 use crate::events::callback_handler::GatewayEvent;
 use crate::events::{map_cloud_event_to_agui_events, Event};
+use crate::executor::chat_completion::breakpoint::BreakpointManager;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
@@ -123,6 +124,11 @@ impl EventsUIBroadcaster {
 
     /// Helper function to send an event to all connected clients for a specific project
     pub async fn send_events(&self, project_id: &str, events: &[Event]) {
+        // Store events grouped by thread_id in BreakpointManager if available
+        if let Some(breakpoint_manager) = &self.senders_container.breakpoint_manager {
+            breakpoint_manager.store_events(events).await;
+        }
+
         // Lock the senders map
         let mut senders = self.senders_container.senders.lock().await;
 
@@ -154,12 +160,22 @@ impl EventsUIBroadcaster {
 #[derive(Clone)]
 pub struct EventsSendersContainer {
     pub senders: EventSenders,
+    pub breakpoint_manager: Option<Arc<BreakpointManager>>,
 }
 
 impl EventsSendersContainer {
     pub fn new(senders: EventSenders) -> Self {
-        Self { senders }
+        Self {
+            senders,
+            breakpoint_manager: None,
+        }
+    }
+
+    pub fn with_breakpoint_manager(mut self, breakpoint_manager: Arc<BreakpointManager>) -> Self {
+        self.breakpoint_manager = Some(breakpoint_manager);
+        self
     }
 }
+
 /// Type alias for the map of event senders
 type EventSenders = Arc<Mutex<HashMap<String, (Sender<Event>, Option<oneshot::Sender<()>>)>>>;

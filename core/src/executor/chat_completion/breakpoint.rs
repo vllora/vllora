@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::{oneshot, Mutex};
 use tracing::Span;
+use vllora_llm::types::events::Event;
 use vllora_llm::types::{
     events::CustomEventType, gateway::ChatCompletionRequest, CustomEvent, ModelEvent,
     ModelEventType,
@@ -34,6 +35,7 @@ pub struct BreakpointManager {
     pending_breakpoints: Arc<Mutex<HashMap<String, oneshot::Sender<BreakpointAction>>>>,
     breakpoint_requests: Arc<Mutex<HashMap<String, RequestWithThreadId>>>,
     intercept_all: Arc<AtomicBool>,
+    events_storage: Arc<Mutex<HashMap<String, Vec<Event>>>>,
 }
 
 impl BreakpointManager {
@@ -42,6 +44,7 @@ impl BreakpointManager {
             pending_breakpoints: Arc::new(Mutex::new(HashMap::new())),
             breakpoint_requests: Arc::new(Mutex::new(HashMap::new())),
             intercept_all: Arc::new(AtomicBool::new(false)),
+            events_storage: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -66,13 +69,22 @@ impl BreakpointManager {
         // Drain all pending breakpoints and send Continue to each
         for (breakpoint_id, sender) in pending.drain() {
             // Remove stored request as we're resuming execution
-            requests.remove(&breakpoint_id);
+            let request_with_thread_id = requests.remove(&breakpoint_id);
+            if let Some(request_with_thread_id) = request_with_thread_id {
+                self.clear_events_for_request(&request_with_thread_id).await;
+            }
             if let Err(_action) = sender.send(BreakpointAction::Continue) {
                 tracing::error!(
                     breakpoint_id = %breakpoint_id,
                     "Failed to continue breakpoint: receiver dropped"
                 );
             }
+        }
+    }
+
+    pub async fn clear_events_for_request(&self, request_with_thread_id: &RequestWithThreadId) {
+        if let Some(thread_id) = &request_with_thread_id.thread_id {
+            self.clear_events_by_thread_id(thread_id).await;
         }
     }
 
@@ -107,7 +119,10 @@ impl BreakpointManager {
         let mut requests = self.breakpoint_requests.lock().await;
         if let Some(tx) = pending.remove(breakpoint_id) {
             // remove stored request when resolved
-            requests.remove(breakpoint_id);
+            let request_with_thread_id = requests.remove(breakpoint_id);
+            if let Some(request_with_thread_id) = request_with_thread_id {
+                self.clear_events_for_request(&request_with_thread_id).await;
+            }
             tx.send(action)
                 .map_err(|_| BreakpointError::ChannelClosed)?;
             Ok(())
@@ -133,6 +148,34 @@ impl BreakpointManager {
             .keys()
             .filter_map(|id| requests.get(id).cloned().map(|req| (id.clone(), req)))
             .collect()
+    }
+
+    /// Store events grouped by thread_id
+    pub async fn store_events(&self, events: &[Event]) {
+        if !self.intercept_all() {
+            return;
+        }
+        let mut storage = self.events_storage.lock().await;
+        for event in events {
+            if let Some(thread_id) = event.thread_id() {
+                storage
+                    .entry(thread_id.clone())
+                    .or_insert_with(Vec::new)
+                    .push(event.clone());
+            }
+        }
+    }
+
+    /// Retrieve all events for a specific thread_id
+    pub async fn get_events_by_thread_id(&self, thread_id: &str) -> Vec<Event> {
+        let storage = self.events_storage.lock().await;
+        storage.get(thread_id).cloned().unwrap_or_default()
+    }
+
+    /// Clear events for a specific thread_id
+    pub async fn clear_events_by_thread_id(&self, thread_id: &str) {
+        let mut storage = self.events_storage.lock().await;
+        storage.remove(thread_id);
     }
 }
 
