@@ -26,7 +26,7 @@ pub enum BreakpointAction {
 #[derive(Clone)]
 pub struct BreakpointManager {
     pending_breakpoints: Arc<Mutex<HashMap<String, oneshot::Sender<BreakpointAction>>>>,
-    breakpoint_requests: Arc<Mutex<HashMap<String, ChatCompletionRequest>>>,
+    breakpoint_requests: Arc<Mutex<HashMap<String, (ChatCompletionRequest, Option<String>)>>>,
     intercept_all: Arc<AtomicBool>,
 }
 
@@ -75,12 +75,13 @@ impl BreakpointManager {
         &self,
         breakpoint_id: String,
         request: ChatCompletionRequest,
+        thread_id: Option<&String>,
     ) -> oneshot::Receiver<BreakpointAction> {
         let (tx, rx) = oneshot::channel();
         let mut pending = self.pending_breakpoints.lock().await;
         let mut requests = self.breakpoint_requests.lock().await;
         pending.insert(breakpoint_id.clone(), tx);
-        requests.insert(breakpoint_id, request);
+        requests.insert(breakpoint_id, (request, thread_id.cloned()));
         rx
     }
 
@@ -112,7 +113,7 @@ impl BreakpointManager {
     }
 
     /// List all currently pending breakpoints and their stored requests
-    pub async fn list_breakpoints(&self) -> Vec<(String, ChatCompletionRequest)> {
+    pub async fn list_breakpoints(&self) -> Vec<(String, (ChatCompletionRequest, Option<String>))> {
         let pending = self.pending_breakpoints.lock().await;
         let requests = self.breakpoint_requests.lock().await;
 
@@ -143,6 +144,7 @@ pub async fn wait_for_breakpoint_action(
     breakpoint_manager: &BreakpointManager,
     request: &ChatCompletionRequest,
     callback_handler: &CallbackHandlerFn,
+    thread_id: Option<&String>,
 ) -> Result<ChatCompletionRequest, BreakpointError> {
     // If global intercept is disabled, only intercept when "debug" tag is present
     if !breakpoint_manager.intercept_all() && !executor_tags.contains_key("debug") {
@@ -167,7 +169,7 @@ pub async fn wait_for_breakpoint_action(
 
     // Register the breakpoint and get the receiver
     let rx = breakpoint_manager
-        .register_breakpoint(breakpoint_id.clone(), request.clone())
+        .register_breakpoint(breakpoint_id.clone(), request.clone(), thread_id)
         .await;
 
     // Log that we're waiting for breakpoint

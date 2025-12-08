@@ -1,5 +1,5 @@
 use actix_web::{web, HttpResponse, Result};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use vllora_core::events::callback_handler::GatewayCallbackHandlerFn;
 use vllora_core::events::callback_handler::GatewayEvent;
 use vllora_core::events::callback_handler::GlobalBreakpointStateEvent;
@@ -8,11 +8,25 @@ use vllora_core::executor::chat_completion::breakpoint::{
 };
 use vllora_core::types::metadata::project::Project;
 use vllora_core::GatewayApiError;
+use vllora_llm::types::gateway::ChatCompletionRequest;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ContinueRequest {
     pub breakpoint_id: String,
     pub action: BreakpointAction,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ContinueRequestWithThreadId {
+    pub breakpoint_id: String,
+    pub request: ChatCompletionRequest,
+    pub thread_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ContinueRequestWithThreadIdResponse {
+    pub breakpoints: Vec<ContinueRequestWithThreadId>,
+    pub intercept_all: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -67,21 +81,22 @@ pub async fn list_breakpoints(
 ) -> Result<HttpResponse, GatewayApiError> {
     let breakpoints = breakpoint_manager.list_breakpoints().await;
 
-    let response: Vec<_> = breakpoints
+    let breakpoints = breakpoints
         .into_iter()
-        .map(|(breakpoint_id, request)| {
-            serde_json::json!({
-                "breakpoint_id": breakpoint_id,
-                "request": request,
-            })
+        .map(|(breakpoint_id, (request, thread_id))| {
+            ContinueRequestWithThreadId {
+                breakpoint_id,
+                request,
+                thread_id
+            }
         })
         .collect();
     let intercept_all = breakpoint_manager.intercept_all();
 
-    Ok(HttpResponse::Ok().json(serde_json::json!({
-        "breakpoints": response,
-        "intercept_all": intercept_all
-    })))
+    Ok(HttpResponse::Ok().json(ContinueRequestWithThreadIdResponse {
+        breakpoints,
+        intercept_all,
+    }))
 }
 
 pub async fn set_global_breakpoint(

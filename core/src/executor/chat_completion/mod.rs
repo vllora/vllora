@@ -62,6 +62,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
     basic_cache_context: BasicCacheContext,
     llm_model: &ModelMetadata,
     breakpoint_manager: Option<&BreakpointManager>,
+    thread_id: Option<&String>,
 ) -> Result<ChatCompletionExecutionResult, GatewayApiError> {
     let span = Span::current();
 
@@ -94,6 +95,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
             breakpoint_manager,
             &request_with_tools.request,
             &executor_context.callbackhandler,
+            thread_id,
         )
         .await
         {

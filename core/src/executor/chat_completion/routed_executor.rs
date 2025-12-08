@@ -226,6 +226,7 @@ impl RoutedExecutor {
             BasicCacheContext::default(),
             &llm_model,
             breakpoint_manager,
+            thread_id,
         )
         .instrument(span.clone())
         .await?;
