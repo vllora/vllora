@@ -53,7 +53,7 @@ pub mod stream_wrapper;
 pub type ChatCompletionExecutionResult =
     Either<Result<ResultStream, GatewayApiError>, Result<ChatCompletionResponse, GatewayApiError>>;
 
-#[tracing::instrument(level = "debug", skip_all)]
+#[allow(clippy::too_many_arguments)]
 pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
     request_with_tools: &ChatCompletionRequestWithTools<T>,
     executor_context: &ExecutorContext,

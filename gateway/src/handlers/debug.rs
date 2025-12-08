@@ -3,12 +3,12 @@ use serde::{Deserialize, Serialize};
 use vllora_core::events::callback_handler::GatewayCallbackHandlerFn;
 use vllora_core::events::callback_handler::GatewayEvent;
 use vllora_core::events::callback_handler::GlobalBreakpointStateEvent;
+use vllora_core::executor::chat_completion::breakpoint::RequestWithThreadId;
 use vllora_core::executor::chat_completion::breakpoint::{
     BreakpointAction, BreakpointError, BreakpointManager,
 };
 use vllora_core::types::metadata::project::Project;
 use vllora_core::GatewayApiError;
-use vllora_llm::types::gateway::ChatCompletionRequest;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ContinueRequest {
@@ -19,8 +19,8 @@ pub struct ContinueRequest {
 #[derive(Debug, Clone, Serialize)]
 pub struct ContinueRequestWithThreadId {
     pub breakpoint_id: String,
-    pub request: ChatCompletionRequest,
-    pub thread_id: Option<String>,
+    #[serde(flatten)]
+    pub request_with_thread_id: RequestWithThreadId,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -83,20 +83,21 @@ pub async fn list_breakpoints(
 
     let breakpoints = breakpoints
         .into_iter()
-        .map(|(breakpoint_id, (request, thread_id))| {
-            ContinueRequestWithThreadId {
+        .map(
+            |(breakpoint_id, request_with_thread_id)| ContinueRequestWithThreadId {
                 breakpoint_id,
-                request,
-                thread_id
-            }
-        })
+                request_with_thread_id,
+            },
+        )
         .collect();
     let intercept_all = breakpoint_manager.intercept_all();
 
-    Ok(HttpResponse::Ok().json(ContinueRequestWithThreadIdResponse {
-        breakpoints,
-        intercept_all,
-    }))
+    Ok(
+        HttpResponse::Ok().json(ContinueRequestWithThreadIdResponse {
+            breakpoints,
+            intercept_all,
+        }),
+    )
 }
 
 pub async fn set_global_breakpoint(

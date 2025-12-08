@@ -22,11 +22,17 @@ pub enum BreakpointAction {
     ModifyRequest(Box<ChatCompletionRequest>),
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RequestWithThreadId {
+    pub request: ChatCompletionRequest,
+    pub thread_id: Option<String>,
+}
+
 /// Manager for handling breakpoints across requests
 #[derive(Clone)]
 pub struct BreakpointManager {
     pending_breakpoints: Arc<Mutex<HashMap<String, oneshot::Sender<BreakpointAction>>>>,
-    breakpoint_requests: Arc<Mutex<HashMap<String, (ChatCompletionRequest, Option<String>)>>>,
+    breakpoint_requests: Arc<Mutex<HashMap<String, RequestWithThreadId>>>,
     intercept_all: Arc<AtomicBool>,
 }
 
@@ -81,7 +87,13 @@ impl BreakpointManager {
         let mut pending = self.pending_breakpoints.lock().await;
         let mut requests = self.breakpoint_requests.lock().await;
         pending.insert(breakpoint_id.clone(), tx);
-        requests.insert(breakpoint_id, (request, thread_id.cloned()));
+        requests.insert(
+            breakpoint_id,
+            RequestWithThreadId {
+                request,
+                thread_id: thread_id.cloned(),
+            },
+        );
         rx
     }
 
@@ -113,7 +125,7 @@ impl BreakpointManager {
     }
 
     /// List all currently pending breakpoints and their stored requests
-    pub async fn list_breakpoints(&self) -> Vec<(String, (ChatCompletionRequest, Option<String>))> {
+    pub async fn list_breakpoints(&self) -> Vec<(String, RequestWithThreadId)> {
         let pending = self.pending_breakpoints.lock().await;
         let requests = self.breakpoint_requests.lock().await;
 
