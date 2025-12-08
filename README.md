@@ -126,6 +126,22 @@ The binary will be available at `target/release/vlora`.
 cargo test
 ```
 
+## Contributing
+
+We welcome contributions! Please check out our [Contributing Guide](CONTRIBUTING.md) for guidelines on:
+
+- How to submit issues
+- How to submit pull requests
+- Code style conventions
+- Development workflow
+- Testing requirements
+
+Have a bug report or feature request? Check out our [Issues](https://github.com/vllora/vllora/issues) to see what's being worked on or to report a new issue.
+
+## Roadmap
+
+Check out our [Roadmap](https://vllora.dev/docs/roadmap) to see what's coming next!
+
 ## License
 
 vLLora is [fair-code](https://faircode.io/) distributed under the [Elastic License 2.0 (ELv2)](https://github.com/vllora/vllora/blob/main/LICENSE.md).
@@ -137,13 +153,3 @@ vLLora is [fair-code](https://faircode.io/) distributed under the [Elastic Licen
 For Enterprise License, contact us at [hello@vllora.dev](mailto:hello@vllora.dev).
 
 Additional information about the license model can be found in the docs.
-
-## Contributing
-
-We welcome contributions! Please check out our [Contributing Guide](CONTRIBUTING.md) for guidelines on:
-
-- How to submit issues
-- How to submit pull requests
-- Code style conventions
-- Development workflow
-- Testing requirements
