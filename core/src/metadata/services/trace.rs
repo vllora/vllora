@@ -177,6 +177,12 @@ impl TraceService for TraceServiceImpl {
         if let Some(spans) = run_span_buffer.get(run_id, project_id) {
             let offset_usize = offset.max(0) as usize;
             let limit_usize = limit as usize;
+
+            // Check if offset is beyond the available spans
+            if offset_usize >= spans.len() {
+                return Ok(Vec::new());
+            }
+
             let end = (offset_usize + limit_usize).min(spans.len());
             let slice = spans[offset_usize..end].to_vec();
             if !slice.is_empty() {
