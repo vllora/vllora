@@ -14,18 +14,20 @@ use vllora_llm::types::{
 use crate::handler::{CallbackHandlerFn, ModelEventWithDetails};
 
 /// Guard that sets span error on drop if receiver is dropped before completion
-struct BreakpointReceiverGuard {
+struct BreakpointReceiverGuard<'a> {
     span: Span,
     breakpoint_id: String,
     completed: bool,
+    breakpoint_manager: &'a BreakpointManager,
 }
 
-impl BreakpointReceiverGuard {
-    fn new(span: Span, breakpoint_id: String) -> Self {
+impl<'a> BreakpointReceiverGuard<'a> {
+    fn new(span: Span, breakpoint_id: String, breakpoint_manager: &'a BreakpointManager) -> Self {
         Self {
             span,
             breakpoint_id,
             completed: false,
+            breakpoint_manager,
         }
     }
 
@@ -34,7 +36,7 @@ impl BreakpointReceiverGuard {
     }
 }
 
-impl Drop for BreakpointReceiverGuard {
+impl<'a> Drop for BreakpointReceiverGuard<'a> {
     fn drop(&mut self) {
         if !self.completed {
             // Set span error when receiver is dropped (e.g., request cancelled)
@@ -46,6 +48,14 @@ impl Drop for BreakpointReceiverGuard {
                 breakpoint_id = %self.breakpoint_id,
                 "Breakpoint receiver dropped - request cancelled"
             );
+
+            // Spawn a task to clean up the breakpoint asynchronously
+            // We can't await in Drop, so we spawn a fire-and-forget task
+            let breakpoint_manager = self.breakpoint_manager.clone();
+            let breakpoint_id = self.breakpoint_id.clone();
+            tokio::spawn(async move {
+                breakpoint_manager.remove_breakpoint(&breakpoint_id).await;
+            });
         }
     }
 }
@@ -144,6 +154,18 @@ impl BreakpointManager {
             },
         );
         rx
+    }
+
+    pub async fn remove_breakpoint(&self, breakpoint_id: &str) {
+        let mut pending = self.pending_breakpoints.lock().await;
+        let mut requests = self.breakpoint_requests.lock().await;
+        pending.remove(breakpoint_id);
+        requests.remove(breakpoint_id);
+
+        let request_with_thread_id = requests.remove(breakpoint_id);
+        if let Some(request_with_thread_id) = request_with_thread_id {
+            self.clear_events_for_request(&request_with_thread_id).await;
+        }
     }
 
     /// Resolve a breakpoint with the given action
@@ -265,7 +287,8 @@ pub async fn wait_for_breakpoint_action(
         .await;
 
     // Create guard to detect drop and set span error
-    let mut guard = BreakpointReceiverGuard::new(span.clone(), breakpoint_id.clone());
+    let mut guard =
+        BreakpointReceiverGuard::new(span.clone(), breakpoint_id.clone(), breakpoint_manager);
 
     // Log that we're waiting for breakpoint
     tracing::info!(
@@ -307,8 +330,7 @@ pub async fn wait_for_breakpoint_action(
         }
         Err(_) => {
             let span = Span::current();
-            span.record("error", true);
-            span.record("error.message", "Breakpoint channel closed unexpectedly");
+            span.record("error", "Breakpoint channel closed unexpectedly");
             tracing::error!(breakpoint_id = %breakpoint_id, "Breakpoint channel closed unexpectedly");
             Err(BreakpointError::ChannelClosed)
         }
