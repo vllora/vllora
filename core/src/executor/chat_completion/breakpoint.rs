@@ -13,6 +13,43 @@ use vllora_llm::types::{
 
 use crate::handler::{CallbackHandlerFn, ModelEventWithDetails};
 
+/// Guard that sets span error on drop if receiver is dropped before completion
+struct BreakpointReceiverGuard {
+    span: Span,
+    breakpoint_id: String,
+    completed: bool,
+}
+
+impl BreakpointReceiverGuard {
+    fn new(span: Span, breakpoint_id: String) -> Self {
+        Self {
+            span,
+            breakpoint_id,
+            completed: false,
+        }
+    }
+
+    fn mark_completed(&mut self) {
+        self.completed = true;
+    }
+}
+
+impl Drop for BreakpointReceiverGuard {
+    fn drop(&mut self) {
+        if !self.completed {
+            // Set span error when receiver is dropped (e.g., request cancelled)
+            self.span.record(
+                "error",
+                "Request cancelled while waiting for breakpoint action",
+            );
+            tracing::error!(
+                breakpoint_id = %self.breakpoint_id,
+                "Breakpoint receiver dropped - request cancelled"
+            );
+        }
+    }
+}
+
 /// Action to take when continuing from a breakpoint
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(crate = "serde", untagged, rename_all = "snake_case")]
@@ -227,6 +264,9 @@ pub async fn wait_for_breakpoint_action(
         .register_breakpoint(breakpoint_id.clone(), request.clone(), thread_id)
         .await;
 
+    // Create guard to detect drop and set span error
+    let mut guard = BreakpointReceiverGuard::new(span.clone(), breakpoint_id.clone());
+
     // Log that we're waiting for breakpoint
     tracing::info!(
         breakpoint_id = %breakpoint_id,
@@ -234,7 +274,9 @@ pub async fn wait_for_breakpoint_action(
     );
 
     // Wait for the action
-    match rx.await {
+    let result = rx.await;
+    guard.mark_completed();
+    match result {
         Ok(action) => {
             let span = Span::current();
             let event = ModelEventWithDetails::new(
@@ -264,6 +306,9 @@ pub async fn wait_for_breakpoint_action(
             }
         }
         Err(_) => {
+            let span = Span::current();
+            span.record("error", true);
+            span.record("error.message", "Breakpoint channel closed unexpectedly");
             tracing::error!(breakpoint_id = %breakpoint_id, "Breakpoint channel closed unexpectedly");
             Err(BreakpointError::ChannelClosed)
         }
