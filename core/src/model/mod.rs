@@ -460,54 +460,56 @@ impl ModelInstance for TracedModel {
         );
 
         let price = self.definition.db_model.price.clone();
-        tokio::spawn(async move {
-            let mut output = String::new();
-            while let Some(Some(msg)) = rx.recv().await {
-                match &msg.event {
-                    ModelEventType::LlmStart(_event) => {
-                        start_time = Some(msg.timestamp.timestamp_micros() as u64);
-                    }
-                    ModelEventType::LlmContent(event) => {
-                        output.push_str(event.content.as_str());
-                    }
-                    ModelEventType::LlmFirstToken(_) => {
-                        if let Some(start_time) = start_time {
-                            let current_span = tracing::Span::current();
-                            current_span.record(
-                                "ttft",
-                                msg.timestamp.timestamp_micros() as u64 - start_time,
-                            );
+        tokio::spawn(
+            async move {
+                let mut output = String::new();
+                while let Some(Some(msg)) = rx.recv().await {
+                    match &msg.event {
+                        ModelEventType::LlmStart(_event) => {
+                            start_time = Some(msg.timestamp.timestamp_micros() as u64);
                         }
-                    }
-                    ModelEventType::LlmStop(llmfinish_event) => {
-                        let s = tracing::Span::current();
-                        s.record("output", serde_json::to_string(&output).unwrap());
-                        if let Some(u) = &llmfinish_event.usage {
-                            let cost = cost_calculator
-                                .calculate_cost(
-                                    &price,
-                                    &Usage::CompletionModelUsage(u.clone()),
-                                    &credentials_ident,
-                                )
-                                .await;
-
-                            match cost {
-                                Ok(c) => {
-                                    s.record("cost", serde_json::to_string(&c).unwrap());
-                                }
-                                Err(e) => {
-                                    tracing::error!("Error calculating cost: {:?}", e);
-                                }
+                        ModelEventType::LlmContent(event) => {
+                            output.push_str(event.content.as_str());
+                        }
+                        ModelEventType::LlmFirstToken(_) => {
+                            if let Some(start_time) = start_time {
+                                let current_span = tracing::Span::current();
+                                current_span.record(
+                                    "ttft",
+                                    msg.timestamp.timestamp_micros() as u64 - start_time,
+                                );
                             }
-                            s.record("usage", serde_json::to_string(u).unwrap());
                         }
-                        s.record("output", output.clone());
+                        ModelEventType::LlmStop(llmfinish_event) => {
+                            let s = tracing::Span::current();
+                            if let Some(u) = &llmfinish_event.usage {
+                                let cost = cost_calculator
+                                    .calculate_cost(
+                                        &price,
+                                        &Usage::CompletionModelUsage(u.clone()),
+                                        &credentials_ident,
+                                    )
+                                    .await;
+
+                                match cost {
+                                    Ok(c) => {
+                                        s.record("cost", serde_json::to_string(&c).unwrap());
+                                    }
+                                    Err(e) => {
+                                        tracing::error!("Error calculating cost: {:?}", e);
+                                    }
+                                }
+                                s.record("usage", serde_json::to_string(u).unwrap());
+                            }
+                            s.record("output", output.clone());
+                        }
+                        _ => {}
                     }
-                    _ => {}
+                    outer_tx.send(Some(msg)).await.unwrap();
                 }
-                outer_tx.send(Some(msg)).await.unwrap();
             }
-        });
+            .instrument(span.clone()),
+        );
 
         result
     }
