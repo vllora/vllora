@@ -35,6 +35,23 @@ case $VERSION_TYPE in
         ;;
 esac
 
+# Delete all prerelease tags for the new version
+echo "Deleting prerelease tags for v$NEW_VERSION..."
+PRERELEASE_TAGS=$(git tag -l "v$NEW_VERSION-prerelease-*" 2>/dev/null || true)
+if [ -n "$PRERELEASE_TAGS" ]; then
+    echo "$PRERELEASE_TAGS" | while read tag; do
+        if [ -n "$tag" ]; then
+            echo "Deleting local tag: $tag"
+            git tag -d "$tag" 2>/dev/null || true
+            echo "Deleting remote tag: $tag"
+            git push origin --delete "$tag" 2>/dev/null || true
+        fi
+    done
+    echo "All prerelease tags for v$NEW_VERSION have been deleted."
+else
+    echo "No prerelease tags found for v$NEW_VERSION."
+fi
+
 # Update version in Cargo.toml files
 echo "Updating version to $NEW_VERSION in Cargo.toml files..."
 (cd core && cargo set-version $NEW_VERSION)
@@ -42,6 +59,10 @@ echo "Updating version to $NEW_VERSION in Cargo.toml files..."
 (cd guardrails && cargo set-version $NEW_VERSION)
 (cd llm && cargo set-version $NEW_VERSION)
 (cd telemetry && cargo set-version $NEW_VERSION)
+
+cargo build --release
+
+git add CHANGELOG.md core/Cargo.toml gateway/Cargo.toml guardrails/Cargo.toml telemetry/Cargo.toml llm/Cargo.toml Cargo.lock
 
 # Install standard-version if not already installed
 if ! command -v npx &> /dev/null; then
@@ -51,12 +72,8 @@ fi
 
 # Generate CHANGELOG
 echo "Generating CHANGELOG..."
-npx standard-version --release-as "$NEW_VERSION" --tag-prefix "" --skip.tag true
+npx standard-version --release-as "$NEW_VERSION" --tag-prefix "" --skip.tag true --commit-all
 
-cargo build --release
-
-git add CHANGELOG.md core/Cargo.toml gateway/Cargo.toml guardrails/Cargo.toml telemetry/Cargo.toml llm/Cargo.toml Cargo.lock
-git commit -m "chore: release v$NEW_VERSION"
 git push origin main
 
 git tag v$NEW_VERSION
