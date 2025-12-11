@@ -1,7 +1,7 @@
-use async_openai_compat::types::responses::CreateResponse;
-use async_openai_compat::types::responses::InputParam;
-use async_openai_compat::types::responses::OutputItem;
-use async_openai_compat::types::responses::OutputMessageContent;
+use vllora_llm::async_openai::types::responses::CreateResponse;
+use vllora_llm::async_openai::types::responses::InputParam;
+use vllora_llm::async_openai::types::responses::OutputItem;
+use vllora_llm::async_openai::types::responses::OutputMessageContent;
 use tokio_stream::StreamExt;
 use vllora_llm::client::VlloraLLMClient;
 use vllora_llm::error::LLMResult;

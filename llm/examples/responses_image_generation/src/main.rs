@@ -1,11 +1,11 @@
-use async_openai_compat::types::responses::CreateResponse;
-use async_openai_compat::types::responses::ImageGenTool;
-use async_openai_compat::types::responses::ImageGenToolCall;
-use async_openai_compat::types::responses::InputParam;
-use async_openai_compat::types::responses::OutputItem;
-use async_openai_compat::types::responses::OutputMessageContent;
-use async_openai_compat::types::responses::Tool;
-use async_openai_compat::types::responses::WebSearchTool;
+use vllora_llm::async_openai::types::responses::CreateResponse;
+use vllora_llm::async_openai::types::responses::ImageGenTool;
+use vllora_llm::async_openai::types::responses::ImageGenToolCall;
+use vllora_llm::async_openai::types::responses::InputParam;
+use vllora_llm::async_openai::types::responses::OutputItem;
+use vllora_llm::async_openai::types::responses::OutputMessageContent;
+use vllora_llm::async_openai::types::responses::Tool;
+use vllora_llm::async_openai::types::responses::WebSearchTool;
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use std::fs;
