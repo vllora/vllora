@@ -1,6 +1,9 @@
 use crate::client::completions::response_stream::ResultStream;
 use crate::client::tools::handler::handle_tool_call;
 use crate::client::DEFAULT_MAX_RETRIES;
+use crate::provider::openai::azure_openai_client;
+use crate::provider::openai::is_azure_endpoint;
+use crate::provider::openai::openai_client;
 use crate::types::gateway::ChatCompletionChunk;
 use crate::types::gateway::ChatCompletionChunkChoice;
 use crate::types::gateway::ChatCompletionDelta;
@@ -14,7 +17,7 @@ use crate::types::credentials::ApiKeyCredentials;
 use crate::types::credentials_ident::CredentialsIdent;
 use crate::types::engine::{render, ExecutionOptions, OpenAiModelParams};
 use crate::types::gateway::{ChatCompletionContent, ChatCompletionMessage, ToolCall};
-use crate::types::gateway::{ChatCompletionMessageWithFinishReason, CompletionModelUsage};
+use crate::types::gateway::{ChatCompletionMessageWithFinishReason, GatewayModelUsage};
 use crate::types::instance::ModelInstance;
 use crate::types::message::{ImageDetail, MessageContentType, MessageType};
 use crate::types::message::{InnerMessage, Message};
@@ -76,56 +79,6 @@ macro_rules! target {
 enum InnerExecutionResult {
     Finish(Box<ChatCompletionMessageWithFinishReason>),
     NextCall(Vec<ChatCompletionRequestMessage>),
-}
-
-/// Helper function to determine if an endpoint is for Azure OpenAI
-pub fn is_azure_endpoint(endpoint: &str) -> bool {
-    endpoint.contains("azure.com")
-}
-
-/// Create an OpenAI client with standard OpenAI configuration
-/// Note: This does not handle Azure OpenAI endpoints. Use azure_openai_client for Azure endpoints.
-pub fn openai_client(
-    credentials: Option<&ApiKeyCredentials>,
-    endpoint: Option<&str>,
-) -> Result<Client<OpenAIConfig>, ModelError> {
-    let api_key = if let Some(credentials) = credentials {
-        credentials.api_key.clone()
-    } else {
-        std::env::var("VLLORA_OPENAI_API_KEY").map_err(|_| AuthorizationError::InvalidApiKey)?
-    };
-
-    let mut config = OpenAIConfig::new();
-    config = config.with_api_key(api_key);
-
-    if let Some(endpoint) = endpoint {
-        // Do not handle Azure endpoints here
-        if is_azure_endpoint(endpoint) {
-            return Err(ModelError::CustomError(format!(
-                "Azure endpoints should be handled by azure_openai_client, not openai_client: {endpoint}"
-            )));
-        }
-
-        // For custom non-Azure endpoints
-        config = config.with_api_base(endpoint);
-    }
-
-    Ok(Client::with_config(config))
-}
-
-/// Create an Azure OpenAI client from endpoint URL
-pub fn azure_openai_client(
-    api_key: String,
-    endpoint: &str,
-    deployment_id: &str,
-) -> Client<AzureConfig> {
-    let azure_config = AzureConfig::new()
-        .with_api_base(endpoint)
-        .with_api_version("2024-10-21".to_string())
-        .with_api_key(api_key)
-        .with_deployment_id(deployment_id.to_string());
-
-    Client::with_config(azure_config)
 }
 
 #[derive(Clone)]
@@ -847,32 +800,8 @@ impl<C: Config> OpenAIModel<C> {
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
-    fn map_usage(usage: Option<&CompletionUsage>) -> Option<CompletionModelUsage> {
-        usage.map(|u| CompletionModelUsage {
-            input_tokens: u.prompt_tokens,
-            output_tokens: u.completion_tokens
-                + u.completion_tokens_details
-                    .as_ref()
-                    .and_then(|c| c.reasoning_tokens)
-                    .unwrap_or(0),
-            total_tokens: u.total_tokens,
-            prompt_tokens_details: u.prompt_tokens_details.as_ref().map(|p| {
-                crate::types::gateway::PromptTokensDetails::new(
-                    p.cached_tokens,
-                    Some(0),
-                    p.audio_tokens,
-                )
-            }),
-            completion_tokens_details: u.completion_tokens_details.as_ref().map(|c| {
-                crate::types::gateway::CompletionTokensDetails::new(
-                    c.accepted_prediction_tokens,
-                    c.audio_tokens,
-                    c.reasoning_tokens,
-                    c.rejected_prediction_tokens,
-                )
-            }),
-            ..Default::default()
-        })
+    fn map_usage(usage: Option<&CompletionUsage>) -> Option<GatewayModelUsage> {
+        usage.map(GatewayModelUsage::from)
     }
 
     #[tracing::instrument(level = "debug", skip_all)]

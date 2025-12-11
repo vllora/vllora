@@ -1,14 +1,14 @@
 use std::sync::Arc;
-
 use thiserror::Error;
 use tokio::sync::Mutex;
-use vllora_core::usage::{InMemoryStorage, LimitPeriod};
-use vllora_llm::types::gateway::CostCalculator;
-use vllora_llm::types::gateway::CostCalculatorError;
-use vllora_llm::types::gateway::Usage;
 
 use crate::cost::GatewayCostCalculator;
+use vllora_core::usage::{InMemoryStorage, LimitPeriod};
 use vllora_llm::types::credentials_ident::CredentialsIdent;
+use vllora_llm::types::gateway::CostCalculator;
+use vllora_llm::types::gateway::CostCalculatorError;
+use vllora_llm::types::gateway::GatewayModelUsage;
+use vllora_llm::types::gateway::Usage;
 use vllora_llm::types::provider::ModelPrice;
 
 #[derive(Error, Debug)]
@@ -58,7 +58,7 @@ pub(crate) async fn update_usage(
         }
 
         match usage {
-            Usage::CompletionModelUsage(vllora_llm::types::gateway::CompletionModelUsage {
+            Usage::CompletionModelUsage(GatewayModelUsage {
                 input_tokens,
                 output_tokens,
                 total_tokens,

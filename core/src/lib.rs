@@ -10,7 +10,6 @@ pub mod mcp;
 pub mod metadata;
 pub mod model;
 pub mod pricing;
-pub mod responses;
 pub mod routing;
 pub mod telemetry;
 pub mod types;

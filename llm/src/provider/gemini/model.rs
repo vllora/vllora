@@ -20,7 +20,7 @@ use crate::types::engine::render;
 use crate::types::engine::{ExecutionOptions, GeminiModelParams};
 use crate::types::gateway::{
     ChatCompletionChunk, ChatCompletionChunkChoice, ChatCompletionContent, ChatCompletionDelta,
-    ChatCompletionMessage, ChatCompletionMessageWithFinishReason, CompletionModelUsage, ToolCall,
+    ChatCompletionMessage, ChatCompletionMessageWithFinishReason, GatewayModelUsage, ToolCall,
 };
 use crate::types::instance::ModelInstance;
 use crate::types::message::{AudioFormat, InnerMessage, Message, MessageContentPartOptions};
@@ -474,15 +474,12 @@ impl GeminiModel {
             let tool = self.tools.get(&calls[0].0);
             if let Some(tool) = tool {
                 if tool.stop_at_call() {
-                    let usage = response
-                        .usage_metadata
-                        .as_ref()
-                        .map(|u| CompletionModelUsage {
-                            input_tokens: u.prompt_token_count,
-                            output_tokens: (u.total_token_count - u.prompt_token_count),
-                            total_tokens: u.total_token_count,
-                            ..Default::default()
-                        });
+                    let usage = response.usage_metadata.as_ref().map(|u| GatewayModelUsage {
+                        input_tokens: u.prompt_token_count,
+                        output_tokens: (u.total_token_count - u.prompt_token_count),
+                        total_tokens: u.total_token_count,
+                        ..Default::default()
+                    });
                     let finish_reason = ModelFinishReason::ToolCalls;
                     let _ = tx
                         .send(Some(ModelEvent::new(
@@ -577,15 +574,12 @@ impl GeminiModel {
 
         match finish_reason {
             Some(FinishReason::Stop) | Some(FinishReason::MaxTokens) => {
-                let usage = response
-                    .usage_metadata
-                    .as_ref()
-                    .map(|u| CompletionModelUsage {
-                        input_tokens: u.prompt_token_count,
-                        output_tokens: (u.total_token_count - u.prompt_token_count),
-                        total_tokens: u.total_token_count,
-                        ..Default::default()
-                    });
+                let usage = response.usage_metadata.as_ref().map(|u| GatewayModelUsage {
+                    input_tokens: u.prompt_token_count,
+                    output_tokens: (u.total_token_count - u.prompt_token_count),
+                    total_tokens: u.total_token_count,
+                    ..Default::default()
+                });
 
                 let finish_reason = Self::map_finish_reason(
                     &finish_reason.expect("Finish reason is already checked"),
@@ -720,8 +714,8 @@ impl GeminiModel {
         }
     }
 
-    fn map_usage(usage: Option<&UsageMetadata>) -> Option<CompletionModelUsage> {
-        usage.map(|u| CompletionModelUsage {
+    fn map_usage(usage: Option<&UsageMetadata>) -> Option<GatewayModelUsage> {
+        usage.map(|u| GatewayModelUsage {
             input_tokens: u.prompt_token_count,
             output_tokens: (u.total_token_count - u.prompt_token_count),
             total_tokens: u.total_token_count,

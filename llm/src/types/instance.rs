@@ -1,14 +1,17 @@
 use crate::client::completions::response_stream::ResultStream;
 use crate::client::error::ModelError;
+use crate::client::responses::Responses;
 use crate::error::LLMError;
 use crate::error::LLMResult;
 use crate::provider::anthropic::AnthropicModel;
 use crate::provider::bedrock::BedrockModel;
 use crate::provider::gemini::GeminiModel;
-use crate::provider::openai::OpenAIModel;
+use crate::provider::openai::completions::OpenAIModel;
+use crate::provider::openai::responses::OpenAIResponses;
 use crate::provider::proxy::OpenAISpecModel;
 use crate::types::credentials_ident::CredentialsIdent;
 use crate::types::engine::CompletionEngineParams;
+use crate::types::engine::ResponsesEngineParams;
 use crate::types::gateway::ChatCompletionChunk;
 use crate::types::gateway::ChatCompletionChunkChoice;
 use crate::types::gateway::ChatCompletionContent;
@@ -60,6 +63,19 @@ pub trait ModelInstance: Sync + Send {
         previous_messages: Vec<Message>,
         tags: HashMap<String, String>,
     ) -> LLMResult<ResultStream>;
+}
+
+pub async fn init_responses_model_instance(
+    engine: ResponsesEngineParams,
+    _tools: HashMap<String, Arc<Box<dyn Tool + 'static>>>,
+) -> Result<Box<dyn Responses>, ModelError> {
+    let instance = match engine {
+        ResponsesEngineParams::OpenAi { credentials } => {
+            Box::new(OpenAIResponses::new(credentials.as_ref(), None)?) as Box<dyn Responses>
+        }
+    };
+
+    Ok(instance)
 }
 
 pub async fn init_model_instance(

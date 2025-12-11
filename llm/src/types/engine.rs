@@ -28,6 +28,14 @@ pub struct CompletionModelDefinition {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResponsesModelDefinition {
+    pub name: String,
+    pub model_params: ResponsesModelParams,
+    pub tools: ModelTools,
+    pub db_model: Model,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Model {
     pub name: String,
     pub inference_model_name: String,
@@ -799,7 +807,6 @@ pub struct GeminiModelParams {
 pub struct CompletionModelParams {
     pub engine: CompletionEngineParams,
     pub provider_name: String,
-    pub prompt_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -956,5 +963,77 @@ fn get_anthropic_model(model_name: &str) -> &str {
         "claude-3-haiku" => "claude-3-haiku-20240307",
         "claude-3-5-sonnet" => "claude-3-5-sonnet-20240620",
         n => n,
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ResponsesModelParams {
+    pub engine: ResponsesEngineParams,
+    pub provider_name: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub enum ResponsesEngineParams {
+    OpenAi {
+        credentials: Option<ApiKeyCredentials>,
+    },
+}
+
+pub struct ResponsesEngineParamsBuilder {
+    pub provider: InferenceProvider,
+    pub credentials: Option<Credentials>,
+}
+
+impl Default for ResponsesEngineParamsBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ResponsesEngineParamsBuilder {
+    pub fn new() -> Self {
+        Self {
+            provider: InferenceProvider {
+                provider: InferenceModelProvider::OpenAI,
+                model_name: "unknown".to_string(),
+                endpoint: None,
+            },
+            credentials: None,
+        }
+    }
+
+    pub fn with_provider(mut self, provider: InferenceProvider) -> Self {
+        self.provider = provider;
+        self
+    }
+
+    pub fn with_credentials(mut self, credentials: Credentials) -> Self {
+        self.credentials = Some(credentials);
+        self
+    }
+
+    pub fn with_model_name(mut self, model_name: String) -> Self {
+        self.provider.model_name = model_name;
+        self
+    }
+
+    pub fn build(&self) -> Result<ResponsesEngineParams, LLMError> {
+        match &self.provider.provider {
+            InferenceModelProvider::OpenAI => {
+                let credentials = match &self.credentials {
+                    Some(Credentials::ApiKey(api_key)) => Some(api_key.clone()),
+                    Some(Credentials::ApiKeyWithEndpoint { api_key, .. }) => {
+                        Some(ApiKeyCredentials {
+                            api_key: api_key.clone(),
+                        })
+                    }
+                    _ => None,
+                };
+                Ok(ResponsesEngineParams::OpenAi { credentials })
+            }
+            _ => Err(LLMError::UnsupportedProvider(
+                self.provider.provider.to_string(),
+            )),
+        }
     }
 }

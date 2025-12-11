@@ -14,7 +14,7 @@ use crate::types::gateway::ChatCompletionChunkChoice;
 use crate::types::gateway::ChatCompletionDelta;
 use crate::types::gateway::{
     ChatCompletionContent, ChatCompletionMessage, ChatCompletionMessageWithFinishReason,
-    CompletionModelUsage, FunctionCall, ToolCall,
+    FunctionCall, GatewayModelUsage, ToolCall,
 };
 use crate::types::message::Message as LMessage;
 use crate::types::message::MessageContentType;
@@ -453,7 +453,7 @@ impl BedrockModel {
         match response.stop_reason {
             StopReason::EndTurn | StopReason::StopSequence => match response.output {
                 Some(MessageVariant(message)) => {
-                    let usage = response.usage.as_ref().map(|usage| CompletionModelUsage {
+                    let usage = response.usage.as_ref().map(|usage| GatewayModelUsage {
                         input_tokens: usage.input_tokens as u32,
                         output_tokens: usage.output_tokens as u32,
                         total_tokens: usage.total_tokens as u32,
@@ -591,7 +591,7 @@ impl BedrockModel {
                             );
                             if tool.stop_at_call() {
                                 let usage =
-                                    response.usage.as_ref().map(|usage| CompletionModelUsage {
+                                    response.usage.as_ref().map(|usage| GatewayModelUsage {
                                         input_tokens: usage.input_tokens as u32,
                                         output_tokens: usage.output_tokens as u32,
                                         total_tokens: usage.total_tokens as u32,
@@ -860,8 +860,8 @@ impl BedrockModel {
             x => ModelFinishReason::Other(format!("{x:?}")),
         }
     }
-    fn map_usage(usage: Option<&TokenUsage>) -> Option<CompletionModelUsage> {
-        usage.map(|u| CompletionModelUsage {
+    fn map_usage(usage: Option<&TokenUsage>) -> Option<GatewayModelUsage> {
+        usage.map(|u| GatewayModelUsage {
             input_tokens: u.input_tokens as u32,
             output_tokens: u.output_tokens as u32,
             total_tokens: u.total_tokens as u32,

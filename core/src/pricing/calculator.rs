@@ -1,6 +1,6 @@
 use vllora_llm::types::{
     gateway::{
-        CompletionModelUsage, CostCalculationResult, ImageCostCalculationResult,
+        CostCalculationResult, GatewayModelUsage, ImageCostCalculationResult,
         ImageGenerationModelUsage,
     },
     provider::ImageGenerationPrice,
@@ -62,7 +62,7 @@ pub fn calculate_image_price(
 }
 
 pub fn calculate_tokens_cost(
-    usage: &CompletionModelUsage,
+    usage: &GatewayModelUsage,
     mut cost_per_input_token: f64,
     mut cost_per_cached_input_token: Option<f64>,
     mut cost_per_cached_input_write_token: Option<f64>,
@@ -112,11 +112,11 @@ pub fn calculate_tokens_cost(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vllora_llm::types::gateway::{CompletionModelUsage, PromptTokensDetails};
+    use vllora_llm::types::gateway::{GatewayModelUsage, PromptTokensDetails};
 
     #[test]
     fn test_calculate_tokens_cost_no_cache() {
-        let usage = CompletionModelUsage {
+        let usage = GatewayModelUsage {
             input_tokens: 1000,
             output_tokens: 500,
             total_tokens: 1500,
@@ -156,7 +156,7 @@ mod tests {
 
     #[test]
     fn test_calculate_tokens_cost_with_cache_no_cached_tokens() {
-        let usage = CompletionModelUsage {
+        let usage = GatewayModelUsage {
             input_tokens: 1000,
             output_tokens: 500,
             total_tokens: 1500,
@@ -196,7 +196,7 @@ mod tests {
 
     #[test]
     fn test_calculate_tokens_cost_with_cache_and_cached_tokens() {
-        let usage = CompletionModelUsage {
+        let usage = GatewayModelUsage {
             input_tokens: 1000,
             output_tokens: 500,
             total_tokens: 1500,
@@ -237,7 +237,7 @@ mod tests {
 
     #[test]
     fn test_calculate_tokens_cost_with_cache_and_cached_write_tokens() {
-        let usage = CompletionModelUsage {
+        let usage = GatewayModelUsage {
             input_tokens: 1000,
             output_tokens: 500,
             total_tokens: 1500,
@@ -278,7 +278,7 @@ mod tests {
 
     #[test]
     fn test_calculate_tokens_cost_with_cache_no_cached_input_token_price() {
-        let usage = CompletionModelUsage {
+        let usage = GatewayModelUsage {
             input_tokens: 1000,
             output_tokens: 500,
             total_tokens: 1500,
@@ -319,7 +319,7 @@ mod tests {
 
     #[test]
     fn test_calculate_tokens_cost_no_cache_with_cached_tokens() {
-        let usage = CompletionModelUsage {
+        let usage = GatewayModelUsage {
             input_tokens: 1000,
             output_tokens: 500,
             total_tokens: 1500,
@@ -360,7 +360,7 @@ mod tests {
 
     #[test]
     fn test_calculate_tokens_cost_no_cache_with_cached_write_tokens() {
-        let usage = CompletionModelUsage {
+        let usage = GatewayModelUsage {
             input_tokens: 1000,
             output_tokens: 500,
             total_tokens: 1500,
@@ -401,7 +401,7 @@ mod tests {
 
     #[test]
     fn test_calculate_tokens_cost_zero_tokens() {
-        let usage = CompletionModelUsage {
+        let usage = GatewayModelUsage {
             input_tokens: 0,
             output_tokens: 0,
             total_tokens: 0,
@@ -435,7 +435,7 @@ mod tests {
 
     #[test]
     fn test_calculate_tokens_cost_large_numbers() {
-        let usage = CompletionModelUsage {
+        let usage = GatewayModelUsage {
             input_tokens: 1_000_000,
             output_tokens: 500_000,
             total_tokens: 1_500_000,
@@ -479,7 +479,7 @@ mod tests {
 
     #[test]
     fn test_calculate_tokens_cost_cache_with_audio_tokens() {
-        let usage = CompletionModelUsage {
+        let usage = GatewayModelUsage {
             input_tokens: 1000,
             output_tokens: 500,
             total_tokens: 1500,
@@ -522,7 +522,7 @@ mod tests {
 
     #[test]
     fn test_calculate_tokens_cost_edge_case_all_cached_tokens() {
-        let usage = CompletionModelUsage {
+        let usage = GatewayModelUsage {
             input_tokens: 1000,
             output_tokens: 500,
             total_tokens: 1500,
@@ -563,7 +563,7 @@ mod tests {
 
     #[test]
     fn test_calculate_tokens_cost_edge_case_more_cached_than_input() {
-        let usage = CompletionModelUsage {
+        let usage = GatewayModelUsage {
             input_tokens: 500,
             output_tokens: 200,
             total_tokens: 700,
@@ -604,7 +604,7 @@ mod tests {
 
     #[test]
     fn test_calculate_tokens_cost_edge_case_more_cached_write_than_input() {
-        let usage = CompletionModelUsage {
+        let usage = GatewayModelUsage {
             input_tokens: 500,
             output_tokens: 200,
             total_tokens: 700,
@@ -645,7 +645,7 @@ mod tests {
 
     #[test]
     fn test_calculate_tokens_cost_with_cache_no_cached_write_token_price() {
-        let usage = CompletionModelUsage {
+        let usage = GatewayModelUsage {
             input_tokens: 1000,
             output_tokens: 500,
             total_tokens: 1500,

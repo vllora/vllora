@@ -10,3 +10,4 @@ config.yaml
 *.db
 **/target/
 **/Cargo.lock
+generated_image*

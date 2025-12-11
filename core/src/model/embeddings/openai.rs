@@ -19,7 +19,7 @@ use vllora_llm::provider::openai::{azure_openai_client, openai_client};
 use vllora_llm::types::credentials::ApiKeyCredentials;
 use vllora_llm::types::credentials_ident::CredentialsIdent;
 use vllora_llm::types::gateway::{
-    CompletionModelUsage, CreateEmbeddingRequest, EncodingFormat, Input,
+    CreateEmbeddingRequest, EncodingFormat, GatewayModelUsage, Input,
 };
 use vllora_llm::types::LLMFinishEvent;
 use vllora_llm::types::LLMStartEvent;
@@ -121,7 +121,7 @@ impl<C: Config> OpenAIEmbeddings<C> {
                     provider_name: SPAN_OPENAI.to_string(),
                     model_name: model_name.to_string(),
                     output: None,
-                    usage: Some(CompletionModelUsage {
+                    usage: Some(GatewayModelUsage {
                         input_tokens: response.usage().prompt_tokens,
                         output_tokens: 0,
                         total_tokens: response.usage().total_tokens,
@@ -146,8 +146,8 @@ impl<C: Config> OpenAIEmbeddings<C> {
         Ok(response)
     }
 
-    fn map_usage(usage: &EmbeddingUsage) -> CompletionModelUsage {
-        CompletionModelUsage {
+    fn map_usage(usage: &EmbeddingUsage) -> GatewayModelUsage {
+        GatewayModelUsage {
             input_tokens: usage.prompt_tokens,
             total_tokens: usage.total_tokens,
             ..Default::default()

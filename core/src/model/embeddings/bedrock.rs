@@ -14,7 +14,7 @@ use vllora_llm::client::error::ModelError;
 use vllora_llm::error::LLMResult;
 use vllora_llm::provider::bedrock::bedrock_client;
 use vllora_llm::types::credentials::BedrockCredentials;
-use vllora_llm::types::gateway::{CompletionModelUsage, CreateEmbeddingRequest, Input};
+use vllora_llm::types::gateway::{CreateEmbeddingRequest, GatewayModelUsage, Input};
 use vllora_llm::types::{
     LLMFinishEvent, LLMStartEvent, ModelEvent, ModelEventType, ModelFinishReason,
 };
@@ -128,7 +128,7 @@ impl BedrockEmbeddings {
                     provider_name: SPAN_BEDROCK.to_string(),
                     model_name: request.model.clone(),
                     output: None,
-                    usage: Some(CompletionModelUsage {
+                    usage: Some(GatewayModelUsage {
                         input_tokens: response.usage().prompt_tokens,
                         output_tokens: 0,
                         total_tokens: response.usage().total_tokens,
@@ -153,8 +153,8 @@ impl BedrockEmbeddings {
         Ok(response)
     }
 
-    fn map_usage(usage: &EmbeddingUsage) -> CompletionModelUsage {
-        CompletionModelUsage {
+    fn map_usage(usage: &EmbeddingUsage) -> GatewayModelUsage {
+        GatewayModelUsage {
             input_tokens: usage.prompt_tokens,
             total_tokens: usage.total_tokens,
             ..Default::default()

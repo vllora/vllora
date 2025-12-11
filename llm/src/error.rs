@@ -17,6 +17,8 @@ pub enum LLMError {
     DecodeError(#[from] base64::DecodeError),
     #[error("Custom Error: {0}")]
     CustomError(String),
+    #[error("Api key was ")]
+    InvalidCredentials,
     #[error("Function get is not implemented")]
     FunctionGetNotImplemented,
     #[error("Tool call id not found in request")]

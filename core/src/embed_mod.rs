@@ -14,7 +14,7 @@ use vllora_llm::client::error::ModelError;
 use vllora_llm::provider::openai::openai_client;
 use vllora_llm::types::credentials::ApiKeyCredentials;
 use vllora_llm::types::credentials_ident::CredentialsIdent;
-use vllora_llm::types::gateway::CompletionModelUsage;
+use vllora_llm::types::gateway::GatewayModelUsage;
 use vllora_llm::types::LLMFinishEvent;
 use vllora_llm::types::ModelEvent;
 use vllora_llm::types::ModelEventType;
@@ -119,7 +119,7 @@ impl OpenAIEmbed {
                     provider_name: SPAN_OPENAI.to_string(),
                     model_name: self.params.model.clone().unwrap_or_default(),
                     output: None,
-                    usage: Some(CompletionModelUsage {
+                    usage: Some(GatewayModelUsage {
                         input_tokens: response.usage.prompt_tokens,
                         output_tokens: 0,
                         total_tokens: response.usage.total_tokens,
