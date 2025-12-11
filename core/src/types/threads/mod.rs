@@ -113,8 +113,11 @@ pub struct PageOptions {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum PageOrderType {
+    #[serde(alias = "Asc", alias = "ASC", alias = "asc")]
     Asc,
+    #[serde(alias = "Desc", alias = "DESC", alias = "desc")]
     Desc,
 }
 
