@@ -18,7 +18,7 @@ use crate::{
     },
 };
 use actix_web::{web, HttpRequest, HttpResponse};
-use async_openai::types::responses::{CreateResponse, Input};
+use async_openai::types::responses::{CreateResponse, InputParam};
 use tokio::task::JoinHandle;
 use tracing::Span;
 use tracing_futures::Instrument;
@@ -171,8 +171,8 @@ async fn prepare_request(
 
 fn get_thread_title(request: &CreateResponse) -> Option<String> {
     match &request.input {
-        Input::Text(text) => Some(text.clone()),
-        Input::Items(_items) => None,
+        InputParam::Text(text) => Some(text.clone()),
+        InputParam::Items(_items) => None,
     }
 }
 
@@ -246,8 +246,7 @@ pub async fn create(
         None,
     )?;
 
-    let result = handle_create_response(&request, &executor_context)
+    handle_create_response(&request, &executor_context)
         .instrument(span.clone())
-        .await?;
-    Ok(HttpResponse::Ok().json(result))
+        .await
 }

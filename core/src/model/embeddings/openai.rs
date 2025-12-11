@@ -104,14 +104,14 @@ impl<C: Config> OpenAIEmbeddings<C> {
                 .create(embedding_request)
                 .await
                 .map(|r| r.into())
-                .map_err(ModelError::OpenAIApi)?,
+                .map_err(|e| ModelError::OpenAIApi(Box::new(e)))?,
             EncodingFormat::Base64 => self
                 .client
                 .embeddings()
                 .create_base64(embedding_request)
                 .await
                 .map(|r| r.into())
-                .map_err(ModelError::OpenAIApi)?,
+                .map_err(|e| ModelError::OpenAIApi(Box::new(e)))?,
         };
 
         outer_tx

@@ -86,7 +86,9 @@ impl OpenAIEmbed {
             request_builder.dimensions(dimensions);
         }
         // Finalize the request
-        let request = request_builder.build().map_err(ModelError::OpenAIApi)?;
+        let request = request_builder
+            .build()
+            .map_err(|e| ModelError::OpenAIApi(Box::new(e)))?;
 
         // Send the request and handle the response
         let mut response = async move {
@@ -99,7 +101,7 @@ impl OpenAIEmbed {
                 .map(JsonValue)
                 .record();
 
-            let response = result.map_err(ModelError::OpenAIApi)?;
+            let response = result.map_err(|e| ModelError::OpenAIApi(Box::new(e)))?;
 
             let span = Span::current();
             let usage = response.usage.clone();

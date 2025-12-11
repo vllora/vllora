@@ -1235,21 +1235,30 @@ impl From<async_openai::types::CompletionUsage> for GatewayModelUsage {
     }
 }
 
-impl From<&async_openai::types::responses::Usage> for GatewayModelUsage {
-    fn from(val: &async_openai::types::responses::Usage) -> Self {
+impl From<&async_openai::types::responses::ResponseUsage> for GatewayModelUsage {
+    fn from(val: &async_openai::types::responses::ResponseUsage) -> Self {
         GatewayModelUsage {
             input_tokens: val.input_tokens,
             output_tokens: val.output_tokens,
             total_tokens: val.total_tokens,
-            prompt_tokens_details: Some((&val.input_tokens_details).into()),
-            completion_tokens_details: Some((&val.output_tokens_details).into()),
+            prompt_tokens_details: Some(PromptTokensDetails {
+                cached_tokens: val.input_tokens_details.cached_tokens,
+                cache_creation_tokens: 0,
+                audio_tokens: 0,
+            }),
+            completion_tokens_details: Some(CompletionTokensDetails {
+                accepted_prediction_tokens: 0,
+                audio_tokens: 0,
+                reasoning_tokens: val.output_tokens_details.reasoning_tokens,
+                rejected_prediction_tokens: 0,
+            }),
             ..Default::default()
         }
     }
 }
 
-impl From<async_openai::types::responses::Usage> for GatewayModelUsage {
-    fn from(val: async_openai::types::responses::Usage) -> Self {
+impl From<async_openai::types::responses::ResponseUsage> for GatewayModelUsage {
+    fn from(val: async_openai::types::responses::ResponseUsage) -> Self {
         GatewayModelUsage::from(&val)
     }
 }

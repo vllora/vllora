@@ -1,16 +1,19 @@
-use async_openai_compat::types::responses::ImageGeneration;
-use async_openai_compat::types::responses::ImageGenerationCallOutput;
-use async_openai_compat::types::responses::ToolDefinition;
-use async_openai_compat::types::responses::WebSearchPreview;
-use async_openai_compat::types::responses::{Content, CreateResponse, Input, OutputContent};
+use async_openai_compat::types::responses::CreateResponse;
+use async_openai_compat::types::responses::ImageGenTool;
+use async_openai_compat::types::responses::ImageGenToolCall;
+use async_openai_compat::types::responses::InputParam;
+use async_openai_compat::types::responses::OutputItem;
+use async_openai_compat::types::responses::OutputMessageContent;
+use async_openai_compat::types::responses::Tool;
+use async_openai_compat::types::responses::WebSearchTool;
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use std::fs;
 
 use vllora_llm::client::VlloraLLMClient;
 use vllora_llm::error::LLMResult;
-use vllora_llm::types::credentials::Credentials;
 use vllora_llm::types::credentials::ApiKeyCredentials;
+use vllora_llm::types::credentials::Credentials;
 
 /// Decodes a base64-encoded image from an ImageGenerationCall and saves it to a file.
 ///
@@ -22,7 +25,7 @@ use vllora_llm::types::credentials::ApiKeyCredentials;
 /// * `Ok(filename)` - The filename where the image was saved
 /// * `Err(e)` - An error if the call has no result, decoding fails, or file writing fails
 fn decode_and_save_image(
-    image_generation_call: &ImageGenerationCallOutput,
+    image_generation_call: &ImageGenToolCall,
     index: usize,
 ) -> Result<String, Box<dyn std::error::Error>> {
     // Extract base64 image from the call
@@ -46,21 +49,22 @@ async fn main() -> LLMResult<()> {
     // 1) Build a Responses-style request using async-openai-compat types
     // with tools for web_search_preview and image_generation
     let responses_req = CreateResponse {
-        model: "gpt-4.1".to_string(),
-        input: Input::Text(
+        model: Some("gpt-4.1".to_string()),
+        input: InputParam::Text(
             "Search for the latest news from today and generate an image about it".to_string(),
         ),
         tools: Some(vec![
-            ToolDefinition::WebSearchPreview(WebSearchPreview::default()),
-            ToolDefinition::ImageGeneration(ImageGeneration::default()),
+            Tool::WebSearch(WebSearchTool::default()),
+            Tool::ImageGeneration(ImageGenTool::default()),
         ]),
         ..Default::default()
     };
 
     // 2) Construct a VlloraLLMClient
-    let client = VlloraLLMClient::default()
-        .with_credentials(Credentials::ApiKey(ApiKeyCredentials {
-            api_key: std::env::var("VLLORA_OPENAI_API_KEY").expect("VLLORA_OPENAI_API_KEY must be set"),
+    let client =
+        VlloraLLMClient::default().with_credentials(Credentials::ApiKey(ApiKeyCredentials {
+            api_key: std::env::var("VLLORA_OPENAI_API_KEY")
+                .expect("VLLORA_OPENAI_API_KEY must be set"),
         }));
 
     // 3) Non-streaming: send the request and print the final reply
@@ -72,7 +76,7 @@ async fn main() -> LLMResult<()> {
 
     for (index, output) in response.output.iter().enumerate() {
         match output {
-            OutputContent::ImageGenerationCall(image_generation_call) => {
+            OutputItem::ImageGenerationCall(image_generation_call) => {
                 println!("\n[Image Generation Call {}]", index);
                 match decode_and_save_image(image_generation_call, index) {
                     Ok(filename) => {
@@ -83,13 +87,13 @@ async fn main() -> LLMResult<()> {
                     }
                 }
             }
-            OutputContent::Message(message) => {
+            OutputItem::Message(message) => {
                 println!("\n[Message {}]", index);
                 println!("{}", "-".repeat(80));
 
                 for content in &message.content {
                     match content {
-                        Content::OutputText(text_output) => {
+                        OutputMessageContent::OutputText(text_output) => {
                             // Print the text content
                             println!("\n{}", text_output.text);
 

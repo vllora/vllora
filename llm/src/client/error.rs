@@ -24,7 +24,7 @@ pub enum ModelError {
     RoleIsMissing(String),
 
     #[error(transparent)]
-    OpenAIApi(#[from] OpenAIError),
+    OpenAIApi(Box<OpenAIError>),
 
     #[error(transparent)]
     Bedrock(#[from] Box<BedrockError>),
@@ -55,6 +55,12 @@ pub enum ModelError {
 
     #[error("Cannot calculate input tokens")]
     CannotCalculateInputTokens,
+}
+
+impl From<OpenAIError> for ModelError {
+    fn from(value: OpenAIError) -> Self {
+        ModelError::OpenAIApi(Box::new(value))
+    }
 }
 
 impl From<BedrockError> for ModelError {

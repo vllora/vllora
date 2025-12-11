@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 
+use crate::executor::context::ExecutorContext;
 use async_openai::types::responses::{CreateResponse, Response};
 use serde::Serialize;
 use serde_json::{json, Value};
 use tokio::sync::mpsc::channel;
 use tracing::info_span;
+use tracing_futures::Instrument;
 use vllora_llm::{
     client::{
         error::ModelError,
@@ -23,8 +25,6 @@ use vllora_llm::{
     },
 };
 use vllora_telemetry::events::SPAN_MODEL_CALL;
-
-use crate::executor::context::ExecutorContext;
 
 pub struct TracedResponsesModel {
     definition: ResponsesModelDefinition,
@@ -128,7 +128,7 @@ impl Responses for TracedResponsesModel {
         )
         .await?;
 
-        request.model = self.definition.db_model.inference_model_name.clone();
+        request.model = Some(self.definition.db_model.inference_model_name.clone());
 
         let capacity = outer_tx.as_ref().map_or(10000, |tx| tx.max_capacity());
         if let Some(outer_tx) = outer_tx.as_ref() {
@@ -194,10 +194,97 @@ impl Responses for TracedResponsesModel {
 
     async fn stream(
         &self,
-        _input_response: CreateResponse,
-        _tx: Option<tokio::sync::mpsc::Sender<Option<ModelEvent>>>,
+        mut request: CreateResponse,
+        outer_tx: Option<tokio::sync::mpsc::Sender<Option<ModelEvent>>>,
     ) -> LLMResult<ResponsesResultStream> {
-        todo!()
+        let credentials_ident = credentials_identifier_responses(&self.definition.model_params);
+        let traced_model: TraceResponsesModelDefinition = self.definition.clone().into();
+        let model = traced_model.sanitize_json()?;
+        let model_str = serde_json::to_string(&model)?;
+
+        let input = HashMap::new();
+        let input_str = self.clean_input_trace(&input)?;
+        let model_name = self.definition.name.clone();
+        let provider_name = self.definition.db_model.provider_name.clone();
+
+        let span = info_span!(
+            target: "vllora::user_tracing::models",
+            SPAN_MODEL_CALL,
+            input = &input_str,
+            model = model_str,
+            provider_name = provider_name,
+            model_name = model_name.clone(),
+            inference_model_name = self.definition.db_model.inference_model_name.to_string(),
+            output = tracing::field::Empty,
+            error = tracing::field::Empty,
+            credentials_identifier = credentials_ident.to_string(),
+            cost = tracing::field::Empty,
+            usage = tracing::field::Empty,
+            ttft = tracing::field::Empty,
+            tags = tracing::field::Empty,
+            cache = tracing::field::Empty
+        );
+
+        let instance = init_responses_model_instance(
+            self.definition.model_params.engine.clone(),
+            HashMap::new(),
+        )
+        .await?;
+
+        request.model = Some(self.definition.db_model.inference_model_name.clone());
+
+        let capacity = outer_tx.as_ref().map_or(10000, |tx| tx.max_capacity());
+        let (tx, mut rx) = channel::<Option<ModelEvent>>(capacity);
+
+        let cost_calculator = self.executor_context.cost_calculator.clone();
+        let price = self.definition.db_model.price.clone();
+
+        tokio::spawn(async move {
+            let mut usage = GatewayModelUsage::default();
+            let mut total_cost = 0.0;
+            while let Some(Some(msg)) = rx.recv().await {
+                if let ModelEventType::LlmStop(llmfinish_event) = &msg.event {
+                    let current_span = tracing::Span::current();
+                    if let Some(output) = &llmfinish_event.output {
+                        current_span.record("output", serde_json::to_string(output).unwrap());
+                    }
+                    if let Some(u) = &llmfinish_event.usage {
+                        match cost_calculator
+                            .calculate_cost(
+                                &price,
+                                &Usage::CompletionModelUsage(u.clone()),
+                                &credentials_ident,
+                            )
+                            .await
+                        {
+                            Ok(mut c) => {
+                                total_cost += c.cost;
+                                c.cost = total_cost;
+                                current_span.record("cost", serde_json::to_string(&c).unwrap());
+                            }
+                            Err(e) => {
+                                tracing::error!(
+                                    "Error calculating cost: {:?} {:#?}",
+                                    e,
+                                    llmfinish_event
+                                );
+                            }
+                        };
+
+                        usage.add_usage(u);
+                        current_span.record("usage", serde_json::to_string(u).unwrap());
+                    }
+                }
+                if let Some(tx) = outer_tx.as_ref() {
+                    let _ = tx.send(Some(msg)).await;
+                }
+            }
+        });
+
+        instance
+            .stream(request, Some(tx))
+            .instrument(span.clone())
+            .await
     }
 }
 

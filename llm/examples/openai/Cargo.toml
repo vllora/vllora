@@ -13,6 +13,6 @@ edition = "2021"
 vllora_llm = { path = "../.." }
 
 # Match the versions used in vllora_llm where relevant
-async-openai-compat = { package = "async-openai-compat", version = "0.29.8" }
+async-openai-compat = { package = "async-openai-compat", version = "0.30.1" }
 tokio = { version = "1", features = ["full"] }
 tokio-stream = "0.1"

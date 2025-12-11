@@ -6,20 +6,25 @@ use crate::provider::openai::openai_client;
 use crate::types::credentials::ApiKeyCredentials;
 use crate::types::credentials_ident::CredentialsIdent;
 use crate::types::gateway::GatewayModelUsage;
+use crate::types::LLMContentEvent;
 use crate::types::LLMFinishEvent;
+use crate::types::LLMFirstToken;
 use crate::types::LLMStartEvent;
 use crate::types::ModelEvent;
 use crate::types::ModelEventType;
 use crate::types::ModelFinishReason;
 use async_openai::config::OpenAIConfig;
-use async_openai::types::responses::Content;
+use async_openai::error::OpenAIError;
+use async_openai::error::StreamError;
 use async_openai::types::responses::CreateResponse;
-use async_openai::types::responses::OutputContent;
+use async_openai::types::responses::OutputItem;
+use async_openai::types::responses::OutputMessageContent;
 use async_openai::types::responses::Response;
-use async_openai::types::responses::ResponseEvent;
+use async_openai::types::responses::ResponseCompletedEvent;
 use async_openai::types::responses::ResponseStream;
+use async_openai::types::responses::ResponseStreamEvent;
+use async_openai::types::responses::ResponseUsage;
 use async_openai::types::responses::Status;
-use async_openai::types::responses::Usage;
 use async_openai::Client;
 use tokio_stream::StreamExt;
 use tracing::{field, Span};
@@ -87,10 +92,15 @@ impl OpenAIResponses {
 
         let mut content = String::new();
         for output in &response.output {
-            if let OutputContent::Message(message) = output {
-                for message_content in &message.content {
-                    if let Content::OutputText(text) = message_content {
-                        content.push_str(&text.text);
+            if let OutputItem::Message(message) = output {
+                for c in &message.content {
+                    match c {
+                        OutputMessageContent::OutputText(text) => {
+                            content.push_str(&text.text);
+                        }
+                        OutputMessageContent::Refusal(refusal) => {
+                            content.push_str(&refusal.refusal);
+                        }
                     }
                 }
             }
@@ -102,7 +112,7 @@ impl OpenAIResponses {
                 &span,
                 ModelEventType::LlmStop(LLMFinishEvent {
                     provider_name: SPAN_OPENAI.to_string(),
-                    model_name: request.model.clone(),
+                    model_name: request.model.clone().unwrap_or_default(),
                     output: Some(content),
                     usage: mapped_usage,
                     finish_reason: finish_reason.clone(),
@@ -120,15 +130,64 @@ impl OpenAIResponses {
         &self,
         request: &CreateResponse,
         tx: Option<&tokio::sync::mpsc::Sender<Option<ModelEvent>>>,
-        tx_response: &tokio::sync::mpsc::Sender<LLMResult<ResponseEvent>>,
+        tx_response: &tokio::sync::mpsc::Sender<LLMResult<ResponseStreamEvent>>,
     ) -> LLMResult<()> {
+        let span = Span::current();
+        Self::send_event(
+            tx,
+            ModelEvent::new(
+                &span,
+                ModelEventType::LlmStart(LLMStartEvent {
+                    provider_name: SPAN_OPENAI.to_string(),
+                    model_name: request.model.clone().unwrap_or_default(),
+                    input: serde_json::to_string(&request)?,
+                }),
+            ),
+        )
+        .await;
+        let started_at = std::time::Instant::now();
         let response = self
             .client
             .responses()
             .create_stream(request.clone())
             .await?;
 
-        let _ = self.process_stream(response, tx, tx_response).await;
+        let result = self
+            .process_stream(response, tx, tx_response, started_at)
+            .await?;
+
+        if let Some(response_completed) = result {
+            let finish_reason = Self::map_finish_reason(&response_completed.response.status);
+            let mapped_usage = Self::map_usage(response_completed.response.usage.as_ref());
+            let response = "".to_string();
+            let _ = Self::send_event(
+                tx,
+                ModelEvent::new(
+                    &span,
+                    ModelEventType::LlmStop(LLMFinishEvent {
+                        provider_name: SPAN_OPENAI.to_string(),
+                        model_name: request.model.clone().unwrap_or_default(),
+                        output: None,
+                        usage: mapped_usage.clone(),
+                        finish_reason,
+                        tool_calls: vec![],
+                        credentials_ident: self.credentials_ident.clone(),
+                    }),
+                ),
+            )
+            .await;
+
+            span.record("output", serde_json::to_string(&response)?);
+            span.record(
+                "raw_usage",
+                JsonValue(&serde_json::to_value(response_completed.response.usage).unwrap())
+                    .as_value(),
+            );
+            span.record(
+                "usage",
+                JsonValue(&serde_json::to_value(mapped_usage).unwrap()).as_value(),
+            );
+        }
 
         Ok(())
     }
@@ -136,23 +195,44 @@ impl OpenAIResponses {
     async fn process_stream(
         &self,
         mut response: ResponseStream,
-        _tx: Option<&tokio::sync::mpsc::Sender<Option<ModelEvent>>>,
-        tx_response: &tokio::sync::mpsc::Sender<LLMResult<ResponseEvent>>,
-    ) -> LLMResult<()> {
+        tx: Option<&tokio::sync::mpsc::Sender<Option<ModelEvent>>>,
+        tx_response: &tokio::sync::mpsc::Sender<LLMResult<ResponseStreamEvent>>,
+        started_at: std::time::Instant,
+    ) -> LLMResult<Option<ResponseCompletedEvent>> {
+        let mut response_completed = None;
         while let Some(event) = response.next().await {
+            if let Err(OpenAIError::StreamError(StreamError::ReqwestEventSource(
+                reqwest_eventsource::Error::StreamEnded,
+            ))) = event
+            {
+                if response_completed.is_some() {
+                    break;
+                }
+            }
+
             let event = event?;
-            // Self::send_event(tx, ModelEvent::new(
-            //     &Span::current(),
-            //     ModelEventType::LlmStream(LLMStreamEvent {
-            //         provider_name: SPAN_OPENAI.to_string(),
-            //         model_name: request.model.clone(),
-            //         output: Some(event.to_string()),
-            //     })),
-            // ).await;
-            // TODO: send events to tx
+
+            if let ResponseStreamEvent::ResponseCreated(_) = &event {
+                Self::send_event(
+                    tx,
+                    ModelEvent::new(
+                        &Span::current(),
+                        ModelEventType::LlmFirstToken(LLMFirstToken {}),
+                    ),
+                )
+                .await;
+                Span::current().record("ttft", started_at.elapsed().as_micros());
+            }
+
+            if let ResponseStreamEvent::ResponseCompleted(c) = &event {
+                response_completed = Some(c.clone());
+            }
+
+            let _ = Self::match_response_event(&event, &Span::current(), tx).await;
             let _ = tx_response.send(Ok(event)).await;
         }
-        Ok(())
+
+        Ok(response_completed)
     }
 
     async fn send_event(
@@ -160,11 +240,11 @@ impl OpenAIResponses {
         event: ModelEvent,
     ) {
         if let Some(tx) = tx {
-            let _ = tx.send(Some(event)).await;
+            tx.send(Some(event)).await.unwrap();
         }
     }
 
-    fn map_usage(usage: Option<&Usage>) -> Option<GatewayModelUsage> {
+    fn map_usage(usage: Option<&ResponseUsage>) -> Option<GatewayModelUsage> {
         usage.map(GatewayModelUsage::from)
     }
 
@@ -174,8 +254,120 @@ impl OpenAIResponses {
             Status::Failed => ModelFinishReason::Error,
             Status::InProgress => ModelFinishReason::InProgress,
             Status::Incomplete => ModelFinishReason::Incomplete,
+            Status::Queued => ModelFinishReason::Queued,
+            Status::Cancelled => ModelFinishReason::Cancelled,
         }
     }
+
+    async fn match_response_event(
+        response_event: &ResponseStreamEvent,
+        span: &tracing::Span,
+        tx: Option<&tokio::sync::mpsc::Sender<Option<ModelEvent>>>,
+    ) {
+        let Some(tx) = tx else {
+            return;
+        };
+
+        let mut events = vec![];
+        match response_event {
+            ResponseStreamEvent::ResponseCreated(_) => {}
+            ResponseStreamEvent::ResponseCompleted(_) => {}
+            ResponseStreamEvent::ResponseFailed(_) => {}
+            ResponseStreamEvent::ResponseIncomplete(_) => {}
+            ResponseStreamEvent::ResponseQueued(_) => {}
+            ResponseStreamEvent::ResponseOutputItemAdded(_) => {}
+            ResponseStreamEvent::ResponseContentPartAdded(_) => {}
+            ResponseStreamEvent::ResponseOutputTextDelta(delta) => {
+                events.push(ModelEventType::LlmContent(LLMContentEvent {
+                    content: delta.delta.clone(),
+                }));
+            }
+            ResponseStreamEvent::ResponseOutputTextDone(_) => {}
+            ResponseStreamEvent::ResponseRefusalDelta(_) => {}
+            ResponseStreamEvent::ResponseRefusalDone(_) => {}
+            ResponseStreamEvent::ResponseContentPartDone(_) => {}
+            ResponseStreamEvent::ResponseOutputItemDone(_) => {}
+            ResponseStreamEvent::ResponseFunctionCallArgumentsDelta(_) => {}
+            ResponseStreamEvent::ResponseFunctionCallArgumentsDone(_) => {}
+            ResponseStreamEvent::ResponseFileSearchCallInProgress(_) => {}
+            ResponseStreamEvent::ResponseFileSearchCallSearching(_) => {}
+            ResponseStreamEvent::ResponseFileSearchCallCompleted(_) => {}
+            ResponseStreamEvent::ResponseWebSearchCallInProgress(_) => {}
+            ResponseStreamEvent::ResponseWebSearchCallSearching(_) => {}
+            ResponseStreamEvent::ResponseWebSearchCallCompleted(_) => {}
+            ResponseStreamEvent::ResponseReasoningSummaryPartAdded(_) => {}
+            ResponseStreamEvent::ResponseReasoningSummaryPartDone(_) => {}
+            ResponseStreamEvent::ResponseReasoningSummaryTextDelta(_) => {}
+            ResponseStreamEvent::ResponseReasoningSummaryTextDone(_) => {}
+            ResponseStreamEvent::ResponseImageGenerationCallInProgress(_) => {}
+            ResponseStreamEvent::ResponseImageGenerationCallGenerating(_) => {}
+            ResponseStreamEvent::ResponseImageGenerationCallPartialImage(_) => {}
+            ResponseStreamEvent::ResponseImageGenerationCallCompleted(_) => {}
+            ResponseStreamEvent::ResponseCodeInterpreterCallInProgress(_) => {}
+            ResponseStreamEvent::ResponseCodeInterpreterCallInterpreting(_) => {}
+            ResponseStreamEvent::ResponseCodeInterpreterCallCompleted(_) => {}
+            ResponseStreamEvent::ResponseCodeInterpreterCallCodeDelta(_) => {}
+            ResponseStreamEvent::ResponseCodeInterpreterCallCodeDone(_) => {}
+            ResponseStreamEvent::ResponseOutputTextAnnotationAdded(_) => {}
+            ResponseStreamEvent::ResponseError(_) => {}
+            _ => {}
+        }
+
+        for event in events {
+            Self::send_event(Some(tx), ModelEvent::new(span, event)).await;
+        }
+    }
+
+    // async fn match_output_content(output_content: &OutputContent, _span: &tracing::Span, tx: Option<&tokio::sync::mpsc::Sender<Option<ModelEvent>>>) {
+    //     let Some(tx) = tx else {
+    //         return;
+    //     };
+
+    //     let events = match output_content {
+    //         OutputContent::Message(_message) => {
+    //             // vec![ModelEvent::new(span, ModelEventType::LlmContent(LLMContentEvent { content: message.content.clone() }))]
+    //             vec![]
+    //         },
+    //         _ => vec![],
+    // OutputContent::FileSearchCall(file_search_call) => {
+    //     vec![ModelEvent::new(span, ModelEventType::LlmImageUrl(LLMImageUrlEvent { image_url: image_url.url }))]
+    // }
+    // OutputContent::FunctionCall(function_call) => {
+    //     vec![ModelEvent::new(span, ModelEventType::LlmInputAudio(LLMInputAudioEvent { input_audio: input_audio.data }))]
+    // }
+    // OutputContent::WebSearchCall(web_search_call) => {
+    //     vec![ModelEvent::new(span, ModelEventType::LlmWebSearchPreview(LLMWebSearchPreviewEvent { web_search_preview: web_search_preview.url }))]
+    // }
+    // OutputContent::ComputerCall(computer_call) => {
+    //     vec![ModelEvent::new(span, ModelEventType::LlmComputerCall(LLMComputerCallEvent { computer_call: computer_call.data }))]
+    // }
+    // OutputContent::Reasoning(reasoning) => {
+    //     vec![ModelEvent::new(span, ModelEventType::LlmReasoning(LLMReasoningEvent { reasoning: reasoning.data }))]
+    // }
+    // OutputContent::ImageGenerationCall(image_generation_call) => {
+    //     vec![ModelEvent::new(span, ModelEventType::LlmImageGenerationCall(LLMImageGenerationCallEvent { image_generation_call: image_generation_call.data }))]
+    // }
+    // OutputContent::CodeInterpreterCall(code_interpreter_call) => {
+    //     vec![ModelEvent::new(span, ModelEventType::LlmCodeInterpreterCall(LLMCodeInterpreterCallEvent { code_interpreter_call: code_interpreter_call.data }))]
+    // }
+    // OutputContent::LocalShellCall(local_shell_call) => {
+    //     vec![ModelEvent::new(span, ModelEventType::LlmLocalShellCall(LLMLocalShellCallEvent { local_shell_call: local_shell_call.data }))]
+    // }
+    // OutputContent::McpCall(mcp_call) => {
+    //     vec![ModelEvent::new(span, ModelEventType::LlmMcpCall(LLMMcpCallEvent { mcp_call: mcp_call.data }))]
+    // }
+    // OutputContent::McpListTools(mcp_list_tools) => {
+    //     vec![ModelEvent::new(span, ModelEventType::LlmMcpListTools(LLMMcpListToolsEvent { mcp_list_tools: mcp_list_tools.data }))]
+    // }
+    // OutputContent::McpApprovalRequest(mcp_approval_request) => {
+    //     vec![ModelEvent::new(span, ModelEventType::LlmMcpApprovalRequest(LLMMcpApprovalRequestEvent { mcp_approval_request: mcp_approval_request.data }))],
+    // }
+    //         };
+
+    //         for event in events {
+    //             Self::send_event(Some(tx), event).await;
+    //         }
+    //     }
 }
 
 #[async_trait::async_trait]
@@ -202,7 +394,7 @@ impl Responses for OpenAIResponses {
                 &call_span,
                 ModelEventType::LlmStart(LLMStartEvent {
                     provider_name: SPAN_OPENAI.to_string(),
-                    model_name: request.model.clone(),
+                    model_name: request.model.clone().unwrap_or_default(),
                     input: serde_json::to_string(&request)?,
                 }),
             ),
@@ -248,5 +440,71 @@ impl Responses for OpenAIResponses {
         );
 
         Ok(ResponsesResultStream::create(rx_response))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::path::PathBuf;
+
+    fn read_fixture_file() -> String {
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push("src/provider/openai/tests/fixtures/basic_responses_stream");
+        fs::read_to_string(path).expect("Failed to read fixture file")
+    }
+
+    fn parse_fixture_events(content: &str) -> Vec<ResponseStreamEvent> {
+        let mut events = Vec::new();
+        let lines: Vec<&str> = content.lines().collect();
+
+        let mut i = 0;
+        while i < lines.len() {
+            if lines[i].starts_with("event: ") {
+                if i + 1 < lines.len() && lines[i + 1].starts_with("data: ") {
+                    let json_str = &lines[i + 1][6..]; // Skip "data: "
+                    match serde_json::from_str::<ResponseStreamEvent>(json_str) {
+                        Ok(event) => events.push(event),
+                        Err(e) => panic!("Failed to parse event at line {}: {}", i + 1, e),
+                    }
+                    i += 2; // Skip both event and data lines
+                } else {
+                    i += 1;
+                }
+            } else {
+                i += 1;
+            }
+        }
+
+        events
+    }
+
+    #[tokio::test]
+    async fn test_match_response_event() {
+        let fixture_content = read_fixture_file();
+        let response_events = parse_fixture_events(&fixture_content);
+
+        let span = tracing::Span::current();
+        let (tx, mut rx) = tokio::sync::mpsc::channel(10000);
+
+        for response_event in &response_events {
+            // println!("Response event: {:?}", response_event);
+            let _ = OpenAIResponses::match_response_event(response_event, &span, Some(&tx)).await;
+        }
+
+        let _ = tx.send(None).await;
+
+        let expected_deltas = vec!["1", "  \n", "2", "  \n", "3", "  \n", "4", "  \n", "5"];
+        let mut index = 0;
+        while let Some(Some(event)) = rx.recv().await {
+            if let ModelEventType::LlmContent(LLMContentEvent { content }) = &event.event {
+                assert_eq!(content, expected_deltas[index]);
+                index += 1;
+            }
+        }
+
+        // Test that all events were processed without panicking
+        assert!(!response_events.is_empty());
     }
 }

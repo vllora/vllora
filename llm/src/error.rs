@@ -100,6 +100,6 @@ impl From<tokio::sync::mpsc::error::SendError<Option<ModelEvent>>> for LLMError 
 
 impl From<async_openai::error::OpenAIError> for LLMError {
     fn from(value: async_openai::error::OpenAIError) -> Self {
-        LLMError::ModelError(Box::new(ModelError::OpenAIApi(value)))
+        LLMError::ModelError(Box::new(ModelError::OpenAIApi(Box::new(value))))
     }
 }

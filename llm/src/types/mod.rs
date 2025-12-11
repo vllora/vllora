@@ -201,6 +201,8 @@ pub enum ModelFinishReason {
     Error,
     InProgress,
     Incomplete,
+    Queued,
+    Cancelled,
     Other(String),
 }
 
@@ -216,6 +218,8 @@ impl std::fmt::Display for ModelFinishReason {
             ModelFinishReason::Error => write!(f, "error"),
             ModelFinishReason::InProgress => write!(f, "in_progress"),
             ModelFinishReason::Incomplete => write!(f, "incomplete"),
+            ModelFinishReason::Queued => write!(f, "queued"),
+            ModelFinishReason::Cancelled => write!(f, "cancelled"),
             ModelFinishReason::Other(s) => write!(f, "{s}"),
         }
     }
@@ -234,6 +238,8 @@ impl From<ModelFinishReason> for async_openai::types::FinishReason {
             ModelFinishReason::Error => async_openai::types::FinishReason::Stop,
             ModelFinishReason::InProgress => async_openai::types::FinishReason::Stop,
             ModelFinishReason::Incomplete => async_openai::types::FinishReason::Stop,
+            ModelFinishReason::Queued => async_openai::types::FinishReason::Stop,
+            ModelFinishReason::Cancelled => async_openai::types::FinishReason::Stop,
             ModelFinishReason::Other(_s) => async_openai::types::FinishReason::Stop,
         }
     }

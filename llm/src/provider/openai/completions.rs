@@ -257,7 +257,7 @@ impl<C: Config> OpenAIModel<C> {
                         strict: Some(false),
                     })
                     .build()
-                    .map_err(ModelError::OpenAIApi)?,
+                    .map_err(|e| ModelError::OpenAIApi(Box::new(e)))?,
             );
         }
 
@@ -306,7 +306,9 @@ impl<C: Config> OpenAIModel<C> {
                 .tool_choice(ChatCompletionToolChoiceOption::Auto);
         }
 
-        Ok(builder.build().map_err(ModelError::OpenAIApi)?)
+        Ok(builder
+            .build()
+            .map_err(|e| ModelError::OpenAIApi(Box::new(e)))?)
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
@@ -494,7 +496,7 @@ impl<C: Config> OpenAIModel<C> {
                 }
                 Err(err) => {
                     tracing::warn!("OpenAI API error: {err}");
-                    return Err(ModelError::OpenAIApi(err).into());
+                    return Err(ModelError::OpenAIApi(Box::new(err)).into());
                 }
             }
         }
@@ -551,7 +553,7 @@ impl<C: Config> OpenAIModel<C> {
                 .as_ref()
                 .map(JsonValue)
                 .record();
-            let response = result.map_err(ModelError::OpenAIApi)?;
+            let response = result.map_err(|e| ModelError::OpenAIApi(Box::new(e)))?;
 
             let span = Span::current();
             span.record("output", serde_json::to_string(&response)?);
@@ -668,7 +670,7 @@ impl<C: Config> OpenAIModel<C> {
                             ChatCompletionRequestAssistantMessageArgs::default()
                                 .tool_calls(tool_calls.clone())
                                 .build()
-                                .map_err(ModelError::OpenAIApi)?,
+                                .map_err(|e| ModelError::OpenAIApi(Box::new(e)))?,
                         )];
                     let result_tool_calls =
                         Self::handle_tool_calls(tool_calls.iter(), &self.tools, tx, tags.clone())
@@ -833,7 +835,7 @@ impl<C: Config> OpenAIModel<C> {
             .chat()
             .create_stream(request)
             .await
-            .map_err(ModelError::OpenAIApi)?;
+            .map_err(|e| ModelError::OpenAIApi(Box::new(e)))?;
         let (finish_reason, tool_calls, usage, response) = self
             .process_stream(stream, tx, tx_response, started_at)
             .instrument(span.clone())
@@ -960,7 +962,7 @@ impl<C: Config> OpenAIModel<C> {
                             ChatCompletionRequestAssistantMessageArgs::default()
                                 .tool_calls(tool_calls.clone())
                                 .build()
-                                .map_err(ModelError::OpenAIApi)?,
+                                .map_err(|e| ModelError::OpenAIApi(Box::new(e)))?,
                         )];
                     let result_tool_calls =
                         Self::handle_tool_calls(tool_calls.iter(), &self.tools, tx, tags.clone())
