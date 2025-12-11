@@ -61,4 +61,6 @@ Non-streaming reply:
 ✓ Successfully saved image to: generated_image_1.png
 ```
 
+## Example of generated image
+
 ![Example generated image](result_example.png)
