@@ -135,9 +135,9 @@ impl GroupService for GroupServiceImpl {
               COALESCE(json_group_array(DISTINCT request_model) FILTER (WHERE request_model IS NOT NULL), '[]') as request_models,
               COALESCE(json_group_array(DISTINCT used_model) FILTER (WHERE used_model IS NOT NULL), '[]') as used_models,
               CAST(SUM(CASE WHEN operation_name = 'model_call' THEN 1 ELSE 0 END) AS BIGINT) as llm_calls,
-              SUM(COALESCE(CAST(json_extract(attribute, '$.cost') as REAL), 0)) as cost,
-              SUM(CASE WHEN operation_name != 'model_call' THEN json_extract(json_extract(attribute, '$.usage'), '$.input_tokens') END) AS input_tokens,
-              SUM(CASE WHEN operation_name != 'model_call' THEN json_extract(json_extract(attribute, '$.usage'), '$.output_tokens') END) AS output_tokens,
+              COALESCE(SUM(CASE WHEN operation_name = 'api_invoke' THEN CAST(json_extract(attribute, '$.cost') as REAL) END), 0) as cost,
+              SUM(CASE WHEN operation_name == 'api_invoke' THEN json_extract(json_extract(attribute, '$.usage'), '$.input_tokens') END) AS input_tokens,
+              SUM(CASE WHEN operation_name == 'api_invoke' THEN json_extract(json_extract(attribute, '$.usage'), '$.output_tokens') END) AS output_tokens,
               MIN(start_time_us) as start_time_us,
               MAX(finish_time_us) as finish_time_us,
               COALESCE(json_group_array(DISTINCT error_msg) FILTER (WHERE error_msg IS NOT NULL), '[]') as errors
