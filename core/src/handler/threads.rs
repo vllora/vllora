@@ -43,9 +43,13 @@ pub async fn list_threads(
 ) -> Result<HttpResponse> {
     // For POST requests, prefer JSON body; for GET requests, use query params
     let page_options: PageOptions = if req.method() == actix_web::http::Method::POST {
-        body.map(|b| b.into_inner()).unwrap_or_else(get_default_page_options)
+        body.map(|b| b.into_inner())
+            .unwrap_or_else(get_default_page_options)
     } else {
-        query.page_options.clone().unwrap_or_else(get_default_page_options)
+        query
+            .page_options
+            .clone()
+            .unwrap_or_else(get_default_page_options)
     };
 
     let limit = page_options.limit.unwrap_or(50) as i64;
