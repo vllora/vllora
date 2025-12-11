@@ -183,7 +183,7 @@ mod tests {
             .build()
             .unwrap();
 
-        let client = VlloraLLMClientBuilder::default()    
+        let client = VlloraLLMClientBuilder::default()
             .with_provider(InferenceProvider {
                 provider: InferenceModelProvider::Proxy("test".to_string()),
                 model_name: "test".to_string(),

@@ -7,7 +7,6 @@ use crate::GatewayApiError;
 pub use async_openai::types::responses as ResponsesTypes;
 use async_openai::types::responses::CreateResponse;
 use async_openai::types::responses::Response;
-// pub use async_openai::Client;
 use vllora_llm::client::responses::Responses;
 use vllora_llm::types::credentials::Credentials;
 use vllora_llm::types::credentials_ident::CredentialsIdent;
