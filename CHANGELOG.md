@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.16](https://github.com/vllora/vllora/compare/v0.1.15...v0.1.16) (2025-12-11)
+
+
+### Bug Fixes
+
+* Paused spans not displayed after page refresh in debug mode ([#210](https://github.com/vllora/vllora/issues/210))
+* Cannot collapse content in InputNode (Visual Diagram) ([#212](https://github.com/vllora/vllora/issues/212))
+* Cost calculation should only sum from api_invoke spans ([#213](https://github.com/vllora/vllora/issues/213))
+* Inconsistent spacing between ThreadList rows ([#214](https://github.com/vllora/vllora/issues/214))
+* POST /threads endpoint ignores JSON body pagination parameters ([#216](https://github.com/vllora/vllora/issues/216))
+* Infinite scroll fires multiple duplicate requests and uses wrong offset ([#217](https://github.com/vllora/vllora/issues/217))
+
 ### [0.1.15](https://github.com/langdb/langdb-cloud/compare/v0.1.14...v0.1.15) (2025-12-10)
 
 
