@@ -60,3 +60,5 @@ Non-streaming reply:
 [Image Generation Call 1]
 ✓ Successfully saved image to: generated_image_1.png
 ```
+
+![Example generated image](result_example.png)
