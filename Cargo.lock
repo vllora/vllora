@@ -313,9 +313,9 @@ checksum = "34ac096ce696dc2fcabef30516bb13c0a68a11d30131d3df6f04711467681b04"
 
 [[package]]
 name = "async-openai-compat"
-version = "0.30.1"
+version = "0.30.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4eb2e08760fdce32962dddb8f3e63a09753ae35204f103ae8b5f0bdeed8ea54"
+checksum = "21badf7fba686698843981062c1b217530be8592d1a3eabfb9272876f9ac708c"
 dependencies = [
  "async-openai-macros",
  "backoff",

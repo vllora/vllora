@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::client::error::ModelError;
 use crate::client::responses::stream::ResponsesResultStream;
 use crate::client::responses::Responses;
@@ -13,6 +15,8 @@ use crate::types::LLMStartEvent;
 use crate::types::ModelEvent;
 use crate::types::ModelEventType;
 use crate::types::ModelFinishReason;
+use crate::types::ToolResultEvent;
+use crate::types::ToolStartEvent;
 use async_openai::config::OpenAIConfig;
 use async_openai::error::OpenAIError;
 use async_openai::error::StreamError;
@@ -26,10 +30,13 @@ use async_openai::types::responses::ResponseStreamEvent;
 use async_openai::types::responses::ResponseUsage;
 use async_openai::types::responses::Status;
 use async_openai::Client;
+use serde::Serialize;
+use serde_json::json;
 use tokio_stream::StreamExt;
 use tracing::{field, Span};
 use tracing_futures::Instrument;
 use valuable::Valuable;
+use vllora_telemetry::events;
 use vllora_telemetry::events::JsonValue;
 use vllora_telemetry::events::SPAN_OPENAI;
 
@@ -40,6 +47,18 @@ macro_rules! target {
     ($subtgt:literal) => {
         concat!("vllora::user_tracing::models::openai::", $subtgt)
     };
+}
+
+#[derive(Clone, Serialize)]
+struct ToolCall {
+    id: String,
+    function: Option<FunctionCall>,
+}
+
+#[derive(Clone, Serialize)]
+struct FunctionCall {
+    name: String,
+    arguments: serde_json::Value,
 }
 
 #[derive(Clone)]
@@ -200,6 +219,7 @@ impl OpenAIResponses {
         started_at: std::time::Instant,
     ) -> LLMResult<Option<ResponseCompletedEvent>> {
         let mut response_completed = None;
+        let mut tool_calls = HashMap::new();
         while let Some(event) = response.next().await {
             if let Err(OpenAIError::StreamError(StreamError::ReqwestEventSource(
                 reqwest_eventsource::Error::StreamEnded,
@@ -228,7 +248,7 @@ impl OpenAIResponses {
                 response_completed = Some(c.clone());
             }
 
-            let _ = Self::match_response_event(&event, &Span::current(), tx).await;
+            let _ = Self::match_response_event(&event, &Span::current(), tx, &mut tool_calls).await;
             let _ = tx_response.send(Ok(event)).await;
         }
 
@@ -263,6 +283,7 @@ impl OpenAIResponses {
         response_event: &ResponseStreamEvent,
         span: &tracing::Span,
         tx: Option<&tokio::sync::mpsc::Sender<Option<ModelEvent>>>,
+        tool_calls: &mut HashMap<String, (Option<String>, Option<Span>)>,
     ) {
         let Some(tx) = tx else {
             return;
@@ -286,13 +307,63 @@ impl OpenAIResponses {
             ResponseStreamEvent::ResponseRefusalDelta(_) => {}
             ResponseStreamEvent::ResponseRefusalDone(_) => {}
             ResponseStreamEvent::ResponseContentPartDone(_) => {}
-            ResponseStreamEvent::ResponseOutputItemDone(_) => {}
+            ResponseStreamEvent::ResponseOutputItemDone(item) => {
+                if let OutputItem::WebSearchCall(call) = &item.item {
+                    if let Some((_, tool_span)) = tool_calls.remove(&call.id) {
+                        if let Some(tool_span) = tool_span {
+                            let tool_calls = vec![ToolCall {
+                                id: call.id.clone(),
+                                function: Some(FunctionCall {
+                                    name: "web_search".to_string(),
+                                    arguments: json!(call.action),
+                                }),
+                            }];
+                            tool_span.record(
+                                "tool_calls",
+                                JsonValue(&serde_json::to_value(tool_calls).unwrap()).as_value(),
+                            );
+                            tool_span.record("tool.name", "web_search".to_string());
+                            // Drop the span by letting it go out of scope
+                            // The span will be exited when dropped
+                        }
+                    }
+
+                    events.push(ModelEventType::ToolResult(ToolResultEvent {
+                        tool_id: call.id.clone(),
+                        tool_name: "web_search".to_string(),
+                        is_error: false,
+                        output: "{}".to_string(),
+                    }));
+                }
+            }
             ResponseStreamEvent::ResponseFunctionCallArgumentsDelta(_) => {}
             ResponseStreamEvent::ResponseFunctionCallArgumentsDone(_) => {}
             ResponseStreamEvent::ResponseFileSearchCallInProgress(_) => {}
             ResponseStreamEvent::ResponseFileSearchCallSearching(_) => {}
             ResponseStreamEvent::ResponseFileSearchCallCompleted(_) => {}
-            ResponseStreamEvent::ResponseWebSearchCallInProgress(_) => {}
+            ResponseStreamEvent::ResponseWebSearchCallInProgress(call) => {
+                let tool_span = tracing::info_span!(
+                    target: target!(),
+                    parent: span.clone(),
+                    events::SPAN_TOOLS,
+                    tool_calls=field::Empty,
+                    tool_results=field::Empty,
+                    tool.name=field::Empty
+                );
+                tool_span.follows_from(span.id());
+                // Enter the span when created - clone it first since entered() consumes it
+                let _entered = tool_span.clone().entered();
+                // Store the span so we can record on it and drop it later
+                tool_calls.insert(call.item_id.clone(), (None, Some(tool_span)));
+                // The _entered guard is dropped here, exiting the span
+                // But the span itself remains stored until ResponseOutputItemDone
+
+                events.push(ModelEventType::ToolStart(ToolStartEvent {
+                    tool_id: call.item_id.clone(),
+                    tool_name: "web_search".to_string(),
+                    input: "{}".to_string(),
+                }));
+            }
             ResponseStreamEvent::ResponseWebSearchCallSearching(_) => {}
             ResponseStreamEvent::ResponseWebSearchCallCompleted(_) => {}
             ResponseStreamEvent::ResponseReasoningSummaryPartAdded(_) => {}
@@ -398,9 +469,9 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
 
-    fn read_fixture_file() -> String {
+    fn read_fixture_file(event_file: &str) -> String {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push("src/provider/openai/tests/fixtures/basic_responses_stream");
+        path.push(format!("src/provider/openai/tests/fixtures/{event_file}"));
         fs::read_to_string(path).expect("Failed to read fixture file")
     }
 
@@ -431,15 +502,22 @@ mod tests {
 
     #[tokio::test]
     async fn test_match_response_event() {
-        let fixture_content = read_fixture_file();
+        let fixture_content = read_fixture_file("basic_responses_stream");
         let response_events = parse_fixture_events(&fixture_content);
 
         let span = tracing::Span::current();
         let (tx, mut rx) = tokio::sync::mpsc::channel(10000);
+        let mut tool_calls = HashMap::new();
 
         for response_event in &response_events {
             // println!("Response event: {:?}", response_event);
-            let _ = OpenAIResponses::match_response_event(response_event, &span, Some(&tx)).await;
+            let _ = OpenAIResponses::match_response_event(
+                response_event,
+                &span,
+                Some(&tx),
+                &mut tool_calls,
+            )
+            .await;
         }
 
         let _ = tx.send(None).await;
@@ -455,5 +533,62 @@ mod tests {
 
         // Test that all events were processed without panicking
         assert!(!response_events.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_match_response_event_web_search() {
+        let fixture_content = read_fixture_file("web_search_example");
+        let response_events = parse_fixture_events(&fixture_content);
+
+        let span = tracing::Span::current();
+        let (tx, mut rx) = tokio::sync::mpsc::channel(10000);
+        let mut tool_calls = HashMap::new();
+
+        for response_event in &response_events {
+            // println!("Response event: {:?}", response_event);
+            let _ = OpenAIResponses::match_response_event(
+                response_event,
+                &span,
+                Some(&tx),
+                &mut tool_calls,
+            )
+            .await;
+        }
+
+        let _ = tx.send(None).await;
+
+        let mut tool_start_found = false;
+        let mut tool_result_found = false;
+        let expected_tool_id = "ws_044dc2229a1fbfb200693bd4dfe09c8197b3cb2e8e2ee9bf80";
+
+        while let Some(Some(event)) = rx.recv().await {
+            match &event.event {
+                ModelEventType::ToolStart(ToolStartEvent {
+                    tool_id, tool_name, ..
+                }) => {
+                    assert_eq!(tool_id, expected_tool_id);
+                    assert_eq!(tool_name, "web_search");
+                    tool_start_found = true;
+                }
+                ModelEventType::ToolResult(ToolResultEvent {
+                    tool_id,
+                    tool_name,
+                    is_error,
+                    ..
+                }) => {
+                    assert_eq!(tool_id, expected_tool_id);
+                    assert_eq!(tool_name, "web_search");
+                    assert_eq!(*is_error, false);
+                    tool_result_found = true;
+                }
+                _ => {}
+            }
+        }
+
+        // Test that all events were processed without panicking
+        assert!(!response_events.is_empty());
+        // Verify that tool events were found
+        assert!(tool_start_found, "ToolStart event should be found");
+        assert!(tool_result_found, "ToolResult event should be found");
     }
 }

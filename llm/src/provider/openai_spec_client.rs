@@ -1,4 +1,4 @@
-use async_openai::{config::OpenAIConfig, Client};
+use crate::async_openai::{config::OpenAIConfig, Client};
 
 use crate::types::credentials::ApiKeyCredentials;
 

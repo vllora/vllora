@@ -1,6 +1,5 @@
 use super::CredentialsIdent;
 use crate::types::embed::EmbeddingResult;
-use async_openai::types::{CreateEmbeddingResponse, Embedding, EmbeddingUsage};
 use aws_sdk_bedrockruntime::Client;
 use aws_smithy_types::Blob;
 use serde::Deserialize;
@@ -10,6 +9,7 @@ use tracing::field;
 use tracing::Span;
 use tracing_futures::Instrument;
 use valuable::Valuable;
+use vllora_llm::async_openai::types::{CreateEmbeddingResponse, Embedding, EmbeddingUsage};
 use vllora_llm::client::error::ModelError;
 use vllora_llm::error::LLMResult;
 use vllora_llm::provider::bedrock::bedrock_client;

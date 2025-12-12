@@ -1,15 +1,17 @@
 use crate::types::embed::OpenAiEmbeddingParams;
 use crate::GatewayError;
 use crate::GatewayResult;
-use async_openai::config::OpenAIConfig;
-use async_openai::types::{CreateEmbeddingRequestArgs, CreateEmbeddingResponse, EmbeddingInput};
-use async_openai::Client;
 use futures::stream::TryReadyChunksError;
 use futures::{Stream, TryStreamExt};
 use serde_json::Value;
 use tracing::Instrument;
 use tracing::{field, Span};
 use valuable::Valuable;
+use vllora_llm::async_openai::config::OpenAIConfig;
+use vllora_llm::async_openai::types::{
+    CreateEmbeddingRequestArgs, CreateEmbeddingResponse, EmbeddingInput,
+};
+use vllora_llm::async_openai::Client;
 use vllora_llm::client::error::ModelError;
 use vllora_llm::provider::openai::openai_client;
 use vllora_llm::types::credentials::ApiKeyCredentials;

@@ -18,10 +18,10 @@ use crate::{
     },
 };
 use actix_web::{web, HttpRequest, HttpResponse};
-use async_openai::types::responses::{CreateResponse, InputParam};
 use tokio::task::JoinHandle;
 use tracing::Span;
 use tracing_futures::Instrument;
+use vllora_llm::async_openai::types::responses::{CreateResponse, InputParam};
 use vllora_llm::types::{
     events::CustomEventType,
     gateway::{CostCalculator, Usage},

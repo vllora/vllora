@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use async_openai::config::Config;
-use async_openai::{config::OpenAIConfig, Client};
+use vllora_llm::async_openai::config::Config;
+use vllora_llm::async_openai::{config::OpenAIConfig, Client};
 use vllora_llm::client::error::ModelError;
 use vllora_telemetry::events::SPAN_OPENAI;
 

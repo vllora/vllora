@@ -1,0 +1,105 @@
+event: response.created
+data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_044dc2229a1fbfb200693bd4df5dcc8197af55953b160815b4","object":"response","created_at":1765528799,"status":"in_progress","background":false,"error":null,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4.1-2025-04-14","output":[],"parallel_tool_calls":true,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"type":"web_search","filters":null,"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}}}
+
+event: response.in_progress
+data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_044dc2229a1fbfb200693bd4df5dcc8197af55953b160815b4","object":"response","created_at":1765528799,"status":"in_progress","background":false,"error":null,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4.1-2025-04-14","output":[],"parallel_tool_calls":true,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"type":"web_search","filters":null,"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"id":"ws_044dc2229a1fbfb200693bd4dfe09c8197b3cb2e8e2ee9bf80","type":"web_search_call","status":"in_progress","action":{"type":"search"}}}
+
+event: response.web_search_call.in_progress
+data: {"type":"response.web_search_call.in_progress","sequence_number":3,"output_index":0,"item_id":"ws_044dc2229a1fbfb200693bd4dfe09c8197b3cb2e8e2ee9bf80"}
+
+event: response.web_search_call.searching
+data: {"type":"response.web_search_call.searching","sequence_number":4,"output_index":0,"item_id":"ws_044dc2229a1fbfb200693bd4dfe09c8197b3cb2e8e2ee9bf80"}
+
+event: response.web_search_call.completed
+data: {"type":"response.web_search_call.completed","sequence_number":5,"output_index":0,"item_id":"ws_044dc2229a1fbfb200693bd4dfe09c8197b3cb2e8e2ee9bf80"}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","sequence_number":6,"output_index":0,"item":{"id":"ws_044dc2229a1fbfb200693bd4dfe09c8197b3cb2e8e2ee9bf80","type":"web_search_call","status":"completed","action":{"type":"search","query":"latest news site:basketnews.lt"}}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","sequence_number":7,"output_index":1,"item":{"id":"msg_044dc2229a1fbfb200693bd4e27a8081978dd2a87f903e4719","type":"message","status":"in_progress","content":[],"role":"assistant"}}
+
+event: response.content_part.added
+data: {"type":"response.content_part.added","sequence_number":8,"item_id":"msg_044dc2229a1fbfb200693bd4e27a8081978dd2a87f903e4719","output_index":1,"content_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":9,"item_id":"msg_044dc2229a1fbfb200693bd4e27a8081978dd2a87f903e4719","output_index":1,"content_index":0,"delta":"Here are the latest five news headings from BasketNews.lt:\n\n1","logprobs":[],"obfuscation":"8tW"}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":10,"item_id":"msg_044dc2229a1fbfb200693bd4e27a8081978dd2a87f903e4719","output_index":1,"content_index":0,"delta":". Islandų treneris keiksmažodžiais kritik","logprobs":[],"obfuscation":"zzTBxQR"}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":11,"item_id":"msg_044dc2229a1fbfb200693bd4e27a8081978dd2a87f903e4719","output_index":1,"content_index":0,"delta":"avo teisėjavimą","logprobs":[],"obfuscation":"D"}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":12,"item_id":"msg_044dc2229a1fbfb200693bd4e27a8081978dd2a87f903e4719","output_index":1,"content_index":0,"delta":" ([basketnews.lt](https://www.basketnews.lt/?utm_source=openai))  ","logprobs":[],"obfuscation":"gUIcAylccvToGr"}
+
+event: response.output_text.annotation.added
+data: {"type":"response.output_text.annotation.added","sequence_number":13,"item_id":"msg_044dc2229a1fbfb200693bd4e27a8081978dd2a87f903e4719","output_index":1,"content_index":0,"annotation_index":0,"annotation":{"type":"url_citation","end_index":181,"start_index":118,"title":"Čia gyvena krepšinis, čia krepšinio namai - Basketnews.lt","url":"https://www.basketnews.lt/?utm_source=openai"}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":14,"item_id":"msg_044dc2229a1fbfb200693bd4e27a8081978dd2a87f903e4719","output_index":1,"content_index":0,"delta":"\n2. Europos čempionato VI diena: Lietuv","logprobs":[],"obfuscation":"5Vn14Gdh3"}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":15,"item_id":"msg_044dc2229a1fbfb200693bd4e27a8081978dd2a87f903e4719","output_index":1,"content_index":0,"delta":"ai – šeimininkų iššūkis ","logprobs":[],"obfuscation":"0H77kfet"}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":16,"item_id":"msg_044dc2229a1fbfb200693bd4e27a8081978dd2a87f903e4719","output_index":1,"content_index":0,"delta":"([basketnews.lt](https://www.basketnews.lt/?utm_source=openai))  \n3","logprobs":[],"obfuscation":"JgiH11xwVDO25"}
+
+event: response.output_text.annotation.added
+data: {"type":"response.output_text.annotation.added","sequence_number":17,"item_id":"msg_044dc2229a1fbfb200693bd4e27a8081978dd2a87f903e4719","output_index":1,"content_index":0,"annotation_index":1,"annotation":{"type":"url_citation","end_index":309,"start_index":246,"title":"Čia gyvena krepšinis, čia krepšinio namai - Basketnews.lt","url":"https://www.basketnews.lt/?utm_source=openai"}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":18,"item_id":"msg_044dc2229a1fbfb200693bd4e27a8081978dd2a87f903e4719","output_index":1,"content_index":0,"delta":". Kas jau turi vietą EČ atkrintamosiose","logprobs":[],"obfuscation":"jljHKZv7d"}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":19,"item_id":"msg_044dc2229a1fbfb200693bd4e27a8081978dd2a87f903e4719","output_index":1,"content_index":0,"delta":" ir kaip į Rygą patektų Lietuva?","logprobs":[],"obfuscation":""}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":20,"item_id":"msg_044dc2229a1fbfb200693bd4e27a8081978dd2a87f903e4719","output_index":1,"content_index":0,"delta":" ([basketnews.lt](https://www.basketnews.lt/?utm_source=openai))  ","logprobs":[],"obfuscation":"G8PBkBxANeYZ8C"}
+
+event: response.output_text.annotation.added
+data: {"type":"response.output_text.annotation.added","sequence_number":21,"item_id":"msg_044dc2229a1fbfb200693bd4e27a8081978dd2a87f903e4719","output_index":1,"content_index":0,"annotation_index":2,"annotation":{"type":"url_citation","end_index":448,"start_index":385,"title":"Čia gyvena krepšinis, čia krepšinio namai - Basketnews.lt","url":"https://www.basketnews.lt/?utm_source=openai"}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":22,"item_id":"msg_044dc2229a1fbfb200693bd4e27a8081978dd2a87f903e4719","output_index":1,"content_index":0,"delta":"\n4. Loydo vėl vesta Lenkija vos nepr","logprobs":[],"obfuscation":"xRdLggLNWnoJ"}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":23,"item_id":"msg_044dc2229a1fbfb200693bd4e27a8081978dd2a87f903e4719","output_index":1,"content_index":0,"delta":"isidirbo prieš islandus","logprobs":[],"obfuscation":"gWsUQoMkV"}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":24,"item_id":"msg_044dc2229a1fbfb200693bd4e27a8081978dd2a87f903e4719","output_index":1,"content_index":0,"delta":" ([basketnews.lt](https://www.basketnews.lt/?utm_source=openai))  ","logprobs":[],"obfuscation":"qj45ZD1OxcdwIL"}
+
+event: response.output_text.annotation.added
+data: {"type":"response.output_text.annotation.added","sequence_number":25,"item_id":"msg_044dc2229a1fbfb200693bd4e27a8081978dd2a87f903e4719","output_index":1,"content_index":0,"annotation_index":3,"annotation":{"type":"url_citation","end_index":573,"start_index":510,"title":"Čia gyvena krepšinis, čia krepšinio namai - Basketnews.lt","url":"https://www.basketnews.lt/?utm_source=openai"}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":26,"item_id":"msg_044dc2229a1fbfb200693bd4e27a8081978dd2a87f903e4719","output_index":1,"content_index":0,"delta":"\n5. Italų pergalė pažymėta neį","logprobs":[],"obfuscation":"eN"}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":27,"item_id":"msg_044dc2229a1fbfb200693bd4e27a8081978dd2a87f903e4719","output_index":1,"content_index":0,"delta":"prastu Pozzecco išvarymu ir Fontecchio rek","logprobs":[],"obfuscation":"Ub9NET"}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":28,"item_id":"msg_044dc2229a1fbfb200693bd4e27a8081978dd2a87f903e4719","output_index":1,"content_index":0,"delta":"ordu ","logprobs":[],"obfuscation":"BDSF0D09faj"}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":29,"item_id":"msg_044dc2229a1fbfb200693bd4e27a8081978dd2a87f903e4719","output_index":1,"content_index":0,"delta":"([basketnews.lt](https://www.basketnews.lt/?utm_source=openai))","logprobs":[],"obfuscation":"G"}
+
+event: response.output_text.annotation.added
+data: {"type":"response.output_text.annotation.added","sequence_number":30,"item_id":"msg_044dc2229a1fbfb200693bd4e27a8081978dd2a87f903e4719","output_index":1,"content_index":0,"annotation_index":4,"annotation":{"type":"url_citation","end_index":715,"start_index":652,"title":"Čia gyvena krepšinis, čia krepšinio namai - Basketnews.lt","url":"https://www.basketnews.lt/?utm_source=openai"}}
+
+event: response.output_text.done
+data: {"type":"response.output_text.done","sequence_number":31,"item_id":"msg_044dc2229a1fbfb200693bd4e27a8081978dd2a87f903e4719","output_index":1,"content_index":0,"text":"Here are the latest five news headings from BasketNews.lt:\n\n1. Islandų treneris keiksmažodžiais kritikavo teisėjavimą ([basketnews.lt](https://www.basketnews.lt/?utm_source=openai))  \n2. Europos čempionato VI diena: Lietuvai – šeimininkų iššūkis ([basketnews.lt](https://www.basketnews.lt/?utm_source=openai))  \n3. Kas jau turi vietą EČ atkrintamosiose ir kaip į Rygą patektų Lietuva? ([basketnews.lt](https://www.basketnews.lt/?utm_source=openai))  \n4. Loydo vėl vesta Lenkija vos neprisidirbo prieš islandus ([basketnews.lt](https://www.basketnews.lt/?utm_source=openai))  \n5. Italų pergalė pažymėta neįprastu Pozzecco išvarymu ir Fontecchio rekordu ([basketnews.lt](https://www.basketnews.lt/?utm_source=openai))","logprobs":[]}
+
+event: response.content_part.done
+data: {"type":"response.content_part.done","sequence_number":32,"item_id":"msg_044dc2229a1fbfb200693bd4e27a8081978dd2a87f903e4719","output_index":1,"content_index":0,"part":{"type":"output_text","annotations":[{"type":"url_citation","end_index":181,"start_index":118,"title":"Čia gyvena krepšinis, čia krepšinio namai - Basketnews.lt","url":"https://www.basketnews.lt/?utm_source=openai"},{"type":"url_citation","end_index":309,"start_index":246,"title":"Čia gyvena krepšinis, čia krepšinio namai - Basketnews.lt","url":"https://www.basketnews.lt/?utm_source=openai"},{"type":"url_citation","end_index":448,"start_index":385,"title":"Čia gyvena krepšinis, čia krepšinio namai - Basketnews.lt","url":"https://www.basketnews.lt/?utm_source=openai"},{"type":"url_citation","end_index":573,"start_index":510,"title":"Čia gyvena krepšinis, čia krepšinio namai - Basketnews.lt","url":"https://www.basketnews.lt/?utm_source=openai"},{"type":"url_citation","end_index":715,"start_index":652,"title":"Čia gyvena krepšinis, čia krepšinio namai - Basketnews.lt","url":"https://www.basketnews.lt/?utm_source=openai"}],"logprobs":[],"text":"Here are the latest five news headings from BasketNews.lt:\n\n1. Islandų treneris keiksmažodžiais kritikavo teisėjavimą ([basketnews.lt](https://www.basketnews.lt/?utm_source=openai))  \n2. Europos čempionato VI diena: Lietuvai – šeimininkų iššūkis ([basketnews.lt](https://www.basketnews.lt/?utm_source=openai))  \n3. Kas jau turi vietą EČ atkrintamosiose ir kaip į Rygą patektų Lietuva? ([basketnews.lt](https://www.basketnews.lt/?utm_source=openai))  \n4. Loydo vėl vesta Lenkija vos neprisidirbo prieš islandus ([basketnews.lt](https://www.basketnews.lt/?utm_source=openai))  \n5. Italų pergalė pažymėta neįprastu Pozzecco išvarymu ir Fontecchio rekordu ([basketnews.lt](https://www.basketnews.lt/?utm_source=openai))"}}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","sequence_number":33,"output_index":1,"item":{"id":"msg_044dc2229a1fbfb200693bd4e27a8081978dd2a87f903e4719","type":"message","status":"completed","content":[{"type":"output_text","annotations":[{"type":"url_citation","end_index":181,"start_index":118,"title":"Čia gyvena krepšinis, čia krepšinio namai - Basketnews.lt","url":"https://www.basketnews.lt/?utm_source=openai"},{"type":"url_citation","end_index":309,"start_index":246,"title":"Čia gyvena krepšinis, čia krepšinio namai - Basketnews.lt","url":"https://www.basketnews.lt/?utm_source=openai"},{"type":"url_citation","end_index":448,"start_index":385,"title":"Čia gyvena krepšinis, čia krepšinio namai - Basketnews.lt","url":"https://www.basketnews.lt/?utm_source=openai"},{"type":"url_citation","end_index":573,"start_index":510,"title":"Čia gyvena krepšinis, čia krepšinio namai - Basketnews.lt","url":"https://www.basketnews.lt/?utm_source=openai"},{"type":"url_citation","end_index":715,"start_index":652,"title":"Čia gyvena krepšinis, čia krepšinio namai - Basketnews.lt","url":"https://www.basketnews.lt/?utm_source=openai"}],"logprobs":[],"text":"Here are the latest five news headings from BasketNews.lt:\n\n1. Islandų treneris keiksmažodžiais kritikavo teisėjavimą ([basketnews.lt](https://www.basketnews.lt/?utm_source=openai))  \n2. Europos čempionato VI diena: Lietuvai – šeimininkų iššūkis ([basketnews.lt](https://www.basketnews.lt/?utm_source=openai))  \n3. Kas jau turi vietą EČ atkrintamosiose ir kaip į Rygą patektų Lietuva? ([basketnews.lt](https://www.basketnews.lt/?utm_source=openai))  \n4. Loydo vėl vesta Lenkija vos neprisidirbo prieš islandus ([basketnews.lt](https://www.basketnews.lt/?utm_source=openai))  \n5. Italų pergalė pažymėta neįprastu Pozzecco išvarymu ir Fontecchio rekordu ([basketnews.lt](https://www.basketnews.lt/?utm_source=openai))"}],"role":"assistant"}}
+
+event: response.completed
+data: {"type":"response.completed","sequence_number":34,"response":{"id":"resp_044dc2229a1fbfb200693bd4df5dcc8197af55953b160815b4","object":"response","created_at":1765528799,"status":"completed","background":false,"error":null,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4.1-2025-04-14","output":[{"id":"ws_044dc2229a1fbfb200693bd4dfe09c8197b3cb2e8e2ee9bf80","type":"web_search_call","status":"completed","action":{"type":"search","query":"latest news site:basketnews.lt"}},{"id":"msg_044dc2229a1fbfb200693bd4e27a8081978dd2a87f903e4719","type":"message","status":"completed","content":[{"type":"output_text","annotations":[{"type":"url_citation","end_index":181,"start_index":118,"title":"Čia gyvena krepšinis, čia krepšinio namai - Basketnews.lt","url":"https://www.basketnews.lt/?utm_source=openai"},{"type":"url_citation","end_index":309,"start_index":246,"title":"Čia gyvena krepšinis, čia krepšinio namai - Basketnews.lt","url":"https://www.basketnews.lt/?utm_source=openai"},{"type":"url_citation","end_index":448,"start_index":385,"title":"Čia gyvena krepšinis, čia krepšinio namai - Basketnews.lt","url":"https://www.basketnews.lt/?utm_source=openai"},{"type":"url_citation","end_index":573,"start_index":510,"title":"Čia gyvena krepšinis, čia krepšinio namai - Basketnews.lt","url":"https://www.basketnews.lt/?utm_source=openai"},{"type":"url_citation","end_index":715,"start_index":652,"title":"Čia gyvena krepšinis, čia krepšinio namai - Basketnews.lt","url":"https://www.basketnews.lt/?utm_source=openai"}],"logprobs":[],"text":"Here are the latest five news headings from BasketNews.lt:\n\n1. Islandų treneris keiksmažodžiais kritikavo teisėjavimą ([basketnews.lt](https://www.basketnews.lt/?utm_source=openai))  \n2. Europos čempionato VI diena: Lietuvai – šeimininkų iššūkis ([basketnews.lt](https://www.basketnews.lt/?utm_source=openai))  \n3. Kas jau turi vietą EČ atkrintamosiose ir kaip į Rygą patektų Lietuva? ([basketnews.lt](https://www.basketnews.lt/?utm_source=openai))  \n4. Loydo vėl vesta Lenkija vos neprisidirbo prieš islandus ([basketnews.lt](https://www.basketnews.lt/?utm_source=openai))  \n5. Italų pergalė pažymėta neįprastu Pozzecco išvarymu ir Fontecchio rekordu ([basketnews.lt](https://www.basketnews.lt/?utm_source=openai))"}],"role":"assistant"}],"parallel_tool_calls":true,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":null,"summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"type":"web_search","filters":null,"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":31652,"input_tokens_details":{"cached_tokens":0},"output_tokens":232,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":31884},"user":null,"metadata":{}}}
+

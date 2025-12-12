@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
-use async_openai::types::{CreateEmbeddingResponse, Embedding, EmbeddingUsage};
 use tracing::field;
 use tracing::Span;
 use tracing_futures::Instrument;
 use valuable::Valuable;
+use vllora_llm::async_openai::types::{CreateEmbeddingResponse, Embedding, EmbeddingUsage};
 use vllora_llm::types::LLMFinishEvent;
 
 use crate::{

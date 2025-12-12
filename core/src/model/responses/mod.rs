@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 
 use crate::executor::context::ExecutorContext;
-use async_openai::types::responses::{CreateResponse, Response};
 use serde::Serialize;
 use serde_json::{json, Value};
 use tokio::sync::mpsc::channel;
 use tracing::info_span;
 use tracing_futures::Instrument;
+use vllora_llm::async_openai::types::responses::{CreateResponse, Response};
 use vllora_llm::{
     client::{
         error::ModelError,
