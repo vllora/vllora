@@ -1,6 +1,6 @@
 [package]
 name = "vllora_llm"
-version = "0.1.15"
+version = "0.1.16"
 authors = ["Vllora Team<api@vllora.dev>"]
 description = "LLM client layer for the Vllora AI Gateway: unified chat-completions over multiple providers (OpenAI, Anthropic, Gemini, Bedrock, LangDB proxy) with optional tracing/telemetry."
 license = "Apache-2.0"
@@ -17,7 +17,7 @@ path = "src/lib.rs"
 
 
 [dependencies]
-vllora_telemetry = { path = "../telemetry", version = "0.1.15" }
+vllora_telemetry = { path = "../telemetry", version = "0.1.16" }
 
 async-openai = { package = "async-openai-compat", version = "0.29.8" }
 clust = { version = "0.9.10", package = "langdb_clust" }
