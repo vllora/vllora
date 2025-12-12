@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use vllora_llm::types::credentials_ident::CredentialsIdent;
 use vllora_llm::types::gateway::ChatCompletionChunk;
-use vllora_llm::types::gateway::CompletionModelUsage;
+use vllora_llm::types::gateway::GatewayModelUsage;
 use vllora_llm::types::gateway::Usage;
 use vllora_llm::types::models::InferenceProvider;
 use vllora_llm::types::models::ModelMetadata;
@@ -280,7 +280,7 @@ impl RoutedExecutor {
                                     let mut delta: ChatCompletionChunk = delta;
                                     delta.model = model_name.clone();
                                     if let Some(usage) = delta.usage.as_mut() {
-                                        let u = CompletionModelUsage {
+                                        let u = GatewayModelUsage {
                                             input_tokens: usage.prompt_tokens as u32,
                                             output_tokens: usage.completion_tokens as u32,
                                             total_tokens: usage.total_tokens as u32,

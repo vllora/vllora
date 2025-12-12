@@ -89,7 +89,6 @@ struct TracedImageGenerationModelDefinition {
     pub name: String,
     pub provider_name: String,
     pub engine_name: String,
-    pub prompt_name: Option<String>,
     pub model_params: ImageGenerationModelDefinition,
     pub model_name: String,
 }
@@ -137,7 +136,6 @@ impl From<ImageGenerationModelDefinition> for TracedImageGenerationModelDefiniti
             name: value.name.clone(),
             provider_name: value.db_model.provider_name.clone(),
             engine_name: value.engine.engine_name().to_string(),
-            prompt_name: None,
             model_params: value.clone(),
         }
     }

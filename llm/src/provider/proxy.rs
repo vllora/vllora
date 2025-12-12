@@ -1,7 +1,7 @@
 use crate::client::completions::response_stream::ResultStream;
 use crate::client::error::ModelError;
 use crate::error::LLMResult;
-use crate::provider::openai::OpenAIModel;
+use crate::provider::openai::completions::OpenAIModel;
 use crate::provider::openai_spec_client::openai_spec_client;
 use crate::types::credentials::ApiKeyCredentials;
 use crate::types::engine::ExecutionOptions;

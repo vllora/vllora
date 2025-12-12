@@ -15,7 +15,7 @@ use crate::types::gateway::{
     ChatCompletionContent, ChatCompletionMessage, ChatCompletionMessageWithFinishReason,
     FunctionCall, ToolCall,
 };
-use crate::types::gateway::{CompletionModelUsage, PromptTokensDetails};
+use crate::types::gateway::{GatewayModelUsage, PromptTokensDetails};
 use crate::types::instance::ModelInstance;
 use crate::types::message::InnerMessage;
 use crate::types::message::Message;
@@ -575,7 +575,7 @@ impl AnthropicModel {
                 let input_tokens = response.usage.input_tokens
                     + response.usage.cache_read_input_tokens.unwrap_or(0)
                     + response.usage.cache_creation_input_tokens.unwrap_or(0);
-                let usage = CompletionModelUsage {
+                let usage = GatewayModelUsage {
                     input_tokens,
                     output_tokens: response.usage.output_tokens,
                     total_tokens: input_tokens + response.usage.output_tokens,
@@ -726,7 +726,7 @@ impl AnthropicModel {
 
                 let tool = self.tools.get(&tool_runs[0].name).unwrap();
                 if tool.stop_at_call() {
-                    let usage = Some(CompletionModelUsage {
+                    let usage = Some(GatewayModelUsage {
                         input_tokens: response.usage.input_tokens,
                         output_tokens: response.usage.output_tokens,
                         total_tokens: response.usage.input_tokens + response.usage.output_tokens,
@@ -927,11 +927,11 @@ impl AnthropicModel {
         Ok(())
     }
 
-    fn map_usage(usage: &Usage) -> CompletionModelUsage {
+    fn map_usage(usage: &Usage) -> GatewayModelUsage {
         let input_tokens = usage.input_tokens
             + usage.cache_read_input_tokens.unwrap_or(0)
             + usage.cache_creation_input_tokens.unwrap_or(0);
-        CompletionModelUsage {
+        GatewayModelUsage {
             input_tokens,
             output_tokens: usage.output_tokens,
             total_tokens: usage.output_tokens + input_tokens,

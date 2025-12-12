@@ -1,4 +1,4 @@
-use async_openai_compat::types::{
+use vllora_llm::async_openai::types::{
     ChatCompletionRequestMessage,
     ChatCompletionRequestSystemMessageArgs,
     ChatCompletionRequestUserMessageArgs,

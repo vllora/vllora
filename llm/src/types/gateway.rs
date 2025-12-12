@@ -613,7 +613,7 @@ pub struct ChatCompletionMessageWithFinishReason {
     model: String,
     message: ChatCompletionMessage,
     finish_reason: ModelFinishReason,
-    usage: Option<CompletionModelUsage>,
+    usage: Option<GatewayModelUsage>,
 }
 
 impl ChatCompletionMessageWithFinishReason {
@@ -623,7 +623,7 @@ impl ChatCompletionMessageWithFinishReason {
         id: String,
         created: u32,
         model: String,
-        usage: Option<CompletionModelUsage>,
+        usage: Option<GatewayModelUsage>,
     ) -> Self {
         Self {
             message,
@@ -1185,8 +1185,9 @@ pub struct StreamOptions {
     pub include_usage: bool,
 }
 
+/// Unified usage model for all models
 #[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq, Eq)]
-pub struct CompletionModelUsage {
+pub struct GatewayModelUsage {
     pub input_tokens: u32,
     pub output_tokens: u32,
     pub total_tokens: u32,
@@ -1197,7 +1198,72 @@ pub struct CompletionModelUsage {
     pub is_cache_used: bool,
 }
 
-impl CompletionModelUsage {
+impl From<&async_openai::types::CompletionUsage> for GatewayModelUsage {
+    fn from(val: &async_openai::types::CompletionUsage) -> Self {
+        GatewayModelUsage {
+            input_tokens: val.prompt_tokens,
+            output_tokens: val.completion_tokens
+                + val
+                    .completion_tokens_details
+                    .as_ref()
+                    .and_then(|c| c.reasoning_tokens)
+                    .unwrap_or(0),
+            total_tokens: val.total_tokens,
+            prompt_tokens_details: val.prompt_tokens_details.as_ref().map(|p| {
+                crate::types::gateway::PromptTokensDetails::new(
+                    p.cached_tokens,
+                    Some(0),
+                    p.audio_tokens,
+                )
+            }),
+            completion_tokens_details: val.completion_tokens_details.as_ref().map(|c| {
+                crate::types::gateway::CompletionTokensDetails::new(
+                    c.accepted_prediction_tokens,
+                    c.audio_tokens,
+                    c.reasoning_tokens,
+                    c.rejected_prediction_tokens,
+                )
+            }),
+            ..Default::default()
+        }
+    }
+}
+
+impl From<async_openai::types::CompletionUsage> for GatewayModelUsage {
+    fn from(val: async_openai::types::CompletionUsage) -> Self {
+        GatewayModelUsage::from(&val)
+    }
+}
+
+impl From<&async_openai::types::responses::ResponseUsage> for GatewayModelUsage {
+    fn from(val: &async_openai::types::responses::ResponseUsage) -> Self {
+        GatewayModelUsage {
+            input_tokens: val.input_tokens,
+            output_tokens: val.output_tokens,
+            total_tokens: val.total_tokens,
+            prompt_tokens_details: Some(PromptTokensDetails {
+                cached_tokens: val.input_tokens_details.cached_tokens,
+                cache_creation_tokens: 0,
+                audio_tokens: 0,
+            }),
+            completion_tokens_details: Some(CompletionTokensDetails {
+                accepted_prediction_tokens: 0,
+                audio_tokens: 0,
+                reasoning_tokens: val.output_tokens_details.reasoning_tokens,
+                rejected_prediction_tokens: 0,
+            }),
+            ..Default::default()
+        }
+    }
+}
+
+impl From<async_openai::types::responses::ResponseUsage> for GatewayModelUsage {
+    fn from(val: async_openai::types::responses::ResponseUsage) -> Self {
+        GatewayModelUsage::from(&val)
+    }
+}
+
+impl GatewayModelUsage {
     pub fn add_usage(&mut self, other: &Self) {
         self.input_tokens += other.input_tokens;
         self.output_tokens += other.output_tokens;
@@ -1248,6 +1314,12 @@ pub struct PromptTokensDetails {
 
 impl From<async_openai::types::PromptTokensDetails> for PromptTokensDetails {
     fn from(val: async_openai::types::PromptTokensDetails) -> Self {
+        PromptTokensDetails::from(&val)
+    }
+}
+
+impl From<&async_openai::types::PromptTokensDetails> for PromptTokensDetails {
+    fn from(val: &async_openai::types::PromptTokensDetails) -> Self {
         PromptTokensDetails {
             cached_tokens: val.cached_tokens.unwrap_or(0),
             cache_creation_tokens: 0,
@@ -1278,6 +1350,12 @@ impl From<CompletionTokensDetails> for async_openai::types::CompletionTokensDeta
 
 impl From<async_openai::types::CompletionTokensDetails> for CompletionTokensDetails {
     fn from(val: async_openai::types::CompletionTokensDetails) -> Self {
+        CompletionTokensDetails::from(&val)
+    }
+}
+
+impl From<&async_openai::types::CompletionTokensDetails> for CompletionTokensDetails {
+    fn from(val: &async_openai::types::CompletionTokensDetails) -> Self {
         CompletionTokensDetails {
             accepted_prediction_tokens: val.accepted_prediction_tokens.unwrap_or(0),
             audio_tokens: val.audio_tokens.unwrap_or(0),
@@ -1387,7 +1465,7 @@ pub enum ImageCostCalculationResult {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(untagged)]
 pub enum Usage {
-    CompletionModelUsage(CompletionModelUsage),
+    CompletionModelUsage(GatewayModelUsage),
     ImageGenerationModelUsage(ImageGenerationModelUsage),
 }
 

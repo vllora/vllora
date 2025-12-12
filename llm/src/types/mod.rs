@@ -1,7 +1,7 @@
 use crate::types::credentials_ident::CredentialsIdent;
 use crate::types::events::CustomEventType;
-use crate::types::gateway::{CompletionModelUsage, ImageSize};
 use crate::types::gateway::{FunctionCall, ToolCall};
+use crate::types::gateway::{GatewayModelUsage, ImageSize};
 use chrono::{DateTime, Utc};
 use opentelemetry::trace::TraceContextExt;
 use serde::{Deserialize, Serialize};
@@ -44,11 +44,11 @@ impl CustomEvent {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CostEvent {
     cost: f64,
-    usage: Option<CompletionModelUsage>,
+    usage: Option<GatewayModelUsage>,
 }
 
 impl CostEvent {
-    pub fn new(cost: f64, usage: Option<CompletionModelUsage>) -> Self {
+    pub fn new(cost: f64, usage: Option<GatewayModelUsage>) -> Self {
         Self { cost, usage }
     }
 }
@@ -148,7 +148,7 @@ pub struct LLMFinishEvent {
     pub provider_name: String,
     pub model_name: String,
     pub output: Option<String>,
-    pub usage: Option<CompletionModelUsage>,
+    pub usage: Option<GatewayModelUsage>,
     pub finish_reason: ModelFinishReason,
     pub tool_calls: Vec<ModelToolCall>,
     pub credentials_ident: CredentialsIdent,
@@ -197,6 +197,12 @@ pub enum ModelFinishReason {
     ToolCalls,
     ContentFilter,
     Guardrail,
+    // Responses API only
+    Error,
+    InProgress,
+    Incomplete,
+    Queued,
+    Cancelled,
     Other(String),
 }
 
@@ -209,6 +215,11 @@ impl std::fmt::Display for ModelFinishReason {
             ModelFinishReason::ToolCalls => write!(f, "tool_calls"),
             ModelFinishReason::ContentFilter => write!(f, "content_filter"),
             ModelFinishReason::Guardrail => write!(f, "guardrail"),
+            ModelFinishReason::Error => write!(f, "error"),
+            ModelFinishReason::InProgress => write!(f, "in_progress"),
+            ModelFinishReason::Incomplete => write!(f, "incomplete"),
+            ModelFinishReason::Queued => write!(f, "queued"),
+            ModelFinishReason::Cancelled => write!(f, "cancelled"),
             ModelFinishReason::Other(s) => write!(f, "{s}"),
         }
     }
@@ -224,6 +235,11 @@ impl From<ModelFinishReason> for async_openai::types::FinishReason {
             // TODO: Handle stop sequence and guardrail in async-openai-compat
             ModelFinishReason::StopSequence => async_openai::types::FinishReason::Stop,
             ModelFinishReason::Guardrail => async_openai::types::FinishReason::Stop,
+            ModelFinishReason::Error => async_openai::types::FinishReason::Stop,
+            ModelFinishReason::InProgress => async_openai::types::FinishReason::Stop,
+            ModelFinishReason::Incomplete => async_openai::types::FinishReason::Stop,
+            ModelFinishReason::Queued => async_openai::types::FinishReason::Stop,
+            ModelFinishReason::Cancelled => async_openai::types::FinishReason::Stop,
             ModelFinishReason::Other(_s) => async_openai::types::FinishReason::Stop,
         }
     }

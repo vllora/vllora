@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
-use async_openai::types::{CreateEmbeddingResponse, Embedding, EmbeddingUsage};
 use tracing::field;
 use tracing::Span;
 use tracing_futures::Instrument;
 use valuable::Valuable;
+use vllora_llm::async_openai::types::{CreateEmbeddingResponse, Embedding, EmbeddingUsage};
 use vllora_llm::types::LLMFinishEvent;
 
 use crate::{
@@ -19,7 +19,7 @@ use vllora_llm::provider::gemini::{
     types::{Part, PartWithThought},
 };
 use vllora_llm::types::credentials::ApiKeyCredentials;
-use vllora_llm::types::gateway::{CompletionModelUsage, CreateEmbeddingRequest, Input};
+use vllora_llm::types::gateway::{CreateEmbeddingRequest, GatewayModelUsage, Input};
 use vllora_llm::types::LLMStartEvent;
 use vllora_llm::types::ModelEvent;
 use vllora_llm::types::ModelEventType;
@@ -87,7 +87,7 @@ impl GeminiEmbeddings {
                     provider_name: SPAN_GEMINI.to_string(),
                     model_name: model_name.to_string(),
                     output: None,
-                    usage: Some(CompletionModelUsage {
+                    usage: Some(GatewayModelUsage {
                         input_tokens: tokens_count.total_tokens as u32,
                         output_tokens: 0,
                         total_tokens: tokens_count.total_tokens as u32,
@@ -126,8 +126,8 @@ impl GeminiEmbeddings {
 
     fn map_usage(
         usage: &vllora_llm::provider::gemini::types::CountTokensResponse,
-    ) -> CompletionModelUsage {
-        CompletionModelUsage {
+    ) -> GatewayModelUsage {
+        GatewayModelUsage {
             input_tokens: usage.total_tokens as u32,
             total_tokens: usage.total_tokens as u32,
             ..Default::default()

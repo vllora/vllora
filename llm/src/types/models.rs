@@ -74,6 +74,7 @@ pub enum ModelType {
     Completions,
     Embeddings,
     ImageGeneration,
+    Responses,
 }
 
 impl FromStr for ModelType {
@@ -83,7 +84,8 @@ impl FromStr for ModelType {
             "completions" => Ok(ModelType::Completions),
             "embeddings" => Ok(ModelType::Embeddings),
             "image_generation" => Ok(ModelType::ImageGeneration),
-            _ => Ok(ModelType::Completions),
+            "responses" => Ok(ModelType::Responses),
+            _ => Err(format!("Invalid ModelType: {s}")),
         }
     }
 }
@@ -94,6 +96,7 @@ impl Display for ModelType {
             ModelType::Completions => write!(f, "completions"),
             ModelType::Embeddings => write!(f, "embeddings"),
             ModelType::ImageGeneration => write!(f, "image_generation"),
+            ModelType::Responses => write!(f, "responses"),
         }
     }
 }

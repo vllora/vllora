@@ -1,0 +1,19 @@
+[package]
+name = "responses_image_generation_example"
+version = "0.1.0"
+edition = "2021"
+
+# Declare an empty workspace here so this example
+# is treated as a standalone crate, not part of
+# the parent Cargo workspace.
+[workspace]
+
+[dependencies]
+# Use the local vllora_llm crate
+vllora_llm = { path = "../.." }
+
+# Match the versions used in vllora_llm where relevant
+tokio = { version = "1", features = ["full"] }
+serde_json = "1.0"
+base64 = "0.22"
+

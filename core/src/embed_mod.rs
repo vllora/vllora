@@ -1,20 +1,22 @@
 use crate::types::embed::OpenAiEmbeddingParams;
 use crate::GatewayError;
 use crate::GatewayResult;
-use async_openai::config::OpenAIConfig;
-use async_openai::types::{CreateEmbeddingRequestArgs, CreateEmbeddingResponse, EmbeddingInput};
-use async_openai::Client;
 use futures::stream::TryReadyChunksError;
 use futures::{Stream, TryStreamExt};
 use serde_json::Value;
 use tracing::Instrument;
 use tracing::{field, Span};
 use valuable::Valuable;
+use vllora_llm::async_openai::config::OpenAIConfig;
+use vllora_llm::async_openai::types::{
+    CreateEmbeddingRequestArgs, CreateEmbeddingResponse, EmbeddingInput,
+};
+use vllora_llm::async_openai::Client;
 use vllora_llm::client::error::ModelError;
 use vllora_llm::provider::openai::openai_client;
 use vllora_llm::types::credentials::ApiKeyCredentials;
 use vllora_llm::types::credentials_ident::CredentialsIdent;
-use vllora_llm::types::gateway::CompletionModelUsage;
+use vllora_llm::types::gateway::GatewayModelUsage;
 use vllora_llm::types::LLMFinishEvent;
 use vllora_llm::types::ModelEvent;
 use vllora_llm::types::ModelEventType;
@@ -86,7 +88,9 @@ impl OpenAIEmbed {
             request_builder.dimensions(dimensions);
         }
         // Finalize the request
-        let request = request_builder.build().map_err(ModelError::OpenAIApi)?;
+        let request = request_builder
+            .build()
+            .map_err(|e| ModelError::OpenAIApi(Box::new(e)))?;
 
         // Send the request and handle the response
         let mut response = async move {
@@ -99,7 +103,7 @@ impl OpenAIEmbed {
                 .map(JsonValue)
                 .record();
 
-            let response = result.map_err(ModelError::OpenAIApi)?;
+            let response = result.map_err(|e| ModelError::OpenAIApi(Box::new(e)))?;
 
             let span = Span::current();
             let usage = response.usage.clone();
@@ -119,7 +123,7 @@ impl OpenAIEmbed {
                     provider_name: SPAN_OPENAI.to_string(),
                     model_name: self.params.model.clone().unwrap_or_default(),
                     output: None,
-                    usage: Some(CompletionModelUsage {
+                    usage: Some(GatewayModelUsage {
                         input_tokens: response.usage.prompt_tokens,
                         output_tokens: 0,
                         total_tokens: response.usage.total_tokens,

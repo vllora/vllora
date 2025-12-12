@@ -39,6 +39,7 @@ use vllora_core::handler::middleware::actix_otel::ActixOtelMiddleware;
 use vllora_core::handler::middleware::rate_limit::RateLimitMiddleware;
 use vllora_core::handler::middleware::run_id::RunId;
 use vllora_core::handler::middleware::thread_id::ThreadId;
+use vllora_core::handler::responses;
 use vllora_core::handler::runs;
 use vllora_core::handler::spans;
 use vllora_core::handler::traces;
@@ -446,5 +447,6 @@ impl ApiServer {
             .route("/pricing", web::get().to(models::list_gateway_pricing))
             .route("/embeddings", web::post().to(embeddings_handler))
             .route("/images/generations", web::post().to(create_image))
+            .route("/responses", web::post().to(responses::create))
     }
 }

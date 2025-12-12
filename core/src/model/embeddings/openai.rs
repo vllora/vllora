@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 
-use async_openai::{
-    config::{AzureConfig, Config, OpenAIConfig},
-    types::EmbeddingUsage,
-    Client,
-};
 use tracing::field;
 use tracing::Span;
 use tracing_futures::Instrument;
 use valuable::Valuable;
+use vllora_llm::async_openai::{
+    config::{AzureConfig, Config, OpenAIConfig},
+    types::EmbeddingUsage,
+    Client,
+};
 
 use crate::{model::embeddings::EmbeddingsModelInstance, types::embed::EmbeddingResult};
 use vllora_llm::client::error::AuthorizationError;
@@ -19,7 +19,7 @@ use vllora_llm::provider::openai::{azure_openai_client, openai_client};
 use vllora_llm::types::credentials::ApiKeyCredentials;
 use vllora_llm::types::credentials_ident::CredentialsIdent;
 use vllora_llm::types::gateway::{
-    CompletionModelUsage, CreateEmbeddingRequest, EncodingFormat, Input,
+    CreateEmbeddingRequest, EncodingFormat, GatewayModelUsage, Input,
 };
 use vllora_llm::types::LLMFinishEvent;
 use vllora_llm::types::LLMStartEvent;
@@ -82,7 +82,7 @@ impl OpenAIEmbeddings<AzureConfig> {
 impl<C: Config> OpenAIEmbeddings<C> {
     async fn execute(
         &self,
-        embedding_request: async_openai::types::CreateEmbeddingRequest,
+        embedding_request: vllora_llm::async_openai::types::CreateEmbeddingRequest,
         encoding_format: &EncodingFormat,
         model_name: &str,
         outer_tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
@@ -104,14 +104,14 @@ impl<C: Config> OpenAIEmbeddings<C> {
                 .create(embedding_request)
                 .await
                 .map(|r| r.into())
-                .map_err(ModelError::OpenAIApi)?,
+                .map_err(|e| ModelError::OpenAIApi(Box::new(e)))?,
             EncodingFormat::Base64 => self
                 .client
                 .embeddings()
                 .create_base64(embedding_request)
                 .await
                 .map(|r| r.into())
-                .map_err(ModelError::OpenAIApi)?,
+                .map_err(|e| ModelError::OpenAIApi(Box::new(e)))?,
         };
 
         outer_tx
@@ -121,7 +121,7 @@ impl<C: Config> OpenAIEmbeddings<C> {
                     provider_name: SPAN_OPENAI.to_string(),
                     model_name: model_name.to_string(),
                     output: None,
-                    usage: Some(CompletionModelUsage {
+                    usage: Some(GatewayModelUsage {
                         input_tokens: response.usage().prompt_tokens,
                         output_tokens: 0,
                         total_tokens: response.usage().total_tokens,
@@ -146,8 +146,8 @@ impl<C: Config> OpenAIEmbeddings<C> {
         Ok(response)
     }
 
-    fn map_usage(usage: &EmbeddingUsage) -> CompletionModelUsage {
-        CompletionModelUsage {
+    fn map_usage(usage: &EmbeddingUsage) -> GatewayModelUsage {
+        GatewayModelUsage {
             input_tokens: usage.prompt_tokens,
             total_tokens: usage.total_tokens,
             ..Default::default()
@@ -165,7 +165,7 @@ impl<C: Config + std::marker::Sync + std::marker::Send> EmbeddingsModelInstance
         outer_tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
     ) -> LLMResult<EmbeddingResult> {
-        let embedding_request = async_openai::types::CreateEmbeddingRequest {
+        let embedding_request = vllora_llm::async_openai::types::CreateEmbeddingRequest {
             model: request.model.clone(),
             input: match &request.input {
                 Input::String(s) => s.into(),
@@ -174,8 +174,8 @@ impl<C: Config + std::marker::Sync + std::marker::Send> EmbeddingsModelInstance
             user: request.user.clone(),
             dimensions: request.dimensions.map(|d| d as u32),
             encoding_format: Some(match &request.encoding_format {
-                EncodingFormat::Float => async_openai::types::EncodingFormat::Float,
-                EncodingFormat::Base64 => async_openai::types::EncodingFormat::Base64,
+                EncodingFormat::Float => vllora_llm::async_openai::types::EncodingFormat::Float,
+                EncodingFormat::Base64 => vllora_llm::async_openai::types::EncodingFormat::Base64,
             }),
         };
 

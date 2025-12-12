@@ -343,7 +343,6 @@ pub async fn resolve_model_instance<T: Serialize + DeserializeOwned + Debug + Cl
         model_params: CompletionModelParams {
             engine: engine.clone(),
             provider_name: llm_model.model_provider.to_string(),
-            prompt_name: None,
         },
         tools,
         db_model: db_model.clone(),

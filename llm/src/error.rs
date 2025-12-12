@@ -17,6 +17,8 @@ pub enum LLMError {
     DecodeError(#[from] base64::DecodeError),
     #[error("Custom Error: {0}")]
     CustomError(String),
+    #[error("Api key was ")]
+    InvalidCredentials,
     #[error("Function get is not implemented")]
     FunctionGetNotImplemented,
     #[error("Tool call id not found in request")]
@@ -98,6 +100,6 @@ impl From<tokio::sync::mpsc::error::SendError<Option<ModelEvent>>> for LLMError 
 
 impl From<async_openai::error::OpenAIError> for LLMError {
     fn from(value: async_openai::error::OpenAIError) -> Self {
-        LLMError::ModelError(Box::new(ModelError::OpenAIApi(value)))
+        LLMError::ModelError(Box::new(ModelError::OpenAIApi(Box::new(value))))
     }
 }

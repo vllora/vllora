@@ -18,8 +18,8 @@ use tokio::task::JoinHandle;
 use valuable::Valuable;
 use vllora_llm::types::events::CustomEventType;
 use vllora_llm::types::gateway::ChatCompletionRequestWithTools;
-use vllora_llm::types::gateway::CompletionModelUsage;
 use vllora_llm::types::gateway::Extra;
+use vllora_llm::types::gateway::GatewayModelUsage;
 use vllora_llm::types::gateway::Usage;
 use vllora_llm::types::CostEvent;
 use vllora_llm::types::CustomEvent;
@@ -44,7 +44,7 @@ use crate::executor::chat_completion::routed_executor::RoutedExecutor;
 
 pub type SSOChatEvent = (
     Option<ChatCompletionDelta>,
-    Option<CompletionModelUsage>,
+    Option<GatewayModelUsage>,
     Option<String>,
 );
 

@@ -21,7 +21,7 @@ use vllora_llm::error::LLMResult;
 use vllora_llm::types::engine::EmbeddingsEngineParams;
 use vllora_llm::types::engine::EmbeddingsModelDefinition;
 use vllora_llm::types::gateway::{
-    CompletionModelUsage, CostCalculator, CreateEmbeddingRequest, Usage,
+    CostCalculator, CreateEmbeddingRequest, GatewayModelUsage, Usage,
 };
 use vllora_llm::types::ModelEvent;
 use vllora_llm::types::ModelEventType;
@@ -107,7 +107,6 @@ struct TracedEmbeddingsModelDefinition {
     pub name: String,
     pub provider_name: String,
     pub engine_name: String,
-    pub prompt_name: Option<String>,
     pub model_params: EmbeddingsModelDefinition,
     pub model_name: String,
 }
@@ -165,7 +164,6 @@ impl From<EmbeddingsModelDefinition> for TracedEmbeddingsModelDefinition {
             name: value.name.clone(),
             provider_name: value.db_model.provider_name.clone(),
             engine_name: value.engine.engine_name().to_string(),
-            prompt_name: None,
             model_params: value.clone(),
         }
     }
@@ -210,7 +208,7 @@ impl<Inner: EmbeddingsModelInstance> EmbeddingsModelInstance for TracedEmbedding
                     if let Some(cost_calculator) = cost_calculator.as_ref() {
                         if let ModelEventType::LlmStop(llm_finish_event) = &msg.event {
                             let s = tracing::Span::current();
-                            let u = CompletionModelUsage {
+                            let u = GatewayModelUsage {
                                 input_tokens: llm_finish_event.usage.as_ref().unwrap().input_tokens,
                                 output_tokens: llm_finish_event
                                     .usage

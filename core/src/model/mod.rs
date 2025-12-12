@@ -24,8 +24,8 @@ use vllora_llm::types::engine::{CompletionEngineParamsBuilder, CompletionModelDe
 use vllora_llm::types::events::CustomEventType;
 use vllora_llm::types::gateway::{
     ChatCompletionContent, ChatCompletionMessage, ChatCompletionMessageWithFinishReason,
-    ChatCompletionRequest, CompletionModelUsage, ContentType, Extra, GuardOrName,
-    GuardWithParameters, Usage,
+    ChatCompletionRequest, ContentType, Extra, GatewayModelUsage, GuardOrName, GuardWithParameters,
+    Usage,
 };
 use vllora_llm::types::instance::init_model_instance;
 use vllora_llm::types::message::Message;
@@ -43,6 +43,7 @@ pub mod cached;
 pub mod embeddings;
 pub mod google_vertex;
 pub mod image_generation;
+pub mod responses;
 pub mod tools;
 
 #[async_trait::async_trait]
@@ -120,7 +121,6 @@ struct TraceModelDefinition {
     pub name: String,
     pub provider_name: String,
     pub engine_name: String,
-    pub prompt_name: Option<String>,
     pub model_params: CompletionModelParams,
     pub model_name: String,
     pub tools: ModelTools,
@@ -175,7 +175,6 @@ impl From<CompletionModelDefinition> for TraceModelDefinition {
             name: value.name,
             provider_name: value.model_params.provider_name.clone(),
             engine_name: value.model_params.engine.engine_name().to_string(),
-            prompt_name: value.model_params.prompt_name.clone(),
             model_params: value.model_params,
             tools: value.tools,
             model_type: ModelType::Completions,
@@ -259,7 +258,7 @@ impl ModelInstance for TracedModel {
         tokio::spawn(
             async move {
                 let mut start_time = None;
-                let mut usage = CompletionModelUsage::default();
+                let mut usage = GatewayModelUsage::default();
                 let mut total_cost = 0.0;
                 while let Some(Some(msg)) = rx.recv().await {
                     match &msg.event {
