@@ -73,7 +73,8 @@ pub fn map_cloud_event_to_agui_events(value: &GatewayEvent) -> Vec<Event> {
                         run_context: value.clone().into(),
                         snapshot: serde_json::json!({
                             "first_token_received": true,
-                            "trace_id": event.event.event.trace_id
+                            "trace_id": event.event.event.trace_id,
+                            "operation_name": event.event.event.span.as_ref().and_then(|span| span.metadata().map(|m| m.name())).unwrap_or(""),
                         }),
                         timestamp: event_info.timestamp.timestamp_millis() as u64,
                     }]
