@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.17](https://github.com/langdb/langdb-cloud/compare/v0.1.16...v0.1.17) (2025-12-12)
+
+
+### Features
+
+* Integrate responses API ([#215](https://github.com/langdb/langdb-cloud/issues/215)) ([00ac1d2](https://github.com/langdb/langdb-cloud/commit/00ac1d2abebc325cf12b0dd649b62719f8513a74))
+
 ### [0.1.16](https://github.com/vllora/vllora/compare/v0.1.15...v0.1.16) (2025-12-11)
 
 
