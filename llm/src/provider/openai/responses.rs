@@ -309,23 +309,22 @@ impl OpenAIResponses {
             ResponseStreamEvent::ResponseContentPartDone(_) => {}
             ResponseStreamEvent::ResponseOutputItemDone(item) => {
                 if let OutputItem::WebSearchCall(call) = &item.item {
-                    if let Some((_, tool_span)) = tool_calls.remove(&call.id) {
-                        if let Some(tool_span) = tool_span {
-                            let tool_calls = vec![ToolCall {
-                                id: call.id.clone(),
-                                function: Some(FunctionCall {
-                                    name: "web_search".to_string(),
-                                    arguments: json!(call.action),
-                                }),
-                            }];
-                            tool_span.record(
-                                "tool_calls",
-                                JsonValue(&serde_json::to_value(tool_calls).unwrap()).as_value(),
-                            );
-                            tool_span.record("tool.name", "web_search".to_string());
-                            // Drop the span by letting it go out of scope
-                            // The span will be exited when dropped
-                        }
+                    // Keep the span alive until after we've recorded and sent events
+                    if let Some((_, Some(tool_span))) = tool_calls.remove(&call.id) {
+                        // Enter the span before recording to ensure it's active
+                        let _entered = tool_span.clone().entered();
+                        let tool_calls_vec = vec![ToolCall {
+                            id: call.id.clone(),
+                            function: Some(FunctionCall {
+                                name: "web_search".to_string(),
+                                arguments: json!(call.action),
+                            }),
+                        }];
+                        tool_span.record(
+                            "tool_calls",
+                            JsonValue(&serde_json::to_value(tool_calls_vec).unwrap()).as_value(),
+                        );
+                        tool_span.record("tool.name", "web_search".to_string());
                     }
 
                     events.push(ModelEventType::ToolResult(ToolResultEvent {
