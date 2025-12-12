@@ -317,57 +317,6 @@ impl OpenAIResponses {
             Self::send_event(Some(tx), ModelEvent::new(span, event)).await;
         }
     }
-
-    // async fn match_output_content(output_content: &OutputContent, _span: &tracing::Span, tx: Option<&tokio::sync::mpsc::Sender<Option<ModelEvent>>>) {
-    //     let Some(tx) = tx else {
-    //         return;
-    //     };
-
-    //     let events = match output_content {
-    //         OutputContent::Message(_message) => {
-    //             // vec![ModelEvent::new(span, ModelEventType::LlmContent(LLMContentEvent { content: message.content.clone() }))]
-    //             vec![]
-    //         },
-    //         _ => vec![],
-    // OutputContent::FileSearchCall(file_search_call) => {
-    //     vec![ModelEvent::new(span, ModelEventType::LlmImageUrl(LLMImageUrlEvent { image_url: image_url.url }))]
-    // }
-    // OutputContent::FunctionCall(function_call) => {
-    //     vec![ModelEvent::new(span, ModelEventType::LlmInputAudio(LLMInputAudioEvent { input_audio: input_audio.data }))]
-    // }
-    // OutputContent::WebSearchCall(web_search_call) => {
-    //     vec![ModelEvent::new(span, ModelEventType::LlmWebSearchPreview(LLMWebSearchPreviewEvent { web_search_preview: web_search_preview.url }))]
-    // }
-    // OutputContent::ComputerCall(computer_call) => {
-    //     vec![ModelEvent::new(span, ModelEventType::LlmComputerCall(LLMComputerCallEvent { computer_call: computer_call.data }))]
-    // }
-    // OutputContent::Reasoning(reasoning) => {
-    //     vec![ModelEvent::new(span, ModelEventType::LlmReasoning(LLMReasoningEvent { reasoning: reasoning.data }))]
-    // }
-    // OutputContent::ImageGenerationCall(image_generation_call) => {
-    //     vec![ModelEvent::new(span, ModelEventType::LlmImageGenerationCall(LLMImageGenerationCallEvent { image_generation_call: image_generation_call.data }))]
-    // }
-    // OutputContent::CodeInterpreterCall(code_interpreter_call) => {
-    //     vec![ModelEvent::new(span, ModelEventType::LlmCodeInterpreterCall(LLMCodeInterpreterCallEvent { code_interpreter_call: code_interpreter_call.data }))]
-    // }
-    // OutputContent::LocalShellCall(local_shell_call) => {
-    //     vec![ModelEvent::new(span, ModelEventType::LlmLocalShellCall(LLMLocalShellCallEvent { local_shell_call: local_shell_call.data }))]
-    // }
-    // OutputContent::McpCall(mcp_call) => {
-    //     vec![ModelEvent::new(span, ModelEventType::LlmMcpCall(LLMMcpCallEvent { mcp_call: mcp_call.data }))]
-    // }
-    // OutputContent::McpListTools(mcp_list_tools) => {
-    //     vec![ModelEvent::new(span, ModelEventType::LlmMcpListTools(LLMMcpListToolsEvent { mcp_list_tools: mcp_list_tools.data }))]
-    // }
-    // OutputContent::McpApprovalRequest(mcp_approval_request) => {
-    //     vec![ModelEvent::new(span, ModelEventType::LlmMcpApprovalRequest(LLMMcpApprovalRequestEvent { mcp_approval_request: mcp_approval_request.data }))],
-    // }
-    //         };
-
-    //         for event in events {
-    //             Self::send_event(Some(tx), event).await;
-    //         }
-    //     }
 }
 
 #[async_trait::async_trait]
