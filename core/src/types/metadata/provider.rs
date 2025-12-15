@@ -10,4 +10,6 @@ pub struct ProviderInfo {
     pub terms_of_service_url: Option<String>,
     pub provider_type: String,
     pub has_credentials: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub custom_endpoint: Option<String>,
 }

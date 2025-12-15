@@ -1,5 +1,6 @@
 use crate::metadata::error::DatabaseError;
 use crate::metadata::models::provider::{DbInsertProvider, DbProvider, DbUpdateProvider};
+use crate::metadata::models::provider_credential::DbProviderCredentials;
 use crate::metadata::pool::DbPool;
 use crate::metadata::schema::providers as p;
 use crate::metadata::schema::providers::dsl::providers;
@@ -11,6 +12,7 @@ use diesel::ExpressionMethods;
 use diesel::OptionalExtension;
 use diesel::{QueryDsl, RunQueryDsl};
 use uuid::Uuid;
+use vllora_llm::types::credentials::Credentials;
 
 pub struct ProvidersServiceImpl {
     db_pool: DbPool,
@@ -129,29 +131,31 @@ impl ProviderService for ProvidersServiceImpl {
             let mut provider_info: ProviderInfo = provider.into();
 
             // Check if credentials exist for this provider
-            let has_credentials = if let Some(pid) = project_id {
+            let credentials = if let Some(pid) = project_id {
                 // Check for project-specific credentials first, then global
                 crate::metadata::schema::provider_credentials::dsl::provider_credentials
-                    .select(count(crate::metadata::schema::provider_credentials::id))
                     .filter(crate::metadata::schema::provider_credentials::provider_name.eq(&provider_info.name))
                     .filter(crate::metadata::schema::provider_credentials::project_id.eq(pid.to_string()).or(crate::metadata::schema::provider_credentials::project_id.is_null()))
                     .filter(crate::metadata::schema::provider_credentials::is_active.eq(1))
-                    .first::<i64>(&mut conn)? > 0
+                    .first::<DbProviderCredentials>(&mut conn).optional()?
             } else {
                 // Check for global credentials only
                 crate::metadata::schema::provider_credentials::dsl::provider_credentials
-                    .select(count(crate::metadata::schema::provider_credentials::id))
                     .filter(
                         crate::metadata::schema::provider_credentials::provider_name
                             .eq(&provider_info.name),
                     )
                     .filter(crate::metadata::schema::provider_credentials::project_id.is_null())
                     .filter(crate::metadata::schema::provider_credentials::is_active.eq(1))
-                    .first::<i64>(&mut conn)?
-                    > 0
+                    .first::<DbProviderCredentials>(&mut conn)
+                    .optional()?
             };
 
-            provider_info.has_credentials = has_credentials;
+            provider_info.has_credentials = credentials.is_some();
+            provider_info.custom_endpoint = credentials.and_then(|c| match c.parse_credentials() {
+                Ok(Credentials::ApiKeyWithEndpoint { endpoint, .. }) => Some(endpoint),
+                _ => None,
+            });
             result.push(provider_info);
         }
 

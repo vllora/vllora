@@ -98,6 +98,7 @@ impl From<DbProvider> for ProviderInfo {
             terms_of_service_url: val.terms_of_service_url,
             provider_type,
             has_credentials: false,
+            custom_endpoint: None,
         }
     }
 }
