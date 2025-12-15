@@ -74,7 +74,7 @@ libsqlite3-sys = { version = "0.27.0", features = ["bundled"] }
 diesel_migrations = { version = "2.3.0", features = ["sqlite"] }
 r2d2 = "0.8.10"
 opentelemetry-semantic-conventions = "0.30.0"
-actix-http = "3.11.1"
+actix-http = "3.11.2"
 actix-web = "4"
 
 rmcp = { workspace = true }
