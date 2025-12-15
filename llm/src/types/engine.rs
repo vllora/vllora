@@ -407,7 +407,7 @@ impl CompletionEngineParamsBuilder {
                         params,
                         execution_options: self.execution_options.clone().unwrap_or_default(),
                         credentials: api_key_credentials,
-                        endpoint: None,
+                        endpoint: custom_endpoint,
                     }),
                     InferenceModelProvider::Proxy(proxy_provider) => {
                         let endpoint = custom_endpoint.or_else(|| self.provider.endpoint.clone());
