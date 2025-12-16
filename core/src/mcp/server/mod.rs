@@ -5,17 +5,15 @@ use chrono::TimeZone;
 pub use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 
 use crate::mcp::server::tools::{
-    ErrorBreadcrumb, GetLlmCallInclude, GetLlmCallParams, GetLlmCallResponse,
-    GetRunOverviewParams, GetRunOverviewResponse, LlmRequest, LlmResponse, LlmSummary, Redaction,
-    RunOverviewRun, RunOverviewSpan, SearchTraceItem, SearchTracesInclude,
-    SearchTracesOperationKind, SearchTracesParams, SearchTracesResponse, SearchTracesStatus,
-    ToolSummary, UnsafeText,
+    ErrorBreadcrumb, GetLlmCallInclude, GetLlmCallParams, GetLlmCallResponse, GetRunOverviewParams,
+    GetRunOverviewResponse, LlmRequest, LlmResponse, LlmSummary, Redaction, RunOverviewRun,
+    RunOverviewSpan, SearchTraceItem, SearchTracesInclude, SearchTracesOperationKind,
+    SearchTracesParams, SearchTracesResponse, SearchTracesStatus, ToolSummary, UnsafeText,
 };
 use crate::types::handlers::pagination::PaginatedResult;
 use crate::types::metadata::services::trace::ListTracesQuery;
 use crate::types::metadata::services::trace::TraceService;
 use crate::types::traces::LangdbSpan;
-use serde_json::Value as JsonValue;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, Content};
 use rmcp::model::{Implementation, ProtocolVersion, ServerCapabilities, ServerInfo};
@@ -24,6 +22,7 @@ use rmcp::{
     handler::server::router::tool::ToolRouter, tool, tool_handler, tool_router,
     ErrorData as McpError, ServerHandler,
 };
+use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 
 #[derive(Clone)]
@@ -104,7 +103,7 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
             if let Some(thread_id) = &filters.thread_id {
                 list_query.thread_ids = Some(vec![thread_id.clone()]);
             }
-            if let Some(model) = &filters.model {
+            if let Some(_model) = &filters.model {
                 // Model name is stored in attributes, so we can't filter directly
                 // This would require a more complex query or post-filtering
             }
@@ -134,13 +133,11 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
             .map_err(|e| e.to_string())?;
 
         // Determine which optional fields should be populated based on `include`.
-        let include = params
-            .include
-            .unwrap_or(SearchTracesInclude {
-                metrics: false,
-                tokens: false,
-                costs: false,
-            });
+        let include = params.include.unwrap_or(SearchTracesInclude {
+            metrics: false,
+            tokens: false,
+            costs: false,
+        });
 
         // Map PaginatedResult<LangdbSpan> into SearchTracesResponse, enriching
         // with labels, metrics, tokens and costs from the span attributes.
@@ -210,10 +207,9 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
                 if include.costs {
                     if let Some(raw_cost) = span.attribute.get("cost") {
                         let cost_value: Option<JsonValue> = match raw_cost {
-                            JsonValue::String(s) => s
-                                .parse::<f64>()
-                                .ok()
-                                .map(|v| serde_json::json!(v)),
+                            JsonValue::String(s) => {
+                                s.parse::<f64>().ok().map(|v| serde_json::json!(v))
+                            }
                             other => Some(other.clone()),
                         };
                         costs = cost_value;
@@ -238,7 +234,10 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
                     run_id: span.run_id,
                     // We currently don't have an explicit ok/error classification at this layer,
                     // so we mark the status as "any".
-                    status: SearchTracesStatus::Any,
+                    status: match span.attribute.get("error") {
+                        Some(_) => SearchTracesStatus::Error,
+                        None => SearchTracesStatus::Ok,
+                    },
                     root_operation_name: span.operation_name.to_string(),
                     // Use microsecond timestamp as a string; this can be changed
                     // later to a full ISO8601 timestamp without breaking schema.
@@ -265,7 +264,10 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
     }
 
     /// Get detailed LLM call information for a specific span.
-    #[tool(name = "get_llm_call", description = "Get detailed LLM call information for a span")]
+    #[tool(
+        name = "get_llm_call",
+        description = "Get detailed LLM call information for a span"
+    )]
     async fn get_llm_call(
         &self,
         Parameters(params): Parameters<GetLlmCallParams>,
@@ -286,8 +288,13 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
         let span = paginated
             .data
             .into_iter()
-            .find(|s| s.trace_id == params.trace_id && s.span_id == params.span_id.to_string())
-            .ok_or_else(|| format!("Span not found: trace_id={}, span_id={}", params.trace_id, params.span_id))?;
+            .find(|s| s.trace_id == params.trace_id && s.span_id == params.span_id)
+            .ok_or_else(|| {
+                format!(
+                    "Span not found: trace_id={}, span_id={}",
+                    params.trace_id, params.span_id
+                )
+            })?;
 
         let include = params.include.unwrap_or(GetLlmCallInclude {
             llm_payload: false,
@@ -337,7 +344,10 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
                 });
 
             // Extract messages and tools from input/request
-            let messages = span.attribute.get("input").or_else(|| span.attribute.get("request"));
+            let messages = span
+                .attribute
+                .get("input")
+                .or_else(|| span.attribute.get("request"));
             let tools = span.attribute.get("tools");
 
             // Wrap in unsafe_text if requested
@@ -373,7 +383,10 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
 
         // Build response payload if requested
         let response = if include.unsafe_text || params.allow_unsafe_text {
-            let output = span.attribute.get("output").or_else(|| span.attribute.get("response"));
+            let output = span
+                .attribute
+                .get("output")
+                .or_else(|| span.attribute.get("response"));
             output.map(|content| LlmResponse {
                 unsafe_text: Some(UnsafeText {
                     kind: Some("llm_output".to_string()),
@@ -404,7 +417,10 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
     }
 
     /// High-level MCP tool that provides an overview of a single run and its spans.
-    #[tool(name = "get_run_overview", description = "Get high-level overview of a run and its spans")]
+    #[tool(
+        name = "get_run_overview",
+        description = "Get high-level overview of a run and its spans"
+    )]
     async fn get_run_overview(
         &self,
         Parameters(params): Parameters<GetRunOverviewParams>,
@@ -446,11 +462,7 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
         spans.sort_by_key(|s| s.start_time_us);
 
         // Compute basic run-level timing
-        let start_time_us = spans
-            .iter()
-            .map(|s| s.start_time_us)
-            .min()
-            .unwrap_or(0);
+        let start_time_us = spans.iter().map(|s| s.start_time_us).min().unwrap_or(0);
         let finish_time_us = spans
             .iter()
             .map(|s| s.finish_time_us)
@@ -478,11 +490,7 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
 
         // Derive run-level labels (e.g. agent) from the root span attributes.
         let mut run_labels = HashMap::new();
-        if let Some(agent) = root_span
-            .attribute
-            .get("agent")
-            .and_then(|v| v.as_str())
-        {
+        if let Some(agent) = root_span.attribute.get("agent").and_then(|v| v.as_str()) {
             run_labels.insert("agent".to_string(), agent.to_string());
         }
         let run_label = if run_labels.is_empty() {
@@ -573,6 +581,7 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
                     span_id: s.span_id.clone(),
                     operation_name: s.operation_name.to_string(),
                     error,
+                    error_payload: s.attribute.get("error_payload").cloned(),
                 });
             }
         }
@@ -634,10 +643,8 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
                     Some(tools_val.clone())
                 };
 
-                if let Some(v) = parsed {
-                    if let JsonValue::Array(arr) = &v {
-                        tool_count = arr.len() as i64;
-                    }
+                if let Some(JsonValue::Array(arr)) = &parsed {
+                    tool_count = arr.len() as i64;
                 }
             }
 

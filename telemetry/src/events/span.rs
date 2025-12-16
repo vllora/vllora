@@ -10,11 +10,11 @@ macro_rules! create_model_span {
             retries_left = $retries_left,
             request = field::Empty,
             output = field::Empty,
+            error_payload = field::Empty,
             error = field::Empty,
             usage = field::Empty,
             raw_usage = field::Empty,
             ttft = field::Empty,
-            message_id = field::Empty,
             cost = field::Empty,
             $($field_name = $field_value,)*
         )
@@ -41,7 +41,6 @@ macro_rules! create_thread_span {
             response = tracing::field::Empty,
             error = tracing::field::Empty,
             thread_id = tracing::field::Empty,
-            message_id = tracing::field::Empty,
             cost = tracing::field::Empty,
             credentials_identifier = tracing::field::Empty,
             router_name = tracing::field::Empty,

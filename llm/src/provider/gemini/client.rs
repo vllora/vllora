@@ -11,6 +11,7 @@ use reqwest_eventsource::{Error, EventSource};
 use serde::Serialize;
 use serde_json::Value;
 use tokio_stream::StreamExt;
+use tracing::Span;
 
 const API_URL: &str = "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -69,6 +70,7 @@ impl Client {
             } else {
                 String::new()
             };
+            Span::current().record("error_payload", msg.clone());
             tracing::error!(target: "gemini", "{msg}. Payload: {p}");
 
             return Err(LLMError::CustomError(format!(

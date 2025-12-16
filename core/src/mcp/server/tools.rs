@@ -196,15 +196,11 @@ pub struct SearchTracesFilters {
     pub model: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(
-        description = "Root operation kind for the trace. One of: llm_call, tool_call."
-    )]
+    #[schemars(description = "Root operation kind for the trace. One of: llm_call, tool_call.")]
     pub operation_name: Option<SearchTracesOperationKind>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(
-        description = "Arbitrary labels to filter by, e.g. {\"agent\": \"browsr\"}."
-    )]
+    #[schemars(description = "Arbitrary labels to filter by, e.g. {\"agent\": \"browsr\"}.")]
     pub labels: Option<HashMap<String, String>>,
 }
 
@@ -264,28 +260,20 @@ pub struct SearchTracesPage {
     pub limit: i64,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(
-        description = "Offset into the result set, for classic offset-based pagination."
-    )]
+    #[schemars(description = "Offset into the result set, for classic offset-based pagination.")]
     pub offset: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[schemars(description = "Include flags for additional trace data in search_traces.")]
 pub struct SearchTracesInclude {
-    #[schemars(
-        description = "If true, include aggregate metrics for the trace (e.g. ttft)."
-    )]
+    #[schemars(description = "If true, include aggregate metrics for the trace (e.g. ttft).")]
     pub metrics: bool,
 
-    #[schemars(
-        description = "If true, include token usage details, if available for the trace."
-    )]
+    #[schemars(description = "If true, include token usage details, if available for the trace.")]
     pub tokens: bool,
 
-    #[schemars(
-        description = "If true, include cost breakdowns, if available for the trace."
-    )]
+    #[schemars(description = "If true, include cost breakdowns, if available for the trace.")]
     pub costs: bool,
 }
 
@@ -335,9 +323,7 @@ pub struct SearchTraceItem {
     #[schemars(description = "Final status of the trace.")]
     pub status: SearchTracesStatus,
 
-    #[schemars(
-        description = "Name of the root operation for this trace (e.g. openai)."
-    )]
+    #[schemars(description = "Name of the root operation for this trace (e.g. openai).")]
     pub root_operation_name: String,
 
     #[schemars(
@@ -354,26 +340,18 @@ pub struct SearchTraceItem {
     pub labels: Option<HashMap<String, String>>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(
-        description = "Optional metrics map for the trace, e.g. {\"ttft\": 8421}."
-    )]
+    #[schemars(description = "Optional metrics map for the trace, e.g. {\"ttft\": 8421}.")]
     pub metrics: Option<HashMap<String, i64>>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(
-        description = "Optional token usage information, if available for the trace."
-    )]
+    #[schemars(description = "Optional token usage information, if available for the trace.")]
     pub tokens: Option<serde_json::Value>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(
-        description = "Optional cost information, if available for the trace."
-    )]
+    #[schemars(description = "Optional cost information, if available for the trace.")]
     pub costs: Option<serde_json::Value>,
 
-    #[schemars(
-        description = "True if the trace is known to contain unsafe or filtered text."
-    )]
+    #[schemars(description = "True if the trace is known to contain unsafe or filtered text.")]
     pub has_unsafe_text: bool,
 }
 
@@ -481,7 +459,9 @@ pub struct LlmResponse {
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[schemars(description = "Information about redacted fields.")]
 pub struct Redaction {
-    #[schemars(description = "JSON path to the redacted field (e.g. request.headers.authorization).")]
+    #[schemars(
+        description = "JSON path to the redacted field (e.g. request.headers.authorization)."
+    )]
     pub path: String,
 
     #[schemars(description = "Type of redaction (e.g. secret, pii, etc.).")]
@@ -519,10 +499,6 @@ pub struct GetLlmCallResponse {
     #[schemars(description = "List of redactions applied to the data.")]
     pub redactions: Option<Vec<Redaction>>,
 }
-
-/// ---------------------------------------------------------------------------
-/// MCP tool shapes for `get_run_overview`
-/// ---------------------------------------------------------------------------
 
 /// Parameters for the get_run_overview MCP tool.
 /// For now we only support a single required parameter: run_id.
@@ -574,9 +550,7 @@ pub struct RunOverviewSpan {
     #[schemars(description = "Operation name for this span.")]
     pub operation_name: String,
 
-    #[schemars(
-        description = "High-level kind of span, e.g. internal, llm, tool."
-    )]
+    #[schemars(description = "High-level kind of span, e.g. internal, llm, tool.")]
     pub kind: String,
 
     #[schemars(description = "Status for this span (e.g. ok, error, any).")]
@@ -596,6 +570,10 @@ pub struct ErrorBreadcrumb {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(description = "Raw error string captured on the span, if any.")]
     pub error: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(description = "Error payload captured on the span, if any.")]
+    pub error_payload: Option<serde_json::Value>,
 }
 
 /// Summary for an LLM span.
