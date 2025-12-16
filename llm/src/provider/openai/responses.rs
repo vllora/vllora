@@ -296,7 +296,28 @@ impl OpenAIResponses {
             ResponseStreamEvent::ResponseFailed(_) => {}
             ResponseStreamEvent::ResponseIncomplete(_) => {}
             ResponseStreamEvent::ResponseQueued(_) => {}
-            ResponseStreamEvent::ResponseOutputItemAdded(_) => {}
+            ResponseStreamEvent::ResponseOutputItemAdded(added) => {
+                if let OutputItem::FunctionCall(call) = &added.item {
+                    // Store tool name so we can use it when arguments are completed
+                    if let Some(id) = &call.id {
+                        let tool_span = tracing::info_span!(
+                            target: target!(),
+                            parent: span.clone(),
+                            events::SPAN_TOOLS,
+                            tool_calls=field::Empty,
+                            tool_results=field::Empty,
+                            tool.name=field::Empty
+                        );
+                        tool_span.follows_from(span.id());
+                        // Enter the span when created - clone it first since entered() consumes it
+                        let _entered = tool_span.clone().entered();
+
+                        tool_calls
+                            .entry(id.clone())
+                            .or_insert((Some(call.name.clone()), Some(tool_span)));
+                    }
+                }
+            }
             ResponseStreamEvent::ResponseContentPartAdded(_) => {}
             ResponseStreamEvent::ResponseOutputTextDelta(delta) => {
                 events.push(ModelEventType::LlmContent(LLMContentEvent {
@@ -333,6 +354,37 @@ impl OpenAIResponses {
                         is_error: false,
                         output: "{}".to_string(),
                     }));
+                } else if let OutputItem::FunctionCall(call) = &item.item {
+                    if let Some(id) = &call.id {
+                        // Prefer the stored tool name, fall back to the one on the item
+                        let stored = tool_calls.remove(id);
+                        let tool_name = stored
+                            .as_ref()
+                            .and_then(|(maybe_name, _)| maybe_name.clone())
+                            .unwrap_or_else(|| call.name.clone());
+
+                        if let Some((_, Some(tool_span))) = stored {
+                            tool_span.record("tool.name", tool_name.clone());
+                            let tool_calls_vec = vec![ToolCall {
+                                id: id.clone(),
+                                function: Some(FunctionCall {
+                                    name: tool_name.clone(),
+                                    arguments: json!(call.arguments.clone()),
+                                }),
+                            }];
+                            tool_span.record(
+                                "tool_calls",
+                                JsonValue(&serde_json::to_value(tool_calls_vec).unwrap())
+                                    .as_value(),
+                            );
+                        }
+
+                        events.push(ModelEventType::ToolStart(ToolStartEvent {
+                            tool_id: id.clone(),
+                            tool_name,
+                            input: call.arguments.clone(),
+                        }));
+                    }
                 }
             }
             ResponseStreamEvent::ResponseFunctionCallArgumentsDelta(_) => {}
@@ -485,7 +537,12 @@ mod tests {
                     let json_str = &lines[i + 1][6..]; // Skip "data: "
                     match serde_json::from_str::<ResponseStreamEvent>(json_str) {
                         Ok(event) => events.push(event),
-                        Err(e) => panic!("Failed to parse event at line {}: {}", i + 1, e),
+                        Err(e) => panic!(
+                            "Failed to parse event at line {}: {}. Row: {}",
+                            i + 1,
+                            e,
+                            json_str
+                        ),
                     }
                     i += 2; // Skip both event and data lines
                 } else {
@@ -589,5 +646,48 @@ mod tests {
         // Verify that tool events were found
         assert!(tool_start_found, "ToolStart event should be found");
         assert!(tool_result_found, "ToolResult event should be found");
+    }
+
+    #[tokio::test]
+    async fn test_two_tools_responses_stream_tool_calls() {
+        let fixture_content = read_fixture_file("two_tools_responses_stream");
+        let response_events = parse_fixture_events(&fixture_content);
+
+        let span = tracing::Span::current();
+        let (tx, mut rx) = tokio::sync::mpsc::channel(10000);
+        let mut tool_calls = HashMap::new();
+
+        for response_event in &response_events {
+            let _ = OpenAIResponses::match_response_event(
+                response_event,
+                &span,
+                Some(&tx),
+                &mut tool_calls,
+            )
+            .await;
+        }
+
+        let _ = tx.send(None).await;
+
+        let mut tool_start_count = 0usize;
+        let mut tool_result_count = 0usize;
+
+        while let Some(Some(event)) = rx.recv().await {
+            match &event.event {
+                ModelEventType::ToolStart(ToolStartEvent { .. }) => {
+                    tool_start_count += 1;
+                }
+                ModelEventType::ToolResult(ToolResultEvent { .. }) => {
+                    tool_result_count += 1;
+                }
+                _ => {}
+            }
+        }
+
+        // We expect two tool calls -> two starts and two results
+        assert_eq!(tool_start_count, 2);
+        assert_eq!(tool_result_count, 0);
+        // And the fixture itself should not be empty / malformed
+        assert!(!response_events.is_empty());
     }
 }
