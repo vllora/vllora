@@ -1,15 +1,15 @@
 pub mod service;
 pub mod tools;
 
+use chrono::TimeZone;
 pub use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 
 use crate::mcp::server::tools::{
-    GetLlmCallInclude, GetLlmCallParams, GetLlmCallResponse, LlmRequest, LlmResponse, Redaction,
-    UnsafeText,
-};
-use crate::mcp::server::tools::{
-    SearchTraceItem, SearchTracesInclude, SearchTracesParams,
-    SearchTracesResponse, SearchTracesStatus,
+    ErrorBreadcrumb, GetLlmCallInclude, GetLlmCallParams, GetLlmCallResponse,
+    GetRunOverviewParams, GetRunOverviewResponse, LlmRequest, LlmResponse, LlmSummary, Redaction,
+    RunOverviewRun, RunOverviewSpan, SearchTraceItem, SearchTracesInclude,
+    SearchTracesOperationKind, SearchTracesParams, SearchTracesResponse, SearchTracesStatus,
+    ToolSummary, UnsafeText,
 };
 use crate::types::handlers::pagination::PaginatedResult;
 use crate::types::metadata::services::trace::ListTracesQuery;
@@ -96,9 +96,37 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
             list_query.offset = page.offset.unwrap_or(0);
         }
 
-        // For now we ignore most high-level filters and let the underlying
-        // ListTracesQuery default behavior handle time ranges and other filters.
-        // These can be wired more precisely as the semantics are refined.
+        // Apply filters
+        if let Some(filters) = &params.filters {
+            if let Some(run_id) = &filters.run_id {
+                list_query.run_ids = Some(vec![run_id.clone()]);
+            }
+            if let Some(thread_id) = &filters.thread_id {
+                list_query.thread_ids = Some(vec![thread_id.clone()]);
+            }
+            if let Some(model) = &filters.model {
+                // Model name is stored in attributes, so we can't filter directly
+                // This would require a more complex query or post-filtering
+            }
+            if let Some(operation_name) = &filters.operation_name {
+                let op_str = match operation_name {
+                    SearchTracesOperationKind::LlmCall => "model_call",
+                    SearchTracesOperationKind::ToolCall => "tools",
+                };
+                list_query.operation_names = Some(vec![op_str.to_string()]);
+            }
+        }
+
+        // Apply time range filters
+        if let Some(time_range) = &params.time_range {
+            if let Some(last_n_minutes) = time_range.last_n_minutes {
+                let now = chrono::Utc::now().timestamp_micros();
+                let start_time_min = now - (last_n_minutes * 60 * 1_000_000);
+                list_query.start_time_min = Some(start_time_min);
+                list_query.start_time_max = Some(now);
+            }
+            // TODO: Handle since/until ISO8601 timestamps
+        }
 
         let paginated: PaginatedResult<LangdbSpan> = self
             .trace_service
@@ -204,7 +232,8 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
                 };
 
                 SearchTraceItem {
-                    trace_id: span.trace_id,
+                    trace_id: span.trace_id.clone(),
+                    span_id: span.span_id.clone(),
                     thread_id: span.thread_id,
                     run_id: span.run_id,
                     // We currently don't have an explicit ok/error classification at this layer,
@@ -264,9 +293,6 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
             llm_payload: false,
             unsafe_text: false,
         });
-
-        // Parse span_id as i64
-        let span_id_num = params.span_id;
 
         // Extract provider from attributes
         let provider = span
@@ -367,13 +393,303 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
         let redactions: Option<Vec<Redaction>> = None;
 
         Ok(Json(GetLlmCallResponse {
-            span_id: span_id_num,
+            span_id: params.span_id.clone(),
             provider,
             request,
             response,
             tokens,
             costs,
             redactions,
+        }))
+    }
+
+    /// High-level MCP tool that provides an overview of a single run and its spans.
+    #[tool(name = "get_run_overview", description = "Get high-level overview of a run and its spans")]
+    async fn get_run_overview(
+        &self,
+        Parameters(params): Parameters<GetRunOverviewParams>,
+    ) -> Result<Json<GetRunOverviewResponse>, String> {
+        // For now we query spans for this run (up to a reasonable limit).
+        let list_query = ListTracesQuery {
+            project_slug: None,
+            span_id: None,
+            run_ids: Some(vec![params.run_id.clone()]),
+            thread_ids: None,
+            operation_names: None,
+            parent_span_ids: None,
+            filter_null_thread: false,
+            filter_null_run: false,
+            filter_null_operation: false,
+            filter_null_parent: false,
+            filter_not_null_thread: false,
+            filter_not_null_run: false,
+            filter_not_null_operation: false,
+            filter_not_null_parent: false,
+            start_time_min: None,
+            start_time_max: None,
+            // A reasonable default page size for an overview; can be expanded later if needed
+            limit: 100,
+            offset: 0,
+        };
+
+        let paginated: PaginatedResult<LangdbSpan> = self
+            .trace_service
+            .list_paginated(list_query)
+            .map_err(|e| e.to_string())?;
+
+        if paginated.data.is_empty() {
+            return Err(format!("No spans found for run_id={}", params.run_id));
+        }
+
+        // Sort spans by start time to get a stable ordering
+        let mut spans = paginated.data;
+        spans.sort_by_key(|s| s.start_time_us);
+
+        // Compute basic run-level timing
+        let start_time_us = spans
+            .iter()
+            .map(|s| s.start_time_us)
+            .min()
+            .unwrap_or(0);
+        let finish_time_us = spans
+            .iter()
+            .map(|s| s.finish_time_us)
+            .max()
+            .unwrap_or(start_time_us);
+        let duration_ms = (finish_time_us - start_time_us) / 1_000;
+
+        // Convert microseconds to ISO8601 (UTC)
+        let start_time = {
+            let secs = start_time_us / 1_000_000;
+            let micros = (start_time_us % 1_000_000) as u32;
+            let dt = chrono::Utc
+                .timestamp_opt(secs, micros * 1_000)
+                .single()
+                .ok_or_else(|| "Failed to convert start_time_us to datetime".to_string())?;
+            dt.to_rfc3339()
+        };
+
+        // Determine root span: prefer an explicit "run" operation, otherwise first span.
+        let root_span = spans
+            .iter()
+            .find(|s| matches!(s.operation_name, crate::types::traces::Operation::Run))
+            .unwrap_or(&spans[0]);
+        let root_span_id = root_span.span_id.clone();
+
+        // Derive run-level labels (e.g. agent) from the root span attributes.
+        let mut run_labels = HashMap::new();
+        if let Some(agent) = root_span
+            .attribute
+            .get("agent")
+            .and_then(|v| v.as_str())
+        {
+            run_labels.insert("agent".to_string(), agent.to_string());
+        }
+        let run_label = if run_labels.is_empty() {
+            None
+        } else {
+            Some(run_labels)
+        };
+
+        // Derive span-level statuses and collect data for later summaries.
+        // Heuristic:
+        // - If a span has an "error" attribute, we mark it as "error".
+        // - Otherwise we mark it as "ok".
+        // - If no spans are "error", the run is "ok"; otherwise "error".
+        let mut has_error_span = false;
+        let span_statuses: Vec<String> = spans
+            .iter()
+            .map(|s| {
+                if s.attribute.contains_key("error") {
+                    has_error_span = true;
+                    "error".to_string()
+                } else {
+                    "ok".to_string()
+                }
+            })
+            .collect();
+
+        let run_status = if has_error_span {
+            "error".to_string()
+        } else {
+            "ok".to_string()
+        };
+
+        let run_overview = RunOverviewRun {
+            run_id: params.run_id.clone(),
+            status: run_status,
+            start_time,
+            duration_ms,
+            label: run_label,
+            root_span_id: root_span_id.clone(),
+        };
+
+        // Build span tree entries and derive "kind" per span.
+        let span_tree: Vec<RunOverviewSpan> = spans
+            .iter()
+            .zip(span_statuses.iter())
+            .map(|(s, status)| {
+                let kind = match &s.operation_name {
+                    crate::types::traces::Operation::Openai
+                    | crate::types::traces::Operation::Anthropic
+                    | crate::types::traces::Operation::Bedrock
+                    | crate::types::traces::Operation::Gemini
+                    | crate::types::traces::Operation::ModelCall => "llm".to_string(),
+                    crate::types::traces::Operation::Tools => "tool".to_string(),
+                    _ => "internal".to_string(),
+                };
+
+                RunOverviewSpan {
+                    span_id: s.span_id.clone(),
+                    parent_span_id: s.parent_span_id.clone(),
+                    operation_name: s.operation_name.to_string(),
+                    kind,
+                    status: status.clone(),
+                }
+            })
+            .collect();
+
+        // Derive agents_used from any span that carries an "agent" attribute.
+        let mut agent_set: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for span in &spans {
+            if let Some(agent) = span.attribute.get("agent").and_then(|v| v.as_str()) {
+                agent_set.insert(agent.to_string());
+            }
+        }
+        let agents_used: Vec<String> = agent_set.into_iter().collect();
+
+        // Error breadcrumbs: one breadcrumb per span that has an "error" attribute.
+        let mut error_breadcrumbs: Vec<ErrorBreadcrumb> = Vec::new();
+        for (s, status) in spans.iter().zip(span_statuses.iter()) {
+            if status == "error" {
+                // Raw error string if present on the span.
+                let error = s
+                    .attribute
+                    .get("error")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+
+                error_breadcrumbs.push(ErrorBreadcrumb {
+                    span_id: s.span_id.clone(),
+                    operation_name: s.operation_name.to_string(),
+                    error,
+                });
+            }
+        }
+
+        // LLM summaries: for spans classified as "llm", use attributes to extract provider/model.
+        let mut llm_summaries: Vec<LlmSummary> = Vec::new();
+        for s in &spans {
+            let is_llm = matches!(
+                s.operation_name,
+                crate::types::traces::Operation::Openai
+                    | crate::types::traces::Operation::Anthropic
+                    | crate::types::traces::Operation::Bedrock
+                    | crate::types::traces::Operation::Gemini
+                    | crate::types::traces::Operation::ModelCall
+            );
+            if !is_llm {
+                continue;
+            }
+
+            // Provider/model are stored as attributes on the span, when present.
+            let provider = s
+                .attribute
+                .get("provider_name")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let model = s
+                .attribute
+                .get("model_name")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
+            // Approximate message_count and tool_count from attributes if they exist.
+            // We look for "input" and "tools" attributes, which may contain JSON.
+            let mut message_count: i64 = 0;
+            if let Some(input_val) = s.attribute.get("input") {
+                // If stored as a string containing JSON, try to parse it.
+                let parsed = if let Some(s) = input_val.as_str() {
+                    serde_json::from_str::<JsonValue>(s).ok()
+                } else {
+                    Some(input_val.clone())
+                };
+
+                if let Some(v) = parsed {
+                    if let JsonValue::Array(arr) = &v {
+                        message_count = arr.len() as i64;
+                    } else if let JsonValue::Object(obj) = &v {
+                        if let Some(JsonValue::Array(msgs)) = obj.get("messages") {
+                            message_count = msgs.len() as i64;
+                        }
+                    }
+                }
+            }
+
+            let mut tool_count: i64 = 0;
+            if let Some(tools_val) = s.attribute.get("tools") {
+                let parsed = if let Some(s) = tools_val.as_str() {
+                    serde_json::from_str::<JsonValue>(s).ok()
+                } else {
+                    Some(tools_val.clone())
+                };
+
+                if let Some(v) = parsed {
+                    if let JsonValue::Array(arr) = &v {
+                        tool_count = arr.len() as i64;
+                    }
+                }
+            }
+
+            llm_summaries.push(LlmSummary {
+                span_id: s.span_id.clone(),
+                provider,
+                model,
+                message_count,
+                tool_count,
+            });
+        }
+
+        // Tool summaries: for spans classified as "tool", derive tool name and hashes from attributes.
+        let mut tool_summaries: Vec<ToolSummary> = Vec::new();
+        for (s, status) in spans.iter().zip(span_statuses.iter()) {
+            let is_tool = matches!(s.operation_name, crate::types::traces::Operation::Tools);
+            if !is_tool {
+                continue;
+            }
+
+            let tool_name = s
+                .attribute
+                .get("tool_name")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let args_sha256 = s
+                .attribute
+                .get("tool_args_sha256")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let result_sha256 = s
+                .attribute
+                .get("tool_result_sha256")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
+            tool_summaries.push(ToolSummary {
+                span_id: s.span_id.clone(),
+                tool_name,
+                args_sha256,
+                result_sha256,
+                status: status.clone(),
+            });
+        }
+
+        Ok(Json(GetRunOverviewResponse {
+            run: run_overview,
+            span_tree,
+            agents_used,
+            error_breadcrumbs,
+            llm_summaries,
+            tool_summaries,
         }))
     }
 }

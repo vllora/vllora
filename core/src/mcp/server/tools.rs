@@ -321,6 +321,9 @@ pub struct SearchTraceItem {
     #[schemars(description = "Unique identifier of the trace.")]
     pub trace_id: String,
 
+    #[schemars(description = "Span identifier (numeric).")]
+    pub span_id: String,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(description = "Thread identifier associated with the trace, if any.")]
     pub thread_id: Option<String>,
@@ -413,8 +416,8 @@ pub struct GetLlmCallParams {
     #[schemars(description = "Trace identifier for the span.")]
     pub trace_id: String,
 
-    #[schemars(description = "Span identifier (numeric).")]
-    pub span_id: i64,
+    #[schemars(description = "Span identifier (string).")]
+    pub span_id: String,
 
     #[schemars(
         description = "If true, allow returning unsafe text content even if not explicitly requested."
@@ -434,7 +437,6 @@ pub struct UnsafeText {
     #[schemars(description = "Kind of unsafe content (e.g. llm_output).")]
     pub kind: Option<String>,
 
-    #[serde(flatten)]
     #[schemars(description = "The actual content (can be any JSON structure).")]
     pub content: serde_json::Value,
 
@@ -490,8 +492,8 @@ pub struct Redaction {
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[schemars(description = "Response schema for the get_llm_call MCP tool.")]
 pub struct GetLlmCallResponse {
-    #[schemars(description = "Span identifier (numeric).")]
-    pub span_id: i64,
+    #[schemars(description = "Span identifier (string).")]
+    pub span_id: String,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(description = "Provider identifier (e.g. openai_compatible).")]
@@ -516,6 +518,152 @@ pub struct GetLlmCallResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(description = "List of redactions applied to the data.")]
     pub redactions: Option<Vec<Redaction>>,
+}
+
+/// ---------------------------------------------------------------------------
+/// MCP tool shapes for `get_run_overview`
+/// ---------------------------------------------------------------------------
+
+/// Parameters for the get_run_overview MCP tool.
+/// For now we only support a single required parameter: run_id.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[schemars(description = "Parameters for the get_run_overview MCP tool.")]
+pub struct GetRunOverviewParams {
+    #[schemars(description = "Run identifier.")]
+    pub run_id: String,
+}
+
+/// Summary information about the run itself.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[schemars(description = "High-level run summary.")]
+pub struct RunOverviewRun {
+    #[schemars(description = "Run identifier.")]
+    pub run_id: String,
+
+    #[schemars(description = "Aggregated status for the run (e.g. ok, error).")]
+    pub status: String,
+
+    #[schemars(
+        description = "Run start time in ISO8601 format.",
+        example = "2025-12-15T06:12:10Z"
+    )]
+    pub start_time: String,
+
+    #[schemars(description = "Total duration of the run in milliseconds.")]
+    pub duration_ms: i64,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(description = "Optional labels associated with the run (e.g. agent).")]
+    pub label: Option<HashMap<String, String>>,
+
+    #[schemars(description = "Span id of the root span for this run.")]
+    pub root_span_id: String,
+}
+
+/// A single span entry in the span tree.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[schemars(description = "A single span in the span tree.")]
+pub struct RunOverviewSpan {
+    #[schemars(description = "Span identifier.")]
+    pub span_id: String,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(description = "Parent span identifier, if any.")]
+    pub parent_span_id: Option<String>,
+
+    #[schemars(description = "Operation name for this span.")]
+    pub operation_name: String,
+
+    #[schemars(
+        description = "High-level kind of span, e.g. internal, llm, tool."
+    )]
+    pub kind: String,
+
+    #[schemars(description = "Status for this span (e.g. ok, error, any).")]
+    pub status: String,
+}
+
+/// Error breadcrumb entry for a span.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[schemars(description = "Error breadcrumb attached to a span.")]
+pub struct ErrorBreadcrumb {
+    #[schemars(description = "Span identifier where the error occurred.")]
+    pub span_id: String,
+
+    #[schemars(description = "Operation name of the span.")]
+    pub operation_name: String,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(description = "Raw error string captured on the span, if any.")]
+    pub error: Option<String>,
+}
+
+/// Summary for an LLM span.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[schemars(description = "Summary of an LLM span.")]
+pub struct LlmSummary {
+    #[schemars(description = "Span identifier for the LLM call.")]
+    pub span_id: String,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(description = "Provider identifier (e.g. openai_compatible).")]
+    pub provider: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(description = "Model identifier (e.g. gpt-4.1-mini).")]
+    pub model: Option<String>,
+
+    #[schemars(description = "Approximate number of messages involved in the call.")]
+    pub message_count: i64,
+
+    #[schemars(description = "Approximate number of tools used in the call.")]
+    pub tool_count: i64,
+}
+
+/// Summary for a tool span.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[schemars(description = "Summary of a tool span.")]
+pub struct ToolSummary {
+    #[schemars(description = "Span identifier for the tool call.")]
+    pub span_id: String,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(description = "Tool name, if known.")]
+    pub tool_name: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(description = "SHA256 digest of the tool arguments, if available.")]
+    pub args_sha256: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(description = "SHA256 digest of the tool result, if available.")]
+    pub result_sha256: Option<String>,
+
+    #[schemars(description = "Status of the tool call (e.g. ok, error).")]
+    pub status: String,
+}
+
+/// High-level run overview response.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[schemars(description = "Response schema for the get_run_overview MCP tool.")]
+pub struct GetRunOverviewResponse {
+    #[schemars(description = "High-level information about the run.")]
+    pub run: RunOverviewRun,
+
+    #[schemars(description = "Tree of spans that belong to this run.")]
+    pub span_tree: Vec<RunOverviewSpan>,
+
+    #[schemars(description = "List of agents used in the run, if known.")]
+    pub agents_used: Vec<String>,
+
+    #[schemars(description = "Error breadcrumbs for spans that encountered errors.")]
+    pub error_breadcrumbs: Vec<ErrorBreadcrumb>,
+
+    #[schemars(description = "Summaries for LLM spans in this run.")]
+    pub llm_summaries: Vec<LlmSummary>,
+
+    #[schemars(description = "Summaries for tool spans in this run.")]
+    pub tool_summaries: Vec<ToolSummary>,
 }
 
 #[cfg(test)]
