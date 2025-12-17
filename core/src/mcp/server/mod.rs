@@ -5,11 +5,12 @@ use chrono::TimeZone;
 pub use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 
 use crate::mcp::server::tools::{
-    ErrorBreadcrumb, GetLlmCallInclude, GetLlmCallParams, GetLlmCallResponse, GetRunOverviewParams,
-    GetRunOverviewResponse, LlmRequest, LlmResponse, LlmSummary, Redaction, RunOverviewRun,
-    RunOverviewSpan, SearchTraceItem, SearchTracesInclude, SearchTracesOperationKind,
-    SearchTracesParams, SearchTracesResponse, SearchTracesSortOrder, SearchTracesStatus,
-    ToolSummary, UnsafeText,
+    ErrorBreadcrumb, GetLlmCallInclude, GetLlmCallParams, GetLlmCallResponse,
+    GetRecentOverviewParams, GetRecentOverviewResponse, GetRunOverviewParams,
+    GetRunOverviewResponse, LlmModelStats, LlmRequest, LlmResponse, LlmSummary, Redaction,
+    RunOverviewRun, RunOverviewSpan, SearchTraceItem, SearchTracesInclude,
+    SearchTracesOperationKind, SearchTracesParams, SearchTracesResponse, SearchTracesSortOrder,
+    SearchTracesStatus, ToolCallStats, ToolSummary, UnsafeText,
 };
 use crate::types::handlers::pagination::PaginatedResult;
 use crate::types::metadata::services::trace::ListTracesQuery;
@@ -758,6 +759,191 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
             error_breadcrumbs,
             llm_summaries,
             tool_summaries,
+        }))
+    }
+
+    /// High-level MCP tool that provides an overview of recent LLM and tool activity
+    /// for the last N minutes.
+    #[tool(
+        name = "get_recent_stats",
+        description = "Get aggregated overview of recent LLM and tool calls for the last N minutes"
+    )]
+    async fn get_recent_stats(
+        &self,
+        Parameters(params): Parameters<GetRecentOverviewParams>,
+    ) -> Result<Json<GetRecentOverviewResponse>, String> {
+        if params.last_n_minutes <= 0 {
+            return Err("last_n_minutes must be > 0".to_string());
+        }
+
+        // Compute time window in microseconds.
+        let now_us = chrono::Utc::now().timestamp_micros();
+        let window_us = params.last_n_minutes * 60 * 1_000_000;
+        let start_us = now_us.saturating_sub(window_us);
+
+        // Helper to convert microseconds since epoch to RFC3339.
+        fn micros_to_rfc3339(ts_us: i64) -> Result<String, String> {
+            let secs = ts_us / 1_000_000;
+            let micros = (ts_us % 1_000_000) as u32;
+            chrono::Utc
+                .timestamp_opt(secs, micros * 1_000)
+                .single()
+                .ok_or_else(|| "Failed to convert timestamp to datetime".to_string())
+                .map(|dt| dt.to_rfc3339())
+        }
+
+        let window_start = micros_to_rfc3339(start_us)?;
+        let window_end = micros_to_rfc3339(now_us)?;
+
+        // Aggregate LLM calls grouped by model.
+        let mut llm_stats_map: HashMap<String, (i64, i64)> = HashMap::new(); // model -> (ok, error)
+
+        // Operations considered LLM calls.
+        let llm_operations: &[&str] = &["model_call"];
+
+        let limit: i64 = 1000;
+        let mut offset: i64 = 0;
+
+        loop {
+            let list_query = ListTracesQuery {
+                project_slug: None,
+                span_id: None,
+                run_ids: None,
+                thread_ids: None,
+                operation_names: Some(llm_operations.iter().map(|s| s.to_string()).collect()),
+                parent_span_ids: None,
+                filter_null_thread: false,
+                filter_null_run: false,
+                filter_null_operation: false,
+                filter_null_parent: false,
+                filter_not_null_thread: false,
+                filter_not_null_run: false,
+                filter_not_null_operation: false,
+                filter_not_null_parent: false,
+                start_time_min: Some(start_us),
+                start_time_max: Some(now_us),
+                limit,
+                offset,
+                text_search: None,
+                sort_by: Some("start_time".to_string()),
+                sort_order: Some("desc".to_string()),
+            };
+
+            let page: PaginatedResult<LangdbSpan> = self
+                .trace_service
+                .list_paginated(list_query)
+                .map_err(|e| e.to_string())?;
+
+            for span in &page.data {
+                let model = span
+                    .attribute
+                    .get("model_name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown")
+                    .to_string();
+
+                let is_error = span.attribute.contains_key("error");
+                let entry = llm_stats_map.entry(model).or_insert((0, 0));
+                if is_error {
+                    entry.1 += 1;
+                } else {
+                    entry.0 += 1;
+                }
+            }
+
+            let pagination = page.pagination;
+            let next_offset = pagination.offset + pagination.limit;
+            if next_offset >= pagination.total {
+                break;
+            }
+            offset = next_offset;
+        }
+
+        let llm_calls: Vec<LlmModelStats> = llm_stats_map
+            .into_iter()
+            .map(|(model, (ok_count, error_count))| LlmModelStats {
+                model,
+                ok_count,
+                error_count,
+                total_count: ok_count + error_count,
+            })
+            .collect();
+
+        // Aggregate tool calls grouped by tool_name.
+        let mut tool_stats_map: HashMap<String, (i64, i64)> = HashMap::new(); // tool_name -> (ok, error)
+        let mut offset_tools: i64 = 0;
+
+        loop {
+            let list_query = ListTracesQuery {
+                project_slug: None,
+                span_id: None,
+                run_ids: None,
+                thread_ids: None,
+                operation_names: Some(vec!["tools".to_string()]),
+                parent_span_ids: None,
+                filter_null_thread: false,
+                filter_null_run: false,
+                filter_null_operation: false,
+                filter_null_parent: false,
+                filter_not_null_thread: false,
+                filter_not_null_run: false,
+                filter_not_null_operation: false,
+                filter_not_null_parent: false,
+                start_time_min: Some(start_us),
+                start_time_max: Some(now_us),
+                limit,
+                offset: offset_tools,
+                text_search: None,
+                sort_by: Some("start_time".to_string()),
+                sort_order: Some("desc".to_string()),
+            };
+
+            let page: PaginatedResult<LangdbSpan> = self
+                .trace_service
+                .list_paginated(list_query)
+                .map_err(|e| e.to_string())?;
+
+            for span in &page.data {
+                let tool_name = span
+                    .attribute
+                    .get("tool.name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown")
+                    .to_string();
+
+                let is_error = span.attribute.contains_key("error");
+                let entry = tool_stats_map.entry(tool_name).or_insert((0, 0));
+                if is_error {
+                    entry.1 += 1;
+                } else {
+                    entry.0 += 1;
+                }
+            }
+
+            let pagination = page.pagination;
+            let next_offset = pagination.offset + pagination.limit;
+            if next_offset >= pagination.total {
+                break;
+            }
+            offset_tools = next_offset;
+        }
+
+        let tool_calls: Vec<ToolCallStats> = tool_stats_map
+            .into_iter()
+            .map(|(tool_name, (ok_count, error_count))| ToolCallStats {
+                tool_name,
+                ok_count,
+                error_count,
+                total_count: ok_count + error_count,
+            })
+            .collect();
+
+        Ok(Json(GetRecentOverviewResponse {
+            window_minutes: params.last_n_minutes,
+            window_start,
+            window_end,
+            llm_calls,
+            tool_calls,
         }))
     }
 }

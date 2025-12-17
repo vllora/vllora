@@ -124,6 +124,7 @@ pub enum RangeFilter {
     #[schemars(rename = "last_365_days")]
     Last365Days,
 }
+
 impl RangeFilter {
     fn from_str(range_filter: &str) -> Result<RangeFilter, String> {
         match range_filter {
@@ -708,6 +709,86 @@ pub struct GetRunOverviewResponse {
 
     #[schemars(description = "Summaries for tool spans in this run.")]
     pub tool_summaries: Vec<ToolSummary>,
+}
+
+/// ---------------------------------------------------------------------------
+/// MCP tool shapes for `get_recent_overview`
+/// ---------------------------------------------------------------------------
+
+/// Parameters for the get_recent_overview MCP tool.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[schemars(description = "Parameters for the get_recent_overview MCP tool.")]
+pub struct GetRecentOverviewParams {
+    #[schemars(
+        description = "Number of minutes in the past to include in the overview window (relative to now)."
+    )]
+    pub last_n_minutes: i64,
+}
+
+/// Aggregated statistics for LLM calls grouped by model.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[schemars(description = "Aggregated statistics for LLM calls for a single model.")]
+pub struct LlmModelStats {
+    #[schemars(description = "Model identifier (e.g. gpt-4.1-mini).")]
+    pub model: String,
+
+    #[schemars(description = "Number of successful LLM calls for this model.")]
+    pub ok_count: i64,
+
+    #[schemars(description = "Number of failed LLM calls for this model.")]
+    pub error_count: i64,
+
+    #[schemars(description = "Total number of LLM calls for this model.")]
+    pub total_count: i64,
+}
+
+/// Aggregated statistics for tool calls grouped by tool name.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[schemars(description = "Aggregated statistics for tool calls for a single tool.")]
+pub struct ToolCallStats {
+    #[schemars(description = "Tool name, if known (otherwise \"unknown\").")]
+    pub tool_name: String,
+
+    #[schemars(description = "Number of successful tool calls for this tool.")]
+    pub ok_count: i64,
+
+    #[schemars(description = "Number of failed tool calls for this tool.")]
+    pub error_count: i64,
+
+    #[schemars(description = "Total number of tool calls for this tool.")]
+    pub total_count: i64,
+}
+
+/// High-level overview of recent LLM and tool activity.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[schemars(description = "Overview of recent LLM and tool activity for the requested time window.")]
+pub struct GetRecentOverviewResponse {
+    #[schemars(
+        description = "Size of the time window in minutes that this overview covers."
+    )]
+    pub window_minutes: i64,
+
+    #[schemars(
+        description = "Start of the time window in ISO8601 format (UTC).",
+        example = "2025-12-15T06:07:00Z"
+    )]
+    pub window_start: String,
+
+    #[schemars(
+        description = "End of the time window in ISO8601 format (UTC).",
+        example = "2025-12-15T06:12:00Z"
+    )]
+    pub window_end: String,
+
+    #[schemars(
+        description = "Aggregated LLM call statistics grouped by model for the requested window."
+    )]
+    pub llm_calls: Vec<LlmModelStats>,
+
+    #[schemars(
+        description = "Aggregated tool call statistics grouped by tool name for the requested window."
+    )]
+    pub tool_calls: Vec<ToolCallStats>,
 }
 
 #[cfg(test)]
