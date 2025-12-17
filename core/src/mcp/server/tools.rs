@@ -208,6 +208,18 @@ pub struct SearchTracesFilters {
         description = "Free-text search query to filter traces by content (searches in messages, tool calls, responses, etc.). Case-insensitive substring match."
     )]
     pub text: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(
+        description = "If true, only return traces that have a thread_id. Useful for finding the latest thread."
+    )]
+    pub has_thread: Option<bool>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(
+        description = "If true, only return traces that have a run_id. Useful for finding the latest run."
+    )]
+    pub has_run: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
@@ -221,9 +233,35 @@ pub enum SearchTracesStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
-#[schemars(description = "High-level root operation kind of the trace.")]
+#[schemars(
+    description = "Operation kind filter. Available: run, agent, task, tools, openai, anthropic, bedrock, gemini, cloud_api_invoke, api_invoke, model_call, llm_call (alias for model_call), tool_call (alias for tools)."
+)]
 pub enum SearchTracesOperationKind {
+    /// Run operation (top-level workflow)
+    Run,
+    /// Agent operation
+    Agent,
+    /// Task operation
+    Task,
+    /// Tool call operation
+    Tools,
+    /// OpenAI LLM call
+    Openai,
+    /// Anthropic LLM call
+    Anthropic,
+    /// AWS Bedrock LLM call
+    Bedrock,
+    /// Google Gemini LLM call
+    Gemini,
+    /// Cloud API invocation
+    CloudApiInvoke,
+    /// API invocation
+    ApiInvoke,
+    /// Generic model call
+    ModelCall,
+    /// Alias for model_call (backward compatibility)
     LlmCall,
+    /// Alias for tools (backward compatibility)
     ToolCall,
 }
 
@@ -281,6 +319,18 @@ pub struct SearchTracesInclude {
 
     #[schemars(description = "If true, include cost breakdowns, if available for the trace.")]
     pub costs: bool,
+
+    #[serde(default)]
+    #[schemars(
+        description = "If true, include raw span attributes (model_name, provider_name, tools, etc.)."
+    )]
+    pub attributes: bool,
+
+    #[serde(default)]
+    #[schemars(
+        description = "If true, include the output/response content wrapped in unsafe_text."
+    )]
+    pub output: bool,
 }
 
 /// Top-level MCP tool parameters for `search_traces` as documented in DOC_v2.md.
@@ -356,6 +406,16 @@ pub struct SearchTraceItem {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(description = "Optional cost information, if available for the trace.")]
     pub costs: Option<serde_json::Value>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(description = "Raw span attributes, if include.attributes is true.")]
+    pub attributes: Option<std::collections::HashMap<String, serde_json::Value>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(
+        description = "Output/response content wrapped in unsafe_text, if include.output is true."
+    )]
+    pub output: Option<UnsafeText>,
 
     #[schemars(description = "True if the trace is known to contain unsafe or filtered text.")]
     pub has_unsafe_text: bool,

@@ -106,13 +106,44 @@ impl TraceService for TraceServiceImpl {
             }
         }
 
-        // Order by start_time_us descending, apply limit and offset
-        let results = db_query
-            .order(traces::start_time_us.desc())
-            .limit(query.limit)
-            .offset(query.offset)
-            .load::<DbTrace>(&mut conn)
-            .map_err(DatabaseError::QueryError)?;
+        // Apply sorting - default to start_time descending
+        let sort_by = query.sort_by.as_deref().unwrap_or("start_time");
+        let sort_order = query.sort_order.as_deref().unwrap_or("desc");
+        let is_desc = sort_order == "desc";
+
+        let results = match (sort_by, is_desc) {
+            ("start_time", true) => db_query
+                .order(traces::start_time_us.desc())
+                .limit(query.limit)
+                .offset(query.offset)
+                .load::<DbTrace>(&mut conn)
+                .map_err(DatabaseError::QueryError)?,
+            ("start_time", false) => db_query
+                .order(traces::start_time_us.asc())
+                .limit(query.limit)
+                .offset(query.offset)
+                .load::<DbTrace>(&mut conn)
+                .map_err(DatabaseError::QueryError)?,
+            ("finish_time", true) => db_query
+                .order(traces::finish_time_us.desc())
+                .limit(query.limit)
+                .offset(query.offset)
+                .load::<DbTrace>(&mut conn)
+                .map_err(DatabaseError::QueryError)?,
+            ("finish_time", false) => db_query
+                .order(traces::finish_time_us.asc())
+                .limit(query.limit)
+                .offset(query.offset)
+                .load::<DbTrace>(&mut conn)
+                .map_err(DatabaseError::QueryError)?,
+            // Default: start_time descending
+            _ => db_query
+                .order(traces::start_time_us.desc())
+                .limit(query.limit)
+                .offset(query.offset)
+                .load::<DbTrace>(&mut conn)
+                .map_err(DatabaseError::QueryError)?,
+        };
 
         Ok(results)
     }

@@ -58,6 +58,10 @@ pub struct ListTracesQuery {
     pub offset: i64,
     /// Free-text search query (case-insensitive substring match on attribute JSON)
     pub text_search: Option<String>,
+    /// Field to sort by. Supported: "start_time", "duration". Defaults to "start_time".
+    pub sort_by: Option<String>,
+    /// Sort order: "asc" or "desc". Defaults to "desc".
+    pub sort_order: Option<String>,
 }
 
 /// Query parameters for unified GET /group/spans endpoint
@@ -155,6 +159,8 @@ impl Default for ListTracesQuery {
             limit: 100,
             offset: 0,
             text_search: None,
+            sort_by: None,
+            sort_order: None,
         }
     }
 }

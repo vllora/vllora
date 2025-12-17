@@ -59,6 +59,8 @@ pub async fn list_traces<T: TraceService + DatabaseServiceTrait>(
         limit: query.limit.unwrap_or(100),
         offset: query.offset.unwrap_or(0),
         text_search: None,
+        sort_by: None,
+        sort_order: None,
     };
 
     Ok(trace_service
@@ -151,6 +153,8 @@ pub async fn get_spans_by_run<T: TraceService + DatabaseServiceTrait>(
                 limit: 1,
                 offset: 0,
                 text_search: None,
+                sort_by: None,
+                sort_order: None,
             };
             let total = trace_service.count(count_query).unwrap_or(0);
 

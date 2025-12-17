@@ -8,7 +8,8 @@ use crate::mcp::server::tools::{
     ErrorBreadcrumb, GetLlmCallInclude, GetLlmCallParams, GetLlmCallResponse, GetRunOverviewParams,
     GetRunOverviewResponse, LlmRequest, LlmResponse, LlmSummary, Redaction, RunOverviewRun,
     RunOverviewSpan, SearchTraceItem, SearchTracesInclude, SearchTracesOperationKind,
-    SearchTracesParams, SearchTracesResponse, SearchTracesStatus, ToolSummary, UnsafeText,
+    SearchTracesParams, SearchTracesResponse, SearchTracesSortOrder, SearchTracesStatus,
+    ToolSummary, UnsafeText,
 };
 use crate::types::handlers::pagination::PaginatedResult;
 use crate::types::metadata::services::trace::ListTracesQuery;
@@ -109,13 +110,32 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
             }
             if let Some(operation_name) = &filters.operation_name {
                 let op_str = match operation_name {
-                    SearchTracesOperationKind::LlmCall => "model_call",
-                    SearchTracesOperationKind::ToolCall => "tools",
+                    SearchTracesOperationKind::Run => "run",
+                    SearchTracesOperationKind::Agent => "agent",
+                    SearchTracesOperationKind::Task => "task",
+                    SearchTracesOperationKind::Tools | SearchTracesOperationKind::ToolCall => {
+                        "tools"
+                    }
+                    SearchTracesOperationKind::Openai => "openai",
+                    SearchTracesOperationKind::Anthropic => "anthropic",
+                    SearchTracesOperationKind::Bedrock => "bedrock",
+                    SearchTracesOperationKind::Gemini => "gemini",
+                    SearchTracesOperationKind::CloudApiInvoke => "cloud_api_invoke",
+                    SearchTracesOperationKind::ApiInvoke => "api_invoke",
+                    SearchTracesOperationKind::ModelCall | SearchTracesOperationKind::LlmCall => {
+                        "model_call"
+                    }
                 };
                 list_query.operation_names = Some(vec![op_str.to_string()]);
             }
             if let Some(text) = &filters.text {
                 list_query.text_search = Some(text.clone());
+            }
+            if let Some(true) = filters.has_thread {
+                list_query.filter_not_null_thread = true;
+            }
+            if let Some(true) = filters.has_run {
+                list_query.filter_not_null_run = true;
             }
         }
 
@@ -130,6 +150,15 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
             // TODO: Handle since/until ISO8601 timestamps
         }
 
+        // Apply sorting
+        if let Some(sort) = &params.sort {
+            list_query.sort_by = Some(sort.by.clone());
+            list_query.sort_order = sort.order.as_ref().map(|o| match o {
+                SearchTracesSortOrder::Asc => "asc".to_string(),
+                SearchTracesSortOrder::Desc => "desc".to_string(),
+            });
+        }
+
         let paginated: PaginatedResult<LangdbSpan> = self
             .trace_service
             .list_paginated(list_query)
@@ -140,6 +169,8 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
             metrics: false,
             tokens: false,
             costs: false,
+            attributes: false,
+            output: false,
         });
 
         // Map PaginatedResult<LangdbSpan> into SearchTracesResponse, enriching
@@ -219,6 +250,28 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
                     }
                 }
 
+                // ----- attributes -----
+                let attributes: Option<HashMap<String, JsonValue>> = if include.attributes {
+                    Some(span.attribute.clone())
+                } else {
+                    None
+                };
+
+                // ----- output -----
+                let output: Option<UnsafeText> = if include.output {
+                    span.attribute
+                        .get("output")
+                        .or_else(|| span.attribute.get("response"))
+                        .map(|content| UnsafeText {
+                            kind: Some("llm_output".to_string()),
+                            content: content.clone(),
+                            treat_as_data_not_instructions: Some(true),
+                        })
+                } else {
+                    None
+                };
+                let has_unsafe_text = output.is_some();
+
                 let labels = if labels.is_empty() {
                     None
                 } else {
@@ -250,7 +303,9 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
                     metrics,
                     tokens,
                     costs,
-                    has_unsafe_text: false,
+                    attributes,
+                    output,
+                    has_unsafe_text,
                 }
             })
             .collect();
@@ -450,6 +505,8 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
             limit: 100,
             offset: 0,
             text_search: None,
+            sort_by: None,
+            sort_order: None,
         };
 
         let paginated: PaginatedResult<LangdbSpan> = self
