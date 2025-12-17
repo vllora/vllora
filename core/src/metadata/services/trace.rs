@@ -96,6 +96,16 @@ impl TraceService for TraceServiceImpl {
             db_query = db_query.filter(traces::start_time_us.le(start_max));
         }
 
+        // Apply text search filter (case-insensitive substring match on attribute JSON)
+        if let Some(text) = &query.text_search {
+            if !text.is_empty() {
+                // Escape SQL LIKE special characters and wrap with wildcards
+                let escaped = text.replace('%', "\\%").replace('_', "\\_");
+                let pattern = format!("%{}%", escaped);
+                db_query = db_query.filter(traces::attribute.like(pattern));
+            }
+        }
+
         // Order by start_time_us descending, apply limit and offset
         let results = db_query
             .order(traces::start_time_us.desc())
@@ -275,6 +285,16 @@ impl TraceService for TraceServiceImpl {
 
         if let Some(start_max) = query.start_time_max {
             db_query = db_query.filter(traces::start_time_us.le(start_max));
+        }
+
+        // Apply text search filter (case-insensitive substring match on attribute JSON)
+        if let Some(text) = &query.text_search {
+            if !text.is_empty() {
+                // Escape SQL LIKE special characters and wrap with wildcards
+                let escaped = text.replace('%', "\\%").replace('_', "\\_");
+                let pattern = format!("%{}%", escaped);
+                db_query = db_query.filter(traces::attribute.like(pattern));
+            }
         }
 
         let count = db_query

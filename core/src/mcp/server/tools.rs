@@ -202,6 +202,12 @@ pub struct SearchTracesFilters {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(description = "Arbitrary labels to filter by, e.g. {\"agent\": \"browsr\"}.")]
     pub labels: Option<HashMap<String, String>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(
+        description = "Free-text search query to filter traces by content (searches in messages, tool calls, responses, etc.). Case-insensitive substring match."
+    )]
+    pub text: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]

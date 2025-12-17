@@ -56,6 +56,8 @@ pub struct ListTracesQuery {
     pub start_time_max: Option<i64>,
     pub limit: i64,
     pub offset: i64,
+    /// Free-text search query (case-insensitive substring match on attribute JSON)
+    pub text_search: Option<String>,
 }
 
 /// Query parameters for unified GET /group/spans endpoint
@@ -152,6 +154,7 @@ impl Default for ListTracesQuery {
             start_time_max: None,
             limit: 100,
             offset: 0,
+            text_search: None,
         }
     }
 }

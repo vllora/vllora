@@ -87,7 +87,7 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
         Parameters(params): Parameters<SearchTracesParams>,
     ) -> Result<Json<SearchTracesResponse>, String> {
         // Map high-level MCP params onto the existing ListTracesQuery.
-        let mut list_query = ListTracesQuery::default();
+        let mut list_query: ListTracesQuery = ListTracesQuery::default();
 
         // Basic pagination mapping
         if let Some(page) = &params.page {
@@ -113,6 +113,9 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
                     SearchTracesOperationKind::ToolCall => "tools",
                 };
                 list_query.operation_names = Some(vec![op_str.to_string()]);
+            }
+            if let Some(text) = &filters.text {
+                list_query.text_search = Some(text.clone());
             }
         }
 
@@ -446,6 +449,7 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
             // A reasonable default page size for an overview; can be expanded later if needed
             limit: 100,
             offset: 0,
+            text_search: None,
         };
 
         let paginated: PaginatedResult<LangdbSpan> = self

@@ -185,6 +185,7 @@ pub async fn list_spans<T: TraceService + DatabaseServiceTrait>(
         start_time_max: query.end_time,
         limit: query.limit.unwrap_or(100),
         offset: query.offset.unwrap_or(0),
+        text_search: None,
     };
 
     Ok(trace_service.list(list_query.clone()).map(|traces| {
