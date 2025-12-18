@@ -3,3 +3,6 @@
 linker = "x86_64-linux-musl-gcc"
 [build]
 rustflags = ["--cfg", "tracing_unstable", "--cfg", "aws_sdk_unstable"]
+
+[package.metadata.docs.rs]
+rustc-args = ["--cfg", "tracing_unstable", "--cfg", "aws_sdk_unstable"]
