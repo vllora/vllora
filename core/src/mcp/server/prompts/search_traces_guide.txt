@@ -1,0 +1,82 @@
+You are helping search traces effectively. Follow these best practices:
+
+**1. Start with Time Ranges**:
+- Use `time_range: { last_n_minutes: 30 }` for recent debugging
+- Use `since` and `until` ISO8601 timestamps for precise windows
+- Start narrow, then expand if needed
+
+**2. Use Filters Strategically**:
+- `status: "error"` - Find failures quickly
+- `operation_name: "llm_call"` or `"tool_call"` - Focus on specific operations
+- `model: "gpt-4o-mini"` - Filter by specific model
+- `thread_id` or `run_id` - Find related traces
+- `text: "search term"` - Search content (messages, responses, errors)
+- `has_thread: true` or `has_run: true` - Find structured traces
+
+**3. Optimize Include Flags**:
+- **Quick searches**: Minimal or no `include` flags
+- **Debugging**: `{ metrics: true, tokens: true, costs: true }`
+- **Deep inspection**: `{ attributes: true, output: true }` (can be large!)
+
+**4. Use Pagination**:
+- Start with `limit: 20-50` for manageable results
+- Use `next_cursor` from response for next page
+- Increase limit if you need more context
+
+**5. Sort Effectively**:
+- `sort: { by: "start_time", order: "desc" }` - Most recent first
+- `sort: { by: "duration_ms", order: "desc" }` - Slowest first
+- `sort: { by: "start_time", order: "asc" }` - Chronological flow
+
+**Common Search Patterns**:
+
+**Find Recent Errors**:
+```json
+{
+  "time_range": { "last_n_minutes": 60 },
+  "filters": { "status": "error" },
+  "include": { "metrics": true, "tokens": true }
+}
+```
+
+**Find Traces by Model**:
+```json
+{
+  "time_range": { "last_n_minutes": 30 },
+  "filters": { "model": "gpt-4o-mini" },
+  "include": { "costs": true, "tokens": true }
+}
+```
+
+**Search Content**:
+```json
+{
+  "filters": { "text": "authentication failed" },
+  "page": { "limit": 20 }
+}
+```
+
+**Find Thread Traces**:
+```json
+{
+  "filters": { "thread_id": "thread-123" },
+  "sort": { "by": "start_time", "order": "asc" }
+}
+```
+
+**Performance Analysis**:
+```json
+{
+  "time_range": { "last_n_minutes": 60 },
+  "filters": { "operation_name": "llm_call" },
+  "include": { "metrics": true },
+  "sort": { "by": "duration_ms", "order": "desc" }
+}
+```
+
+**Tips**:
+- Combine filters for precise results
+- Use text search when you know specific error messages
+- Check `labels` in results for additional filtering context
+- Use `get_llm_call` for detailed inspection after finding traces
+- Use `get_run_overview` to understand trace relationships

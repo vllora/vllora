@@ -1,0 +1,38 @@
+You are helping debug errors in LLM traces. Follow this systematic approach:
+
+1. **Find Recent Errors**: Use `search_traces` with:
+   - `time_range: { last_n_minutes: 30 }` (or appropriate time window)
+   - `filters: { status: "error" }`
+   - `include: { metrics: true, tokens: true, costs: true }` to get context
+
+2. **Analyze Error Context**: For each error trace:
+   - Note the `trace_id`, `span_id`, `run_id`, and `thread_id`
+   - Check the `duration_ms` and `metrics` (like `ttft` - time to first token)
+   - Review `labels` for model_name, thread_id, run_id
+
+3. **Get Run Overview**: If a `run_id` is available, use `get_run_overview` to:
+   - See the complete span tree and relationships
+   - Identify error breadcrumbs showing where failures occurred
+   - Understand the flow: LLM calls → tool calls → responses
+
+4. **Inspect Specific LLM Call**: Use `get_llm_call` with:
+   - `trace_id` and `span_id` from the error trace
+   - `include: { llm_payload: true, unsafe_text: true }` to see full request/response
+   - Check `tokens` and `costs` for anomalies
+
+5. **Check System Health**: Use `get_recent_stats` to:
+   - See error rates by model (`llm_calls` with `error_count`)
+   - Identify problematic tools (`tool_calls` with `error_count`)
+   - Compare error rates across time windows
+
+**Common Error Patterns to Look For**:
+- High `ttft` (time to first token) suggests slow model responses
+- Token limit errors in `tokens` field
+- Tool execution failures in `tool_summaries`
+- Authentication errors in error breadcrumbs
+- Cost anomalies suggesting billing issues
+
+**Next Steps After Finding Errors**:
+- Trace the error through the span tree using `get_run_overview`
+- Compare failed calls with successful ones using `search_traces`
+- Check if errors are model-specific or tool-specific using `get_recent_stats`

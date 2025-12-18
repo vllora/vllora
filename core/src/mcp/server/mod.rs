@@ -1,3 +1,4 @@
+pub mod prompts;
 pub mod service;
 pub mod tools;
 
@@ -6,6 +7,7 @@ use rmcp::handler::server::router::prompt::PromptRouter;
 use rmcp::service::RequestContext;
 pub use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 
+use crate::mcp::server::prompts::Prompts;
 use crate::mcp::server::tools::{
     ErrorBreadcrumb, GetLlmCallInclude, GetLlmCallParams, GetLlmCallResponse,
     GetRecentOverviewParams, GetRecentOverviewResponse, GetRunOverviewParams,
@@ -14,26 +16,29 @@ use crate::mcp::server::tools::{
     SearchTracesOperationKind, SearchTracesParams, SearchTracesResponse, SearchTracesSortOrder,
     SearchTracesStatus, ToolCallStats, ToolSummary, UnsafeText,
 };
+use crate::rmcp::model::ListResourceTemplatesResult;
 use crate::types::handlers::pagination::PaginatedResult;
 use crate::types::metadata::services::trace::ListTracesQuery;
 use crate::types::metadata::services::trace::TraceService;
 use crate::types::traces::LangdbSpan;
 use rmcp::handler::server::wrapper::Parameters;
-use rmcp::model::{Annotated, CallToolResult, Content, PaginatedRequestParam, PromptMessage, PromptMessageContent, RawResourceTemplate, ReadResourceRequestParam, ReadResourceResult, ResourceContents};
+use rmcp::model::GetPromptRequestParam;
+use rmcp::model::GetPromptResult;
+use rmcp::model::ListPromptsResult;
+use rmcp::model::{
+    Annotated, CallToolResult, Content, PaginatedRequestParam, PromptMessage, PromptMessageContent,
+    RawResourceTemplate, ReadResourceRequestParam, ReadResourceResult, ResourceContents,
+};
 use rmcp::model::{Implementation, ProtocolVersion, ServerCapabilities, ServerInfo};
-use rmcp::{Json, RoleServer};
 use rmcp::{
     handler::server::router::tool::ToolRouter, prompt, tool, tool_handler, tool_router,
     ErrorData as McpError, ServerHandler,
 };
-use serde_json::{Value as JsonValue, json};
-use std::collections::HashMap;
-use crate::rmcp::model::ListResourceTemplatesResult;
+use rmcp::{Json, RoleServer};
 use rmcp_macros::prompt_handler;
-use rmcp::model::GetPromptRequestParam;
-use rmcp::model::GetPromptResult;
-use rmcp::model::ListPromptsResult;
 use rmcp_macros::prompt_router;
+use serde_json::{json, Value as JsonValue};
+use std::collections::HashMap;
 
 #[derive(Clone)]
 pub struct VlloraMcp<T: TraceService + Send + Sync + 'static> {
@@ -41,6 +46,8 @@ pub struct VlloraMcp<T: TraceService + Send + Sync + 'static> {
     tool_router: ToolRouter<VlloraMcp<T>>,
     prompt_router: PromptRouter<VlloraMcp<T>>,
     trace_service: T,
+    /// Prompts loaded from separate files
+    prompts: Prompts,
 }
 
 #[tool_router]
@@ -52,6 +59,7 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
             tool_router: Self::tool_router(),
             prompt_router: Self::prompt_router(),
             trace_service,
+            prompts: Prompts::new(),
         }
     }
 
@@ -967,53 +975,10 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
         &self,
         Parameters(_args): Parameters<HashMap<String, String>>,
     ) -> Result<Vec<PromptMessage>, McpError> {
-        Ok(vec![
-            PromptMessage {
-                role: rmcp::model::PromptMessageRole::User,
-                content: PromptMessageContent::text(
-                    r#"You are helping debug errors in LLM traces. Follow this systematic approach:
-
-1. **Find Recent Errors**: Use `search_traces` with:
-   - `time_range: { last_n_minutes: 30 }` (or appropriate time window)
-   - `filters: { status: "error" }`
-   - `include: { metrics: true, tokens: true, costs: true }` to get context
-
-2. **Analyze Error Context**: For each error trace:
-   - Note the `trace_id`, `span_id`, `run_id`, and `thread_id`
-   - Check the `duration_ms` and `metrics` (like `ttft` - time to first token)
-   - Review `labels` for model_name, thread_id, run_id
-
-3. **Get Run Overview**: If a `run_id` is available, use `get_run_overview` to:
-   - See the complete span tree and relationships
-   - Identify error breadcrumbs showing where failures occurred
-   - Understand the flow: LLM calls → tool calls → responses
-
-4. **Inspect Specific LLM Call**: Use `get_llm_call` with:
-   - `trace_id` and `span_id` from the error trace
-   - `include: { llm_payload: true, unsafe_text: true }` to see full request/response
-   - Check `tokens` and `costs` for anomalies
-
-5. **Check System Health**: Use `get_recent_stats` to:
-   - See error rates by model (`llm_calls` with `error_count`)
-   - Identify problematic tools (`tool_calls` with `error_count`)
-   - Compare error rates across time windows
-
-**Common Error Patterns to Look For**:
-- High `ttft` (time to first token) suggests slow model responses
-- Token limit errors in `tokens` field
-- Tool execution failures in `tool_summaries`
-- Authentication errors in error breadcrumbs
-- Cost anomalies suggesting billing issues
-
-**Next Steps After Finding Errors**:
-- Trace the error through the span tree using `get_run_overview`
-- Compare failed calls with successful ones using `search_traces`
-- Check if errors are model-specific or tool-specific using `get_recent_stats`
-"#
-                    .to_string(),
-                ),
-            },
-        ])
+        Ok(vec![PromptMessage {
+            role: rmcp::model::PromptMessageRole::User,
+            content: PromptMessageContent::text(self.prompts.debug_errors.to_string()),
+        }])
     }
 
     /// Prompt for analyzing performance issues
@@ -1025,57 +990,10 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
         &self,
         Parameters(_args): Parameters<HashMap<String, String>>,
     ) -> Result<Vec<PromptMessage>, McpError> {
-        Ok(vec![
-            PromptMessage {
-                role: rmcp::model::PromptMessageRole::User,
-                content: PromptMessageContent::text(
-                    r#"You are helping analyze performance issues in LLM traces. Use this approach:
-
-1. **Identify Slow Traces**: Use `search_traces` with:
-   - `include: { metrics: true }` to get `ttft` and duration data
-   - Sort by `duration_ms` descending to find slowest traces
-   - Filter by `operation_name: "llm_call"` to focus on LLM performance
-
-2. **Analyze Metrics**:
-   - **TTFT (Time to First Token)**: High values indicate slow model responses
-   - **Duration**: Total time including all processing
-   - **Token Usage**: High `input_tokens` or `output_tokens` can slow responses
-   - Compare metrics across different models using `get_recent_stats`
-
-3. **Check Token Efficiency**: Use `get_llm_call` to:
-   - Review `tokens` field for input/output ratios
-   - Check if messages are unnecessarily long
-   - Identify if tool definitions are bloating requests
-
-4. **Analyze Run Performance**: Use `get_run_overview` to:
-   - See total `duration_ms` for the run
-   - Identify bottlenecks in the span tree
-   - Check if tool calls are slowing down the flow
-   - Look for sequential operations that could be parallelized
-
-5. **Compare Performance**: Use `search_traces` to:
-   - Compare same model across different time periods
-   - Compare different models for the same task
-   - Identify performance regressions over time
-
-**Performance Red Flags**:
-- TTFT > 5 seconds for most models
-- Duration > 30 seconds for simple queries
-- High token counts without corresponding value
-- Many sequential tool calls in span tree
-- Repeated LLM calls that could be cached
-
-**Optimization Opportunities**:
-- Reduce message history length
-- Simplify tool definitions
-- Cache frequent LLM responses
-- Parallelize independent tool calls
-- Use faster models for simple tasks
-"#
-                    .to_string(),
-                ),
-            },
-        ])
+        Ok(vec![PromptMessage {
+            role: rmcp::model::PromptMessageRole::User,
+            content: PromptMessageContent::text(self.prompts.analyze_performance.to_string()),
+        }])
     }
 
     /// Prompt for understanding run flows
@@ -1087,67 +1005,10 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
         &self,
         Parameters(_args): Parameters<HashMap<String, String>>,
     ) -> Result<Vec<PromptMessage>, McpError> {
-        Ok(vec![
-            PromptMessage {
-                role: rmcp::model::PromptMessageRole::User,
-                content: PromptMessageContent::text(
-                    r#"You are helping understand agent run flows. Use this systematic approach:
-
-1. **Get Run Overview**: Start with `get_run_overview` using a `run_id`:
-   - Review the `run` object for status, duration, and labels
-   - Examine the `span_tree` to understand the hierarchy
-   - Check `error_breadcrumbs` for any failures
-   - Review `llm_summaries` and `tool_summaries` for quick insights
-
-2. **Understand Span Relationships**:
-   - The `span_tree` shows parent-child relationships
-   - Root span (no `parent_span_id`) is typically the run entry point
-   - LLM spans (`kind: "llm"`) call models
-   - Tool spans (`kind: "tool"`) execute tools
-   - Internal spans (`kind: "internal"`) are framework operations
-
-3. **Trace the Flow**:
-   - Start from the root span
-   - Follow `parent_span_id` → `span_id` relationships
-   - Identify decision points where LLM calls lead to tool calls
-   - Note where errors occur in the flow
-
-4. **Analyze LLM Interactions**: For each LLM span:
-   - Use `get_llm_call` with the `span_id` to see:
-     - Full request messages and context
-     - Tool definitions used
-     - Response content
-     - Token usage and costs
-
-5. **Examine Tool Usage**: For tool spans:
-   - Check `tool_summaries` for tool names
-   - Review `args_sha256` and `result_sha256` for consistency
-   - Identify which tools are called most frequently
-   - Check tool error rates
-
-6. **Find Related Traces**: Use `search_traces` with:
-   - `filters: { run_id: "..." }` to see all traces in the run
-   - `filters: { thread_id: "..." }` to see conversation context
-   - Sort by `start_time` ascending to see chronological flow
-
-**Key Questions to Answer**:
-- What was the agent trying to accomplish? (Check root span and labels)
-- How many LLM calls were made? (Count `llm_summaries`)
-- What tools were used? (Review `tool_summaries`)
-- Where did it fail? (Check `error_breadcrumbs`)
-- How long did it take? (Check `duration_ms`)
-- What was the cost? (Sum costs from individual LLM calls)
-
-**Common Patterns**:
-- **Agent Loop**: LLM → Tool → LLM → Tool (repeated)
-- **Parallel Tools**: Multiple tool spans with same parent
-- **Error Recovery**: Error breadcrumb followed by retry spans
-- **Cost Spikes**: Many LLM calls with high token counts
-"#
-                    .to_string(),
-                ),
-            },
-        ])
+        Ok(vec![PromptMessage {
+            role: rmcp::model::PromptMessageRole::User,
+            content: PromptMessageContent::text(self.prompts.understand_run_flow.to_string()),
+        }])
     }
 
     /// Prompt for effective trace searching
@@ -1159,97 +1020,10 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
         &self,
         Parameters(_args): Parameters<HashMap<String, String>>,
     ) -> Result<Vec<PromptMessage>, McpError> {
-        Ok(vec![
-            PromptMessage {
-                role: rmcp::model::PromptMessageRole::User,
-                content: PromptMessageContent::text(
-                    r#"You are helping search traces effectively. Follow these best practices:
-
-**1. Start with Time Ranges**:
-- Use `time_range: { last_n_minutes: 30 }` for recent debugging
-- Use `since` and `until` ISO8601 timestamps for precise windows
-- Start narrow, then expand if needed
-
-**2. Use Filters Strategically**:
-- `status: "error"` - Find failures quickly
-- `operation_name: "llm_call"` or `"tool_call"` - Focus on specific operations
-- `model: "gpt-4o-mini"` - Filter by specific model
-- `thread_id` or `run_id` - Find related traces
-- `text: "search term"` - Search content (messages, responses, errors)
-- `has_thread: true` or `has_run: true` - Find structured traces
-
-**3. Optimize Include Flags**:
-- **Quick searches**: Minimal or no `include` flags
-- **Debugging**: `{ metrics: true, tokens: true, costs: true }`
-- **Deep inspection**: `{ attributes: true, output: true }` (can be large!)
-
-**4. Use Pagination**:
-- Start with `limit: 20-50` for manageable results
-- Use `next_cursor` from response for next page
-- Increase limit if you need more context
-
-**5. Sort Effectively**:
-- `sort: { by: "start_time", order: "desc" }` - Most recent first
-- `sort: { by: "duration_ms", order: "desc" }` - Slowest first
-- `sort: { by: "start_time", order: "asc" }` - Chronological flow
-
-**Common Search Patterns**:
-
-**Find Recent Errors**:
-```json
-{
-  "time_range": { "last_n_minutes": 60 },
-  "filters": { "status": "error" },
-  "include": { "metrics": true, "tokens": true }
-}
-```
-
-**Find Traces by Model**:
-```json
-{
-  "time_range": { "last_n_minutes": 30 },
-  "filters": { "model": "gpt-4o-mini" },
-  "include": { "costs": true, "tokens": true }
-}
-```
-
-**Search Content**:
-```json
-{
-  "filters": { "text": "authentication failed" },
-  "page": { "limit": 20 }
-}
-```
-
-**Find Thread Traces**:
-```json
-{
-  "filters": { "thread_id": "thread-123" },
-  "sort": { "by": "start_time", "order": "asc" }
-}
-```
-
-**Performance Analysis**:
-```json
-{
-  "time_range": { "last_n_minutes": 60 },
-  "filters": { "operation_name": "llm_call" },
-  "include": { "metrics": true },
-  "sort": { "by": "duration_ms", "order": "desc" }
-}
-```
-
-**Tips**:
-- Combine filters for precise results
-- Use text search when you know specific error messages
-- Check `labels` in results for additional filtering context
-- Use `get_llm_call` for detailed inspection after finding traces
-- Use `get_run_overview` to understand trace relationships
-"#
-                    .to_string(),
-                ),
-            },
-        ])
+        Ok(vec![PromptMessage {
+            role: rmcp::model::PromptMessageRole::User,
+            content: PromptMessageContent::text(self.prompts.search_traces_guide.to_string()),
+        }])
     }
 
     /// Prompt for monitoring system health
@@ -1261,82 +1035,10 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
         &self,
         Parameters(_args): Parameters<HashMap<String, String>>,
     ) -> Result<Vec<PromptMessage>, McpError> {
-        Ok(vec![
-            PromptMessage {
-                role: rmcp::model::PromptMessageRole::User,
-                content: PromptMessageContent::text(
-                    r#"You are helping monitor system health. Use this approach:
-
-**1. Get Recent Statistics**: Use `get_recent_stats` with appropriate time windows:
-   - `last_n_minutes: 15` - Current activity
-   - `last_n_minutes: 60` - Hourly trends
-   - `last_n_minutes: 1440` - Daily patterns
-
-**2. Analyze LLM Health** (`llm_calls` array):
-   - **Error Rate**: `error_count / total_count` per model
-   - **Success Rate**: `ok_count / total_count` per model
-   - **Model Usage**: `total_count` shows which models are used most
-   - **Compare Models**: Look for models with unusually high error rates
-
-**3. Analyze Tool Health** (`tool_calls` array):
-   - **Tool Reliability**: `ok_count / total_count` per tool
-   - **Problematic Tools**: Tools with high `error_count`
-   - **Tool Usage**: Most frequently used tools
-   - **Tool Trends**: Compare error rates over time
-
-**4. Deep Dive into Issues**:
-   - If a model has high error rate, use `search_traces` with:
-     - `filters: { model: "...", status: "error" }`
-     - `include: { metrics: true, tokens: true }`
-   - If a tool has high error rate, use `search_traces` with:
-     - `filters: { operation_name: "tool_call", status: "error" }`
-     - Check error breadcrumbs in `get_run_overview`
-
-**5. Monitor Costs**: Use `search_traces` with:
-   - `include: { costs: true, tokens: true }`
-   - Filter by model to compare costs
-   - Sort by costs to find expensive operations
-   - Use `get_llm_call` for detailed cost breakdown
-
-**6. Track Performance Trends**:
-   - Compare `get_recent_stats` across different time windows
-   - Look for increasing error rates
-   - Monitor token usage trends
-   - Track cost trends over time
-
-**Health Indicators**:
-
-**Good Health**:
-- Error rates < 5% for models
-- Error rates < 10% for tools
-- Consistent response times
-- Stable token usage patterns
-
-**Warning Signs**:
-- Error rates > 10% for models
-- Error rates > 20% for tools
-- Spiking response times
-- Unusual token usage spikes
-- Cost anomalies
-
-**Critical Issues**:
-- Error rates > 25%
-- Complete model failures
-- Tool failures blocking workflows
-- Cost spikes indicating issues
-
-**Regular Monitoring Checklist**:
-1. Check `get_recent_stats` for overall health
-2. Review error rates by model and tool
-3. Identify any new error patterns
-4. Check cost trends
-5. Review performance metrics
-6. Investigate any anomalies with `search_traces`
-"#
-                    .to_string(),
-                ),
-            },
-        ])
+        Ok(vec![PromptMessage {
+            role: rmcp::model::PromptMessageRole::User,
+            content: PromptMessageContent::text(self.prompts.monitor_system_health.to_string()),
+        }])
     }
 
     /// Prompt for cost analysis
@@ -1348,93 +1050,23 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
         &self,
         Parameters(_args): Parameters<HashMap<String, String>>,
     ) -> Result<Vec<PromptMessage>, McpError> {
-        Ok(vec![
-            PromptMessage {
-                role: rmcp::model::PromptMessageRole::User,
-                content: PromptMessageContent::text(
-                    r#"You are helping analyze costs and token usage. Follow this approach:
-
-**1. Get Cost Overview**: Use `search_traces` with:
-   - `include: { costs: true, tokens: true }`
-   - Filter by time range to analyze specific periods
-   - Filter by model to compare model costs
-   - Sort by costs to find most expensive operations
-
-**2. Analyze Token Usage**: Review `tokens` field:
-   - **Input Tokens**: Size of requests (messages + tools)
-   - **Output Tokens**: Size of responses
-   - **Total Tokens**: Combined usage
-   - **Efficiency**: Low output/input ratio may indicate inefficiency
-
-**3. Compare Models**: Use `get_recent_stats` to:
-   - See total calls per model
-   - Combine with `search_traces` filtered by model to get costs
-   - Identify which models are most expensive
-   - Compare cost per call across models
-
-**4. Detailed Cost Breakdown**: Use `get_llm_call` to:
-   - See exact `costs` and `tokens` for specific calls
-   - Review request size (messages, tools) affecting costs
-   - Identify expensive patterns (long messages, many tools)
-
-**5. Analyze Run Costs**: Use `get_run_overview` to:
-   - See all LLM calls in a run (`llm_summaries`)
-   - Use `get_llm_call` for each span to sum costs
-   - Identify expensive runs
-   - Find cost optimization opportunities
-
-**Cost Optimization Strategies**:
-
-**Reduce Input Tokens**:
-- Shorten message history
-- Simplify tool definitions
-- Remove unnecessary context
-- Use more efficient prompts
-
-**Reduce Output Tokens**:
-- Set `max_tokens` limits appropriately
-- Use faster/cheaper models for simple tasks
-- Cache frequent responses
-
-**Model Selection**:
-- Use cheaper models for simple tasks
-- Reserve expensive models for complex tasks
-- Compare cost vs quality trade-offs
-
-**Tool Usage**:
-- Minimize tool definitions when possible
-- Cache tool results
-- Optimize tool call frequency
-
-**Common Cost Issues**:
-- **Token Waste**: High input tokens with low value
-- **Model Overuse**: Using expensive models unnecessarily
-- **Tool Bloat**: Excessive tool definitions
-- **Inefficient Prompts**: Long prompts that don't add value
-- **No Caching**: Repeated identical calls
-
-**Cost Analysis Checklist**:
-1. Get overall costs using `search_traces` with cost include
-2. Identify most expensive models
-3. Find expensive individual calls
-4. Analyze token efficiency
-5. Compare costs across time periods
-6. Identify optimization opportunities
-"#
-                    .to_string(),
-                ),
-            },
-        ])
+        Ok(vec![PromptMessage {
+            role: rmcp::model::PromptMessageRole::User,
+            content: PromptMessageContent::text(self.prompts.analyze_costs.to_string()),
+        }])
     }
 
     fn _create_resource_template(&self, uri: &str, name: &str) -> Annotated<RawResourceTemplate> {
-        Annotated::new(RawResourceTemplate {
-            uri_template: uri.to_string(),
-            name: name.to_string(),
-            title: Some(name.to_string()),
-            description: None,
-            mime_type: None
-        }, None)
+        Annotated::new(
+            RawResourceTemplate {
+                uri_template: uri.to_string(),
+                name: name.to_string(),
+                title: Some(name.to_string()),
+                description: None,
+                mime_type: None,
+            },
+            None,
+        )
     }
 }
 
@@ -1460,9 +1092,7 @@ impl<T: TraceService + Send + Sync + 'static> ServerHandler for VlloraMcp<T> {
         _: RequestContext<RoleServer>,
     ) -> Result<ListResourceTemplatesResult, McpError> {
         Ok(ListResourceTemplatesResult {
-            resource_templates: vec![
-                self._create_resource_template("run://{id}", "run"),
-            ],
+            resource_templates: vec![self._create_resource_template("run://{id}", "run")],
             meta: None,
             next_cursor: None,
         })
@@ -1476,7 +1106,12 @@ impl<T: TraceService + Send + Sync + 'static> ServerHandler for VlloraMcp<T> {
         let (resource_type, resource_id) = uri.split_once("://").unwrap();
         match resource_type {
             "run" => {
-                let run = self.get_run_overview(Parameters(GetRunOverviewParams { run_id: resource_id.to_string() })).await.map_err(|e| McpError::internal_error(e, None))?;
+                let run = self
+                    .get_run_overview(Parameters(GetRunOverviewParams {
+                        run_id: resource_id.to_string(),
+                    }))
+                    .await
+                    .map_err(|e| McpError::internal_error(e, None))?;
                 let run_json = serde_json::to_string(&run.0).unwrap();
                 Ok(ReadResourceResult {
                     contents: vec![ResourceContents::text(run_json, uri)],

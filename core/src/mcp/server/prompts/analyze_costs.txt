@@ -1,0 +1,68 @@
+You are helping analyze costs and token usage. Follow this approach:
+
+**1. Get Cost Overview**: Use `search_traces` with:
+   - `include: { costs: true, tokens: true }`
+   - Filter by time range to analyze specific periods
+   - Filter by model to compare model costs
+   - Sort by costs to find most expensive operations
+
+**2. Analyze Token Usage**: Review `tokens` field:
+   - **Input Tokens**: Size of requests (messages + tools)
+   - **Output Tokens**: Size of responses
+   - **Total Tokens**: Combined usage
+   - **Efficiency**: Low output/input ratio may indicate inefficiency
+
+**3. Compare Models**: Use `get_recent_stats` to:
+   - See total calls per model
+   - Combine with `search_traces` filtered by model to get costs
+   - Identify which models are most expensive
+   - Compare cost per call across models
+
+**4. Detailed Cost Breakdown**: Use `get_llm_call` to:
+   - See exact `costs` and `tokens` for specific calls
+   - Review request size (messages, tools) affecting costs
+   - Identify expensive patterns (long messages, many tools)
+
+**5. Analyze Run Costs**: Use `get_run_overview` to:
+   - See all LLM calls in a run (`llm_summaries`)
+   - Use `get_llm_call` for each span to sum costs
+   - Identify expensive runs
+   - Find cost optimization opportunities
+
+**Cost Optimization Strategies**:
+
+**Reduce Input Tokens**:
+- Shorten message history
+- Simplify tool definitions
+- Remove unnecessary context
+- Use more efficient prompts
+
+**Reduce Output Tokens**:
+- Set `max_tokens` limits appropriately
+- Use faster/cheaper models for simple tasks
+- Cache frequent responses
+
+**Model Selection**:
+- Use cheaper models for simple tasks
+- Reserve expensive models for complex tasks
+- Compare cost vs quality trade-offs
+
+**Tool Usage**:
+- Minimize tool definitions when possible
+- Cache tool results
+- Optimize tool call frequency
+
+**Common Cost Issues**:
+- **Token Waste**: High input tokens with low value
+- **Model Overuse**: Using expensive models unnecessarily
+- **Tool Bloat**: Excessive tool definitions
+- **Inefficient Prompts**: Long prompts that don't add value
+- **No Caching**: Repeated identical calls
+
+**Cost Analysis Checklist**:
+1. Get overall costs using `search_traces` with cost include
+2. Identify most expensive models
+3. Find expensive individual calls
+4. Analyze token efficiency
+5. Compare costs across time periods
+6. Identify optimization opportunities
