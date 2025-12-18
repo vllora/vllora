@@ -201,7 +201,7 @@ impl ThreadService {
                 ) as finish_time_us,
                 GROUP_CONCAT(DISTINCT CASE WHEN parent_span_id IS NULL THEN run_id END) as run_ids,
                 GROUP_CONCAT(DISTINCT json_extract(attribute, '$.model_name')) as input_models,
-                SUM(CAST(json_extract(attribute, '$.cost') AS REAL)) as cost,
+                SUM(CASE WHEN operation_name = 'api_invoke' THEN COALESCE(CAST(json_extract(attribute, '$.cost') as REAL), 0) ELSE 0 END) as cost,
                 GROUP_CONCAT(json_extract(attribute, '$.title')) as titles
             FROM traces as main_traces
             WHERE project_id = {}
