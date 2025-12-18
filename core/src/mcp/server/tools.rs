@@ -323,7 +323,7 @@ pub struct SearchTracesInclude {
 
     #[serde(default)]
     #[schemars(
-        description = "If true, include raw span attributes (model_name, provider_name, tools, etc.)."
+        description = "If true, include raw span attributes (model_name, provider_name, tools, status, messages, response, output, details of span etc.) - data might be huge so use with caution."
     )]
     pub attributes: bool,
 
@@ -368,6 +368,9 @@ pub struct SearchTraceItem {
 
     #[schemars(description = "Span identifier (numeric).")]
     pub span_id: String,
+
+    #[schemars(description = "Parent span identifier")]
+    pub parent_span_id: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(description = "Thread identifier associated with the trace, if any.")]
@@ -714,7 +717,6 @@ pub struct GetRunOverviewResponse {
 /// ---------------------------------------------------------------------------
 /// MCP tool shapes for `get_recent_overview`
 /// ---------------------------------------------------------------------------
-
 /// Parameters for the get_recent_overview MCP tool.
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[schemars(description = "Parameters for the get_recent_overview MCP tool.")]
@@ -763,9 +765,7 @@ pub struct ToolCallStats {
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[schemars(description = "Overview of recent LLM and tool activity for the requested time window.")]
 pub struct GetRecentOverviewResponse {
-    #[schemars(
-        description = "Size of the time window in minutes that this overview covers."
-    )]
+    #[schemars(description = "Size of the time window in minutes that this overview covers.")]
     pub window_minutes: i64,
 
     #[schemars(

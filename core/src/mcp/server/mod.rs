@@ -90,7 +90,6 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
     ) -> Result<Json<SearchTracesResponse>, String> {
         // Map high-level MCP params onto the existing ListTracesQuery.
         let mut list_query: ListTracesQuery = ListTracesQuery::default();
-
         // Basic pagination mapping
         if let Some(page) = &params.page {
             list_query.limit = page.limit;
@@ -287,6 +286,7 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
                 SearchTraceItem {
                     trace_id: span.trace_id.clone(),
                     span_id: span.span_id.clone(),
+                    parent_span_id: span.parent_span_id,
                     thread_id: span.thread_id,
                     run_id: span.run_id,
                     // We currently don't have an explicit ok/error classification at this layer,
