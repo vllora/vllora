@@ -17,7 +17,7 @@ fn create_http_service<T: TraceService + Clone + Send + Sync + 'static>(
     StreamableHttpService::builder()
         .service_factory(Arc::new(move || Ok(vllora_mcp.clone())))
         .session_manager(session_manager) // Session management
-        .stateful_mode(false) // Enable sessions
+        .stateful_mode(true) // Enable sessions
         .sse_keep_alive(Duration::from_secs(30)) // Keep-alive pings
         .build()
 }

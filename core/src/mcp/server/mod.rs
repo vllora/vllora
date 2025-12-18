@@ -2,6 +2,7 @@ pub mod service;
 pub mod tools;
 
 use chrono::TimeZone;
+use rmcp::service::RequestContext;
 pub use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 
 use crate::mcp::server::tools::{
@@ -17,15 +18,16 @@ use crate::types::metadata::services::trace::ListTracesQuery;
 use crate::types::metadata::services::trace::TraceService;
 use crate::types::traces::LangdbSpan;
 use rmcp::handler::server::wrapper::Parameters;
-use rmcp::model::{CallToolResult, Content};
+use rmcp::model::{Annotated, CallToolResult, Content, ListResourcesResult, PaginatedRequestParam, RawResource, RawResourceTemplate, ReadResourceRequestParam, ReadResourceResult, Resource, ResourceContents, ResourceTemplate};
 use rmcp::model::{Implementation, ProtocolVersion, ServerCapabilities, ServerInfo};
-use rmcp::Json;
+use rmcp::{Json, RoleServer};
 use rmcp::{
     handler::server::router::tool::ToolRouter, tool, tool_handler, tool_router,
     ErrorData as McpError, ServerHandler,
 };
-use serde_json::Value as JsonValue;
+use serde_json::{Value as JsonValue, json};
 use std::collections::HashMap;
+use crate::rmcp::model::ListResourceTemplatesResult;
 
 #[derive(Clone)]
 pub struct VlloraMcp<T: TraceService + Send + Sync + 'static> {
@@ -946,6 +948,16 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
             tool_calls,
         }))
     }
+
+    fn _create_resource_text(&self, uri: &str, name: &str) -> Annotated<RawResourceTemplate> {
+        Annotated::new(RawResourceTemplate {
+            uri_template: uri.to_string(),
+            name: name.to_string(),
+            title: Some(name.to_string()),
+            description: None,
+            mime_type: None
+        }, None)
+    }
 }
 
 #[tool_handler]
@@ -955,9 +967,47 @@ impl<T: TraceService + Send + Sync + 'static> ServerHandler for VlloraMcp<T> {
             protocol_version: ProtocolVersion::V_2024_11_05,
             capabilities: ServerCapabilities::builder()
                 .enable_tools()
+                .enable_resources()
                 .build(),
             server_info: Implementation::from_build_env(),
             instructions: Some("This server provides a Vllora version tool that can get the current Vllora version.".to_string()),
+        }
+    }
+
+    async fn list_resource_templates(
+        &self,
+        _request: Option<PaginatedRequestParam>,
+        _: RequestContext<RoleServer>,
+    ) -> Result<ListResourceTemplatesResult, McpError> {
+        Ok(ListResourceTemplatesResult {
+            resource_templates: vec![
+                self._create_resource_text("run://{id}", "run"),
+            ],
+            meta: None,
+            next_cursor: None,
+        })
+    }
+
+    async fn read_resource(
+        &self,
+        ReadResourceRequestParam { uri }: ReadResourceRequestParam,
+        _: RequestContext<RoleServer>,
+    ) -> Result<ReadResourceResult, McpError> {
+        let (resource_type, resource_id) = uri.split_once("://").unwrap();
+        match resource_type {
+            "run" => {
+                let run = self.get_run_overview(Parameters(GetRunOverviewParams { run_id: resource_id.to_string() })).await.unwrap();
+                let run_json = serde_json::to_string(&run.0).unwrap();
+                Ok(ReadResourceResult {
+                    contents: vec![ResourceContents::text(run_json, uri)],
+                })
+            }
+            _ => Err(McpError::resource_not_found(
+                "resource_not_found",
+                Some(json!({
+                    "uri": uri
+                })),
+            )),
         }
     }
 }
