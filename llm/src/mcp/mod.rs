@@ -21,8 +21,9 @@ pub enum McpServerError {
     #[error("Server initialization error: {0}")]
     ServerInitializeError(#[from] Box<rmcp::service::ServerInitializeError>),
 
-    // #[error("SSE transport error: {0}")]
-    // SseTransportError(#[from] rmcp::transport::sse_client::SseTransportError<reqwest::Error>),
+    #[error("SSE transport error: {0}")]
+    SseTransportError(#[from] rmcp::transport::sse_client::SseTransportError<reqwest::Error>),
+
     #[error("Client initialization error: {0}")]
     ClientInitializeError(#[from] Box<rmcp::service::ClientInitializeError>),
 

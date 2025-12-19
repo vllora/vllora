@@ -6,10 +6,8 @@ use reqwest::header::HeaderMap;
 use rmcp::{
     service::{DynService, RunningService},
     transport::{
-        // sse_client::SseClientConfig,
-        streamable_http_client::StreamableHttpClientTransportConfig,
-        // SseClientTransport,
-        StreamableHttpClientTransport,
+        sse_client::SseClientConfig, streamable_http_client::StreamableHttpClientTransportConfig,
+        SseClientTransport, StreamableHttpClientTransport,
     },
     RoleClient, ServiceExt,
 };
@@ -28,23 +26,26 @@ impl McpTransport {
         &self,
     ) -> Result<RunningService<RoleClient, Box<dyn DynService<RoleClient>>>, McpServerError> {
         match &self.definition.r#type {
-            McpTransportType::Sse { .. } => {
-                // let reqwest_client = Self::create_reqwest_client_with_headers(headers)?;
-                // let transport = SseClientTransport::start_with_client(
-                //     reqwest_client,
-                //     SseClientConfig {
-                //         sse_endpoint: server_url.clone().into(),
-                //         ..Default::default()
-                //     },
-                // )
-                // .await?;
+            McpTransportType::Sse {
+                server_url,
+                headers,
+                ..
+            } => {
+                let reqwest_client = Self::create_reqwest_client_with_headers(headers)?;
+                let transport = SseClientTransport::start_with_client(
+                    reqwest_client,
+                    SseClientConfig {
+                        sse_endpoint: server_url.clone().into(),
+                        ..Default::default()
+                    },
+                )
+                .await?;
 
-                // Ok(()
-                //     .into_dyn()
-                //     .serve(transport)
-                //     .await
-                //     .map_err(|e| McpServerError::ClientStartError(e.to_string()))?)
-                todo!()
+                Ok(()
+                    .into_dyn()
+                    .serve(transport)
+                    .await
+                    .map_err(|e| McpServerError::ClientStartError(e.to_string()))?)
             }
             McpTransportType::Http {
                 server_url,
@@ -63,20 +64,19 @@ impl McpTransport {
                     .await
                     .map_err(|e| McpServerError::ClientStartError(e.to_string()))?)
             }
-            McpTransportType::InMemory { .. } => {
-                todo!()
-                // Self::validate_server_name(name)?;
-                // let transport = SseClientTransport::start(
-                //     std::env::var("TAVILY_MCP_URL")
-                //         .unwrap_or("http://localhost:8083/sse".to_string()),
-                // )
-                // .await?;
+            McpTransportType::InMemory { name, .. } => {
+                Self::validate_server_name(name)?;
+                let transport = SseClientTransport::start(
+                    std::env::var("TAVILY_MCP_URL")
+                        .unwrap_or("http://localhost:8083/sse".to_string()),
+                )
+                .await?;
 
-                // Ok(()
-                //     .into_dyn()
-                //     .serve(transport)
-                //     .await
-                //     .map_err(|e| McpServerError::ClientStartError(e.to_string()))?)
+                Ok(()
+                    .into_dyn()
+                    .serve(transport)
+                    .await
+                    .map_err(|e| McpServerError::ClientStartError(e.to_string()))?)
             }
             _ => Err(McpServerError::InvalidServerName(
                 "Invalid or unsupported server type".to_string(),
@@ -110,12 +110,12 @@ impl McpTransport {
             .map_err(McpServerError::ReqwestError)
     }
 
-    // fn validate_server_name(name: &str) -> Result<(), McpServerError> {
-    //     match name {
-    //         "websearch" | "Web Search" => Ok(()),
-    //         _ => Err(McpServerError::InvalidServerName(name.to_string())),
-    //     }
-    // }
+    fn validate_server_name(name: &str) -> Result<(), McpServerError> {
+        match name {
+            "websearch" | "Web Search" => Ok(()),
+            _ => Err(McpServerError::InvalidServerName(name.to_string())),
+        }
+    }
 }
 
 #[cfg(test)]

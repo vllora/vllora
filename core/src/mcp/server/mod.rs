@@ -70,36 +70,6 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
         ))]))
     }
 
-    // #[tool(name = "get_spans", description = "Get spans")]
-    // async fn get_traces(
-    //     &self,
-    //     Parameters(params): Parameters<ListTracesRequest>,
-    // ) -> Result<Json<PaginatedResult<LangdbSpan>>, String> {
-    //     let range = params.get_range();
-    //     let list_query = ListTracesQuery {
-    //         project_slug: None,
-    //         run_ids: params.run_ids.clone(),
-    //         thread_ids: params.thread_ids.clone(),
-    //         operation_names: params.operation_names.as_ref().map(|operation_names| {
-    //             operation_names
-    //                 .iter()
-    //                 .map(|operation| operation.to_string())
-    //                 .collect()
-    //         }),
-    //         parent_span_ids: params.parent_span_ids.clone(),
-    //         start_time_min: range.map(|(start_time_min, _)| start_time_min),
-    //         start_time_max: range.map(|(_, start_time_max)| start_time_max),
-    //         limit: params.get_limit(),
-    //         offset: params.get_offset(),
-    //         ..Default::default()
-    //     };
-    //     Ok(Json(
-    //         self.trace_service
-    //             .list_paginated(list_query)
-    //             .map_err(|e| e.to_string())?,
-    //     ))
-    // }
-
     /// High-level MCP tool that wraps `get_traces` into the `search_traces` shape
     /// documented in DOC_v2.md.
     #[tool(name = "search_traces", description = "Search traces for analysis")]
@@ -166,7 +136,19 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
                 list_query.start_time_min = Some(start_time_min);
                 list_query.start_time_max = Some(now);
             }
-            // TODO: Handle since/until ISO8601 timestamps
+
+            if let Some(since) = &time_range.since {
+                let since = chrono::DateTime::parse_from_str(since, "%Y-%m-%dT%H:%M:%S%.3fZ")
+                    .map_err(|e| format!("Invalid since date ({since}): {}", e))?
+                    .timestamp_micros();
+                list_query.start_time_min = Some(since);
+            }
+            if let Some(until) = &time_range.until {
+                let until = chrono::DateTime::parse_from_str(until, "%Y-%m-%dT%H:%M:%S%.3fZ")
+                    .map_err(|e| format!("Invalid until date ({until}): {}", e))?
+                    .timestamp_micros();
+                list_query.start_time_max = Some(until);
+            }
         }
 
         // Apply sorting
@@ -1093,7 +1075,6 @@ impl<T: TraceService + Send + Sync + 'static> ServerHandler for VlloraMcp<T> {
     ) -> Result<ListResourceTemplatesResult, McpError> {
         Ok(ListResourceTemplatesResult {
             resource_templates: vec![self._create_resource_template("run://{id}", "run")],
-            meta: None,
             next_cursor: None,
         })
     }
