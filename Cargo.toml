@@ -17,22 +17,22 @@ tokio = { version = "1.48.0", features = ["rt", "rt-multi-thread", "sync", "io-s
 tokio-stream = { version = "0.1.17", features = ["io-util"] }
 chrono = { version = "0.4", features = ["serde"] }
 
-tracing = { version = "0.1.41", features = ["log", "valuable"] }
-tracing-opentelemetry = { version = "0.31", default-features = false }
+tracing = { version = "0.1.44", features = ["log", "valuable"] }
+tracing-opentelemetry = { version = "0.32", default-features = false }
 tracing-futures = { version = "0.2.5", features = ["futures-03"] }
-tracing-subscriber = { version = "0.3.20", features = [
+tracing-subscriber = { version = "0.3.22", features = [
   "env-filter",
   "tracing-log",
   "valuable",
 ] }
 
-opentelemetry = "0.30"
-opentelemetry-otlp = { version = "0.30", features = ["tls", "grpc-tonic"] }
-opentelemetry_sdk = { version = "0.30", features = ["rt-tokio"] }
+opentelemetry = "0.31"
+opentelemetry-otlp = { version = "0.31", features = ["tls", "grpc-tonic"] }
+opentelemetry_sdk = { version = "0.31", features = ["rt-tokio"] }
 
 valuable = { version = "0.1", features = ["derive"] }
 
-tonic = "0.13.0"
+tonic = "0.14.2"
 
 rmcp = { version = "0.10.0", default-features = true, features = [
   "reqwest",
