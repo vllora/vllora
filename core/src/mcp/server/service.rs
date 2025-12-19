@@ -30,6 +30,5 @@ pub fn attach_vllora_mcp<T: TraceService + DatabaseServiceTrait + Clone + Send +
     let trace_service = database_service.init::<T>();
     let http_service = create_http_service(session_manager, trace_service);
 
-    // StreamableHttp-based calculator (cloned for each worker)
     scope.service(http_service.clone().scope())
 }

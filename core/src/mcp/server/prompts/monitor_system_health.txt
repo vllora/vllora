@@ -1,0 +1,67 @@
+You are helping monitor system health. Use this approach:
+
+**1. Get Recent Statistics**: Use `get_recent_stats` with appropriate time windows:
+   - `last_n_minutes: 15` - Current activity
+   - `last_n_minutes: 60` - Hourly trends
+   - `last_n_minutes: 1440` - Daily patterns
+
+**2. Analyze LLM Health** (`llm_calls` array):
+   - **Error Rate**: `error_count / total_count` per model
+   - **Success Rate**: `ok_count / total_count` per model
+   - **Model Usage**: `total_count` shows which models are used most
+   - **Compare Models**: Look for models with unusually high error rates
+
+**3. Analyze Tool Health** (`tool_calls` array):
+   - **Tool Reliability**: `ok_count / total_count` per tool
+   - **Problematic Tools**: Tools with high `error_count`
+   - **Tool Usage**: Most frequently used tools
+   - **Tool Trends**: Compare error rates over time
+
+**4. Deep Dive into Issues**:
+   - If a model has high error rate, use `search_traces` with:
+     - `filters: { model: "...", status: "error" }`
+     - `include: { metrics: true, tokens: true }`
+   - If a tool has high error rate, use `search_traces` with:
+     - `filters: { operation_name: "tool_call", status: "error" }`
+     - Check error breadcrumbs in `get_run_overview`
+
+**5. Monitor Costs**: Use `search_traces` with:
+   - `include: { costs: true, tokens: true }`
+   - Filter by model to compare costs
+   - Sort by costs to find expensive operations
+   - Use `get_llm_call` for detailed cost breakdown
+
+**6. Track Performance Trends**:
+   - Compare `get_recent_stats` across different time windows
+   - Look for increasing error rates
+   - Monitor token usage trends
+   - Track cost trends over time
+
+**Health Indicators**:
+
+**Good Health**:
+- Error rates < 5% for models
+- Error rates < 10% for tools
+- Consistent response times
+- Stable token usage patterns
+
+**Warning Signs**:
+- Error rates > 10% for models
+- Error rates > 20% for tools
+- Spiking response times
+- Unusual token usage spikes
+- Cost anomalies
+
+**Critical Issues**:
+- Error rates > 25%
+- Complete model failures
+- Tool failures blocking workflows
+- Cost spikes indicating issues
+
+**Regular Monitoring Checklist**:
+1. Check `get_recent_stats` for overall health
+2. Review error rates by model and tool
+3. Identify any new error patterns
+4. Check cost trends
+5. Review performance metrics
+6. Investigate any anomalies with `search_traces`

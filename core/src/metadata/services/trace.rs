@@ -96,13 +96,54 @@ impl TraceService for TraceServiceImpl {
             db_query = db_query.filter(traces::start_time_us.le(start_max));
         }
 
-        // Order by start_time_us descending, apply limit and offset
-        let results = db_query
-            .order(traces::start_time_us.desc())
-            .limit(query.limit)
-            .offset(query.offset)
-            .load::<DbTrace>(&mut conn)
-            .map_err(DatabaseError::QueryError)?;
+        // Apply text search filter (case-insensitive substring match on attribute JSON)
+        if let Some(text) = &query.text_search {
+            if !text.is_empty() {
+                // Escape SQL LIKE special characters and wrap with wildcards
+                let escaped = text.replace('%', "\\%").replace('_', "\\_");
+                let pattern = format!("%{}%", escaped);
+                db_query = db_query.filter(traces::attribute.like(pattern));
+            }
+        }
+
+        // Apply sorting - default to start_time descending
+        let sort_by = query.sort_by.as_deref().unwrap_or("start_time");
+        let sort_order = query.sort_order.as_deref().unwrap_or("desc");
+        let is_desc = sort_order == "desc";
+
+        let results = match (sort_by, is_desc) {
+            ("start_time", true) => db_query
+                .order(traces::start_time_us.desc())
+                .limit(query.limit)
+                .offset(query.offset)
+                .load::<DbTrace>(&mut conn)
+                .map_err(DatabaseError::QueryError)?,
+            ("start_time", false) => db_query
+                .order(traces::start_time_us.asc())
+                .limit(query.limit)
+                .offset(query.offset)
+                .load::<DbTrace>(&mut conn)
+                .map_err(DatabaseError::QueryError)?,
+            ("finish_time", true) => db_query
+                .order(traces::finish_time_us.desc())
+                .limit(query.limit)
+                .offset(query.offset)
+                .load::<DbTrace>(&mut conn)
+                .map_err(DatabaseError::QueryError)?,
+            ("finish_time", false) => db_query
+                .order(traces::finish_time_us.asc())
+                .limit(query.limit)
+                .offset(query.offset)
+                .load::<DbTrace>(&mut conn)
+                .map_err(DatabaseError::QueryError)?,
+            // Default: start_time descending
+            _ => db_query
+                .order(traces::start_time_us.desc())
+                .limit(query.limit)
+                .offset(query.offset)
+                .load::<DbTrace>(&mut conn)
+                .map_err(DatabaseError::QueryError)?,
+        };
 
         Ok(results)
     }
@@ -275,6 +316,16 @@ impl TraceService for TraceServiceImpl {
 
         if let Some(start_max) = query.start_time_max {
             db_query = db_query.filter(traces::start_time_us.le(start_max));
+        }
+
+        // Apply text search filter (case-insensitive substring match on attribute JSON)
+        if let Some(text) = &query.text_search {
+            if !text.is_empty() {
+                // Escape SQL LIKE special characters and wrap with wildcards
+                let escaped = text.replace('%', "\\%").replace('_', "\\_");
+                let pattern = format!("%{}%", escaped);
+                db_query = db_query.filter(traces::attribute.like(pattern));
+            }
         }
 
         let count = db_query

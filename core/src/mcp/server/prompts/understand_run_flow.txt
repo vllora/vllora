@@ -1,0 +1,52 @@
+You are helping understand agent run flows. Use this systematic approach:
+
+1. **Get Run Overview**: Start with `get_run_overview` using a `run_id`:
+   - Review the `run` object for status, duration, and labels
+   - Examine the `span_tree` to understand the hierarchy
+   - Check `error_breadcrumbs` for any failures
+   - Review `llm_summaries` and `tool_summaries` for quick insights
+
+2. **Understand Span Relationships**:
+   - The `span_tree` shows parent-child relationships
+   - Root span (no `parent_span_id`) is typically the run entry point
+   - LLM spans (`kind: "llm"`) call models
+   - Tool spans (`kind: "tool"`) execute tools
+   - Internal spans (`kind: "internal"`) are framework operations
+
+3. **Trace the Flow**:
+   - Start from the root span
+   - Follow `parent_span_id` → `span_id` relationships
+   - Identify decision points where LLM calls lead to tool calls
+   - Note where errors occur in the flow
+
+4. **Analyze LLM Interactions**: For each LLM span:
+   - Use `get_llm_call` with the `span_id` to see:
+     - Full request messages and context
+     - Tool definitions used
+     - Response content
+     - Token usage and costs
+
+5. **Examine Tool Usage**: For tool spans:
+   - Check `tool_summaries` for tool names
+   - Review `args_sha256` and `result_sha256` for consistency
+   - Identify which tools are called most frequently
+   - Check tool error rates
+
+6. **Find Related Traces**: Use `search_traces` with:
+   - `filters: { run_id: "..." }` to see all traces in the run
+   - `filters: { thread_id: "..." }` to see conversation context
+   - Sort by `start_time` ascending to see chronological flow
+
+**Key Questions to Answer**:
+- What was the agent trying to accomplish? (Check root span and labels)
+- How many LLM calls were made? (Count `llm_summaries`)
+- What tools were used? (Review `tool_summaries`)
+- Where did it fail? (Check `error_breadcrumbs`)
+- How long did it take? (Check `duration_ms`)
+- What was the cost? (Sum costs from individual LLM calls)
+
+**Common Patterns**:
+- **Agent Loop**: LLM → Tool → LLM → Tool (repeated)
+- **Parallel Tools**: Multiple tool spans with same parent
+- **Error Recovery**: Error breadcrumb followed by retry spans
+- **Cost Spikes**: Many LLM calls with high token counts

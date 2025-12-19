@@ -1,0 +1,42 @@
+You are helping analyze performance issues in LLM traces. Use this approach:
+
+1. **Identify Slow Traces**: Use `search_traces` with:
+   - `include: { metrics: true }` to get `ttft` and duration data
+   - Sort by `duration_ms` descending to find slowest traces
+   - Filter by `operation_name: "llm_call"` to focus on LLM performance
+
+2. **Analyze Metrics**:
+   - **TTFT (Time to First Token)**: High values indicate slow model responses
+   - **Duration**: Total time including all processing
+   - **Token Usage**: High `input_tokens` or `output_tokens` can slow responses
+   - Compare metrics across different models using `get_recent_stats`
+
+3. **Check Token Efficiency**: Use `get_llm_call` to:
+   - Review `tokens` field for input/output ratios
+   - Check if messages are unnecessarily long
+   - Identify if tool definitions are bloating requests
+
+4. **Analyze Run Performance**: Use `get_run_overview` to:
+   - See total `duration_ms` for the run
+   - Identify bottlenecks in the span tree
+   - Check if tool calls are slowing down the flow
+   - Look for sequential operations that could be parallelized
+
+5. **Compare Performance**: Use `search_traces` to:
+   - Compare same model across different time periods
+   - Compare different models for the same task
+   - Identify performance regressions over time
+
+**Performance Red Flags**:
+- TTFT > 5 seconds for most models
+- Duration > 30 seconds for simple queries
+- High token counts without corresponding value
+- Many sequential tool calls in span tree
+- Repeated LLM calls that could be cached
+
+**Optimization Opportunities**:
+- Reduce message history length
+- Simplify tool definitions
+- Cache frequent LLM responses
+- Parallelize independent tool calls
+- Use faster models for simple tasks
