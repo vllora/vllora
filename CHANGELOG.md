@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.19](https://github.com/vllora/vllora/compare/v0.1.18...v0.1.19) (2025-12-19)
+
+
+### Features
+
+* Enhance MCP tools for traces information ([bdd770f](https://github.com/vllora/vllora/commit/bdd770fcc31df6de7abfe8a5929e0450a4ab198b))
+* Support tool calls event in responses API ([fbcc376](https://github.com/vllora/vllora/commit/fbcc37611736046ec46ef980acdabb315933ca44))
+
+
+### Bug Fixes
+
+* Allow to use custom endpoint for openai ([9e44d55](https://github.com/vllora/vllora/commit/9e44d552423dd88398ee0ab61a338c8a151d7797))
+* thread cost calculation should be extracted from api_invoke only ([c72c256](https://github.com/vllora/vllora/commit/c72c256ec8bec2ac58f7b5df622639f5d3598a5a))
+
 ### [0.1.18](https://github.com/vllora/vllora/compare/v0.1.17...v0.1.18) (2025-12-15)
 
 
