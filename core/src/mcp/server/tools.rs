@@ -144,10 +144,6 @@ impl RangeFilter {
     }
 }
 
-/// ---------------------------------------------------------------------------
-/// High-level MCP tool shapes for `search_traces` (DOC_v2.md)
-/// ---------------------------------------------------------------------------
-
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[schemars(description = "Time range selector for search_traces.")]
 pub struct SearchTracesTimeRange {

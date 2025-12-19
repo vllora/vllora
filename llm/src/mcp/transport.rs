@@ -294,16 +294,16 @@ mod tests {
         // Success indicates proper handling of mixed valid/invalid headers
     }
 
-    // #[test]
-    // fn test_validate_server_name() {
-    //     // Test valid server names
-    //     assert!(McpTransport::validate_server_name("websearch").is_ok());
-    //     assert!(McpTransport::validate_server_name("Web Search").is_ok());
+    #[test]
+    fn test_validate_server_name() {
+        // Test valid server names
+        assert!(McpTransport::validate_server_name("websearch").is_ok());
+        assert!(McpTransport::validate_server_name("Web Search").is_ok());
 
-    //     // Test invalid server names
-    //     assert!(McpTransport::validate_server_name("invalid").is_err());
-    //     assert!(McpTransport::validate_server_name("").is_err());
-    // }
+        // Test invalid server names
+        assert!(McpTransport::validate_server_name("invalid").is_err());
+        assert!(McpTransport::validate_server_name("").is_err());
+    }
 
     #[test]
     fn test_deepwiki_configuration_examples() {
