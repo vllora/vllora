@@ -1,0 +1,5 @@
+{
+  "compareUrlFormat": "{{host}}/vllora/vllora/compare/{{previousTag}}...{{currentTag}}",
+  "commitUrlFormat": "{{host}}/vllora/vllora/commit/{{hash}}",
+  "issueUrlFormat": "{{host}}/vllora/vllora/issues/{{id}}"
+}

@@ -2,12 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
-### [0.1.18](https://github.com/langdb/langdb-cloud/compare/v0.1.17...v0.1.18) (2025-12-15)
+### [0.1.18](https://github.com/vllora/vllora/compare/v0.1.17...v0.1.18) (2025-12-15)
 
 
 ### Features
 
-* Add custom endpoint support to ProviderInfo ([eb9f43c](https://github.com/langdb/langdb-cloud/commit/eb9f43c43f024e387c37297e39e842692ad70201))
+* Add custom endpoint support to ProviderInfo ([eb9f43c](https://github.com/vllora/vllora/commit/eb9f43c43f024e387c37297e39e842692ad70201))
 
 ### [0.1.17](https://github.com/vllora/vllora/compare/v0.1.16...v0.1.17) (2025-12-12)
 
