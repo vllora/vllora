@@ -2,7 +2,6 @@ use opentelemetry::trace::{SpanId, TraceId, Tracer};
 use opentelemetry_sdk::trace::{Config, IdGenerator, RandomIdGenerator};
 use tracing::level_filters::LevelFilter;
 use tracing::Subscriber;
-use tracing_opentelemetry::PreSampledTracer;
 use tracing_subscriber::filter;
 use tracing_subscriber::layer::Layer;
 use tracing_subscriber::registry::LookupSpan;
@@ -53,7 +52,7 @@ pub fn config() -> Config {
 pub fn layer<S, T>(target: impl Into<String>, level: LevelFilter, tracer: T) -> impl Layer<S>
 where
     S: Subscriber + for<'lookup> LookupSpan<'lookup>,
-    T: Tracer + PreSampledTracer + 'static,
+    T: Tracer + 'static, <T as opentelemetry::trace::Tracer>::Span: Send + Sync
 {
     let target = target.into();
     tracing_opentelemetry::layer()
@@ -67,7 +66,7 @@ where
 pub fn level_layer<S, T>(level: LevelFilter, tracer: T) -> impl Layer<S>
 where
     S: Subscriber + for<'lookup> LookupSpan<'lookup>,
-    T: Tracer + PreSampledTracer + 'static,
+    T: Tracer + 'static, <T as opentelemetry::trace::Tracer>::Span: Send + Sync
 {
     tracing_opentelemetry::layer()
         .with_location(true)
