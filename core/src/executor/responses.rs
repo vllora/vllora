@@ -65,6 +65,7 @@ pub async fn handle_create_response(
                     provider: InferenceModelProvider::from(provider.to_string()),
                     model_name: model.to_string(),
                     endpoint: None,
+                    custom_inference_api_type: None,
                 },
                 ..Default::default()
             }

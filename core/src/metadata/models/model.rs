@@ -13,6 +13,7 @@ use diesel::{BoolExpressionMethods, ExpressionMethods};
 use diesel::{Identifiable, Queryable};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
+use vllora_llm::types::engine::CustomInferenceApiType;
 use vllora_llm::types::models::InferenceProvider;
 use vllora_llm::types::models::Limits;
 use vllora_llm::types::models::ModelCapability;
@@ -70,6 +71,71 @@ pub struct DbModel {
 
 impl From<DbModel> for ModelMetadata {
     fn from(val: DbModel) -> Self {
+        // Use the helper function with None for custom_inference_api_type
+        // This maintains backward compatibility - callers should use to_model_metadata_with_provider
+        // when provider info is available
+        DbModel::to_model_metadata_with_provider(&val, None)
+    }
+}
+
+#[cfg(feature = "sqlite")]
+type All = Select<models::table, AsSelect<DbModel, Sqlite>>;
+#[cfg(feature = "postgres")]
+type All = Select<models::table, AsSelect<DbModel, Pg>>;
+
+impl DbModel {
+    pub fn all() -> All {
+        diesel::QueryDsl::select(models::table, DbModel::as_select())
+    }
+
+    #[diesel::dsl::auto_type(no_type_alias)]
+    pub fn not_deleted() -> _ {
+        let all: All = DbModel::all();
+        all.filter(models::deleted_at.is_null())
+    }
+
+    // Query models for a specific project (includes global models with null project_id)
+    #[diesel::dsl::auto_type(no_type_alias)]
+    pub fn for_project(project_id: String) -> _ {
+        let all: All = DbModel::all();
+        all.filter(models::deleted_at.is_null()).filter(
+            models::project_id
+                .eq(project_id)
+                .or(models::project_id.is_null()),
+        )
+    }
+
+    // Query only global models (project_id is null)
+    #[diesel::dsl::auto_type(no_type_alias)]
+    pub fn global_only() -> _ {
+        let all: All = DbModel::all();
+        all.filter(models::deleted_at.is_null())
+            .filter(models::project_id.is_null())
+    }
+
+    /// Build InferenceProvider with optional custom_inference_api_type
+    /// If custom_inference_api_type is provided, it determines the InferenceModelProvider variant
+    pub fn build_inference_provider(
+        provider_name: &str,
+        model_name: &str,
+        endpoint: Option<&str>,
+        custom_inference_api_type: Option<CustomInferenceApiType>,
+    ) -> InferenceProvider {
+        let provider = InferenceModelProvider::from(provider_name.to_string());
+
+        InferenceProvider {
+            provider,
+            model_name: model_name.to_string(),
+            endpoint: endpoint.map(|s| s.to_string()),
+            custom_inference_api_type,
+        }
+    }
+
+    /// Convert DbModel to ModelMetadata with optional provider custom_inference_api_type
+    pub fn to_model_metadata_with_provider(
+        val: &DbModel,
+        custom_inference_api_type: Option<CustomInferenceApiType>,
+    ) -> ModelMetadata {
         // Parse JSON arrays/objects
         let capabilities: Vec<ModelCapability> = val
             .capabilities
@@ -118,16 +184,15 @@ impl From<DbModel> for ModelMetadata {
         // Parse model type
         let model_type = ModelType::from_str(&val.model_type).unwrap_or(ModelType::Completions);
 
-        // Determine inference provider from provider_info_id
-        // For now, we'll use the owner_name as provider
-        let inference_provider = InferenceProvider {
-            provider: InferenceModelProvider::from(val.provider_name.clone()),
-            model_name: val
-                .model_name_in_provider
-                .clone()
-                .unwrap_or_else(|| val.model_name.clone()),
-            endpoint: val.endpoint,
-        };
+        // Build inference provider with custom_inference_api_type
+        let inference_provider = Self::build_inference_provider(
+            &val.provider_name,
+            val.model_name_in_provider
+                .as_deref()
+                .unwrap_or(&val.model_name),
+            val.endpoint.as_deref(),
+            custom_inference_api_type,
+        );
 
         // Build price
         let price = ModelPrice::Completion(CompletionModelPrice {
@@ -148,7 +213,7 @@ impl From<DbModel> for ModelMetadata {
             capabilities,
             r#type: model_type,
             limits: Limits::new(val.context_size.unwrap_or(0) as u32),
-            description: val.description.unwrap_or_default(),
+            description: val.description.clone().unwrap_or_default(),
             parameters,
             benchmark_info,
             virtual_model_id: val.id.clone(),
@@ -159,42 +224,6 @@ impl From<DbModel> for ModelMetadata {
             langdb_release_date,
             is_private: val.project_id.is_some(),
         }
-    }
-}
-
-#[cfg(feature = "sqlite")]
-type All = Select<models::table, AsSelect<DbModel, Sqlite>>;
-#[cfg(feature = "postgres")]
-type All = Select<models::table, AsSelect<DbModel, Pg>>;
-
-impl DbModel {
-    pub fn all() -> All {
-        diesel::QueryDsl::select(models::table, DbModel::as_select())
-    }
-
-    #[diesel::dsl::auto_type(no_type_alias)]
-    pub fn not_deleted() -> _ {
-        let all: All = DbModel::all();
-        all.filter(models::deleted_at.is_null())
-    }
-
-    // Query models for a specific project (includes global models with null project_id)
-    #[diesel::dsl::auto_type(no_type_alias)]
-    pub fn for_project(project_id: String) -> _ {
-        let all: All = DbModel::all();
-        all.filter(models::deleted_at.is_null()).filter(
-            models::project_id
-                .eq(project_id)
-                .or(models::project_id.is_null()),
-        )
-    }
-
-    // Query only global models (project_id is null)
-    #[diesel::dsl::auto_type(no_type_alias)]
-    pub fn global_only() -> _ {
-        let all: All = DbModel::all();
-        all.filter(models::deleted_at.is_null())
-            .filter(models::project_id.is_null())
     }
 }
 
@@ -320,5 +349,90 @@ impl From<ModelMetadata> for DbNewModel {
             deleted_at: None, // Clear deleted_at if model comes back from API
             endpoint: metadata.inference_provider.endpoint,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use vllora_llm::types::engine::CustomInferenceApiType;
+
+    #[test]
+    fn test_build_inference_provider_with_custom_api_type() {
+        let provider = DbModel::build_inference_provider(
+            "custom-provider",
+            "model-name",
+            Some("https://api.example.com"),
+            Some(CustomInferenceApiType::Gemini),
+        );
+
+        assert_eq!(
+            provider.provider,
+            InferenceModelProvider::Proxy("custom-provider".to_string())
+        );
+        assert_eq!(provider.model_name, "model-name");
+        assert_eq!(
+            provider.custom_inference_api_type,
+            Some(CustomInferenceApiType::Gemini)
+        );
+    }
+
+    #[test]
+    fn test_build_inference_provider_without_custom_api_type() {
+        let provider = DbModel::build_inference_provider("openai", "gpt-4", None, None);
+
+        assert_eq!(provider.provider, InferenceModelProvider::OpenAI);
+        assert_eq!(provider.custom_inference_api_type, None);
+    }
+
+    #[test]
+    fn test_to_model_metadata_with_provider() {
+        let db_model = DbModel {
+            id: Some("test-id".to_string()),
+            model_name: "test-model".to_string(),
+            description: Some("Test model".to_string()),
+            provider_name: "custom-provider".to_string(),
+            model_type: "completions".to_string(),
+            input_token_price: Some(0.001),
+            output_token_price: Some(0.002),
+            context_size: Some(4096),
+            capabilities: None,
+            input_types: None,
+            output_types: None,
+            tags: None,
+            type_prices: None,
+            mp_price: None,
+            model_name_in_provider: None,
+            owner_name: "custom-provider".to_string(),
+            priority: 0,
+            parameters: None,
+            created_at: "2023-01-01T00:00:00Z".to_string(),
+            updated_at: "2023-01-01T00:00:00Z".to_string(),
+            deleted_at: None,
+            benchmark_info: None,
+            cached_input_token_price: None,
+            cached_input_write_token_price: None,
+            release_date: None,
+            langdb_release_date: None,
+            knowledge_cutoff_date: None,
+            license: None,
+            project_id: None,
+            endpoint: None,
+        };
+
+        let metadata = DbModel::to_model_metadata_with_provider(
+            &db_model,
+            Some(CustomInferenceApiType::Anthropic),
+        );
+
+        assert_eq!(metadata.model, "test-model");
+        assert_eq!(
+            metadata.inference_provider.provider,
+            InferenceModelProvider::Proxy("custom-provider".to_string())
+        );
+        assert_eq!(
+            metadata.inference_provider.custom_inference_api_type,
+            Some(CustomInferenceApiType::Anthropic)
+        );
     }
 }

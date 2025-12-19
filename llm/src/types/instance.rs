@@ -130,12 +130,13 @@ pub async fn init_model_instance(
             params,
             execution_options,
             credentials,
-            ..
+            endpoint,
         } => Box::new(AnthropicModel::new(
             params.clone(),
             execution_options.clone(),
             credentials.as_ref(),
             tools,
+            endpoint,
         )?) as Box<dyn ModelInstance>,
         CompletionEngineParams::Gemini {
             params,

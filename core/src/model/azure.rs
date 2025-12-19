@@ -276,6 +276,9 @@ impl ModelProviderInstance for AzureModelProvider {
                     provider: InferenceModelProvider::Proxy("azure".to_string()),
                     model_name: deployment_id,
                     endpoint: None, // The endpoint is already configured in the credentials
+                    custom_inference_api_type: Some(
+                        vllora_llm::types::engine::CustomInferenceApiType::OpenAI,
+                    ),
                 },
                 price,
                 input_formats,

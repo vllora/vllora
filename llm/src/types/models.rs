@@ -1,3 +1,4 @@
+use crate::types::engine::CustomInferenceApiType;
 use crate::types::provider::CompletionModelPrice;
 use crate::types::provider::InferenceModelProvider;
 use crate::types::provider::ModelPrice;
@@ -119,6 +120,8 @@ pub struct InferenceProvider {
     pub provider: InferenceModelProvider,
     pub model_name: String,
     pub endpoint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub custom_inference_api_type: Option<CustomInferenceApiType>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -186,6 +189,7 @@ impl Default for ModelMetadata {
                 provider: InferenceModelProvider::Proxy("vllora".to_string()),
                 model_name: "".to_string(),
                 endpoint: None,
+                custom_inference_api_type: None,
             },
             price: ModelPrice::Completion(CompletionModelPrice {
                 per_input_token: 0.0,

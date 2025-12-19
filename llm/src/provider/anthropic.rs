@@ -98,6 +98,7 @@ pub struct AnthropicModel {
     client: Client,
     tools: HashMap<String, Arc<Box<dyn Tool>>>,
     credentials_ident: CredentialsIdent,
+    endpoint: Option<String>,
 }
 
 impl AnthropicModel {
@@ -106,6 +107,7 @@ impl AnthropicModel {
         execution_options: ExecutionOptions,
         credentials: Option<&ApiKeyCredentials>,
         tools: HashMap<String, Arc<Box<dyn Tool>>>,
+        endpoint: Option<String>,
     ) -> Result<Self, ModelError> {
         let client: Client = anthropic_client(credentials)?;
         Ok(Self {
@@ -116,6 +118,7 @@ impl AnthropicModel {
             credentials_ident: credentials
                 .map(|_c| CredentialsIdent::Own)
                 .unwrap_or(CredentialsIdent::Vllora),
+            endpoint,
         })
     }
 
@@ -158,7 +161,7 @@ impl AnthropicModel {
         stream: bool,
     ) -> Result<MessagesRequestBody, AnthropicError> {
         let model = self.params.model.as_ref().unwrap();
-        let builder = MessagesRequestBuilder::new(**model);
+        let builder = MessagesRequestBuilder::new(model.model.clone());
         let model_params = &self.params;
 
         let builder = if let Some(system_message) = system_message {
@@ -533,7 +536,10 @@ impl AnthropicModel {
             .await;
 
         let response = async move {
-            let result = self.client.create_a_message(request).await;
+            let result = self
+                .client
+                .create_a_message(request, self.endpoint.clone())
+                .await;
             let _ = result
                 .as_ref()
                 .map(|response| serde_json::to_value(response).unwrap())
@@ -993,7 +999,7 @@ impl AnthropicModel {
         let started_at = std::time::Instant::now();
         let stream = self
             .client
-            .create_a_message_stream(request)
+            .create_a_message_stream(request, self.endpoint.clone())
             .await
             .map_err(custom_err)?;
         let (stop_reason, tool_calls, usage, response) = self

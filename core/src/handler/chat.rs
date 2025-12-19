@@ -6,6 +6,7 @@ use crate::events::callback_handler::GatewayModelEventWithDetails;
 use crate::events::callback_handler::GatewaySpanStartEvent;
 use crate::executor::context::ExecutorContext;
 use crate::handler::ModelEventWithDetails;
+use crate::metadata::pool::DbPool;
 use crate::model::DefaultModelMetadataFactory;
 use crate::routing::interceptor::rate_limiter::InMemoryRateLimiterService;
 use crate::routing::RoutingStrategy;
@@ -205,6 +206,7 @@ pub async fn create_chat_completion(
     key_storage: web::Data<Box<dyn KeyStorage>>,
     models_service: web::Data<Box<dyn ModelService>>,
     breakpoint_manager: web::Data<BreakpointManager>,
+    db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse, GatewayApiError> {
     can_execute_llm_for_request(&req).await?;
 
@@ -269,12 +271,13 @@ pub async fn create_chat_completion(
     )
     .await?;
 
+    let db_pool = db_pool.into_inner();
     let executor_context = ExecutorContext::new(
         callback_handler_fn,
         cost_calculator,
-        Arc::new(Box::new(DefaultModelMetadataFactory::new(
-            models_service.into_inner(),
-        )) as Box<dyn ModelMetadataFactory>),
+        Arc::new(Box::new(
+            DefaultModelMetadataFactory::new(models_service.into_inner()).with_db_pool(&db_pool),
+        ) as Box<dyn ModelMetadataFactory>),
         &req,
         HashMap::new(),
         guardrails_evaluator_service,

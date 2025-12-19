@@ -289,9 +289,9 @@ impl ApiServer {
             .app_data(Data::new(session))
             .app_data(Data::new(database_service))
             .app_data(Data::from(breakpoint_manager.clone()))
+            .app_data(Data::new(model_service))
             .service(
                 service
-                    .app_data(Data::new(model_service))
                     .app_data(Data::new(callback))
                     .app_data(Data::new(
                         Box::new(cost_calculator) as Box<dyn CostCalculator>
@@ -322,6 +322,14 @@ impl ApiServer {
                         >),
                     )
                     .route(
+                        "",
+                        web::post().to(
+                            vllora_core::handler::providers::create_provider_definition::<
+                                ProvidersServiceImpl,
+                            >,
+                        ),
+                    )
+                    .route(
                         "/{provider_name}",
                         web::put().to(vllora_core::handler::providers::update_provider_key::<
                             ProvidersServiceImpl,
@@ -330,6 +338,28 @@ impl ApiServer {
                     .route(
                         "/{provider_name}",
                         web::delete().to(vllora_core::handler::providers::delete_provider),
+                    )
+                    .route(
+                        "/definitions/{id}",
+                        web::get().to(vllora_core::handler::providers::get_provider_definition::<
+                            ProvidersServiceImpl,
+                        >),
+                    )
+                    .route(
+                        "/definitions/{id}",
+                        web::put().to(
+                            vllora_core::handler::providers::update_provider_definition::<
+                                ProvidersServiceImpl,
+                            >,
+                        ),
+                    )
+                    .route(
+                        "/definitions/{id}",
+                        web::delete().to(
+                            vllora_core::handler::providers::delete_provider_definition::<
+                                ProvidersServiceImpl,
+                            >,
+                        ),
                     ),
             )
             .service(
@@ -421,6 +451,28 @@ impl ApiServer {
                     .route(
                         "/global_breakpoint",
                         web::post().to(debug::set_global_breakpoint),
+                    ),
+            )
+            .service(
+                web::scope("/models")
+                    .route(
+                        "",
+                        web::post()
+                            .to(vllora_core::handler::models::create_model::<ModelServiceImpl>),
+                    )
+                    .route(
+                        "/{id}",
+                        web::get().to(vllora_core::handler::models::get_model::<ModelServiceImpl>),
+                    )
+                    .route(
+                        "/{id}",
+                        web::put()
+                            .to(vllora_core::handler::models::update_model::<ModelServiceImpl>),
+                    )
+                    .route(
+                        "/{id}",
+                        web::delete()
+                            .to(vllora_core::handler::models::delete_model::<ModelServiceImpl>),
                     ),
             )
             .service(mcp_scope)

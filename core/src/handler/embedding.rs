@@ -26,7 +26,8 @@ pub async fn embeddings_handler(
 ) -> Result<HttpResponse, GatewayApiError> {
     can_execute_llm_for_request(&req).await?;
     let request = request.into_inner();
-    let llm_model = find_model_by_full_name(&request.model, models_service.as_ref().as_ref())?;
+    let llm_model =
+        find_model_by_full_name(&request.model, models_service.as_ref().as_ref(), None)?;
     let key_credentials = req.extensions().get::<Credentials>().cloned();
 
     let span = Span::or_current(tracing::info_span!(

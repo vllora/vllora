@@ -1,5 +1,6 @@
 use crate::credentials::KeyStorage;
 use crate::credentials::ProviderCredentialsId;
+use crate::metadata::models::provider::{DbInsertProvider, DbUpdateProvider};
 use crate::metadata::pool::DbPool;
 use crate::types::metadata::project::Project;
 use crate::types::metadata::provider::ProviderInfo;
@@ -9,7 +10,10 @@ use actix_web::HttpMessage;
 use actix_web::HttpRequest;
 use actix_web::{web, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
+use uuid::Uuid;
 use vllora_llm::types::credentials::Credentials;
+use vllora_llm::types::engine::CustomInferenceApiType;
 
 use crate::ok_json;
 
@@ -225,6 +229,192 @@ pub async fn delete_provider(
             Ok(HttpResponse::NotFound().json(serde_json::json!({
                 "error": "Provider not found",
                 "message": format!("Provider '{}' not found or already deleted", provider_name)
+            })))
+        }
+    }
+}
+
+// Provider definition CRUD handlers
+
+#[derive(Deserialize)]
+pub struct CreateProviderRequest {
+    pub provider_name: String,
+    pub description: Option<String>,
+    pub endpoint: Option<String>,
+    pub priority: Option<i32>,
+    pub privacy_policy_url: Option<String>,
+    pub terms_of_service_url: Option<String>,
+    #[serde(rename = "custom_inference_api_type", alias = "inference_api_type")]
+    pub custom_inference_api_type: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct UpdateProviderDefinitionRequest {
+    pub provider_name: Option<String>,
+    pub description: Option<String>,
+    pub endpoint: Option<String>,
+    pub priority: Option<i32>,
+    pub privacy_policy_url: Option<String>,
+    pub terms_of_service_url: Option<String>,
+    #[serde(rename = "custom_inference_api_type", alias = "inference_api_type")]
+    pub custom_inference_api_type: Option<String>,
+}
+
+/// Create a new provider definition
+pub async fn create_provider_definition<T: ProviderService>(
+    req: web::Json<CreateProviderRequest>,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let providers_service = T::new(db_pool.get_ref().clone());
+
+    // Check if provider already exists
+    if providers_service.provider_exists(&req.provider_name)? {
+        return Ok(HttpResponse::Conflict().json(serde_json::json!({
+            "error": "Provider already exists",
+            "message": format!("Provider '{}' already exists", req.provider_name)
+        })));
+    }
+
+    // Parse custom_inference_api_type
+    let custom_inference_api_type = req
+        .custom_inference_api_type
+        .as_deref()
+        .and_then(|s| CustomInferenceApiType::from_str(s).ok())
+        .map(|t| t.to_string());
+
+    let provider = DbInsertProvider::new(
+        Uuid::new_v4().to_string(),
+        req.provider_name.clone(),
+        req.description.clone(),
+        req.endpoint.clone(),
+        req.priority.unwrap_or(0),
+        req.privacy_policy_url.clone(),
+        req.terms_of_service_url.clone(),
+        custom_inference_api_type,
+    );
+
+    if let Err(e) = providers_service.create_provider(provider) {
+        return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+            "error": "Failed to create provider",
+            "message": e.to_string()
+        })));
+    }
+
+    // Fetch and return the created provider
+    match providers_service.get_provider_by_name(&req.provider_name) {
+        Ok(Some(provider_info)) => Ok(HttpResponse::Created().json(ProviderResponse {
+            provider: provider_info,
+        })),
+        Ok(None) => Ok(HttpResponse::Created().json(serde_json::json!({
+            "message": "Provider created successfully"
+        }))),
+        Err(e) => {
+            tracing::warn!("Provider created but failed to fetch: {:?}", e);
+            Ok(HttpResponse::Created().json(serde_json::json!({
+                "message": "Provider created successfully"
+            })))
+        }
+    }
+}
+
+/// Get a provider definition by ID
+pub async fn get_provider_definition<T: ProviderService>(
+    path: web::Path<String>,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let provider_id = path.into_inner();
+    let providers_service = T::new(db_pool.get_ref().clone());
+
+    match providers_service.get_provider_by_id(&provider_id) {
+        Ok(Some(provider)) => Ok(HttpResponse::Ok().json(ProviderResponse { provider })),
+        Ok(None) => Ok(HttpResponse::NotFound().json(serde_json::json!({
+            "error": "Provider not found",
+            "message": format!("Provider with ID '{}' not found", provider_id)
+        }))),
+        Err(e) => {
+            tracing::error!("Failed to get provider: {:?}", e);
+            Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "Failed to get provider",
+                "message": e.to_string()
+            })))
+        }
+    }
+}
+
+/// Update a provider definition
+pub async fn update_provider_definition<T: ProviderService>(
+    path: web::Path<String>,
+    req: web::Json<UpdateProviderDefinitionRequest>,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let provider_id = path.into_inner();
+    let providers_service = T::new(db_pool.get_ref().clone());
+
+    // Parse custom_inference_api_type if provided
+    let custom_inference_api_type = req
+        .custom_inference_api_type
+        .as_deref()
+        .and_then(|s| CustomInferenceApiType::from_str(s).ok())
+        .map(|t| t.to_string());
+
+    let mut update = DbUpdateProvider::new();
+    if let Some(provider_name) = &req.provider_name {
+        update.provider_name = Some(provider_name.clone());
+    }
+    if let Some(description) = &req.description {
+        update.description = Some(description.clone());
+    }
+    if let Some(endpoint) = &req.endpoint {
+        update.endpoint = Some(endpoint.clone());
+    }
+    if let Some(priority) = req.priority {
+        update.priority = Some(priority);
+    }
+    if let Some(privacy_policy_url) = &req.privacy_policy_url {
+        update.privacy_policy_url = Some(privacy_policy_url.clone());
+    }
+    if let Some(terms_of_service_url) = &req.terms_of_service_url {
+        update.terms_of_service_url = Some(terms_of_service_url.clone());
+    }
+    if custom_inference_api_type.is_some() {
+        update.custom_inference_api_type = custom_inference_api_type;
+    }
+
+    providers_service.update_provider(&provider_id, update)?;
+
+    // Fetch and return the updated provider
+    match providers_service.get_provider_by_id(&provider_id) {
+        Ok(Some(provider)) => Ok(HttpResponse::Ok().json(ProviderResponse { provider })),
+        Ok(None) => Ok(HttpResponse::NotFound().json(serde_json::json!({
+            "error": "Provider not found",
+            "message": format!("Provider with ID '{}' not found", provider_id)
+        }))),
+        Err(e) => {
+            tracing::warn!("Provider updated but failed to fetch: {:?}", e);
+            Ok(HttpResponse::Ok().json(serde_json::json!({
+                "message": "Provider updated successfully"
+            })))
+        }
+    }
+}
+
+/// Delete a provider definition (soft delete)
+pub async fn delete_provider_definition<T: ProviderService>(
+    path: web::Path<String>,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let provider_id = path.into_inner();
+    let providers_service = T::new(db_pool.get_ref().clone());
+
+    match providers_service.delete_provider(&provider_id) {
+        Ok(_) => Ok(HttpResponse::Ok().json(serde_json::json!({
+            "message": "Provider deleted successfully"
+        }))),
+        Err(e) => {
+            tracing::error!("Failed to delete provider: {:?}", e);
+            Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "Failed to delete provider",
+                "message": e.to_string()
             })))
         }
     }

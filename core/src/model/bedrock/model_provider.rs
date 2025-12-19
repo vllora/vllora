@@ -175,6 +175,9 @@ impl ModelProviderInstance for BedrockModelProvider {
                         provider: InferenceModelProvider::Bedrock,
                         model_name: inference_provider_model_name,
                         endpoint: None,
+                        custom_inference_api_type: Some(
+                            vllora_llm::types::engine::CustomInferenceApiType::Bedrock,
+                        ),
                     },
                     price: ModelPrice::Completion(CompletionModelPrice {
                         per_input_token: price

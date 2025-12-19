@@ -188,6 +188,7 @@ mod tests {
                 provider: InferenceModelProvider::Proxy("test".to_string()),
                 model_name: "test".to_string(),
                 endpoint: Some(server_url.clone()),
+                custom_inference_api_type: None,
             })
             .with_credentials(Credentials::ApiKey(ApiKeyCredentials {
                 api_key: "test".to_string(),
