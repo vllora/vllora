@@ -461,6 +461,11 @@ impl ApiServer {
                             .to(vllora_core::handler::models::create_model::<ModelServiceImpl>),
                     )
                     .route(
+                        "/custom/{name}",
+                        web::delete()
+                            .to(vllora_core::handler::models::delete_custom_model_by_name::<ModelServiceImpl>),
+                    )
+                    .route(
                         "/{id}",
                         web::get().to(vllora_core::handler::models::get_model::<ModelServiceImpl>),
                     )

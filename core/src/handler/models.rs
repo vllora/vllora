@@ -333,3 +333,40 @@ pub async fn delete_model<T: ModelService>(
         "message": "Model deleted successfully"
     })))
 }
+
+/// Delete a custom model by name (soft delete)
+/// Only models with is_custom = true can be deleted
+pub async fn delete_custom_model_by_name<T: ModelService>(
+    path: web::Path<String>,
+    model_service: web::Data<Box<dyn ModelService>>,
+) -> Result<HttpResponse, GatewayApiError> {
+    let model_name = path.into_inner();
+
+    // Get models by name (returns all models with this name)
+    let db_models = model_service
+        .get_by_name(&model_name, None)
+        .map_err(|e| GatewayApiError::CustomError(e.to_string()))?;
+
+    // Find the custom model with this name
+    let custom_model = db_models.iter().find(|m| m.is_custom == 1);
+
+    match custom_model {
+        Some(model) => {
+            let model_id = model.id.clone().ok_or_else(|| {
+                GatewayApiError::CustomError("Model ID not found".to_string())
+            })?;
+
+            model_service
+                .mark_as_deleted(model_id)
+                .map_err(|e| GatewayApiError::CustomError(e.to_string()))?;
+
+            Ok(HttpResponse::Ok().json(serde_json::json!({
+                "message": "Model deleted successfully"
+            })))
+        }
+        None => Ok(HttpResponse::NotFound().json(serde_json::json!({
+            "error": "Model not found",
+            "message": format!("No custom model found with name '{}'", model_name)
+        }))),
+    }
+}
