@@ -62,7 +62,7 @@ opentelemetry_sdk = { workspace = true }
 parking_lot = "0.12.4"
 rand = "0.9"
 
-diesel = { version = "2.3.4", features = [
+diesel = { version = "2.3.5", features = [
   "chrono",
   "sqlite",
   "serde_json",
