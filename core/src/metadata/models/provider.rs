@@ -108,6 +108,7 @@ impl From<DbProvider> for ProviderInfo {
             has_credentials: false,
             custom_endpoint: None,
             custom_inference_api_type,
+            is_custom: val.is_custom != 0,
         }
     }
 }

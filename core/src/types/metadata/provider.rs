@@ -16,4 +16,5 @@ pub struct ProviderInfo {
     pub custom_endpoint: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub custom_inference_api_type: Option<CustomInferenceApiType>,
+    pub is_custom: bool,
 }
