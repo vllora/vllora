@@ -73,7 +73,7 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
     /// High-level MCP tool that wraps `get_traces` into the `search_traces` shape
     /// documented in DOC_v2.md.
     #[tool(name = "search_traces", description = "Search traces for analysis")]
-    async fn search_traces(
+    pub async fn search_traces(
         &self,
         Parameters(params): Parameters<SearchTracesParams>,
     ) -> Result<Json<SearchTracesResponse>, String> {
@@ -328,7 +328,7 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
         name = "get_llm_call",
         description = "Get detailed LLM call information for a span"
     )]
-    async fn get_llm_call(
+    pub async fn get_llm_call(
         &self,
         Parameters(params): Parameters<GetLlmCallParams>,
     ) -> Result<Json<GetLlmCallResponse>, String> {
@@ -359,6 +359,8 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
         let include = params.include.unwrap_or(GetLlmCallInclude {
             llm_payload: false,
             unsafe_text: false,
+            raw_request: false,
+            raw_response: false,
         });
 
         // Extract provider from attributes
@@ -462,17 +464,43 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
         let tokens = span.attribute.get("usage").cloned();
         let costs = span.attribute.get("cost").cloned();
 
+        let raw_request = if include.raw_request {
+            span.attribute.get("request").cloned()
+        } else {
+            None
+        };
+
+        let raw_response = if include.raw_response {
+            span.attribute.get("output").cloned()
+        } else {
+            None
+        };
+
         // Build redactions list (placeholder - would need to track redactions in attributes)
         let redactions: Option<Vec<Redaction>> = None;
 
+        // Calculate duration in milliseconds
+        let duration_ms = if span.finish_time_us > span.start_time_us {
+            Some((span.finish_time_us - span.start_time_us) / 1_000)
+        } else {
+            None
+        };
+
         Ok(Json(GetLlmCallResponse {
             span_id: params.span_id.clone(),
+            trace_id: Some(span.trace_id.clone()),
+            run_id: span.run_id.clone(),
+            thread_id: span.thread_id.clone(),
+            start_time: Some(span.start_time_us.to_string()),
+            duration_ms,
             provider,
             request,
             response,
             tokens,
             costs,
             redactions,
+            raw_request,
+            raw_response,
         }))
     }
 
@@ -481,7 +509,7 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
         name = "get_run_overview",
         description = "Get high-level overview of a run and its spans"
     )]
-    async fn get_run_overview(
+    pub async fn get_run_overview(
         &self,
         Parameters(params): Parameters<GetRunOverviewParams>,
     ) -> Result<Json<GetRunOverviewResponse>, String> {
@@ -769,7 +797,7 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
         name = "get_recent_stats",
         description = "Get aggregated overview of recent LLM and tool calls for the last N minutes"
     )]
-    async fn get_recent_stats(
+    pub async fn get_recent_stats(
         &self,
         Parameters(params): Parameters<GetRecentOverviewParams>,
     ) -> Result<Json<GetRecentOverviewResponse>, String> {

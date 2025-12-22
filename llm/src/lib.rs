@@ -6,3 +6,4 @@ pub mod tools;
 pub mod types;
 
 pub use async_openai;
+pub use clust;

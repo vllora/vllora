@@ -1,5 +1,7 @@
 use clap::{Parser, Subcommand};
 
+pub mod commands;
+
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 pub struct Cli {
@@ -49,6 +51,9 @@ pub enum Commands {
         #[arg(long)]
         providers: bool,
     },
+    /// Traces information retrieval commands
+    #[command(subcommand)]
+    Traces(commands::traces::TracesCommands),
     /// Generate models JSON file for embedding
     #[command(hide = true)]
     GenerateModelsJson {

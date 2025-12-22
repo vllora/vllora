@@ -451,6 +451,12 @@ pub struct GetLlmCallInclude {
         description = "If true, include unsafe text content in messages, tools, and response."
     )]
     pub unsafe_text: bool,
+
+    #[schemars(description = "If true, include the raw request as a string.")]
+    pub raw_request: bool,
+
+    #[schemars(description = "If true, include the raw response as a string.")]
+    pub raw_response: bool,
 }
 
 /// Parameters for the get_llm_call MCP tool.
@@ -542,6 +548,26 @@ pub struct GetLlmCallResponse {
     pub span_id: String,
 
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(description = "Trace identifier (string).")]
+    pub trace_id: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(description = "Run identifier (string).")]
+    pub run_id: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(description = "Thread identifier (string).")]
+    pub thread_id: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(description = "Start time in microseconds (string).")]
+    pub start_time: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(description = "Duration in milliseconds.")]
+    pub duration_ms: Option<i64>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(description = "Provider identifier (e.g. openai_compatible).")]
     pub provider: Option<String>,
 
@@ -564,6 +590,14 @@ pub struct GetLlmCallResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(description = "List of redactions applied to the data.")]
     pub redactions: Option<Vec<Redaction>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(description = "Raw request as a string.")]
+    pub raw_request: Option<serde_json::Value>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(description = "Raw response as a string.")]
+    pub raw_response: Option<serde_json::Value>,
 }
 
 /// Parameters for the get_run_overview MCP tool.

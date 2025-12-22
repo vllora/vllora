@@ -1,26 +1,16 @@
 use std::sync::Arc;
 
-use ::tracing::info;
-use axum::routing::get;
 use clap::Parser;
-use config::{Config, ConfigError};
-use http::ApiServer;
-use serde::{Deserialize, Serialize};
-use static_serve::embed_asset;
-use static_serve::embed_assets;
-use std::io::{self, Write};
+use config::ConfigError;
+use serde::Deserialize;
+use serde::Serialize;
 use std::time::Duration;
 use thiserror::Error;
-use tokio::sync::Mutex;
+use vllora_core::error::GatewayError;
 use vllora_core::events::broadcast_channel_manager::BroadcastChannelManager;
 use vllora_core::metadata::error::DatabaseError;
-use vllora_core::metadata::services::model::ModelServiceImpl;
 use vllora_core::telemetry::RunSpanBuffer;
-use vllora_core::types::metadata::services::model::ModelService;
-use vllora_core::{error::GatewayError, usage::InMemoryStorage};
 
-mod ports;
-use ports::{resolve_ports, Service, ServicePort};
 mod callback_handler;
 mod cli;
 mod config;
@@ -29,6 +19,7 @@ mod guardrails;
 mod handlers;
 mod http;
 mod middleware;
+mod ports;
 mod run;
 mod seed;
 mod session;
@@ -56,6 +47,8 @@ pub enum CliError {
     ModelsLoadError(#[from] run::models::ModelsLoadError),
     #[error(transparent)]
     ProvidersLoadError(#[from] run::providers::ProvidersLoadError),
+    #[error("Error: {0}")]
+    CustomError(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -76,21 +69,24 @@ pub const LOGO: &str = r#"
    \_/ |_____|_____\___/|_|  \__,_|
 "#;
 
-embed_assets!("dist", compress = true);
-
 // Embed models data JSON for fast startup
 const MODELS_DATA_JSON: &str = include_str!("../models_data.json");
 
 #[actix_web::main]
 async fn main() -> Result<(), CliError> {
     dotenv::dotenv().ok();
-    println!("{LOGO}");
     std::env::set_var("RUST_BACKTRACE", "1");
 
     let cli = cli::Cli::parse();
 
     let db_pool = get_db_pool()?;
 
+    if let Some(cli::Commands::Traces(traces_cmd)) = cli.command {
+        cli::commands::traces::handle_traces(db_pool, traces_cmd).await?;
+        return Ok(());
+    }
+
+    println!("{LOGO}");
     let project_trace_senders = Arc::new(BroadcastChannelManager::new(Default::default()));
 
     let project_trace_senders_cleanup = Arc::clone(&project_trace_senders);
@@ -119,202 +115,25 @@ async fn main() -> Result<(), CliError> {
         .unwrap_or(cli::Commands::Serve(cli::ServeArgs::default()))
     {
         cli::Commands::Sync { models, providers } => {
-            // If no specific flags are provided, sync both
-            let sync_models = models || !providers;
-            let sync_providers = providers || !models;
-
-            if sync_models {
-                info!("Syncing models from API to database...");
-                let models = run::models::fetch_and_store_models(db_pool.clone()).await?;
-                info!("Successfully synced {} models to database", models.len());
-            }
-
-            if sync_providers {
-                info!("Syncing providers from API to database...");
-                run::providers::sync_providers(db_pool.clone()).await?;
-                info!("Successfully synced providers to database");
-            }
-
-            Ok(())
+            cli::commands::sync::handle_sync(db_pool, models, providers).await
         }
-        cli::Commands::List => {
-            // Query models from database
-            let model_service = ModelServiceImpl::new(db_pool.clone());
-            let db_models = model_service.list(None)?;
-
-            info!("Found {} models in database\n", db_models.len());
-
-            // Convert DbModel to ModelMetadata and display as table
-            let models: Vec<vllora_llm::types::models::ModelMetadata> =
-                db_models.into_iter().map(|m| m.into()).collect();
-
-            run::table::pretty_print_models(models);
-            Ok(())
+        cli::Commands::List => cli::commands::list::handle_list(db_pool).await,
+        cli::Commands::Traces(_traces_cmd) => {
+            unreachable!()
         }
         cli::Commands::GenerateModelsJson { output } => {
-            info!("Generating models JSON file: {}", output);
-            let output_path = std::path::Path::new(&output);
-            let models = run::models::fetch_and_save_models_json(output_path).await?;
-            info!(
-                "Successfully generated {} models to {}",
-                models.len(),
-                output
-            );
-            Ok(())
+            cli::commands::generate_models_json::handle_generate_models_json(output).await
         }
         cli::Commands::Serve(serve_args) => {
-            // Check if models table is empty and sync if needed
-            seed::seed_models(&db_pool).await?;
-
-            // Check if providers table is empty and sync if needed
-            seed::seed_providers(&db_pool).await?;
-
-            let config = Config::load(&cli.config)?;
-            let mut config = config.apply_cli_overrides(&cli::Commands::Serve(serve_args));
-
-            let services = resolve_ports(&config).await?;
-
-            let services_with_new_ports = services
-                .iter()
-                .filter(|service| service.suggested_port.is_some())
-                .collect::<Vec<&ServicePort>>();
-
-            if !services_with_new_ports.is_empty() {
-                println!("\n✅ Configured ports are in use. New ports have been assigned for the following services:");
-                for service in &services_with_new_ports {
-                    println!(
-                        "   {}: {} -> {}",
-                        service.service,
-                        service.initial_port,
-                        service.suggested_port.unwrap()
-                    );
-                }
-
-                print!("\n⚠️  Would you like to accept these port changes? (Y/n): ");
-                io::stdout().flush().unwrap();
-
-                let mut input = String::new();
-                match io::stdin().read_line(&mut input) {
-                    Ok(_) => {
-                        let trimmed = input.trim().to_lowercase();
-                        // Default to "yes" if empty (just pressing Enter)
-                        if !trimmed.is_empty() && trimmed != "y" && trimmed != "yes" {
-                            eprintln!("❌ Port changes rejected. Exiting.");
-                            return Err(CliError::IoError(std::io::Error::new(
-                                std::io::ErrorKind::PermissionDenied,
-                                "User rejected port changes",
-                            )));
-                        }
-
-                        // Apply the port changes to config
-                        for service in &services_with_new_ports {
-                            match service.service {
-                                Service::Backend => {
-                                    config.http.port = service
-                                        .suggested_port
-                                        .expect("Suggested port should be present");
-                                }
-                                Service::UI => {
-                                    config.ui.port = service
-                                        .suggested_port
-                                        .expect("Suggested port should be present");
-                                }
-                                Service::Otel => {
-                                    config.otel.port = service
-                                        .suggested_port
-                                        .expect("Suggested port should be present");
-                                }
-                            }
-                        }
-
-                        println!("✅ Port changes accepted.\n");
-                    }
-                    Err(_) => {
-                        eprintln!("❌ Failed to read user input. Exiting.");
-                        return Err(CliError::IoError(std::io::Error::new(
-                            std::io::ErrorKind::PermissionDenied,
-                            "Failed to read user input",
-                        )));
-                    }
-                }
-            }
-
-            // Extract ports from config after potential changes
-            let backend_port = config.http.port;
-            let ui_port = config.ui.port;
-            let otel_port = config.otel.port;
-            let open_ui_on_startup = config.ui.open_on_startup;
-
-            let api_server = ApiServer::new(config, db_pool.clone());
-            let server_handle = tokio::spawn(async move {
-                let storage = Arc::new(Mutex::new(InMemoryStorage::new()));
-                match api_server
-                    .start(
-                        Some(storage),
-                        project_trace_senders.clone(),
-                        run_span_buffer.clone(),
-                        session.clone(),
-                    )
-                    .await
-                {
-                    Ok(server) => server.await,
-                    Err(e) => Err(e),
-                }
-            });
-
-            let frontend_handle = tokio::spawn(async move {
-                // Handler for serving VITE_BACKEND_PORT environment variable as plain text or JSON
-                let vite_backend_port_handler = move || async move {
-                    axum::Json(serde_json::json!({
-                        "VITE_BACKEND_PORT": backend_port,
-                        "VITE_OTEL_PORT": otel_port,
-                        "VERSION": env!("CARGO_PKG_VERSION")
-                    }))
-                };
-
-                let index = embed_asset!("dist/index.html");
-                let router = static_router()
-                    .route("/api/env", get(vite_backend_port_handler))
-                    .fallback(index);
-
-                let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", ui_port)).await;
-                match listener {
-                    Ok(listener) => {
-                        if open_ui_on_startup {
-                            // Open UI in browser after server starts
-                            let ui_url = format!("http://localhost:{}", ui_port);
-                            // Try to open in browser, but don't fail if it doesn't work
-                            if let Err(e) = open::that(&ui_url) {
-                                println!("⚠ Could not open browser automatically: {}", e);
-                                println!("   Please open {} manually", ui_url);
-                            } else {
-                                println!("🚀 Opening UI in your default browser...");
-                            }
-                        }
-
-                        if let Err(e) = axum::serve(listener, router.into_make_service()).await {
-                            eprintln!("Failed to bind frontend server to port {}: {e}", ui_port);
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to bind frontend server to port {}: {e}", ui_port);
-                    }
-                }
-            });
-
-            tokio::select! {
-                r = server_handle => {
-                    if let Err(e) = r {
-                        eprintln!("Counter loop error: {e}");
-                    }
-                }
-                r = frontend_handle => {
-                    if let Err(e) = r {
-                        eprintln!("Server error: {e}");
-                    }
-                }
-            }
-            Ok(())
+            cli::commands::serve::handle_serve(
+                db_pool,
+                serve_args,
+                cli.config,
+                project_trace_senders,
+                run_span_buffer,
+                session,
+            )
+            .await
         }
     }
 }
