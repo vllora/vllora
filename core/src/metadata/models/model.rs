@@ -224,6 +224,7 @@ impl DbModel {
             knowledge_cutoff_date,
             langdb_release_date,
             is_private: val.project_id.is_some(),
+            is_custom: val.is_custom != 0,
         }
     }
 }

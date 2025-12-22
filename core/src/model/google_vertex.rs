@@ -192,6 +192,7 @@ impl ModelProviderInstance for GoogleVertexModelProvider {
                         knowledge_cutoff_date: None,
                         langdb_release_date: None,
                         is_private: true,
+                        is_custom: false,
                     };
                     out.push(metadata);
                 }

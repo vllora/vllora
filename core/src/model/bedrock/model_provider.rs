@@ -211,6 +211,7 @@ impl ModelProviderInstance for BedrockModelProvider {
                     knowledge_cutoff_date: None,
                     langdb_release_date: None,
                     is_private: true,
+                    is_custom: false,
                 };
 
                 models.push(metadata);

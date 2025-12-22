@@ -109,6 +109,7 @@ pub struct UpdateModelRequest {
     pub cached_input_token_price: Option<f64>,
     pub cached_input_write_token_price: Option<f64>,
     pub model_name_in_provider: Option<String>,
+    pub is_custom: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -174,6 +175,7 @@ pub async fn create_model<T: ModelService>(
         knowledge_cutoff_date: req.knowledge_cutoff_date,
         langdb_release_date: req.langdb_release_date,
         is_private: false,
+        is_custom: true,
     };
 
     // Convert to DbNewModel

@@ -154,6 +154,7 @@ pub struct ModelMetadata {
     pub langdb_release_date: Option<chrono::NaiveDate>,
     #[serde(default)]
     pub is_private: bool,
+    pub is_custom: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -213,6 +214,7 @@ impl Default for ModelMetadata {
             knowledge_cutoff_date: None,
             langdb_release_date: None,
             is_private: false,
+            is_custom: false,
         }
     }
 }
