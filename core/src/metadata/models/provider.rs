@@ -10,6 +10,8 @@ use diesel::SelectableHelper;
 use diesel::{AsChangeset, Insertable, QueryableByName, Selectable};
 use diesel::{Identifiable, Queryable};
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
+use vllora_llm::types::engine::CustomInferenceApiType;
 
 #[derive(
     QueryableByName,
@@ -38,6 +40,8 @@ pub struct DbProvider {
     pub created_at: String,
     pub updated_at: String,
     pub is_active: i32,
+    pub custom_inference_api_type: Option<String>,
+    pub is_custom: i32,
 }
 
 #[cfg(feature = "sqlite")]
@@ -88,6 +92,10 @@ pub fn get_provider_type(provider_name: &str) -> String {
 impl From<DbProvider> for ProviderInfo {
     fn from(val: DbProvider) -> Self {
         let provider_type = val.get_provider_type();
+        let custom_inference_api_type = val
+            .custom_inference_api_type
+            .as_deref()
+            .and_then(|s| CustomInferenceApiType::from_str(s).ok());
         ProviderInfo {
             id: val.id,
             name: val.provider_name,
@@ -99,6 +107,8 @@ impl From<DbProvider> for ProviderInfo {
             provider_type,
             has_credentials: false,
             custom_endpoint: None,
+            custom_inference_api_type,
+            is_custom: val.is_custom != 0,
         }
     }
 }
@@ -118,9 +128,12 @@ pub struct DbInsertProvider {
     pub created_at: String,
     pub updated_at: String,
     pub is_active: i32,
+    pub custom_inference_api_type: Option<String>,
+    pub is_custom: i32,
 }
 
 impl DbInsertProvider {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: String,
         provider_name: String,
@@ -129,6 +142,32 @@ impl DbInsertProvider {
         priority: i32,
         privacy_policy_url: Option<String>,
         terms_of_service_url: Option<String>,
+        custom_inference_api_type: Option<String>,
+    ) -> Self {
+        Self::new_with_custom(
+            id,
+            provider_name,
+            description,
+            endpoint,
+            priority,
+            privacy_policy_url,
+            terms_of_service_url,
+            custom_inference_api_type,
+            false,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_with_custom(
+        id: String,
+        provider_name: String,
+        description: Option<String>,
+        endpoint: Option<String>,
+        priority: i32,
+        privacy_policy_url: Option<String>,
+        terms_of_service_url: Option<String>,
+        custom_inference_api_type: Option<String>,
+        is_custom: bool,
     ) -> Self {
         let now = chrono::Utc::now().to_rfc3339();
         Self {
@@ -142,6 +181,8 @@ impl DbInsertProvider {
             created_at: now.clone(),
             updated_at: now,
             is_active: 1,
+            custom_inference_api_type,
+            is_custom: if is_custom { 1 } else { 0 },
         }
     }
 }
@@ -159,6 +200,8 @@ pub struct DbUpdateProvider {
     pub terms_of_service_url: Option<String>,
     pub updated_at: String,
     pub is_active: Option<i32>,
+    pub custom_inference_api_type: Option<String>,
+    pub is_custom: Option<i32>,
 }
 
 impl DbUpdateProvider {
@@ -172,6 +215,8 @@ impl DbUpdateProvider {
             terms_of_service_url: None,
             updated_at: chrono::Utc::now().to_rfc3339(),
             is_active: None,
+            custom_inference_api_type: None,
+            is_custom: None,
         }
     }
 
@@ -234,6 +279,8 @@ mod tests {
             created_at: "2023-01-01T00:00:00Z".to_string(),
             updated_at: "2023-01-01T00:00:00Z".to_string(),
             is_active: 1,
+            custom_inference_api_type: None,
+            is_custom: 0,
         };
 
         assert_eq!(provider.get_provider_type(), "api_key");
@@ -264,6 +311,8 @@ mod tests {
             created_at: "2023-01-01T00:00:00Z".to_string(),
             updated_at: "2023-01-01T00:00:00Z".to_string(),
             is_active: 1,
+            custom_inference_api_type: None,
+            is_custom: 0,
         };
 
         assert!(provider.is_active_provider());
@@ -285,6 +334,7 @@ mod tests {
             50,
             Some("https://test.com/privacy".to_string()),
             Some("https://test.com/terms".to_string()),
+            None,
         );
 
         assert_eq!(provider.provider_name, "test-provider");
@@ -302,5 +352,52 @@ mod tests {
         assert_eq!(update.description, Some("Updated description".to_string()));
         assert_eq!(update.priority, Some(75));
         assert_eq!(update.is_active, Some(1));
+    }
+
+    #[test]
+    fn test_db_provider_with_custom_inference_api_type() {
+        let provider = DbProvider {
+            id: "test-id".to_string(),
+            provider_name: "custom-provider".to_string(),
+            description: Some("Test provider".to_string()),
+            endpoint: None,
+            priority: 100,
+            privacy_policy_url: None,
+            terms_of_service_url: None,
+            created_at: "2023-01-01T00:00:00Z".to_string(),
+            updated_at: "2023-01-01T00:00:00Z".to_string(),
+            is_active: 1,
+            custom_inference_api_type: Some("anthropic".to_string()),
+            is_custom: 0,
+        };
+
+        let provider_info: ProviderInfo = provider.into();
+        assert_eq!(provider_info.name, "custom-provider");
+        assert_eq!(
+            provider_info.custom_inference_api_type,
+            Some(vllora_llm::types::engine::CustomInferenceApiType::Anthropic)
+        );
+    }
+
+    #[test]
+    fn test_db_insert_provider_with_custom_inference_api_type() {
+        let provider = DbInsertProvider::new(
+            "test-id".to_string(),
+            "test-provider".to_string(),
+            Some("Test description".to_string()),
+            Some("https://api.test.com/v1".to_string()),
+            50,
+            Some("https://test.com/privacy".to_string()),
+            Some("https://test.com/terms".to_string()),
+            Some("bedrock".to_string()),
+        );
+
+        assert_eq!(provider.provider_name, "test-provider");
+        assert_eq!(provider.priority, 50);
+        assert_eq!(provider.is_active, 1);
+        assert_eq!(
+            provider.custom_inference_api_type,
+            Some("bedrock".to_string())
+        );
     }
 }

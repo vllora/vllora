@@ -1,5 +1,6 @@
 use crate::executor::context::ExecutorContext;
 use crate::handler::find_model_by_full_name;
+use crate::metadata::pool::DbPool;
 use crate::model::cached::CachedModel;
 use crate::types::guardrails::service::GuardrailsEvaluator;
 use crate::types::guardrails::{GuardError, GuardResult, GuardStage};
@@ -622,11 +623,20 @@ pub trait ModelMetadataFactory: Send + Sync {
 
 pub struct DefaultModelMetadataFactory {
     service: Arc<Box<dyn ModelService>>,
+    db_pool: Option<DbPool>,
 }
 
 impl DefaultModelMetadataFactory {
     pub fn new(service: Arc<Box<dyn ModelService>>) -> Self {
-        Self { service }
+        Self {
+            service,
+            db_pool: None,
+        }
+    }
+
+    pub fn with_db_pool(mut self, db_pool: &DbPool) -> Self {
+        self.db_pool = Some(db_pool.clone());
+        self
     }
 }
 
@@ -641,7 +651,11 @@ impl ModelMetadataFactory for DefaultModelMetadataFactory {
         _include_benchmark: bool,
         _project_id: Option<&uuid::Uuid>,
     ) -> Result<ModelMetadata, GatewayApiError> {
-        find_model_by_full_name(model_name, self.service.as_ref().as_ref())
+        find_model_by_full_name(
+            model_name,
+            self.service.as_ref().as_ref(),
+            self.db_pool.as_ref(),
+        )
     }
 
     async fn get_cheapest_model_metadata(

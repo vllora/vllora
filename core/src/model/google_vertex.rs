@@ -166,6 +166,9 @@ impl ModelProviderInstance for GoogleVertexModelProvider {
                                 .deployed_models
                                 .as_ref()
                                 .map(|models| serde_json::to_string(models).unwrap()),
+                            custom_inference_api_type: Some(
+                                vllora_llm::types::engine::CustomInferenceApiType::Gemini,
+                            ),
                         },
                         price: ModelPrice::Completion(CompletionModelPrice {
                             per_input_token: 0.0,
@@ -189,6 +192,7 @@ impl ModelProviderInstance for GoogleVertexModelProvider {
                         knowledge_cutoff_date: None,
                         langdb_release_date: None,
                         is_private: true,
+                        is_custom: false,
                     };
                     out.push(metadata);
                 }

@@ -20,7 +20,7 @@ path = "src/lib.rs"
 vllora_telemetry = { path = "../telemetry", version = "0.1.19" }
 
 async-openai = { workspace = true }
-clust = { version = "0.9.10", package = "langdb_clust" }
+clust = { workspace = true }
 
 aws-sdk-bedrock = "1.127.0"
 aws-sdk-bedrockruntime = "1.120.0"

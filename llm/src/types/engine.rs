@@ -113,6 +113,42 @@ pub enum EngineType {
     Proxy(String),
 }
 
+/// Custom inference API type enum for providers
+/// This determines which completions engine implementation to use
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CustomInferenceApiType {
+    OpenAI,
+    Anthropic,
+    Bedrock,
+    Gemini,
+}
+
+impl Display for CustomInferenceApiType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CustomInferenceApiType::OpenAI => write!(f, "openai"),
+            CustomInferenceApiType::Anthropic => write!(f, "anthropic"),
+            CustomInferenceApiType::Bedrock => write!(f, "bedrock"),
+            CustomInferenceApiType::Gemini => write!(f, "gemini"),
+        }
+    }
+}
+
+impl FromStr for CustomInferenceApiType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "openai" => Ok(CustomInferenceApiType::OpenAI),
+            "anthropic" => Ok(CustomInferenceApiType::Anthropic),
+            "bedrock" => Ok(CustomInferenceApiType::Bedrock),
+            "gemini" => Ok(CustomInferenceApiType::Gemini),
+            _ => Err(format!("Invalid CustomInferenceApiType: {}", s)),
+        }
+    }
+}
+
 impl<'de> Deserialize<'de> for EngineType {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -243,6 +279,7 @@ pub enum CompletionEngineParams {
         credentials: Option<ApiKeyCredentials>,
         execution_options: ExecutionOptions,
         params: AnthropicModelParams,
+        endpoint: Option<String>,
     },
     Gemini {
         credentials: Option<ApiKeyCredentials>,
@@ -316,6 +353,7 @@ impl CompletionEngineParamsBuilder {
                 provider: InferenceModelProvider::OpenAI,
                 model_name: "unknown".to_string(),
                 endpoint: None,
+                custom_inference_api_type: None,
             },
             model_name: None,
             credentials: None,
@@ -337,6 +375,14 @@ impl CompletionEngineParamsBuilder {
 
     pub fn with_inference_endpoint(mut self, inference_endpoint: String) -> Self {
         self.provider.endpoint = Some(inference_endpoint);
+        self
+    }
+
+    pub fn with_custom_inference_api_type(
+        mut self,
+        custom_inference_api_type: CustomInferenceApiType,
+    ) -> Self {
+        self.provider.custom_inference_api_type = Some(custom_inference_api_type);
         self
     }
 
@@ -369,7 +415,16 @@ impl CompletionEngineParamsBuilder {
         &self,
         request: &ChatCompletionRequest,
     ) -> Result<CompletionEngineParams, LLMError> {
-        match &self.provider.provider {
+        let provider = match &self.provider.custom_inference_api_type {
+            Some(CustomInferenceApiType::OpenAI) => &InferenceModelProvider::OpenAI,
+            Some(CustomInferenceApiType::Anthropic) => &InferenceModelProvider::Anthropic,
+            Some(CustomInferenceApiType::Bedrock) => &InferenceModelProvider::Bedrock,
+            Some(CustomInferenceApiType::Gemini) => &InferenceModelProvider::Gemini,
+            None => &self.provider.provider,
+        };
+
+        // Fall back to existing behavior based on provider.provider
+        match provider {
             InferenceModelProvider::OpenAI | InferenceModelProvider::Proxy(_) => {
                 let params = OpenAiModelParams {
                     model: self
@@ -469,6 +524,7 @@ impl CompletionEngineParamsBuilder {
                 Ok(CompletionEngineParams::Anthropic {
                     credentials: api_key_credentials,
                     execution_options: self.execution_options.clone().unwrap_or_default(),
+                    endpoint: self.provider.endpoint.clone(),
                     params: AnthropicModelParams {
                         model: Some(model.clone()),
                         max_tokens: match request.max_tokens {
@@ -722,7 +778,7 @@ impl Deref for ClaudeModel {
 impl From<claude::ClaudeModel> for ClaudeModel {
     fn from(model: claude::ClaudeModel) -> Self {
         Self {
-            model,
+            model: model.clone(),
             string: model.to_string(),
         }
     }
@@ -997,6 +1053,7 @@ impl ResponsesEngineParamsBuilder {
                 provider: InferenceModelProvider::OpenAI,
                 model_name: "unknown".to_string(),
                 endpoint: None,
+                custom_inference_api_type: None,
             },
             credentials: None,
         }
@@ -1034,6 +1091,85 @@ impl ResponsesEngineParamsBuilder {
             _ => Err(LLMError::UnsupportedProvider(
                 self.provider.provider.to_string(),
             )),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::gateway::ChatCompletionRequest;
+
+    #[test]
+    fn test_custom_inference_api_type_parsing() {
+        assert_eq!(
+            CustomInferenceApiType::from_str("openai").unwrap(),
+            CustomInferenceApiType::OpenAI
+        );
+        assert_eq!(
+            CustomInferenceApiType::from_str("anthropic").unwrap(),
+            CustomInferenceApiType::Anthropic
+        );
+        assert_eq!(
+            CustomInferenceApiType::from_str("bedrock").unwrap(),
+            CustomInferenceApiType::Bedrock
+        );
+        assert_eq!(
+            CustomInferenceApiType::from_str("gemini").unwrap(),
+            CustomInferenceApiType::Gemini
+        );
+        assert!(CustomInferenceApiType::from_str("invalid").is_err());
+    }
+
+    #[test]
+    fn test_custom_inference_api_type_display() {
+        assert_eq!(CustomInferenceApiType::OpenAI.to_string(), "openai");
+        assert_eq!(CustomInferenceApiType::Anthropic.to_string(), "anthropic");
+        assert_eq!(CustomInferenceApiType::Bedrock.to_string(), "bedrock");
+        assert_eq!(CustomInferenceApiType::Gemini.to_string(), "gemini");
+    }
+
+    #[test]
+    fn test_completion_engine_params_builder_with_custom_api_type() {
+        let mut builder = CompletionEngineParamsBuilder::new();
+        builder.provider.custom_inference_api_type = Some(CustomInferenceApiType::Anthropic);
+        builder.provider.provider = InferenceModelProvider::Proxy("custom".to_string());
+        builder.model_name = Some("claude-3-opus".to_string());
+
+        let request = ChatCompletionRequest {
+            model: "claude-3-opus".to_string(),
+            messages: vec![],
+            ..Default::default()
+        };
+
+        // Should use Anthropic engine despite provider being Proxy
+        let result = builder.build(&request);
+        assert!(result.is_ok());
+        match result.unwrap() {
+            CompletionEngineParams::Anthropic { .. } => {}
+            _ => panic!("Expected Anthropic engine params"),
+        }
+    }
+
+    #[test]
+    fn test_completion_engine_params_builder_fallback_to_provider() {
+        let mut builder = CompletionEngineParamsBuilder::new();
+        // No custom_inference_api_type set
+        builder.provider.provider = InferenceModelProvider::Bedrock;
+        builder.model_name = Some("anthropic.claude-v2".to_string());
+
+        let request = ChatCompletionRequest {
+            model: "anthropic.claude-v2".to_string(),
+            messages: vec![],
+            ..Default::default()
+        };
+
+        // Should use Bedrock engine based on provider
+        let result = builder.build(&request);
+        assert!(result.is_ok());
+        match result.unwrap() {
+            CompletionEngineParams::Bedrock { .. } => {}
+            _ => panic!("Expected Bedrock engine params"),
         }
     }
 }

@@ -198,7 +198,8 @@ impl RoutedExecutor {
             .await
         {
             Ok(model) => model,
-            Err(GatewayApiError::GatewayError(GatewayError::ModelError(_))) => {
+            Err(GatewayApiError::GatewayError(GatewayError::ModelError(e))) => {
+                tracing::warn!("Model error: {:#?}", e);
                 let model_name = request.request.model.clone();
                 let model_parts = model_name.split('/').collect::<Vec<&str>>();
                 let provider = model_parts.first().expect("Provider should not be empty");
@@ -210,6 +211,7 @@ impl RoutedExecutor {
                         provider: InferenceModelProvider::from(provider.to_string()),
                         model_name: model.to_string(),
                         endpoint: None,
+                        custom_inference_api_type: None,
                     },
                     ..Default::default()
                 }

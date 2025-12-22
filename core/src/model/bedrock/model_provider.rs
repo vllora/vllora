@@ -175,6 +175,9 @@ impl ModelProviderInstance for BedrockModelProvider {
                         provider: InferenceModelProvider::Bedrock,
                         model_name: inference_provider_model_name,
                         endpoint: None,
+                        custom_inference_api_type: Some(
+                            vllora_llm::types::engine::CustomInferenceApiType::Bedrock,
+                        ),
                     },
                     price: ModelPrice::Completion(CompletionModelPrice {
                         per_input_token: price
@@ -208,6 +211,7 @@ impl ModelProviderInstance for BedrockModelProvider {
                     knowledge_cutoff_date: None,
                     langdb_release_date: None,
                     is_private: true,
+                    is_custom: false,
                 };
 
                 models.push(metadata);

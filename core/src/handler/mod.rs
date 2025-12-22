@@ -13,7 +13,11 @@ pub mod spans;
 pub mod threads;
 pub mod traces;
 
+use crate::metadata::models::model::DbModel;
+use crate::metadata::pool::DbPool;
+use crate::metadata::services::provider::ProvidersServiceImpl;
 use crate::types::metadata::services::model::ModelService;
+use crate::types::metadata::services::provider::ProviderService;
 use crate::GatewayApiError;
 use crate::GatewayError;
 use actix_web::HttpRequest;
@@ -47,34 +51,64 @@ pub struct AvailableModels(pub Vec<ModelMetadata>);
 pub fn find_model_by_full_name(
     model_name: &str,
     model_service: &dyn ModelService,
+    db_pool: Option<&DbPool>,
+) -> Result<ModelMetadata, GatewayApiError> {
+    find_model_by_full_name_with_provider_info(model_name, model_service, db_pool)
+}
+
+pub fn find_model_by_full_name_with_provider_info(
+    model_name: &str,
+    model_service: &dyn ModelService,
+    db_pool: Option<&DbPool>,
 ) -> Result<ModelMetadata, GatewayApiError> {
     let model_parts = model_name.split('/').collect::<Vec<&str>>();
-    let llm_model = if model_parts.len() == 1 {
-        model_service
+    let (llm_model, provider_name) = if model_parts.len() == 1 {
+        let model = model_service
             .get_by_name(model_name, None)
             .map_err(|e| GatewayApiError::CustomError(e.to_string()))?
             .first()
-            .cloned()
+            .cloned();
+        (model, None)
     } else if model_parts.len() == 2 {
-        let model_name = model_parts.last().expect("2 elements in model parts");
+        let model_name_part = model_parts.last().expect("2 elements in model parts");
         let provided_by = model_parts.first().expect("2 elements in model parts");
 
-        let model_parts = model_name.split('@').collect::<Vec<&str>>();
-        let model_name = model_parts.first().expect("1 element in model parts");
+        let model_parts = model_name_part.split('@').collect::<Vec<&str>>();
+        let model_name_part = model_parts.first().expect("1 element in model parts");
 
-        model_service
+        let provider_name = Some(provided_by.to_lowercase());
+        let model = model_service
             .get_by_provider_and_name(
-                &model_name.to_lowercase(),
-                &provided_by.to_lowercase(),
+                &model_name_part.to_lowercase(),
+                provider_name.as_ref().unwrap(),
                 None,
             )
-            .map_err(|e| GatewayApiError::CustomError(e.to_string()))?
+            .map_err(|e| GatewayApiError::CustomError(e.to_string()))?;
+        (model, provider_name)
     } else {
-        None
+        (None, None)
     };
 
     match llm_model {
-        Some(model) => Ok(model.into()),
+        Some(model) => {
+            // Fetch provider info if db_pool is available
+            let custom_inference_api_type = if let Some(db_pool) = db_pool {
+                let provider_service = ProvidersServiceImpl::new(db_pool.clone());
+                let provider_name_to_fetch = provider_name.as_ref().unwrap_or(&model.provider_name);
+                provider_service
+                    .get_provider_by_name(provider_name_to_fetch)
+                    .ok()
+                    .flatten()
+                    .and_then(|p| p.custom_inference_api_type)
+            } else {
+                None
+            };
+
+            Ok(DbModel::to_model_metadata_with_provider(
+                &model,
+                custom_inference_api_type,
+            ))
+        }
         None => Err(GatewayApiError::LLMError(LLMError::ModelError(Box::new(
             ModelError::ModelNotFound(model_name.to_string()),
         )))),
@@ -157,7 +191,6 @@ pub struct LimitCheckWrapper {
 }
 
 impl LimitCheckWrapper {
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn can_execute_llm(&self) -> Result<bool, Box<dyn std::error::Error>> {
         for checker in &self.checkers {
             let mut checker = checker.lock().await;
@@ -191,7 +224,6 @@ pub struct DefaultLimitCheck;
 
 #[async_trait::async_trait]
 impl LimitCheck for DefaultLimitCheck {
-    #[tracing::instrument(level = "debug", skip(self))]
     async fn can_execute_llm(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
         Ok(true)
     }

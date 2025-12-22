@@ -30,6 +30,13 @@ pub struct LangDBProvider {
 
 impl From<LangDBProvider> for DbInsertProvider {
     fn from(provider: LangDBProvider) -> Self {
+        let custom_inference_api_type = match provider.name.to_lowercase().as_str() {
+            "anthropic" => Some("anthropic".to_string()),
+            "bedrock" => Some("bedrock".to_string()),
+            "gemini" | "vertex-ai" => Some("gemini".to_string()),
+            _ => Some("openai".to_string()), // Default to openai
+        };
+
         DbInsertProvider::new(
             provider.id,
             provider.name,
@@ -38,6 +45,7 @@ impl From<LangDBProvider> for DbInsertProvider {
             provider.priority,
             provider.privacy_policy_url,
             provider.terms_of_service_url,
+            custom_inference_api_type,
         )
     }
 }

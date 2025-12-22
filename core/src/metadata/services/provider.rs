@@ -42,14 +42,18 @@ impl ProviderService for ProvidersServiceImpl {
     ) -> Result<Option<ProviderInfo>, DatabaseError> {
         let mut conn = self.db_pool.get()?;
 
-        let query = providers
-            .filter(p::provider_name.eq(provider_name))
-            .filter(p::is_active.eq(1));
+        let query = providers.filter(p::provider_name.eq(provider_name));
 
         Ok(query
             .first::<DbProvider>(&mut conn)
             .optional()?
-            .map(|p| p.into()))
+            .map_or_else(
+                || {
+                    tracing::warn!("provider not found");
+                    None
+                },
+                |p| Some(p.into()),
+            ))
     }
 
     fn list_providers(&self) -> Result<Vec<ProviderInfo>, DatabaseError> {
@@ -161,6 +165,18 @@ impl ProviderService for ProvidersServiceImpl {
 
         Ok(result)
     }
+
+    fn is_provider_custom(&self, provider_id: &str) -> Result<Option<bool>, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+
+        let is_custom: Option<i32> = providers
+            .filter(p::id.eq(provider_id))
+            .select(p::is_custom)
+            .first(&mut conn)
+            .optional()?;
+
+        Ok(is_custom.map(|val| val == 1))
+    }
 }
 
 #[cfg(test)]
@@ -180,6 +196,8 @@ mod tests {
             created_at: "2023-01-01T00:00:00Z".to_string(),
             updated_at: "2023-01-01T00:00:00Z".to_string(),
             is_active: 1,
+            custom_inference_api_type: None,
+            is_custom: 0,
         };
 
         let provider_info: ProviderInfo = db_provider.into();
