@@ -352,9 +352,10 @@ pub async fn delete_custom_model_by_name<T: ModelService>(
 
     match custom_model {
         Some(model) => {
-            let model_id = model.id.clone().ok_or_else(|| {
-                GatewayApiError::CustomError("Model ID not found".to_string())
-            })?;
+            let model_id = model
+                .id
+                .clone()
+                .ok_or_else(|| GatewayApiError::CustomError("Model ID not found".to_string()))?;
 
             model_service
                 .mark_as_deleted(model_id)
