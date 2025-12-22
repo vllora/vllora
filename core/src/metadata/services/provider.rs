@@ -165,6 +165,18 @@ impl ProviderService for ProvidersServiceImpl {
 
         Ok(result)
     }
+
+    fn is_provider_custom(&self, provider_id: &str) -> Result<Option<bool>, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+
+        let is_custom: Option<i32> = providers
+            .filter(p::id.eq(provider_id))
+            .select(p::is_custom)
+            .first(&mut conn)
+            .optional()?;
+
+        Ok(is_custom.map(|val| val == 1))
+    }
 }
 
 #[cfg(test)]
@@ -185,6 +197,7 @@ mod tests {
             updated_at: "2023-01-01T00:00:00Z".to_string(),
             is_active: 1,
             custom_inference_api_type: None,
+            is_custom: 0,
         };
 
         let provider_info: ProviderInfo = db_provider.into();

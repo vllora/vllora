@@ -67,6 +67,7 @@ pub struct DbModel {
     pub license: Option<String>,
     pub project_id: Option<String>,
     pub endpoint: Option<String>,
+    pub is_custom: i32,
 }
 
 impl From<DbModel> for ModelMetadata {
@@ -259,6 +260,7 @@ pub struct DbNewModel {
     pub project_id: Option<String>,
     pub deleted_at: Option<String>,
     pub endpoint: Option<String>,
+    pub is_custom: i32,
 }
 impl From<ModelMetadata> for DbNewModel {
     fn from(metadata: ModelMetadata) -> Self {
@@ -348,6 +350,7 @@ impl From<ModelMetadata> for DbNewModel {
             project_id: None, // API models are global
             deleted_at: None, // Clear deleted_at if model comes back from API
             endpoint: metadata.inference_provider.endpoint,
+            is_custom: 0, // Default to false, should be set explicitly when creating via API
         }
     }
 }
@@ -418,6 +421,7 @@ mod tests {
             license: None,
             project_id: None,
             endpoint: None,
+            is_custom: 0,
         };
 
         let metadata = DbModel::to_model_metadata_with_provider(

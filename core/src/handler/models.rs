@@ -177,7 +177,9 @@ pub async fn create_model<T: ModelService>(
     };
 
     // Convert to DbNewModel
-    let db_model: DbNewModel = model_metadata.into();
+    let mut db_model: DbNewModel = model_metadata.into();
+    // All models created via /models endpoint are custom
+    db_model.is_custom = 1;
 
     model_service
         .upsert(db_model)
@@ -301,11 +303,25 @@ pub async fn update_model<T: ModelService>(
 }
 
 /// Delete a model (soft delete)
+/// Only models with is_custom = true can be deleted
 pub async fn delete_model<T: ModelService>(
     path: web::Path<String>,
     model_service: web::Data<Box<dyn ModelService>>,
 ) -> Result<HttpResponse, GatewayApiError> {
     let model_id = path.into_inner();
+
+    // Get the model to check if it's custom
+    let db_model = model_service
+        .get_by_id(model_id.clone())
+        .map_err(|e| GatewayApiError::CustomError(e.to_string()))?;
+
+    // Check if model is custom
+    if db_model.is_custom != 1 {
+        return Ok(HttpResponse::Forbidden().json(serde_json::json!({
+            "error": "Cannot delete model",
+            "message": "Only custom models can be deleted"
+        })));
+    }
 
     model_service
         .mark_as_deleted(model_id.clone())

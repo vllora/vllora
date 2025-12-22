@@ -32,6 +32,7 @@ diesel::table! {
         license -> Nullable<Text>,
         project_id -> Nullable<Text>,
         endpoint -> Nullable<Text>,
+        is_custom -> Integer,
     }
 }
 
@@ -77,6 +78,7 @@ diesel::table! {
         updated_at -> Text,
         is_active -> Integer,
         custom_inference_api_type -> Nullable<Text>,
+        is_custom -> Integer,
     }
 }
 

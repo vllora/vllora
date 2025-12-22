@@ -41,6 +41,7 @@ pub struct DbProvider {
     pub updated_at: String,
     pub is_active: i32,
     pub custom_inference_api_type: Option<String>,
+    pub is_custom: i32,
 }
 
 #[cfg(feature = "sqlite")]
@@ -127,6 +128,7 @@ pub struct DbInsertProvider {
     pub updated_at: String,
     pub is_active: i32,
     pub custom_inference_api_type: Option<String>,
+    pub is_custom: i32,
 }
 
 impl DbInsertProvider {
@@ -141,6 +143,31 @@ impl DbInsertProvider {
         terms_of_service_url: Option<String>,
         custom_inference_api_type: Option<String>,
     ) -> Self {
+        Self::new_with_custom(
+            id,
+            provider_name,
+            description,
+            endpoint,
+            priority,
+            privacy_policy_url,
+            terms_of_service_url,
+            custom_inference_api_type,
+            false,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_with_custom(
+        id: String,
+        provider_name: String,
+        description: Option<String>,
+        endpoint: Option<String>,
+        priority: i32,
+        privacy_policy_url: Option<String>,
+        terms_of_service_url: Option<String>,
+        custom_inference_api_type: Option<String>,
+        is_custom: bool,
+    ) -> Self {
         let now = chrono::Utc::now().to_rfc3339();
         Self {
             id,
@@ -154,6 +181,7 @@ impl DbInsertProvider {
             updated_at: now,
             is_active: 1,
             custom_inference_api_type,
+            is_custom: if is_custom { 1 } else { 0 },
         }
     }
 }
@@ -172,6 +200,7 @@ pub struct DbUpdateProvider {
     pub updated_at: String,
     pub is_active: Option<i32>,
     pub custom_inference_api_type: Option<String>,
+    pub is_custom: Option<i32>,
 }
 
 impl DbUpdateProvider {
@@ -186,6 +215,7 @@ impl DbUpdateProvider {
             updated_at: chrono::Utc::now().to_rfc3339(),
             is_active: None,
             custom_inference_api_type: None,
+            is_custom: None,
         }
     }
 
@@ -249,6 +279,7 @@ mod tests {
             updated_at: "2023-01-01T00:00:00Z".to_string(),
             is_active: 1,
             custom_inference_api_type: None,
+            is_custom: 0,
         };
 
         assert_eq!(provider.get_provider_type(), "api_key");
@@ -280,6 +311,7 @@ mod tests {
             updated_at: "2023-01-01T00:00:00Z".to_string(),
             is_active: 1,
             custom_inference_api_type: None,
+            is_custom: 0,
         };
 
         assert!(provider.is_active_provider());
@@ -335,6 +367,7 @@ mod tests {
             updated_at: "2023-01-01T00:00:00Z".to_string(),
             is_active: 1,
             custom_inference_api_type: Some("anthropic".to_string()),
+            is_custom: 0,
         };
 
         let provider_info: ProviderInfo = provider.into();

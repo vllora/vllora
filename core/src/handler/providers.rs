@@ -282,7 +282,7 @@ pub async fn create_provider_definition<T: ProviderService>(
         .and_then(|s| CustomInferenceApiType::from_str(s).ok())
         .map(|t| t.to_string());
 
-    let provider = DbInsertProvider::new(
+    let provider = DbInsertProvider::new_with_custom(
         Uuid::new_v4().to_string(),
         req.provider_name.clone(),
         req.description.clone(),
@@ -291,6 +291,7 @@ pub async fn create_provider_definition<T: ProviderService>(
         req.privacy_policy_url.clone(),
         req.terms_of_service_url.clone(),
         custom_inference_api_type,
+        true, // All providers created via /providers endpoint are custom
     );
 
     if let Err(e) = providers_service.create_provider(provider) {
@@ -399,6 +400,7 @@ pub async fn update_provider_definition<T: ProviderService>(
 }
 
 /// Delete a provider definition (soft delete)
+/// Only providers with is_custom = true can be deleted
 pub async fn delete_provider_definition<T: ProviderService>(
     path: web::Path<String>,
     db_pool: web::Data<DbPool>,
@@ -406,14 +408,50 @@ pub async fn delete_provider_definition<T: ProviderService>(
     let provider_id = path.into_inner();
     let providers_service = T::new(db_pool.get_ref().clone());
 
-    match providers_service.delete_provider(&provider_id) {
-        Ok(_) => Ok(HttpResponse::Ok().json(serde_json::json!({
-            "message": "Provider deleted successfully"
+    // Check if provider exists
+    match providers_service.get_provider_by_id(&provider_id) {
+        Ok(Some(_)) => {
+            // Check if provider is custom
+            match providers_service.is_provider_custom(&provider_id) {
+                Ok(Some(true)) => {
+                    // Provider is custom, allow deletion
+                    match providers_service.delete_provider(&provider_id) {
+                        Ok(_) => Ok(HttpResponse::Ok().json(serde_json::json!({
+                            "message": "Provider deleted successfully"
+                        }))),
+                        Err(e) => {
+                            tracing::error!("Failed to delete provider: {:?}", e);
+                            Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                                "error": "Failed to delete provider",
+                                "message": e.to_string()
+                            })))
+                        }
+                    }
+                }
+                Ok(Some(false)) | Ok(None) => {
+                    // Provider is not custom or doesn't exist, deny deletion
+                    Ok(HttpResponse::Forbidden().json(serde_json::json!({
+                        "error": "Cannot delete provider",
+                        "message": "Only custom providers can be deleted"
+                    })))
+                }
+                Err(e) => {
+                    tracing::error!("Failed to check if provider is custom: {:?}", e);
+                    Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                        "error": "Failed to check provider",
+                        "message": e.to_string()
+                    })))
+                }
+            }
+        }
+        Ok(None) => Ok(HttpResponse::NotFound().json(serde_json::json!({
+            "error": "Provider not found",
+            "message": format!("Provider with ID '{}' not found", provider_id)
         }))),
         Err(e) => {
-            tracing::error!("Failed to delete provider: {:?}", e);
+            tracing::error!("Failed to get provider: {:?}", e);
             Ok(HttpResponse::InternalServerError().json(serde_json::json!({
-                "error": "Failed to delete provider",
+                "error": "Failed to get provider",
                 "message": e.to_string()
             })))
         }

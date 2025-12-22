@@ -39,4 +39,7 @@ pub trait ProviderService {
         &self,
         project_id: Option<&Uuid>,
     ) -> Result<Vec<ProviderInfo>, DatabaseError>;
+
+    /// Check if a provider is custom (can be deleted)
+    fn is_provider_custom(&self, provider_id: &str) -> Result<Option<bool>, DatabaseError>;
 }
