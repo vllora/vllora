@@ -12,6 +12,8 @@ use serde::Deserialize;
 pub struct ListTracesQueryParams {
     #[serde(alias = "runId")]
     run_id: Option<String>,
+    #[serde(alias = "operationNames")]
+    operation_names: Option<String>,
     #[serde(alias = "threadIds")]
     thread_ids: Option<String>, // comma-separated
     #[serde(alias = "startTimeMin")]
@@ -20,6 +22,10 @@ pub struct ListTracesQueryParams {
     start_time_max: Option<i64>,
     limit: Option<i64>,
     offset: Option<i64>,
+}
+
+fn parse_comma_separated_string(s: Option<&String>) -> Option<Vec<String>> {
+    s.map(|s| s.split(',').map(String::from).collect())
 }
 
 pub async fn list_traces<T: TraceService + DatabaseServiceTrait>(
@@ -31,20 +37,16 @@ pub async fn list_traces<T: TraceService + DatabaseServiceTrait>(
 
     // Extract project_id from extensions (set by ProjectMiddleware)
     let project_slug = project.slug.clone();
-
-    let thread_ids = query
-        .thread_ids
-        .as_ref()
-        .map(|s| s.split(',').map(String::from).collect());
-
+    let thread_ids = parse_comma_separated_string(query.thread_ids.as_ref());
     let run_ids = query.run_id.as_ref().map(|id| vec![id.clone()]);
+    let operation_names = parse_comma_separated_string(query.operation_names.as_ref());
 
     let list_query = ListTracesQuery {
         project_slug: Some(project_slug.clone()),
         span_id: None,
         run_ids,
         thread_ids,
-        operation_names: None,
+        operation_names,
         parent_span_ids: None,
         filter_null_thread: false,
         filter_null_run: false,
