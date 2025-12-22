@@ -105,7 +105,13 @@ pub fn format_llm_call_table(
 
     // Tokens
     if let Some(tokens) = &response.tokens {
-        let token_str = if let Some(obj) = tokens.as_object() {
+        let t = if let Some(obj) = tokens.as_str() {
+            serde_json::from_str(obj).unwrap_or(tokens.clone())
+        } else {
+            tokens.clone()
+        };
+
+        let token_str = if let Some(obj) = t.as_object() {
             let mut parts = Vec::new();
             if let Some(input) = obj.get("input_tokens").or_else(|| obj.get("prompt_tokens")) {
                 parts.push(format!("Input: {}", input));
@@ -120,12 +126,12 @@ pub fn format_llm_call_table(
                 parts.push(format!("Total: {}", total));
             }
             if parts.is_empty() {
-                serde_json::to_string(tokens).unwrap_or_else(|_| "N/A".to_string())
+                serde_json::to_string(&tokens).unwrap_or_else(|_| "N/A".to_string())
             } else {
                 parts.join(", ")
             }
         } else {
-            serde_json::to_string(tokens).unwrap_or_else(|_| "N/A".to_string())
+            serde_json::to_string(&t).unwrap_or_else(|_| "N/A".to_string())
         };
         metadata_table.add_row(row!["Tokens", token_str,]);
     }
