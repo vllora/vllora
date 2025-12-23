@@ -82,22 +82,22 @@ impl OpenAIImageGeneration {
     fn map_size(
         &self,
         size: Option<&ImageSize>,
-    ) -> Option<Result<async_openai::types::ImageSize, GatewayError>> {
+    ) -> Option<Result<async_openai::types::images::ImageSize, GatewayError>> {
         size.map(|s| match s {
             vllora_llm::types::gateway::ImageSize::Size256x256 => {
-                Ok(async_openai::types::ImageSize::S256x256)
+                Ok(async_openai::types::images::ImageSize::S256x256)
             }
             vllora_llm::types::gateway::ImageSize::Size512x512 => {
-                Ok(async_openai::types::ImageSize::S512x512)
+                Ok(async_openai::types::images::ImageSize::S512x512)
             }
             vllora_llm::types::gateway::ImageSize::Size1024x1024 => {
-                Ok(async_openai::types::ImageSize::S1024x1024)
+                Ok(async_openai::types::images::ImageSize::S1024x1024)
             }
             vllora_llm::types::gateway::ImageSize::Size1792x1024 => {
-                Ok(async_openai::types::ImageSize::S1792x1024)
+                Ok(async_openai::types::images::ImageSize::S1792x1024)
             }
             vllora_llm::types::gateway::ImageSize::Size1024x1792 => {
-                Ok(async_openai::types::ImageSize::S1024x1792)
+                Ok(async_openai::types::images::ImageSize::S1024x1792)
             }
             vllora_llm::types::gateway::ImageSize::Other((width, height)) => Err(
                 GatewayError::CustomError(format!("Unsupported image size: {width}x{height}")),
@@ -108,12 +108,12 @@ impl OpenAIImageGeneration {
     fn map_quality(
         &self,
         quality: Option<&ImageQuality>,
-    ) -> Option<async_openai::types::ImageQuality> {
+    ) -> Option<async_openai::types::images::ImageQuality> {
         quality.map(|q| match q {
             vllora_llm::types::gateway::ImageQuality::SD => {
-                async_openai::types::ImageQuality::Standard
+                async_openai::types::images::ImageQuality::Standard
             }
-            vllora_llm::types::gateway::ImageQuality::HD => async_openai::types::ImageQuality::HD,
+            vllora_llm::types::gateway::ImageQuality::HD => async_openai::types::images::ImageQuality::HD,
         })
     }
 }
@@ -141,29 +141,30 @@ impl ImageGenerationModelInstance for OpenAIImageGeneration {
 
         let model = serde_json::from_str(&format!("\"{}\"", request.model))?;
 
-        let r = async_openai::types::CreateImageRequest {
+        let r = async_openai::types::images::CreateImageRequest {
             prompt: request.prompt.clone(),
             n: request.n,
             size,
             response_format: request.response_format.as_ref().map(|f| match f {
-                ImageResponseFormat::Url => async_openai::types::ImageResponseFormat::Url,
-                ImageResponseFormat::B64Json => async_openai::types::ImageResponseFormat::B64Json,
+                ImageResponseFormat::Url => async_openai::types::images::ImageResponseFormat::Url,
+                ImageResponseFormat::B64Json => async_openai::types::images::ImageResponseFormat::B64Json,
             }),
             user: request.user.clone(),
             model: Some(model),
             quality,
             style: request.style.as_ref().map(|s| match s {
-                ImageStyle::Vivid => async_openai::types::ImageStyle::Vivid,
-                ImageStyle::Natural => async_openai::types::ImageStyle::Natural,
+                ImageStyle::Vivid => async_openai::types::images::ImageStyle::Vivid,
+                ImageStyle::Natural => async_openai::types::images::ImageStyle::Natural,
             }),
             moderation: request.moderation.as_ref().map(|m| match m {
                 vllora_llm::types::gateway::ImageModeration::Auto => {
-                    async_openai::types::ImageModeration::Auto
+                    async_openai::types::images::ImageModeration::Auto
                 }
                 vllora_llm::types::gateway::ImageModeration::Low => {
-                    async_openai::types::ImageModeration::Low
+                    async_openai::types::images::ImageModeration::Low
                 }
             }),
+            ..Default::default()
         };
 
         let api_base = self.client.config().api_base().to_string();

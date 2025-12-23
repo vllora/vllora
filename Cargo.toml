@@ -5,7 +5,7 @@ default-members = ["gateway"]
 exclude = ["llm/examples/*"]
 
 [workspace.dependencies]
-async-openai = { package = "async-openai-compat", version = "0.30.3" }
+async-openai = { package = "async-openai-compat", version = "0.30.3", path = "../../async-openai-compat/async-openai" }
 clust = { version = "0.9.11", package = "langdb_clust" }
 
 thiserror = "2.0.17"
