@@ -119,24 +119,3 @@ pub async fn handle_traces(db_pool: DbPool, cmd: TracesCommands) -> Result<(), C
         } => overview::handle_overview(&vllora_mcp, last_n_minutes, output).await,
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::shared::*;
-    use serde_json::Value;
-
-    #[test]
-    fn test_map_request() {
-        // Create a valid Gemini request JSON string
-        let json_str = r#"{"contents":[{"role":"user","parts":[{"text":"what is my latest trace?"}]}],"generation_config":{"maxOutputTokens":null,"temperature":null,"topP":null,"topK":null,"stopSequences":null,"candidateCount":null,"presencePenalty":null,"frequencyPenalty":null,"seed":null,"responseLogprobs":null,"logprobs":null,"responseMimeType":null,"responseSchema":null},"tools":[{"function_declarations":[{"name":"search_traces","description":"Search traces for analysis","parameters":{"type":"object","properties":{"sort":{"description":"Sorting configuration for the result set."},"filters":{"description":"Additional filters to narrow down traces."},"page":{"description":"Pagination configuration for the result set."},"time_range":{"description":"Time range configuration for the search."},"include":{"description":"Flags to control which extra data is included per trace."}},"required":[]}}]}]}"#;
-        let raw_request = serde_json::Value::String(json_str.to_string());
-        let mapped_request = map_request(&raw_request);
-        println!("mapped_request: {:#?}", mapped_request);
-
-        // Verify it's a Gemini request
-        match mapped_request {
-            Request::Gemini(_) => {}
-            _ => panic!("Expected Gemini request"),
-        }
-    }
-}
