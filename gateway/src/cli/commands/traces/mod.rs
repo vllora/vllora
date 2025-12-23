@@ -48,9 +48,6 @@ pub enum TracesCommands {
     },
     /// Get detailed LLM call information for a span
     CallInfo {
-        /// Trace ID
-        #[arg(long)]
-        trace_id: String,
         /// Span ID
         #[arg(long)]
         span_id: String,
@@ -111,11 +108,9 @@ pub async fn handle_traces(db_pool: DbPool, cmd: TracesCommands) -> Result<(), C
             )
             .await
         }
-        TracesCommands::CallInfo {
-            trace_id,
-            span_id,
-            output,
-        } => call_info::handle_call_info(&vllora_mcp, trace_id, span_id, output).await,
+        TracesCommands::CallInfo { span_id, output } => {
+            call_info::handle_call_info(&vllora_mcp, span_id, output).await
+        }
         TracesCommands::RunInfo { run_id, output } => {
             run_info::handle_run_info(&vllora_mcp, run_id, output).await
         }

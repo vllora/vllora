@@ -463,9 +463,6 @@ pub struct GetLlmCallInclude {
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[schemars(description = "Parameters for the get_llm_call MCP tool.")]
 pub struct GetLlmCallParams {
-    #[schemars(description = "Trace identifier for the span.")]
-    pub trace_id: String,
-
     #[schemars(description = "Span identifier (string).")]
     pub span_id: String,
 

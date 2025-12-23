@@ -348,13 +348,8 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
         let span = paginated
             .data
             .into_iter()
-            .find(|s| s.trace_id == params.trace_id && s.span_id == params.span_id)
-            .ok_or_else(|| {
-                format!(
-                    "Span not found: trace_id={}, span_id={}",
-                    params.trace_id, params.span_id
-                )
-            })?;
+            .find(|s| s.span_id == params.span_id)
+            .ok_or_else(|| format!("Span not found: span_id={}", params.span_id))?;
 
         let include = params.include.unwrap_or(GetLlmCallInclude {
             llm_payload: false,

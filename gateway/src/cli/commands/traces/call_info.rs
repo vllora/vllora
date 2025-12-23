@@ -261,7 +261,6 @@ pub fn format_llm_call_table(
 
 pub async fn handle_call_info(
     vllora_mcp: &VlloraMcpInstance,
-    trace_id: String,
     span_id: String,
     output: String,
 ) -> Result<(), CliError> {
@@ -273,7 +272,6 @@ pub async fn handle_call_info(
     });
 
     let params = GetLlmCallParams {
-        trace_id: trace_id.clone(),
         span_id: span_id.clone(),
         allow_unsafe_text: false,
         include,
