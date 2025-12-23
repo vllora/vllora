@@ -99,20 +99,11 @@ pub fn format_run_overview_table(response: &GetRunOverviewResponse) {
     // Tool summaries
     if !response.tool_summaries.is_empty() {
         let mut tools_table = Table::new();
-        tools_table
-            .add_row(row![bF=> "Span ID", "Tool Name", "Status", "Args Hash", "Result Hash"]);
+        tools_table.add_row(row![bF=> "Span ID", "Tool Name", "Status"]);
 
         for tool in &response.tool_summaries {
             let tool_name = tool.tool_name.as_deref().unwrap_or("-");
-            let args_hash = tool.args_sha256.as_deref().unwrap_or("-");
-            let result_hash = tool.result_sha256.as_deref().unwrap_or("-");
-            tools_table.add_row(row![
-                tool.span_id,
-                tool_name,
-                tool.status,
-                args_hash,
-                result_hash,
-            ]);
+            tools_table.add_row(row![tool.span_id, tool_name, tool.status,]);
         }
 
         println!("\nTool Calls ({}):", response.tool_summaries.len());

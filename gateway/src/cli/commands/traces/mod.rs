@@ -9,7 +9,6 @@ mod call_info;
 mod list;
 mod overview;
 mod run_info;
-mod shared;
 
 #[derive(Subcommand)]
 pub enum TracesCommands {

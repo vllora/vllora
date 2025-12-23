@@ -4,7 +4,7 @@ use serde::{Deserialize, Deserializer, Serializer};
 use serde_json::Value;
 use std::{collections::HashMap, fmt::Display};
 
-#[derive(Serialize, schemars::JsonSchema)]
+#[derive(Serialize, schemars::JsonSchema, Clone)]
 pub struct LangdbSpan {
     pub trace_id: String,
     pub span_id: String,

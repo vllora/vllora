@@ -37,11 +37,11 @@ pub enum Message {
     },
 }
 
-pub fn map_request(request: &serde_json::Value) -> Request {
+pub fn map_request(request: &serde_json::Value) -> Result<Request, serde_json::Error> {
     if let serde_json::Value::String(obj) = request {
-        serde_json::from_str(obj).unwrap()
+        serde_json::from_str(obj)
     } else {
-        serde_json::from_value(request.clone()).unwrap()
+        serde_json::from_value(request.clone())
     }
 }
 

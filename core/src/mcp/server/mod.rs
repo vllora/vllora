@@ -1,5 +1,6 @@
 pub mod prompts;
 pub mod service;
+pub mod shared;
 pub mod tools;
 
 use chrono::TimeZone;
@@ -672,6 +673,12 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
             }
         }
 
+        let model_calls: HashMap<String, LangdbSpan> = spans
+            .iter()
+            .filter(|s| matches!(s.operation_name, crate::types::traces::Operation::ModelCall))
+            .map(|s| (s.span_id.clone(), s.clone()))
+            .collect();
+
         // LLM summaries: for spans classified as "llm", use attributes to extract provider/model.
         let mut llm_summaries: Vec<LlmSummary> = Vec::new();
         for s in &spans {
@@ -681,23 +688,31 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
                     | crate::types::traces::Operation::Anthropic
                     | crate::types::traces::Operation::Bedrock
                     | crate::types::traces::Operation::Gemini
-                    | crate::types::traces::Operation::ModelCall
             );
+
             if !is_llm {
                 continue;
             }
 
-            // Provider/model are stored as attributes on the span, when present.
-            let provider = s
-                .attribute
-                .get("provider_name")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
-            let model = s
-                .attribute
-                .get("model_name")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
+            let model_call = match &s.parent_span_id {
+                Some(parent_span_id) => model_calls.get(parent_span_id).cloned(),
+                None => None,
+            };
+
+            let mut model = None;
+            let mut provider = None;
+            if let Some(model_call) = model_call {
+                model = model_call
+                    .attribute
+                    .get("inference_model_name")
+                    .cloned()
+                    .and_then(|v| v.as_str().map(|s| s.to_string()));
+                provider = model_call
+                    .attribute
+                    .get("provider_name")
+                    .cloned()
+                    .and_then(|v| v.as_str().map(|s| s.to_string()));
+            }
 
             // Approximate message_count and tool_count from attributes if they exist.
             // We look for "input" and "tools" attributes, which may contain JSON.
@@ -750,28 +765,15 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
             if !is_tool {
                 continue;
             }
-
             let tool_name = s
                 .attribute
-                .get("tool_name")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
-            let args_sha256 = s
-                .attribute
-                .get("tool_args_sha256")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
-            let result_sha256 = s
-                .attribute
-                .get("tool_result_sha256")
+                .get("tool.name")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
 
             tool_summaries.push(ToolSummary {
                 span_id: s.span_id.clone(),
                 tool_name,
-                args_sha256,
-                result_sha256,
                 status: status.clone(),
             });
         }

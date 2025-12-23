@@ -706,14 +706,6 @@ pub struct ToolSummary {
     #[schemars(description = "Tool name, if known.")]
     pub tool_name: Option<String>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(description = "SHA256 digest of the tool arguments, if available.")]
-    pub args_sha256: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(description = "SHA256 digest of the tool result, if available.")]
-    pub result_sha256: Option<String>,
-
     #[schemars(description = "Status of the tool call (e.g. ok, error).")]
     pub status: String,
 }

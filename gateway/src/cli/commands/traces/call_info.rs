@@ -1,9 +1,9 @@
-use super::shared::{
-    generate_messages, generate_response_messages, map_request, map_response, Message,
-};
 use crate::CliError;
 use chrono::TimeZone;
 use prettytable::{row, Table};
+use vllora_core::mcp::server::shared::{
+    generate_messages, generate_response_messages, map_request, map_response, Message,
+};
 use vllora_core::mcp::server::tools::{GetLlmCallInclude, GetLlmCallParams, GetLlmCallResponse};
 use vllora_core::mcp::server::VlloraMcp;
 use vllora_core::metadata::services::trace::TraceServiceImpl as MetadataTraceServiceImpl;
@@ -213,8 +213,10 @@ pub fn format_llm_call_table(
     // Raw Request (if available)
     if let Some(raw_request) = &response.raw_request {
         let request = map_request(raw_request);
-        let generated_messages = generate_messages(&request);
-        messages.extend(generated_messages);
+        if let Ok(request) = request {
+            let generated_messages = generate_messages(&request);
+            messages.extend(generated_messages);
+        }
     }
 
     // Raw Response (if available)
