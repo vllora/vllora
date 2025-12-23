@@ -356,7 +356,6 @@ pub fn generate_messages(request: &Request) -> Vec<Message> {
     result
 }
 
-
 #[cfg(test)]
 mod tests {
     use crate::mcp::server::shared::*;
