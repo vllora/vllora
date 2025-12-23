@@ -154,6 +154,7 @@ pub struct ModelMetadata {
     pub langdb_release_date: Option<chrono::NaiveDate>,
     #[serde(default)]
     pub is_private: bool,
+    #[serde(default)]
     pub is_custom: bool,
 }
 
