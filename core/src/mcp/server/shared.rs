@@ -45,11 +45,11 @@ pub fn map_request(request: &serde_json::Value) -> Result<Request, serde_json::E
     }
 }
 
-pub fn map_response(response: &serde_json::Value) -> Response {
+pub fn map_response(response: &serde_json::Value) -> Result<Response, serde_json::Error> {
     if let serde_json::Value::String(obj) = response {
-        serde_json::from_str(obj).unwrap()
+        serde_json::from_str(obj)
     } else {
-        serde_json::from_value(response.clone()).unwrap()
+        serde_json::from_value(response.clone())
     }
 }
 

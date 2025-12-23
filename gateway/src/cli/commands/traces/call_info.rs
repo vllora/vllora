@@ -211,18 +211,14 @@ pub fn format_llm_call_table(
 
     let mut messages = Vec::new();
     // Raw Request (if available)
-    if let Some(raw_request) = &response.raw_request {
-        let request = map_request(raw_request);
-        if let Ok(request) = request {
-            let generated_messages = generate_messages(&request);
-            messages.extend(generated_messages);
-        }
+    if let Some(Ok(request)) = &response.raw_request.as_ref().map(map_request) {
+        let generated_messages = generate_messages(request);
+        messages.extend(generated_messages);
     }
 
     // Raw Response (if available)
-    if let Some(raw_response) = &response.raw_response {
-        let response = map_response(raw_response);
-        let generated_messages = generate_response_messages(&response);
+    if let Some(Ok(response)) = &response.raw_response.as_ref().map(map_response) {
+        let generated_messages = generate_response_messages(response);
         messages.extend(generated_messages);
     }
 
