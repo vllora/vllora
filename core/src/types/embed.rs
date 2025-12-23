@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 use validator::ValidationError;
-use vllora_llm::async_openai::types::EmbeddingUsage;
+use vllora_llm::async_openai::types::embeddings::EmbeddingUsage;
 
 #[derive(Serialize, Deserialize, Validate, Clone, Debug)]
 #[validate(schema(function = "validate_openai_embedding_params"))]
@@ -15,8 +15,8 @@ pub struct OpenAiEmbeddingParams {
 #[derive(Serialize, Clone, Debug)]
 #[serde(untagged)]
 pub enum EmbeddingResult {
-    Float(vllora_llm::async_openai::types::CreateEmbeddingResponse),
-    Base64(vllora_llm::async_openai::types::CreateBase64EmbeddingResponse),
+    Float(vllora_llm::async_openai::types::embeddings::CreateEmbeddingResponse),
+    Base64(vllora_llm::async_openai::types::embeddings::CreateBase64EmbeddingResponse),
 }
 
 impl EmbeddingResult {
@@ -35,14 +35,14 @@ impl EmbeddingResult {
     }
 }
 
-impl From<vllora_llm::async_openai::types::CreateEmbeddingResponse> for EmbeddingResult {
-    fn from(value: vllora_llm::async_openai::types::CreateEmbeddingResponse) -> Self {
+impl From<vllora_llm::async_openai::types::embeddings::CreateEmbeddingResponse> for EmbeddingResult {
+    fn from(value: vllora_llm::async_openai::types::embeddings::CreateEmbeddingResponse) -> Self {
         EmbeddingResult::Float(value)
     }
 }
 
-impl From<vllora_llm::async_openai::types::CreateBase64EmbeddingResponse> for EmbeddingResult {
-    fn from(value: vllora_llm::async_openai::types::CreateBase64EmbeddingResponse) -> Self {
+impl From<vllora_llm::async_openai::types::embeddings::CreateBase64EmbeddingResponse> for EmbeddingResult {
+    fn from(value: vllora_llm::async_openai::types::embeddings::CreateBase64EmbeddingResponse) -> Self {
         EmbeddingResult::Base64(value)
     }
 }

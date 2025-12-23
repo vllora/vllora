@@ -7,8 +7,15 @@ use crate::provider::openai::openai_client;
 use crate::types::gateway::ChatCompletionChunk;
 use crate::types::gateway::ChatCompletionChunkChoice;
 use crate::types::gateway::ChatCompletionDelta;
+use crate::types::gateway::ToolCall;
+use async_openai::types::chat::FunctionObject;
+use async_openai::types::chat::ChatCompletionRequestUserMessageArgs;
+use async_openai::types::chat::ChatCompletionStreamOptions;
 use async_trait::async_trait;
-
+use async_openai::types::chat::ToolChoiceOptions;
+use async_openai::types::chat::ChatCompletionMessageToolCalls;
+use async_openai::types::chat::ChatCompletionTools;
+use async_openai::types::chat::CompletionUsage;
 use crate::client::error::AuthorizationError;
 use crate::client::error::ModelError;
 use crate::error::LLMError;
@@ -16,7 +23,7 @@ use crate::error::{LLMResult, ModelFinishError};
 use crate::types::credentials::ApiKeyCredentials;
 use crate::types::credentials_ident::CredentialsIdent;
 use crate::types::engine::{render, ExecutionOptions, OpenAiModelParams};
-use crate::types::gateway::{ChatCompletionContent, ChatCompletionMessage, ToolCall};
+use crate::types::gateway::{ChatCompletionContent, ChatCompletionMessage};
 use crate::types::gateway::{ChatCompletionMessageWithFinishReason, GatewayModelUsage};
 use crate::types::instance::ModelInstance;
 use crate::types::message::{ImageDetail, MessageContentType, MessageType};
@@ -29,21 +36,19 @@ use crate::types::{
 use async_openai::config::Config;
 use async_openai::config::{AzureConfig, OpenAIConfig};
 use async_openai::error::OpenAIError;
-use async_openai::types::{
+use async_openai::types::chat::{
     ChatChoice, ChatCompletionMessageToolCall, ChatCompletionMessageToolCallChunk,
     ChatCompletionRequestAssistantMessageArgs, ChatCompletionRequestMessage,
     ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestToolMessage,
-    ChatCompletionRequestToolMessageContent, ChatCompletionRequestUserMessageArgs,
-    ChatCompletionRequestUserMessageContentPart, ChatCompletionResponseMessage, ChatCompletionTool,
-    ChatCompletionToolArgs, ChatCompletionToolChoiceOption, ChatCompletionToolType,
-    CreateChatCompletionRequest, CreateChatCompletionRequestArgs, CreateChatCompletionResponse,
-    FinishReason, FunctionCall, FunctionCallStream, FunctionObject,
+    ChatCompletionRequestToolMessageContent, ChatCompletionRequestUserMessageContentPart,
+    ChatCompletionResponseMessage, ChatCompletionTool,
+    ChatCompletionToolChoiceOption, CreateChatCompletionRequest,
+    CreateChatCompletionRequestArgs, CreateChatCompletionResponse, FinishReason, FunctionCall,
+    FunctionCallStream,
 };
-use async_openai::types::{
-    ChatCompletionRequestMessageContentPartImage, CreateChatCompletionStreamResponse, ImageUrl,
-};
-use async_openai::types::{ChatCompletionRequestToolMessageArgs, CompletionUsage};
-use async_openai::types::{ChatCompletionRequestUserMessageContent, ChatCompletionStreamOptions};
+use async_openai::types::chat::{ChatCompletionRequestMessageContentPartImage, CreateChatCompletionStreamResponse, ImageUrl};
+use async_openai::types::chat::{ChatCompletionRequestToolMessageArgs};
+use async_openai::types::chat::{ChatCompletionRequestUserMessageContent};
 use async_openai::Client;
 use futures::Stream;
 use futures::StreamExt;
@@ -62,8 +67,8 @@ use vllora_telemetry::events::{self, RecordResult};
 
 pub type StreamExecutionResult = (
     FinishReason,
-    Vec<ChatCompletionMessageToolCall>,
-    Option<async_openai::types::CompletionUsage>,
+    Vec<ChatCompletionMessageToolCalls>,
+    Option<async_openai::types::chat::CompletionUsage>,
     Option<CreateChatCompletionResponse>,
 );
 
@@ -181,17 +186,25 @@ impl OpenAIModel<AzureConfig> {
 
 // Common implementation for all Config types
 impl<C: Config> OpenAIModel<C> {
-    pub fn map_tool_call(tool_call: &ChatCompletionMessageToolCall) -> ModelToolCall {
-        ModelToolCall {
-            tool_id: tool_call.id.clone(),
-            tool_name: tool_call.function.name.clone(),
-            input: tool_call.function.arguments.clone(),
-            extra_content: None,
+    pub fn map_tool_call(tool_call: &ChatCompletionMessageToolCalls) -> ModelToolCall {
+        match tool_call {
+            ChatCompletionMessageToolCalls::Function(f) => ModelToolCall {
+                tool_id: f.id.clone(),
+                tool_name: f.function.name.clone(),
+                input: f.function.arguments.clone(),
+                extra_content: None,
+            },
+            ChatCompletionMessageToolCalls::Custom(c) => ModelToolCall {
+                tool_id: c.id.clone(),
+                tool_name: c.custom_tool.name.clone(),
+                input: c.custom_tool.input.clone(),
+                extra_content: None,
+            },
         }
     }
 
     async fn handle_tool_calls(
-        function_calls: impl Iterator<Item = &ChatCompletionMessageToolCall>,
+        function_calls: impl Iterator<Item = &ChatCompletionMessageToolCalls>,
         tools: &HashMap<String, Arc<Box<dyn Tool>>>,
         tx: &tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
@@ -199,15 +212,14 @@ impl<C: Config> OpenAIModel<C> {
         let result = futures::future::join_all(function_calls.map(|tool_call| {
             let tags_value = tags.clone();
             async move {
-                let id = tool_call.id.clone();
-                let function = tool_call.function.clone();
-                tracing::trace!("Calling tool ({id}) {function:?}");
-
                 let tool_call = Self::map_tool_call(tool_call);
+                tracing::trace!("Calling tool ({id}) {tool_call:?}", id = tool_call.tool_id);
+
                 let result = handle_tool_call(&tool_call, tools, tx, tags_value).await;
-                tracing::trace!("Result ({id}): {result:?}");
+                tracing::trace!("Result ({id}): {result:?}", id = tool_call.tool_id);
+                
                 let content = result.unwrap_or_else(|err| err.to_string());
-                (id, content)
+                (tool_call.tool_id, content)
             }
         }))
         .await;
@@ -235,13 +247,12 @@ impl<C: Config> OpenAIModel<C> {
         messages: &[ChatCompletionRequestMessage],
         stream: bool,
     ) -> LLMResult<CreateChatCompletionRequest> {
-        let mut chat_completion_tools: Vec<ChatCompletionTool> = vec![];
+        let mut chat_completion_tools: Vec<ChatCompletionTools> = vec![];
 
         for (name, tool) in self.tools.iter() {
             chat_completion_tools.push(
-                ChatCompletionToolArgs::default()
-                    .r#type(ChatCompletionToolType::Function)
-                    .function(FunctionObject {
+                ChatCompletionTools::Function(ChatCompletionTool {
+                    function: FunctionObject {
                         name: name.to_owned(),
                         description: Some(tool.description()),
                         parameters: tool
@@ -255,9 +266,8 @@ impl<C: Config> OpenAIModel<C> {
                             })
                             .transpose()?,
                         strict: Some(false),
-                    })
-                    .build()
-                    .map_err(|e| ModelError::OpenAIApi(Box::new(e)))?,
+                    }
+                }),
             );
         }
 
@@ -292,7 +302,8 @@ impl<C: Config> OpenAIModel<C> {
 
         if stream {
             builder.stream_options(ChatCompletionStreamOptions {
-                include_usage: true,
+                include_usage: Some(true),
+                include_obfuscation: None
             });
         }
 
@@ -303,7 +314,7 @@ impl<C: Config> OpenAIModel<C> {
         if !self.tools.is_empty() {
             builder
                 .tools(chat_completion_tools)
-                .tool_choice(ChatCompletionToolChoiceOption::Auto);
+                .tool_choice(ChatCompletionToolChoiceOption::Mode(ToolChoiceOptions::Auto));
         }
 
         Ok(builder
@@ -314,8 +325,8 @@ impl<C: Config> OpenAIModel<C> {
     #[tracing::instrument(level = "debug", skip_all)]
     fn build_response(
         first_chunk: Option<&CreateChatCompletionStreamResponse>,
-        tool_call_states: &[ChatCompletionMessageToolCall],
-        usage: Option<async_openai::types::CompletionUsage>,
+        tool_call_states: &[ChatCompletionMessageToolCalls],
+        usage: Option<async_openai::types::chat::CompletionUsage>,
         stream_content: String,
         finish_reason: &FinishReason,
     ) -> Option<CreateChatCompletionResponse> {
@@ -332,6 +343,7 @@ impl<C: Config> OpenAIModel<C> {
                             #[allow(deprecated)]
                             function_call: None,
                             audio: None,
+                            annotations: None,
                         },
                         finish_reason: Some(*finish_reason),
                         logprobs: None,
@@ -348,6 +360,7 @@ impl<C: Config> OpenAIModel<C> {
                     usage: usage.clone(),
                     choices,
                     service_tier: first_chunk.service_tier.clone(),
+                    #[allow(deprecated)]
                     system_fingerprint: first_chunk.system_fingerprint.clone(),
                 })
             }
@@ -362,7 +375,7 @@ impl<C: Config> OpenAIModel<C> {
         tx_response: &tokio::sync::mpsc::Sender<LLMResult<ChatCompletionChunk>>,
         started_at: std::time::Instant,
     ) -> LLMResult<StreamExecutionResult> {
-        let mut tool_call_states: HashMap<u32, ChatCompletionMessageToolCall> = HashMap::new();
+        let mut tool_call_states: HashMap<u32, ChatCompletionMessageToolCalls> = HashMap::new();
         let mut first_chunk = None;
         let mut stream_content = String::new();
         let mut finish_reason = None;
@@ -437,17 +450,18 @@ impl<C: Config> OpenAIModel<C> {
                                 continue;
                             };
                             let state = tool_call_states.entry(*index).or_insert_with(|| {
-                                ChatCompletionMessageToolCall {
+                                ChatCompletionMessageToolCalls::Function(ChatCompletionMessageToolCall {
                                     id: id.clone().unwrap(),
-                                    r#type: ChatCompletionToolType::Function,
                                     function: FunctionCall {
                                         name: name.clone().unwrap(),
                                         arguments: Default::default(),
                                     },
-                                }
+                                })
                             });
-                            if let Some(arguments) = arguments {
-                                state.function.arguments.push_str(arguments);
+                            if let ChatCompletionMessageToolCalls::Function(state) = state {
+                                if let Some(arguments) = arguments {
+                                    state.function.arguments.push_str(arguments);
+                                }
                             }
                         }
                     }
@@ -605,7 +619,10 @@ impl<C: Config> OpenAIModel<C> {
                 );
                 tools_span.follows_from(span.id());
 
-                let tool_name = tool_calls[0].function.name.clone();
+                let tool_name = match &tool_calls[0] {
+                    ChatCompletionMessageToolCalls::Function(f) => f.function.name.clone(),
+                    ChatCompletionMessageToolCalls::Custom(c) => c.custom_tool.name.clone(),
+                };
                 let tool = self
                     .tools
                     .get(tool_name.as_str())
@@ -638,20 +655,12 @@ impl<C: Config> OpenAIModel<C> {
                                     tool_calls
                                         .iter()
                                         .enumerate()
-                                        .map(|(index, tool_call)| ToolCall {
-                                            index: Some(index),
-                                            id: tool_call.id.clone(),
-                                            r#type: match tool_call.r#type {
-                                                ChatCompletionToolType::Function => {
-                                                    "function".to_string()
-                                                }
-                                            },
-                                            function: crate::types::gateway::FunctionCall {
-                                                name: tool_call.function.name.clone(),
-                                                arguments: tool_call.function.arguments.clone(),
-                                            },
-                                            extra_content: None,
-                                        })
+                                        .map(|(index, tool_call)| 
+                                        {
+                                        let mut tool_call: ToolCall = tool_call.into();
+                                        tool_call.index = Some(index);
+                                    
+                                    tool_call})
                                         .collect(),
                                 ),
                                 ..Default::default()
@@ -919,14 +928,23 @@ impl<C: Config> OpenAIModel<C> {
                 .into(),
             )),
             FinishReason::ToolCalls => {
+                let first_tool_name = match &tool_calls[0] {
+                    ChatCompletionMessageToolCalls::Function(f) => f.function.name.clone(),
+                    ChatCompletionMessageToolCalls::Custom(c) => c.custom_tool.name.clone(),
+                };
                 let tool = self
                     .tools
-                    .get(tool_calls[0].function.name.as_str())
+                    .get(first_tool_name.as_str())
                     .unwrap();
 
                 let tool_names = tool_calls
                     .iter()
-                    .map(|t| t.function.name.clone())
+                    .map(|t| 
+                        match t {
+                            ChatCompletionMessageToolCalls::Function(f) => f.function.name.clone(),
+                            ChatCompletionMessageToolCalls::Custom(c) => c.custom_tool.name.clone(),
+                        }
+                    )
                     .collect::<Vec<String>>()
                     .join(",");
                 let tools_span = tracing::info_span!(
@@ -1063,15 +1081,14 @@ impl<C: Config> OpenAIModel<C> {
                             msg_args.tool_calls(
                                 calls
                                     .iter()
-                                    .map(|c| ChatCompletionMessageToolCall {
+                                    .map(|c| ChatCompletionMessageToolCalls::Function(ChatCompletionMessageToolCall {
                                         id: c.id.clone(),
-                                        r#type: ChatCompletionToolType::Function,
                                         function: FunctionCall {
                                             name: c.function.name.clone(),
                                             arguments: c.function.arguments.clone(),
                                         },
-                                    })
-                                    .collect::<Vec<ChatCompletionMessageToolCall>>(),
+                                    }))
+                                    .collect::<Vec<ChatCompletionMessageToolCalls>>(),
                             );
                         }
                         ChatCompletionRequestMessage::Assistant(
@@ -1190,13 +1207,13 @@ fn construct_user_message(
                                         .and_then(|o| o.as_image())
                                         .map(|o| match o {
                                             ImageDetail::Auto => {
-                                                async_openai::types::ImageDetail::Auto
+                                                async_openai::types::chat::ImageDetail::Auto
                                             }
                                             ImageDetail::Low => {
-                                                async_openai::types::ImageDetail::Low
+                                                async_openai::types::chat::ImageDetail::Low
                                             }
                                             ImageDetail::High => {
-                                                async_openai::types::ImageDetail::High
+                                                async_openai::types::chat::ImageDetail::High
                                             }
                                         }),
                                 },
@@ -1204,6 +1221,9 @@ fn construct_user_message(
                         )
                     }
                     MessageContentType::InputAudio => {
+                        todo!()
+                    }
+                    MessageContentType::File => {
                         todo!()
                     }
                 };
@@ -1225,10 +1245,13 @@ pub fn record_map_err(e: impl Into<LLMError> + ToString, span: tracing::Span) ->
     e.into()
 }
 
-fn map_tool_names(tool_calls: &[ChatCompletionMessageToolCall]) -> String {
+fn map_tool_names(tool_calls: &[ChatCompletionMessageToolCalls]) -> String {
     tool_calls
         .iter()
-        .map(|tool_call| tool_call.function.name.clone())
+        .map(|tool_call| match tool_call {
+            ChatCompletionMessageToolCalls::Function(function) => function.function.name.clone(),
+            ChatCompletionMessageToolCalls::Custom(custom) => custom.custom_tool.name.clone(),
+        })
         .collect::<HashSet<String>>()
         .into_iter()
         .collect::<Vec<String>>()

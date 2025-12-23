@@ -31,7 +31,7 @@ use crate::types::{
     LLMContentEvent, LLMFinishEvent, LLMStartEvent, ModelEvent, ModelEventType, ModelFinishReason,
     ModelToolCall,
 };
-use async_openai::types::ResponseFormat;
+use async_openai::types::chat::ResponseFormat;
 use async_trait::async_trait;
 use futures::Stream;
 use futures::StreamExt;
@@ -1159,6 +1159,9 @@ fn construct_user_message(m: &InnerMessage) -> Content {
                             mime_type: format!("audio/{format}"),
                             data: m.value.to_string(),
                         }
+                    }
+                    MessageContentType::File => {
+                        todo!()
                     }
                 };
                 parts.push(msg.into())
