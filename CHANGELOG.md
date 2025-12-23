@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.20](https://github.com/vllora/vllora/compare/v0.1.19...v0.1.20) (2025-12-23)
+
+
+### Features
+
+* Add operation names filter to get traces API ([41e3523](https://github.com/vllora/vllora/commit/41e35230201e72a1395e473759db19c47d3258dc))
+* Enhance LLM call handling and tool summary structure ([8283e74](https://github.com/vllora/vllora/commit/8283e7431ab773c1a3bb5753e32568e22701605d))
+* Handle MCP functionallity through CLI ([dc9915a](https://github.com/vllora/vllora/commit/dc9915a84841fa428f740c04b3f606042f34011e))
+* Remove trace_id from GetLlmCallParams and update related handling ([4a0de09](https://github.com/vllora/vllora/commit/4a0de0940e17ee98f224a0d47cccec807cde0e50))
+* Support custom providers, models and endpoints ([#224](https://github.com/vllora/vllora/issues/224)) ([148f9aa](https://github.com/vllora/vllora/commit/148f9aaf36b257bed923853e00ff64beab23dee1))
+
+
+### Bug Fixes
+
+* Fix response mapping ([c64a13f](https://github.com/vllora/vllora/commit/c64a13fe3c9f99467418799195e4f15d3910dc40))
+
 ### [0.1.19](https://github.com/vllora/vllora/compare/v0.1.18...v0.1.19) (2025-12-19)
 
 
