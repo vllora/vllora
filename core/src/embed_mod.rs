@@ -8,7 +8,7 @@ use tracing::Instrument;
 use tracing::{field, Span};
 use valuable::Valuable;
 use vllora_llm::async_openai::config::OpenAIConfig;
-use vllora_llm::async_openai::types::{
+use vllora_llm::async_openai::types::embeddings::{
     CreateEmbeddingRequestArgs, CreateEmbeddingResponse, EmbeddingInput,
 };
 use vllora_llm::async_openai::Client;

@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
-use vllora_llm::async_openai::types::CreateChatCompletionRequest;
-use vllora_llm::async_openai::types::CreateChatCompletionResponse;
+use vllora_llm::async_openai::types::chat::ChatCompletionMessageToolCalls;
+use vllora_llm::async_openai::types::chat::CreateChatCompletionRequest;
+use vllora_llm::async_openai::types::chat::CreateChatCompletionResponse;
 use vllora_llm::clust::messages::{
     Content as ClustContent, ContentBlock, MessagesRequestBody, MessagesResponseBody,
     Role as ClustRole,
@@ -37,6 +38,29 @@ pub enum Message {
     },
 }
 
+impl From<ChatCompletionMessageToolCalls> for Message {
+    fn from(val: ChatCompletionMessageToolCalls) -> Self {
+        match val {
+            ChatCompletionMessageToolCalls::Function(function) => Message::ToolCall {
+                name: function.function.name.clone(),
+                id: Some(function.id.clone()),
+                arguments: serde_json::to_value(&function.function.arguments).unwrap_or_default(),
+            },
+            ChatCompletionMessageToolCalls::Custom(custom) => Message::ToolCall {
+                name: custom.custom_tool.name.clone(),
+                id: Some(custom.id.clone()),
+                arguments: serde_json::to_value(&custom.custom_tool.input).unwrap_or_default(),
+            },
+        }
+    }
+}
+
+impl From<&ChatCompletionMessageToolCalls> for Message {
+    fn from(val: &ChatCompletionMessageToolCalls) -> Self {
+        val.clone().into()
+    }
+}
+
 pub fn map_request(request: &serde_json::Value) -> Result<Request, serde_json::Error> {
     if let serde_json::Value::String(obj) = request {
         serde_json::from_str(obj)
@@ -70,12 +94,7 @@ pub fn generate_response_messages(response: &Response) -> Vec<Message> {
                 // Handle tool calls
                 if let Some(tool_calls) = &msg.tool_calls {
                     for tool_call in tool_calls {
-                        result.push(Message::ToolCall {
-                            name: tool_call.function.name.clone(),
-                            id: Some(tool_call.id.clone()),
-                            arguments: serde_json::from_str(&tool_call.function.arguments)
-                                .unwrap_or_else(|_| serde_json::Value::Null),
-                        });
+                        result.push(tool_call.into());
                     }
                 }
             }
@@ -171,7 +190,7 @@ pub fn generate_response_messages(response: &Response) -> Vec<Message> {
 }
 
 pub fn generate_messages(request: &Request) -> Vec<Message> {
-    use vllora_llm::async_openai::types::{
+    use vllora_llm::async_openai::types::chat::{
         ChatCompletionRequestAssistantMessageContent, ChatCompletionRequestDeveloperMessageContent,
         ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageContent,
         ChatCompletionRequestToolMessageContent, ChatCompletionRequestUserMessageContent,
@@ -219,12 +238,7 @@ pub fn generate_messages(request: &Request) -> Vec<Message> {
                         // Handle tool calls
                         if let Some(tool_calls) = &assistant_msg.tool_calls {
                             for tool_call in tool_calls {
-                                result.push(Message::ToolCall {
-                                    name: tool_call.function.name.clone(),
-                                    id: Some(tool_call.id.clone()),
-                                    arguments: serde_json::from_str(&tool_call.function.arguments)
-                                        .unwrap_or_default(),
-                                });
+                                result.push(tool_call.into());
                             }
                         }
                     }

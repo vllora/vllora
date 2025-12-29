@@ -57,6 +57,7 @@ impl MessageMapper {
                             value: content.clone(),
                             additional_options: None,
                             cache_control: message.cache_control.clone(),
+                            file: None,
                         }])
                     }
                 }
@@ -69,6 +70,7 @@ impl MessageMapper {
                                 value: c.text.clone().unwrap_or("".to_string()),
                                 additional_options: None,
                                 cache_control: c.cache_control.clone(),
+                                file: None,
                             },
                             ContentType::ImageUrl => MessageContentPart {
                                 r#type: MessageContentType::ImageUrl,
@@ -79,6 +81,7 @@ impl MessageMapper {
                                     .unwrap_or("".to_string()),
                                 additional_options: None,
                                 cache_control: c.cache_control.clone(),
+                                file: None,
                             },
                             ContentType::InputAudio => {
                                 let audio = c
@@ -104,8 +107,16 @@ impl MessageMapper {
                                         },
                                     )),
                                     cache_control: c.cache_control.clone(),
+                                    file: None,
                                 }
                             }
+                            ContentType::File => MessageContentPart {
+                                r#type: MessageContentType::File,
+                                value: "".to_string(),
+                                additional_options: None,
+                                cache_control: c.cache_control.clone(),
+                                file: c.file.clone(),
+                            },
                         })
                     })
                     .collect::<Result<Vec<MessageContentPart>, MessageMapperError>>(),

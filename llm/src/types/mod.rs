@@ -225,22 +225,24 @@ impl std::fmt::Display for ModelFinishReason {
     }
 }
 
-impl From<ModelFinishReason> for async_openai::types::FinishReason {
-    fn from(val: ModelFinishReason) -> async_openai::types::FinishReason {
+impl From<ModelFinishReason> for async_openai::types::chat::FinishReason {
+    fn from(val: ModelFinishReason) -> async_openai::types::chat::FinishReason {
         match val {
-            ModelFinishReason::Stop => async_openai::types::FinishReason::Stop,
-            ModelFinishReason::Length => async_openai::types::FinishReason::Length,
-            ModelFinishReason::ToolCalls => async_openai::types::FinishReason::ToolCalls,
-            ModelFinishReason::ContentFilter => async_openai::types::FinishReason::ContentFilter,
+            ModelFinishReason::Stop => async_openai::types::chat::FinishReason::Stop,
+            ModelFinishReason::Length => async_openai::types::chat::FinishReason::Length,
+            ModelFinishReason::ToolCalls => async_openai::types::chat::FinishReason::ToolCalls,
+            ModelFinishReason::ContentFilter => {
+                async_openai::types::chat::FinishReason::ContentFilter
+            }
             // TODO: Handle stop sequence and guardrail in async-openai-compat
-            ModelFinishReason::StopSequence => async_openai::types::FinishReason::Stop,
-            ModelFinishReason::Guardrail => async_openai::types::FinishReason::Stop,
-            ModelFinishReason::Error => async_openai::types::FinishReason::Stop,
-            ModelFinishReason::InProgress => async_openai::types::FinishReason::Stop,
-            ModelFinishReason::Incomplete => async_openai::types::FinishReason::Stop,
-            ModelFinishReason::Queued => async_openai::types::FinishReason::Stop,
-            ModelFinishReason::Cancelled => async_openai::types::FinishReason::Stop,
-            ModelFinishReason::Other(_s) => async_openai::types::FinishReason::Stop,
+            ModelFinishReason::StopSequence => async_openai::types::chat::FinishReason::Stop,
+            ModelFinishReason::Guardrail => async_openai::types::chat::FinishReason::Stop,
+            ModelFinishReason::Error => async_openai::types::chat::FinishReason::Stop,
+            ModelFinishReason::InProgress => async_openai::types::chat::FinishReason::Stop,
+            ModelFinishReason::Incomplete => async_openai::types::chat::FinishReason::Stop,
+            ModelFinishReason::Queued => async_openai::types::chat::FinishReason::Stop,
+            ModelFinishReason::Cancelled => async_openai::types::chat::FinishReason::Stop,
+            ModelFinishReason::Other(_s) => async_openai::types::chat::FinishReason::Stop,
         }
     }
 }

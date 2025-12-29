@@ -221,12 +221,13 @@ impl OpenAIResponses {
         let mut response_completed = None;
         let mut tool_calls = HashMap::new();
         while let Some(event) = response.next().await {
-            if let Err(OpenAIError::StreamError(StreamError::ReqwestEventSource(
-                reqwest_eventsource::Error::StreamEnded,
-            ))) = event
-            {
-                if response_completed.is_some() {
-                    break;
+            if let Err(OpenAIError::StreamError(e)) = &event {
+                if let StreamError::ReqwestEventSource(reqwest_eventsource::Error::StreamEnded) =
+                    **e
+                {
+                    if response_completed.is_some() {
+                        break;
+                    }
                 }
             }
 

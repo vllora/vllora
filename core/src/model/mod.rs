@@ -346,6 +346,7 @@ impl ModelInstance for TracedModel {
                                 ContentType::Text => a.text.clone().unwrap_or_default(),
                                 ContentType::ImageUrl => "".to_string(),
                                 ContentType::InputAudio => "".to_string(),
+                                ContentType::File => "".to_string(),
                             })
                             .collect::<Vec<String>>()
                             .join("\n"),

@@ -1187,6 +1187,9 @@ fn construct_human_message(m: &InnerMessage) -> Result<Message, ModelError> {
                     MessageContentType::InputAudio => {
                         todo!()
                     }
+                    MessageContentType::File => {
+                        todo!()
+                    }
                 }
             }
             content_blocks

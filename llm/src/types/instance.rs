@@ -272,7 +272,7 @@ mod tests {
     use crate::types::engine::CompletionEngineParamsBuilder;
     use crate::types::gateway::ChatCompletionChunk;
     use crate::types::gateway::ChatCompletionRequest;
-    use async_openai::types::CreateChatCompletionResponse;
+    use async_openai::types::chat::CreateChatCompletionResponse;
     use futures::StreamExt;
 
     #[tokio::test]

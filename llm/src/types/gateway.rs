@@ -7,13 +7,17 @@ use crate::types::tools::ModelTool;
 use crate::types::tools::Tool;
 use crate::types::ModelFinishReason;
 use crate::types::ToolCallExtra;
-use async_openai::types::Base64EmbeddingVector;
-use async_openai::types::ChatChoiceStream;
-use async_openai::types::ChatCompletionRequestMessage;
-use async_openai::types::ChatCompletionStreamResponseDelta;
-use async_openai::types::CreateChatCompletionRequest;
-use async_openai::types::CreateChatCompletionStreamResponse;
-use async_openai::types::FinishReason;
+use async_openai::types::chat::ChatChoiceStream;
+use async_openai::types::chat::ChatCompletionMessageToolCalls;
+use async_openai::types::chat::ChatCompletionRequestMessage;
+use async_openai::types::chat::ChatCompletionStreamResponseDelta;
+use async_openai::types::chat::ChatCompletionToolChoiceOption;
+use async_openai::types::chat::ChatCompletionTools;
+use async_openai::types::chat::CreateChatCompletionRequest;
+use async_openai::types::chat::CreateChatCompletionStreamResponse;
+use async_openai::types::chat::FinishReason;
+use async_openai::types::chat::ToolChoiceOptions;
+use async_openai::types::embeddings::Base64EmbeddingVector;
 use aws_sdk_bedrockruntime::types::TokenUsage;
 use clust::messages::DeltaUsage;
 use serde::{Deserialize, Serialize};
@@ -23,8 +27,8 @@ use std::fmt::Display;
 use std::hash::Hash;
 use thiserror::Error;
 
-pub use async_openai::types::ResponseFormat as OpenaiResponseFormat;
-pub use async_openai::types::ResponseFormatJsonSchema;
+pub use async_openai::types::chat::ResponseFormat as OpenaiResponseFormat;
+pub use async_openai::types::chat::ResponseFormatJsonSchema;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ChatCompletionRequest {
@@ -48,11 +52,11 @@ pub struct ChatCompletionRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub frequency_penalty: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub logit_bias: Option<HashMap<String, serde_json::Value>>,
+    pub logit_bias: Option<HashMap<String, i8>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub response_format: Option<async_openai::types::ResponseFormat>,
+    pub response_format: Option<async_openai::types::chat::ResponseFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub seed: Option<i64>,
     // Keeping functions for backward compatibility
@@ -94,8 +98,10 @@ impl From<CreateChatCompletionRequest> for ChatCompletionRequest {
             n: request.n.map(|n| n as u32),
             stream: request.stream,
             stop: request.stop.map(|stop| match &stop {
-                async_openai::types::Stop::String(string) => vec![string.to_string()],
-                async_openai::types::Stop::StringArray(string_array) => {
+                async_openai::types::chat::StopConfiguration::String(string) => {
+                    vec![string.to_string()]
+                }
+                async_openai::types::chat::StopConfiguration::StringArray(string_array) => {
                     string_array.iter().map(|s| s.to_string()).collect()
                 }
             }),
@@ -104,8 +110,10 @@ impl From<CreateChatCompletionRequest> for ChatCompletionRequest {
             presence_penalty: request.presence_penalty,
             frequency_penalty: request.frequency_penalty,
             logit_bias: request.logit_bias,
+            #[allow(deprecated)]
             user: request.user,
             response_format: request.response_format,
+            #[allow(deprecated)]
             seed: request.seed,
             #[allow(deprecated)]
             functions: request.functions.map(|functions| {
@@ -125,13 +133,13 @@ impl From<CreateChatCompletionRequest> for ChatCompletionRequest {
             function_call: request
                 .function_call
                 .map(|function_call| match function_call {
-                    async_openai::types::ChatCompletionFunctionCall::None => {
+                    async_openai::types::chat::ChatCompletionFunctionCall::None => {
                         Value::String("none".to_string())
                     }
-                    async_openai::types::ChatCompletionFunctionCall::Auto => {
+                    async_openai::types::chat::ChatCompletionFunctionCall::Auto => {
                         Value::String("auto".to_string())
                     }
-                    async_openai::types::ChatCompletionFunctionCall::Function { name } => {
+                    async_openai::types::chat::ChatCompletionFunctionCall::Function { name } => {
                         let mut map = serde_json::Map::new();
                         map.insert("name".to_string(), Value::String(name.clone()));
                         Value::Object(map)
@@ -142,40 +150,57 @@ impl From<CreateChatCompletionRequest> for ChatCompletionRequest {
                     .into_iter()
                     .map(|tool| ChatCompletionTool {
                         tool_type: "function".to_string(),
-                        function: ChatCompletionFunction {
-                            name: tool.function.name.clone(),
-                            description: tool.function.description.clone(),
-                            parameters: tool.function.parameters.clone(),
+                        function: match tool {
+                            ChatCompletionTools::Function(function) => ChatCompletionFunction {
+                                name: function.function.name.clone(),
+                                description: function.function.description.clone(),
+                                parameters: function.function.parameters.clone(),
+                            },
+                            ChatCompletionTools::Custom(custom) => ChatCompletionFunction {
+                                name: custom.custom.name.clone(),
+                                description: custom.custom.description.clone(),
+                                parameters: None,
+                            },
                         },
                     })
                     .collect()
             }),
             tool_choice: request.tool_choice.map(|tool_choice| match tool_choice {
-                async_openai::types::ChatCompletionToolChoiceOption::None => {
-                    Value::String("none".to_string())
+                ChatCompletionToolChoiceOption::AllowedTools(_tools) => {
+                    todo!()
                 }
-                async_openai::types::ChatCompletionToolChoiceOption::Auto => {
-                    Value::String("auto".to_string())
-                }
-                async_openai::types::ChatCompletionToolChoiceOption::Required => {
-                    Value::String("required".to_string())
-                }
-                async_openai::types::ChatCompletionToolChoiceOption::Named(named) => {
+                ChatCompletionToolChoiceOption::Function(function) => {
                     let mut function_map = serde_json::Map::new();
                     function_map.insert(
                         "name".to_string(),
-                        Value::String(named.function.name.clone()),
+                        Value::String(function.function.name.clone()),
                     );
 
                     let mut map = serde_json::Map::new();
-                    map.insert("type".to_string(), Value::String("function".to_string()));
                     map.insert("function".to_string(), Value::Object(function_map));
 
                     Value::Object(map)
                 }
+                ChatCompletionToolChoiceOption::Custom(custom) => {
+                    let mut function_map = serde_json::Map::new();
+                    function_map.insert(
+                        "name".to_string(),
+                        Value::String(custom.custom.name.clone()),
+                    );
+
+                    let mut map = serde_json::Map::new();
+                    map.insert("function".to_string(), Value::Object(function_map));
+
+                    Value::Object(map)
+                }
+                ChatCompletionToolChoiceOption::Mode(mode) => match mode {
+                    ToolChoiceOptions::None => Value::String("none".to_string()),
+                    ToolChoiceOptions::Auto => Value::String("auto".to_string()),
+                    ToolChoiceOptions::Required => Value::String("required".to_string()),
+                },
             }),
             stream_options: request.stream_options.map(|stream_options| StreamOptions {
-                include_usage: stream_options.include_usage,
+                include_usage: stream_options.include_usage.unwrap_or(false),
             }),
             prompt_cache_key: request.prompt_cache_key,
         }
@@ -184,30 +209,26 @@ impl From<CreateChatCompletionRequest> for ChatCompletionRequest {
 
 fn map_message(message: &ChatCompletionRequestMessage) -> ChatCompletionMessage {
     match message {ChatCompletionRequestMessage::Developer(message) =>match &message.content {
-            async_openai::types::ChatCompletionRequestDeveloperMessageContent::Text(text) => ChatCompletionMessage {
+            async_openai::types::chat::ChatCompletionRequestDeveloperMessageContent::Text(text) => ChatCompletionMessage {
                 role: "developer".to_string(),
                 content: Some(ChatCompletionContent::Text(text.clone())),
                 ..Default::default()
             },
-            async_openai::types::ChatCompletionRequestDeveloperMessageContent::Array(array) => ChatCompletionMessage {
+            async_openai::types::chat::ChatCompletionRequestDeveloperMessageContent::Array(array) => ChatCompletionMessage {
                 role: "developer".to_string(),
-                content: Some(ChatCompletionContent::Content(array.iter().map(|part| Content {
-                    r#type: ContentType::Text,
-                    text: Some(part.text.clone()),
-                    ..Default::default()
-                }).collect())),
+                content: Some(ChatCompletionContent::Content(array.iter().map(|part| part.into()).collect())),
                 ..Default::default()
             },
         }
         ChatCompletionRequestMessage::System(message) => match &message.content {
-            async_openai::types::ChatCompletionRequestSystemMessageContent::Text(text) => ChatCompletionMessage {
+            async_openai::types::chat::ChatCompletionRequestSystemMessageContent::Text(text) => ChatCompletionMessage {
                 role: "system".to_string(),
                 content: Some(ChatCompletionContent::Text(text.clone())),
                 ..Default::default()
             },
-            async_openai::types::ChatCompletionRequestSystemMessageContent::Array(array) => {
+            async_openai::types::chat::ChatCompletionRequestSystemMessageContent::Array(array) => {
                 let parts = array.iter().map(|part| match part {
-                    async_openai::types::ChatCompletionRequestSystemMessageContentPart::Text(text) => Content {
+                    async_openai::types::chat::ChatCompletionRequestSystemMessageContentPart::Text(text) => Content {
                         r#type: ContentType::Text,
                         text: Some(text.text.clone()),
                         ..Default::default()
@@ -223,31 +244,40 @@ fn map_message(message: &ChatCompletionRequestMessage) -> ChatCompletionMessage 
         ChatCompletionRequestMessage::User(message) => ChatCompletionMessage {
             role: "user".to_string(),
             content: match &message.content {
-                async_openai::types::ChatCompletionRequestUserMessageContent::Text(text) => Some(ChatCompletionContent::Text(text.clone())),
-                async_openai::types::ChatCompletionRequestUserMessageContent::Array(array) => Some(
+                async_openai::types::chat::ChatCompletionRequestUserMessageContent::Text(text) => Some(ChatCompletionContent::Text(text.clone())),
+                async_openai::types::chat::ChatCompletionRequestUserMessageContent::Array(array) => Some(
                     ChatCompletionContent::Content(
                         array.iter().map(|part| {
                             match part {
-                                async_openai::types::ChatCompletionRequestUserMessageContentPart::Text(text) => Content {
+                                async_openai::types::chat::ChatCompletionRequestUserMessageContentPart::Text(text) => Content {
                                     r#type: ContentType::Text,
                                     text: Some(text.text.clone()),
                                     ..Default::default()
                                 },
-                                async_openai::types::ChatCompletionRequestUserMessageContentPart::ImageUrl(image_url) => Content {
+                                async_openai::types::chat::ChatCompletionRequestUserMessageContentPart::ImageUrl(image_url) => Content {
                                     r#type: ContentType::ImageUrl,
                                     image_url: Some(ImageUrl {
                                         url: image_url.image_url.url.clone(),
                                     }),
                                     ..Default::default()
                                 },
-                                async_openai::types::ChatCompletionRequestUserMessageContentPart::InputAudio(input_audio) => Content {
+                                async_openai::types::chat::ChatCompletionRequestUserMessageContentPart::InputAudio(input_audio) => Content {
                                     r#type: ContentType::InputAudio,
                                     audio: Some(InputAudio {
                                         data: input_audio.input_audio.data.clone(),
                                         format: match input_audio.input_audio.format {
-                                            async_openai::types::InputAudioFormat::Mp3 => "mp3".to_string(),
-                                            async_openai::types::InputAudioFormat::Wav => "wav".to_string(),
+                                            async_openai::types::chat::InputAudioFormat::Mp3 => "mp3".to_string(),
+                                            async_openai::types::chat::InputAudioFormat::Wav => "wav".to_string(),
                                         },
+                                    }),
+                                    ..Default::default()
+                                },
+                                async_openai::types::chat::ChatCompletionRequestUserMessageContentPart::File(file) => Content {
+                                    r#type: ContentType::File,
+                                    file: Some(File {
+                                        data: file.file.file_data.clone(),
+                                        id: file.file.file_id.clone(),
+                                        filename: file.file.filename.clone(),
                                     }),
                                     ..Default::default()
                                 },
@@ -261,16 +291,16 @@ fn map_message(message: &ChatCompletionRequestMessage) -> ChatCompletionMessage 
         ChatCompletionRequestMessage::Assistant(message) => ChatCompletionMessage {
             role: "assistant".to_string(),
             content: match &message.content {
-                Some(async_openai::types::ChatCompletionRequestAssistantMessageContent::Text(text)) => Some(ChatCompletionContent::Text(text.clone())),
-                Some(async_openai::types::ChatCompletionRequestAssistantMessageContent::Array(array)) => Some(
+                Some(async_openai::types::chat::ChatCompletionRequestAssistantMessageContent::Text(text)) => Some(ChatCompletionContent::Text(text.clone())),
+                Some(async_openai::types::chat::ChatCompletionRequestAssistantMessageContent::Array(array)) => Some(
                     ChatCompletionContent::Content(array.iter().map(|part| {
                         match part {
-                            async_openai::types::ChatCompletionRequestAssistantMessageContentPart::Text(text) => Content {
+                            async_openai::types::chat::ChatCompletionRequestAssistantMessageContentPart::Text(text) => Content {
                                 r#type: ContentType::Text,
                                 text: Some(text.text.clone()),
                                 ..Default::default()
                             },
-                            async_openai::types::ChatCompletionRequestAssistantMessageContentPart::Refusal(refusal) => Content {
+                            async_openai::types::chat::ChatCompletionRequestAssistantMessageContentPart::Refusal(refusal) => Content {
                                 r#type: ContentType::Text,
                                 text: Some(refusal.refusal.clone()),
                                 ..Default::default()
@@ -281,26 +311,27 @@ fn map_message(message: &ChatCompletionRequestMessage) -> ChatCompletionMessage 
                 None => None,
             },
             refusal: message.refusal.clone(),
-            tool_calls: message.tool_calls.as_ref().map(|tool_calls| tool_calls.iter().enumerate().map(|(index, tool_call)| ToolCall {
-                index: Some(index),
-                id: tool_call.id.clone(),
-                r#type: "function".to_string(),
-                function: FunctionCall {
-                    name: tool_call.function.name.clone(),
-                    arguments: tool_call.function.arguments.clone(),
-                },
-                extra_content: None,
+            tool_calls: message.tool_calls.as_ref().map(|tool_calls| tool_calls.iter().enumerate().map(|(index, tool_call)| {
+                let mut function_call: ToolCall = tool_call.into();
+                function_call.index = Some(index);
+
+                function_call
             }).collect()),
-            tool_call_id: message.tool_calls.as_ref().and_then(|tool_calls| tool_calls.first().map(|tool_call| tool_call.id.clone())),
+            tool_call_id: message.tool_calls.as_ref().and_then(|tool_calls| tool_calls.first().map(|tool_call| {
+                match tool_call {
+                    ChatCompletionMessageToolCalls::Function(function) => function.id.clone(),
+                    ChatCompletionMessageToolCalls::Custom(custom) => custom.id.clone(),
+                }
+            })),
             cache_control: None
         },
         ChatCompletionRequestMessage::Tool(message) => ChatCompletionMessage {
             role: "tool".to_string(),
             tool_call_id: Some(message.tool_call_id.clone()),
             content: Some(match &message.content {
-                async_openai::types::ChatCompletionRequestToolMessageContent::Text(text) => ChatCompletionContent::Text(text.clone()),
-                async_openai::types::ChatCompletionRequestToolMessageContent::Array(array) => ChatCompletionContent::Content(array.iter().map(|part| match part {
-                        async_openai::types::ChatCompletionRequestToolMessageContentPart::Text(text) => Content {
+                async_openai::types::chat::ChatCompletionRequestToolMessageContent::Text(text) => ChatCompletionContent::Text(text.clone()),
+                async_openai::types::chat::ChatCompletionRequestToolMessageContent::Array(array) => ChatCompletionContent::Content(array.iter().map(|part| match part {
+                        async_openai::types::chat::ChatCompletionRequestToolMessageContentPart::Text(text) => Content {
                             r#type: ContentType::Text,
                             text: Some(text.text.clone()),
                             ..Default::default()
@@ -541,6 +572,13 @@ pub struct InputAudio {
     pub format: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
+pub struct File {
+    pub data: Option<String>,
+    pub id: Option<String>,
+    pub filename: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ContentType {
@@ -548,6 +586,7 @@ pub enum ContentType {
     Text,
     ImageUrl,
     InputAudio,
+    File,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq, Default)]
@@ -557,6 +596,7 @@ pub struct Content {
     pub image_url: Option<ImageUrl>,
     pub audio: Option<InputAudio>,
     pub cache_control: Option<CacheControl>,
+    pub file: Option<File>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
@@ -645,15 +685,15 @@ impl ChatCompletionMessageWithFinishReason {
 }
 
 impl From<ChatCompletionMessageWithFinishReason>
-    for async_openai::types::CreateChatCompletionResponse
+    for async_openai::types::chat::CreateChatCompletionResponse
 {
     fn from(
         val: ChatCompletionMessageWithFinishReason,
-    ) -> async_openai::types::CreateChatCompletionResponse {
+    ) -> async_openai::types::chat::CreateChatCompletionResponse {
         let usage = val
             .usage
             .as_ref()
-            .map(|usage| async_openai::types::CompletionUsage {
+            .map(|usage| async_openai::types::chat::CompletionUsage {
                 prompt_tokens: usage.input_tokens,
                 completion_tokens: usage.output_tokens,
                 total_tokens: usage.total_tokens,
@@ -667,37 +707,41 @@ impl From<ChatCompletionMessageWithFinishReason>
                     .map(|details| details.clone().into()),
             });
 
-        async_openai::types::CreateChatCompletionResponse {
+        async_openai::types::chat::CreateChatCompletionResponse {
             id: val.id,
             object: Some("chat.completion".to_string()),
             created: val.created,
             model: val.model,
-            choices: vec![async_openai::types::ChatChoice {
+            choices: vec![async_openai::types::chat::ChatChoice {
                 index: 0,
-                message: async_openai::types::ChatCompletionResponseMessage {
+                message: async_openai::types::chat::ChatCompletionResponseMessage {
                     content: Some(val.message.content.unwrap().as_string().unwrap()),
                     role: match val.message.role.as_str() {
-                        "assistant" => async_openai::types::Role::Assistant,
-                        "system" => async_openai::types::Role::System,
-                        "tool" => async_openai::types::Role::Tool,
-                        _ => async_openai::types::Role::User,
+                        "assistant" => async_openai::types::chat::Role::Assistant,
+                        "system" => async_openai::types::chat::Role::System,
+                        "tool" => async_openai::types::chat::Role::Tool,
+                        _ => async_openai::types::chat::Role::User,
                     },
                     tool_calls: val.message.tool_calls.as_ref().map(|tool_calls| {
                         tool_calls
                             .iter()
-                            .map(|tool_call| tool_call.clone().into())
-                            .collect::<Vec<async_openai::types::ChatCompletionMessageToolCall>>()
+                            .map(|tool_call| {
+                                ChatCompletionMessageToolCalls::Function(tool_call.clone().into())
+                            })
+                            .collect::<Vec<ChatCompletionMessageToolCalls>>()
                     }),
                     refusal: val.message.refusal.clone(),
                     #[allow(deprecated)]
                     function_call: None,
                     audio: None,
+                    annotations: None,
                 },
                 finish_reason: Some(val.finish_reason.into()),
                 logprobs: None,
             }],
             usage,
             service_tier: None,
+            #[allow(deprecated)]
             system_fingerprint: None,
         }
     }
@@ -723,24 +767,59 @@ pub struct ToolCall {
     pub extra_content: Option<ToolCallExtra>,
 }
 
-impl From<ToolCall> for async_openai::types::ChatCompletionMessageToolCall {
-    fn from(val: ToolCall) -> async_openai::types::ChatCompletionMessageToolCall {
-        async_openai::types::ChatCompletionMessageToolCall {
+impl From<ToolCall> for async_openai::types::chat::ChatCompletionMessageToolCall {
+    fn from(val: ToolCall) -> async_openai::types::chat::ChatCompletionMessageToolCall {
+        async_openai::types::chat::ChatCompletionMessageToolCall {
             function: val.function.into(),
             id: val.id,
-            r#type: async_openai::types::ChatCompletionToolType::Function,
         }
     }
 }
 
-impl From<&async_openai::types::ChatCompletionMessageToolCall> for ToolCall {
-    fn from(val: &async_openai::types::ChatCompletionMessageToolCall) -> Self {
+impl From<async_openai::types::chat::ChatCompletionMessageToolCalls> for ToolCall {
+    fn from(val: async_openai::types::chat::ChatCompletionMessageToolCalls) -> Self {
+        match val {
+            ChatCompletionMessageToolCalls::Function(function) => ToolCall {
+                index: None,
+                id: function.id,
+                r#type: "function".to_string(),
+                function: function.function.into(),
+                extra_content: None,
+            },
+            ChatCompletionMessageToolCalls::Custom(custom) => ToolCall {
+                index: None,
+                id: custom.id,
+                r#type: "tool".to_string(),
+                function: custom.custom_tool.into(),
+                extra_content: None,
+            },
+        }
+    }
+}
+
+impl From<&async_openai::types::chat::ChatCompletionMessageToolCalls> for ToolCall {
+    fn from(val: &async_openai::types::chat::ChatCompletionMessageToolCalls) -> Self {
         val.clone().into()
     }
 }
 
-impl From<async_openai::types::ChatCompletionMessageToolCall> for ToolCall {
-    fn from(val: async_openai::types::ChatCompletionMessageToolCall) -> Self {
+impl From<async_openai::types::chat::CustomTool> for FunctionCall {
+    fn from(val: async_openai::types::chat::CustomTool) -> Self {
+        FunctionCall {
+            name: val.name,
+            arguments: val.input,
+        }
+    }
+}
+
+impl From<&async_openai::types::chat::ChatCompletionMessageToolCall> for ToolCall {
+    fn from(val: &async_openai::types::chat::ChatCompletionMessageToolCall) -> Self {
+        val.clone().into()
+    }
+}
+
+impl From<async_openai::types::chat::ChatCompletionMessageToolCall> for ToolCall {
+    fn from(val: async_openai::types::chat::ChatCompletionMessageToolCall) -> Self {
         ToolCall {
             index: None,
             id: val.id,
@@ -751,14 +830,14 @@ impl From<async_openai::types::ChatCompletionMessageToolCall> for ToolCall {
     }
 }
 
-impl From<&async_openai::types::ChatCompletionMessageToolCallChunk> for ToolCall {
-    fn from(val: &async_openai::types::ChatCompletionMessageToolCallChunk) -> Self {
+impl From<&async_openai::types::chat::ChatCompletionMessageToolCallChunk> for ToolCall {
+    fn from(val: &async_openai::types::chat::ChatCompletionMessageToolCallChunk) -> Self {
         val.clone().into()
     }
 }
 
-impl From<async_openai::types::ChatCompletionMessageToolCallChunk> for ToolCall {
-    fn from(val: async_openai::types::ChatCompletionMessageToolCallChunk) -> Self {
+impl From<async_openai::types::chat::ChatCompletionMessageToolCallChunk> for ToolCall {
+    fn from(val: async_openai::types::chat::ChatCompletionMessageToolCallChunk) -> Self {
         ToolCall {
             index: Some(val.index as usize),
             id: val.id.unwrap_or_default(),
@@ -775,17 +854,17 @@ pub struct FunctionCall {
     pub arguments: String,
 }
 
-impl From<FunctionCall> for async_openai::types::FunctionCall {
-    fn from(val: FunctionCall) -> async_openai::types::FunctionCall {
-        async_openai::types::FunctionCall {
+impl From<FunctionCall> for async_openai::types::chat::FunctionCall {
+    fn from(val: FunctionCall) -> async_openai::types::chat::FunctionCall {
+        async_openai::types::chat::FunctionCall {
             name: val.name,
             arguments: val.arguments,
         }
     }
 }
 
-impl From<async_openai::types::FunctionCall> for FunctionCall {
-    fn from(val: async_openai::types::FunctionCall) -> Self {
+impl From<async_openai::types::chat::FunctionCall> for FunctionCall {
+    fn from(val: async_openai::types::chat::FunctionCall) -> Self {
         FunctionCall {
             name: val.name,
             arguments: val.arguments,
@@ -793,8 +872,8 @@ impl From<async_openai::types::FunctionCall> for FunctionCall {
     }
 }
 
-impl From<async_openai::types::FunctionCallStream> for FunctionCall {
-    fn from(val: async_openai::types::FunctionCallStream) -> Self {
+impl From<async_openai::types::chat::FunctionCallStream> for FunctionCall {
+    fn from(val: async_openai::types::chat::FunctionCallStream) -> Self {
         FunctionCall {
             name: val.name.unwrap_or_default(),
             arguments: val.arguments.unwrap_or_default(),
@@ -847,8 +926,8 @@ pub struct ChatCompletionUsage {
     pub cost: f64,
 }
 
-impl From<async_openai::types::CompletionUsage> for ChatCompletionUsage {
-    fn from(val: async_openai::types::CompletionUsage) -> Self {
+impl From<async_openai::types::chat::CompletionUsage> for ChatCompletionUsage {
+    fn from(val: async_openai::types::chat::CompletionUsage) -> Self {
         ChatCompletionUsage {
             prompt_tokens: val.prompt_tokens as i32,
             completion_tokens: val.completion_tokens as i32,
@@ -893,6 +972,32 @@ impl From<TokenUsage> for ChatCompletionUsage {
             completion_tokens_details: None,
             cost: 0.0,
         }
+    }
+}
+
+impl From<async_openai::types::chat::ChatCompletionRequestDeveloperMessageContentPart> for Content {
+    fn from(
+        val: async_openai::types::chat::ChatCompletionRequestDeveloperMessageContentPart,
+    ) -> Self {
+        match val {
+            async_openai::types::chat::ChatCompletionRequestDeveloperMessageContentPart::Text(
+                text,
+            ) => Content {
+                r#type: ContentType::Text,
+                text: Some(text.text.clone()),
+                ..Default::default()
+            },
+        }
+    }
+}
+
+impl From<&async_openai::types::chat::ChatCompletionRequestDeveloperMessageContentPart>
+    for Content
+{
+    fn from(
+        val: &async_openai::types::chat::ChatCompletionRequestDeveloperMessageContentPart,
+    ) -> Self {
+        val.clone().into()
     }
 }
 
@@ -1002,7 +1107,7 @@ pub struct ChatCompletionChunkChoice {
     pub index: i32,
     pub delta: ChatCompletionDelta,
     pub finish_reason: Option<String>,
-    pub logprobs: Option<async_openai::types::ChatChoiceLogprobs>,
+    pub logprobs: Option<async_openai::types::chat::ChatChoiceLogprobs>,
 }
 
 impl From<ChatChoiceStream> for ChatCompletionChunkChoice {
@@ -1124,6 +1229,7 @@ impl From<GeminiContent> for ChatCompletionDelta {
                             cache_control: None,
                             text: None,
                             image_url: None,
+                            file: None,
                         });
                     } else {
                         unreachable!("Unexpected mime type: {mime_type}");
@@ -1142,6 +1248,7 @@ impl From<GeminiContent> for ChatCompletionDelta {
                             cache_control: None,
                             text: None,
                             audio: None,
+                            file: None,
                         });
                     } else {
                         unreachable!("Unexpected mime type: {mime_type}");
@@ -1198,8 +1305,8 @@ pub struct GatewayModelUsage {
     pub is_cache_used: bool,
 }
 
-impl From<&async_openai::types::CompletionUsage> for GatewayModelUsage {
-    fn from(val: &async_openai::types::CompletionUsage) -> Self {
+impl From<&async_openai::types::chat::CompletionUsage> for GatewayModelUsage {
+    fn from(val: &async_openai::types::chat::CompletionUsage) -> Self {
         GatewayModelUsage {
             input_tokens: val.prompt_tokens,
             output_tokens: val.completion_tokens
@@ -1229,8 +1336,8 @@ impl From<&async_openai::types::CompletionUsage> for GatewayModelUsage {
     }
 }
 
-impl From<async_openai::types::CompletionUsage> for GatewayModelUsage {
-    fn from(val: async_openai::types::CompletionUsage) -> Self {
+impl From<async_openai::types::chat::CompletionUsage> for GatewayModelUsage {
+    fn from(val: async_openai::types::chat::CompletionUsage) -> Self {
         GatewayModelUsage::from(&val)
     }
 }
@@ -1312,14 +1419,14 @@ pub struct PromptTokensDetails {
     audio_tokens: u32,
 }
 
-impl From<async_openai::types::PromptTokensDetails> for PromptTokensDetails {
-    fn from(val: async_openai::types::PromptTokensDetails) -> Self {
+impl From<async_openai::types::chat::PromptTokensDetails> for PromptTokensDetails {
+    fn from(val: async_openai::types::chat::PromptTokensDetails) -> Self {
         PromptTokensDetails::from(&val)
     }
 }
 
-impl From<&async_openai::types::PromptTokensDetails> for PromptTokensDetails {
-    fn from(val: &async_openai::types::PromptTokensDetails) -> Self {
+impl From<&async_openai::types::chat::PromptTokensDetails> for PromptTokensDetails {
+    fn from(val: &async_openai::types::chat::PromptTokensDetails) -> Self {
         PromptTokensDetails {
             cached_tokens: val.cached_tokens.unwrap_or(0),
             cache_creation_tokens: 0,
@@ -1328,18 +1435,18 @@ impl From<&async_openai::types::PromptTokensDetails> for PromptTokensDetails {
     }
 }
 
-impl From<PromptTokensDetails> for async_openai::types::PromptTokensDetails {
-    fn from(val: PromptTokensDetails) -> async_openai::types::PromptTokensDetails {
-        async_openai::types::PromptTokensDetails {
+impl From<PromptTokensDetails> for async_openai::types::chat::PromptTokensDetails {
+    fn from(val: PromptTokensDetails) -> async_openai::types::chat::PromptTokensDetails {
+        async_openai::types::chat::PromptTokensDetails {
             cached_tokens: Some(val.cached_tokens),
             audio_tokens: Some(val.audio_tokens),
         }
     }
 }
 
-impl From<CompletionTokensDetails> for async_openai::types::CompletionTokensDetails {
-    fn from(val: CompletionTokensDetails) -> async_openai::types::CompletionTokensDetails {
-        async_openai::types::CompletionTokensDetails {
+impl From<CompletionTokensDetails> for async_openai::types::chat::CompletionTokensDetails {
+    fn from(val: CompletionTokensDetails) -> async_openai::types::chat::CompletionTokensDetails {
+        async_openai::types::chat::CompletionTokensDetails {
             accepted_prediction_tokens: Some(val.accepted_prediction_tokens),
             audio_tokens: Some(val.audio_tokens),
             reasoning_tokens: Some(val.reasoning_tokens),
@@ -1348,14 +1455,14 @@ impl From<CompletionTokensDetails> for async_openai::types::CompletionTokensDeta
     }
 }
 
-impl From<async_openai::types::CompletionTokensDetails> for CompletionTokensDetails {
-    fn from(val: async_openai::types::CompletionTokensDetails) -> Self {
+impl From<async_openai::types::chat::CompletionTokensDetails> for CompletionTokensDetails {
+    fn from(val: async_openai::types::chat::CompletionTokensDetails) -> Self {
         CompletionTokensDetails::from(&val)
     }
 }
 
-impl From<&async_openai::types::CompletionTokensDetails> for CompletionTokensDetails {
-    fn from(val: &async_openai::types::CompletionTokensDetails) -> Self {
+impl From<&async_openai::types::chat::CompletionTokensDetails> for CompletionTokensDetails {
+    fn from(val: &async_openai::types::chat::CompletionTokensDetails) -> Self {
         CompletionTokensDetails {
             accepted_prediction_tokens: val.accepted_prediction_tokens.unwrap_or(0),
             audio_tokens: val.audio_tokens.unwrap_or(0),

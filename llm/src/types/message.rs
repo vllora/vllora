@@ -1,4 +1,4 @@
-use crate::types::gateway::CacheControl;
+use crate::types::gateway::{CacheControl, File};
 use crate::types::ToolCall;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -134,6 +134,7 @@ pub struct MessageContentPart {
     pub r#type: MessageContentType,
     pub value: String,
     pub additional_options: Option<MessageContentPartOptions>,
+    pub file: Option<File>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cache_control: Option<CacheControl>,
 }
@@ -181,6 +182,7 @@ impl<'de> Deserialize<'de> for MessageContentPart {
                     value,
                     additional_options,
                     cache_control,
+                    file: None,
                 })
             }
         }
@@ -207,6 +209,7 @@ pub enum MessageContentType {
     Text,
     ImageUrl,
     InputAudio,
+    File,
 }
 
 impl Display for MessageContentType {
@@ -215,6 +218,7 @@ impl Display for MessageContentType {
             MessageContentType::Text => f.write_str("Text"),
             MessageContentType::ImageUrl => f.write_str("ImageUrl"),
             MessageContentType::InputAudio => f.write_str("InputAudio"),
+            MessageContentType::File => f.write_str("File"),
         }
     }
 }

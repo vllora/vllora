@@ -1325,6 +1325,9 @@ fn construct_user_message(m: &InnerMessage) -> ClustMessage {
                     MessageContentType::InputAudio => {
                         todo!()
                     }
+                    MessageContentType::File => {
+                        todo!()
+                    }
                 };
                 blocks.push(msg)
             }

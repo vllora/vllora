@@ -1,6 +1,8 @@
+use async_openai::types::moderations::ModerationImageURLInput;
+use async_openai::types::moderations::ModerationTextInput;
 use async_openai::{
     config::OpenAIConfig,
-    types::{CreateModerationRequest, ModerationContentPart, ModerationImageUrl, ModerationInput},
+    types::moderations::{CreateModerationRequest, ModerationContentPart, ModerationInput},
     Client,
 };
 use tracing::Span;
@@ -45,21 +47,26 @@ impl GuardPartner for OpenaiGuardrailPartner {
                         content
                             .iter()
                             .map(|content| match content.r#type {
-                                ContentType::Text => Ok(ModerationContentPart::Text {
-                                    text: content.text.clone().unwrap(),
-                                }),
-                                ContentType::ImageUrl => Ok(ModerationContentPart::ImageUrl {
-                                    image_url: ModerationImageUrl {
-                                        url: content
+                                ContentType::Text => {
+                                    Ok(ModerationContentPart::Text(ModerationTextInput {
+                                        text: content.text.clone().unwrap(),
+                                    }))
+                                }
+                                ContentType::ImageUrl => {
+                                    Ok(ModerationContentPart::ImageUrl(ModerationImageURLInput {
+                                        image_url: content
                                             .image_url
                                             .clone()
                                             .ok_or(GuardPartnerError::InputImageIsMissing)?
                                             .url,
-                                    },
-                                }),
+                                    }))
+                                }
                                 ContentType::InputAudio => Err(
                                     GuardPartnerError::InputTypeNotSupported("audio".to_string()),
                                 ),
+                                ContentType::File => Err(GuardPartnerError::InputTypeNotSupported(
+                                    "file".to_string(),
+                                )),
                             })
                             .collect::<Result<Vec<ModerationContentPart>, GuardPartnerError>>()?,
                     ),
