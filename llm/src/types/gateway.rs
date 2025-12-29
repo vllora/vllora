@@ -1294,6 +1294,7 @@ pub struct StreamOptions {
 
 /// Unified usage model for all models
 #[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct GatewayModelUsage {
     pub input_tokens: u32,
     pub output_tokens: u32,
@@ -1413,6 +1414,7 @@ pub struct ImageGenerationModelUsage {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct PromptTokensDetails {
     cached_tokens: u32,
     cache_creation_tokens: u32,
@@ -1505,6 +1507,7 @@ impl PromptTokensDetails {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct CompletionTokensDetails {
     accepted_prediction_tokens: u32,
     audio_tokens: u32,
@@ -1533,6 +1536,22 @@ impl CompletionTokensDetails {
         self.reasoning_tokens += other.reasoning_tokens;
         self.rejected_prediction_tokens += other.rejected_prediction_tokens;
     }
+
+    pub fn accepted_prediction_tokens(&self) -> u32 {
+        self.accepted_prediction_tokens
+    }
+
+    pub fn audio_tokens(&self) -> u32 {
+        self.audio_tokens
+    }
+
+    pub fn reasoning_tokens(&self) -> u32 {
+        self.reasoning_tokens
+    }
+
+    pub fn rejected_prediction_tokens(&self) -> u32 {
+        self.rejected_prediction_tokens
+    }
 }
 
 #[derive(Error, Debug)]
@@ -1544,7 +1563,7 @@ pub enum CostCalculatorError {
     ModelNotFound,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct CostCalculationResult {
     pub cost: f64,
     pub per_input_token: f64,
@@ -1558,7 +1577,7 @@ pub struct CostCalculationResult {
     pub is_cache_used: bool,
 }
 
-#[derive(Serialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub enum ImageCostCalculationResult {
     TypePrice {
         size: String,

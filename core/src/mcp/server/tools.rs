@@ -631,6 +631,17 @@ pub struct RunOverviewRun {
 
     #[schemars(description = "Span id of the root span for this run.")]
     pub root_span_id: String,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(description = "Total cost across all model calls in the run.")]
+    pub total_cost: Option<f64>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(description = "Aggregated usage across all model calls in the run.")]
+    pub usage: Option<vllora_llm::types::gateway::GatewayModelUsage>,
+
+    #[schemars(description = "Total number of LLM calls in the run.")]
+    pub total_llm_calls: u32,
 }
 
 /// A single span entry in the span tree.

@@ -3,7 +3,6 @@ use crate::types::ToolCall;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_tuple::Serialize_tuple;
-use serde_with::serde_as;
 use std::fmt::Display;
 use std::str::FromStr;
 
@@ -43,7 +42,6 @@ impl FromStr for MessageType {
     }
 }
 
-#[serde_as]
 #[derive(Serialize, Debug, Clone)]
 pub struct Message {
     pub model_name: String,        // Corresponding LangDB model

@@ -4,8 +4,6 @@ use minijinja::Environment;
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use serde_with::serde_as;
-use serde_with::OneOrMany;
 use std::borrow::Cow;
 use std::{collections::HashMap, fmt::Display, ops::Deref, str::FromStr};
 use validator::Validate;
@@ -97,7 +95,6 @@ impl CompletionModelDefinition {
     }
 }
 
-#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Default)]
 pub struct ExecutionOptions {
     pub max_retries: Option<u32>,
@@ -664,7 +661,6 @@ impl EmbeddingsEngineParams {
     }
 }
 
-#[serde_as]
 #[derive(Clone, Debug, Deserialize, Serialize, Validate, Default)]
 #[serde(deny_unknown_fields)]
 pub struct OpenAiModelParams {
@@ -712,7 +708,6 @@ pub struct OpenAiModelParams {
     pub seed: Option<i64>,
 
     /// Up to 4 sequences where the API will stop generating further tokens.
-    #[serde_as(as = "Option<OneOrMany<_>>")]
     #[serde(alias = "stop_sequences")]
     #[validate(length(min = 1, max = 4))]
     pub stop: Option<Vec<String>>,

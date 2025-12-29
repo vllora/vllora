@@ -70,3 +70,4 @@ uuid = { version = "1.19.0", features = ["serde", "v4"] }
 dashmap = "6.1.0"
 bytemuck = { version = "1.24", features = ["derive"] }
 futures = "0.3.30"
+schemars = "1.0.4"

@@ -18,6 +18,48 @@ pub fn format_run_overview_table(response: &GetRunOverviewResponse) {
     run_table.add_row(row!["Start Time", run.start_time]);
     run_table.add_row(row!["Duration", format!("{} ms", run.duration_ms)]);
     run_table.add_row(row!["Root Span ID", run.root_span_id]);
+    run_table.add_row(row!["Total LLM Calls", run.total_llm_calls]);
+
+    // Add total cost if available
+    if let Some(cost) = run.total_cost {
+        run_table.add_row(row!["Total Cost", format!("${:.6}", cost)]);
+    }
+
+    // Add usage information if available
+    if let Some(ref usage) = run.usage {
+        let usage_summary = format!(
+            "Input: {}, Output: {}, Total: {}",
+            usage.input_tokens, usage.output_tokens, usage.total_tokens
+        );
+        run_table.add_row(row!["Token Usage", usage_summary]);
+
+        if usage.is_cache_used {
+            run_table.add_row(row!["Cache Used", "Yes"]);
+        }
+
+        // Add prompt tokens details if available
+        if let Some(ref prompt_details) = usage.prompt_tokens_details {
+            let prompt_info = format!(
+                "Cached: {}, Cache Creation: {}, Audio: {}",
+                prompt_details.cached_tokens(),
+                prompt_details.cache_creation_tokens(),
+                prompt_details.audio_tokens()
+            );
+            run_table.add_row(row!["Prompt Details", prompt_info]);
+        }
+
+        // Add completion tokens details if available
+        if let Some(ref completion_details) = usage.completion_tokens_details {
+            let completion_info = format!(
+                "Accepted: {}, Audio: {}, Reasoning: {}, Rejected: {}",
+                completion_details.accepted_prediction_tokens(),
+                completion_details.audio_tokens(),
+                completion_details.reasoning_tokens(),
+                completion_details.rejected_prediction_tokens()
+            );
+            run_table.add_row(row!["Completion Details", completion_info]);
+        }
+    }
 
     if let Some(label) = &run.label {
         if !label.is_empty() {

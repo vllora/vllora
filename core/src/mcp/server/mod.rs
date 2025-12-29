@@ -40,6 +40,7 @@ use rmcp_macros::prompt_handler;
 use rmcp_macros::prompt_router;
 use serde_json::{json, Value as JsonValue};
 use std::collections::HashMap;
+use vllora_llm::types::gateway::{CostCalculationResult, GatewayModelUsage};
 
 #[derive(Clone)]
 pub struct VlloraMcp<T: TraceService + Send + Sync + 'static> {
@@ -610,6 +611,77 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
             "ok".to_string()
         };
 
+        // Aggregate cost and usage from ModelCall spans
+        let mut total_cost = 0.0;
+        let mut aggregated_usage: Option<GatewayModelUsage> = None;
+        let mut total_llm_calls = 0u32;
+
+        // Count all LLM operations
+        for span in &spans {
+            if matches!(
+                span.operation_name,
+                crate::types::traces::Operation::Openai
+                    | crate::types::traces::Operation::Anthropic
+                    | crate::types::traces::Operation::Bedrock
+                    | crate::types::traces::Operation::Gemini
+            ) {
+                total_llm_calls += 1;
+            }
+        }
+
+        for span in &spans {
+            if matches!(
+                span.operation_name,
+                crate::types::traces::Operation::ModelCall
+            ) {
+                // Extract and deserialize cost
+                if let Some(cost_str) = span.attribute.get("cost").and_then(|v| v.as_str()) {
+                    if let Ok(cost_result) = serde_json::from_str::<CostCalculationResult>(cost_str)
+                    {
+                        total_cost += cost_result.cost;
+                    }
+                }
+
+                // Extract and deserialize usage
+                if let Some(usage_str) = span.attribute.get("usage").and_then(|v| v.as_str()) {
+                    if let Ok(usage) = serde_json::from_str::<GatewayModelUsage>(usage_str) {
+                        if let Some(ref mut agg) = aggregated_usage {
+                            // Aggregate usage
+                            agg.input_tokens += usage.input_tokens;
+                            agg.output_tokens += usage.output_tokens;
+                            agg.total_tokens += usage.total_tokens;
+                            agg.is_cache_used = agg.is_cache_used || usage.is_cache_used;
+
+                            // Aggregate prompt_tokens_details
+                            if let (Some(ref mut agg_prompt), Some(usage_prompt)) = (
+                                agg.prompt_tokens_details.as_mut(),
+                                usage.prompt_tokens_details.as_ref(),
+                            ) {
+                                agg_prompt.add_usage(usage_prompt);
+                            } else if let Some(usage_prompt) = usage.prompt_tokens_details.as_ref()
+                            {
+                                agg.prompt_tokens_details = Some(usage_prompt.clone());
+                            }
+
+                            // Aggregate completion_tokens_details
+                            if let (Some(ref mut agg_completion), Some(usage_completion)) = (
+                                agg.completion_tokens_details.as_mut(),
+                                usage.completion_tokens_details.as_ref(),
+                            ) {
+                                agg_completion.add_usage(usage_completion);
+                            } else if let Some(usage_completion) =
+                                usage.completion_tokens_details.as_ref()
+                            {
+                                agg.completion_tokens_details = Some(usage_completion.clone());
+                            }
+                        } else {
+                            aggregated_usage = Some(usage);
+                        }
+                    }
+                }
+            }
+        }
+
         let run_overview = RunOverviewRun {
             run_id: params.run_id.clone(),
             status: run_status,
@@ -617,6 +689,13 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
             duration_ms,
             label: run_label,
             root_span_id: root_span_id.clone(),
+            total_cost: if total_cost > 0.0 {
+                Some(total_cost)
+            } else {
+                None
+            },
+            usage: aggregated_usage,
+            total_llm_calls,
         };
 
         // Build span tree entries and derive "kind" per span.
