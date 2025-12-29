@@ -62,6 +62,8 @@ pub struct ListTracesQuery {
     pub sort_by: Option<String>,
     /// Sort order: "asc" or "desc". Defaults to "desc".
     pub sort_order: Option<String>,
+    /// Filter by labels (from attribute.label JSON field)
+    pub labels: Option<Vec<String>>,
 }
 
 /// Query parameters for unified GET /group/spans endpoint
@@ -161,6 +163,7 @@ impl Default for ListTracesQuery {
             text_search: None,
             sort_by: None,
             sort_order: None,
+            labels: None,
         }
     }
 }

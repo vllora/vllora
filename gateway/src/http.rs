@@ -39,6 +39,7 @@ use vllora_core::handler::middleware::actix_otel::ActixOtelMiddleware;
 use vllora_core::handler::middleware::rate_limit::RateLimitMiddleware;
 use vllora_core::handler::middleware::run_id::RunId;
 use vllora_core::handler::middleware::thread_id::ThreadId;
+use vllora_core::handler::labels;
 use vllora_core::handler::responses;
 use vllora_core::handler::runs;
 use vllora_core::handler::spans;
@@ -389,6 +390,10 @@ impl ApiServer {
             .service(web::scope("/spans").route(
                 "",
                 web::get().to(spans::list_spans::<MetadataTraceServiceImpl>),
+            ))
+            .service(web::scope("/labels").route(
+                "",
+                web::get().to(labels::list_labels),
             ))
             .service(
                 web::scope("/mcp-configs")

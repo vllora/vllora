@@ -22,6 +22,8 @@ pub struct ListTracesQueryParams {
     start_time_max: Option<i64>,
     limit: Option<i64>,
     offset: Option<i64>,
+    /// Filter by labels (comma-separated, e.g., "flight_search,budget_agent")
+    labels: Option<String>,
 }
 
 fn parse_comma_separated_string(s: Option<&String>) -> Option<Vec<String>> {
@@ -40,6 +42,8 @@ pub async fn list_traces<T: TraceService + DatabaseServiceTrait>(
     let thread_ids = parse_comma_separated_string(query.thread_ids.as_ref());
     let run_ids = query.run_id.as_ref().map(|id| vec![id.clone()]);
     let operation_names = parse_comma_separated_string(query.operation_names.as_ref());
+
+    let labels = parse_comma_separated_string(query.labels.as_ref());
 
     let list_query = ListTracesQuery {
         project_slug: Some(project_slug.clone()),
@@ -63,6 +67,7 @@ pub async fn list_traces<T: TraceService + DatabaseServiceTrait>(
         text_search: None,
         sort_by: None,
         sort_order: None,
+        labels,
     };
 
     Ok(trace_service
@@ -157,6 +162,7 @@ pub async fn get_spans_by_run<T: TraceService + DatabaseServiceTrait>(
                 text_search: None,
                 sort_by: None,
                 sort_order: None,
+                labels: None,
             };
             let total = trace_service.count(count_query).unwrap_or(0);
 

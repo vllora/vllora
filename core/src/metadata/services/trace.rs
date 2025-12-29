@@ -106,6 +106,23 @@ impl TraceService for TraceServiceImpl {
             }
         }
 
+        // Apply labels filter using JSON_EXTRACT
+        if let Some(labels) = &query.labels {
+            if !labels.is_empty() {
+                // Build OR condition for multiple labels (match any)
+                let labels_str = labels
+                    .iter()
+                    .map(|l| format!("'{}'", l.replace('\'', "''")))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                let sql_filter = format!(
+                    "json_extract(attribute, '$.label') IN ({})",
+                    labels_str
+                );
+                db_query = db_query.filter(diesel::dsl::sql::<diesel::sql_types::Bool>(&sql_filter));
+            }
+        }
+
         // Apply sorting - default to start_time descending
         let sort_by = query.sort_by.as_deref().unwrap_or("start_time");
         let sort_order = query.sort_order.as_deref().unwrap_or("desc");
@@ -325,6 +342,23 @@ impl TraceService for TraceServiceImpl {
                 let escaped = text.replace('%', "\\%").replace('_', "\\_");
                 let pattern = format!("%{}%", escaped);
                 db_query = db_query.filter(traces::attribute.like(pattern));
+            }
+        }
+
+        // Apply labels filter using JSON_EXTRACT
+        if let Some(labels) = &query.labels {
+            if !labels.is_empty() {
+                // Build OR condition for multiple labels (match any)
+                let labels_str = labels
+                    .iter()
+                    .map(|l| format!("'{}'", l.replace('\'', "''")))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                let sql_filter = format!(
+                    "json_extract(attribute, '$.label') IN ({})",
+                    labels_str
+                );
+                db_query = db_query.filter(diesel::dsl::sql::<diesel::sql_types::Bool>(&sql_filter));
             }
         }
 
