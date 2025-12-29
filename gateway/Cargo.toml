@@ -48,7 +48,7 @@ clap = { version = "4.5", features = ["derive"] }
 prettytable-rs = "0.10.0"
 dotenv = "0.15.0"
 futures-util = "0.3"
-
+mid = "4.0.0"
 open = "5.3.2"
 
 chrono = { workspace = true }

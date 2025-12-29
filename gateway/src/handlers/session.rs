@@ -1,3 +1,4 @@
+use crate::session::device_id;
 use actix_web::{web, HttpRequest, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -59,6 +60,10 @@ pub async fn track_session(
             if key.starts_with("x-") || key == "User-Agent" {
                 reqwest_request = reqwest_request.header(&key, &value);
             }
+        }
+
+        if let Ok(device_id) = device_id() {
+            reqwest_request = reqwest_request.header("X-vllora-device-id", &device_id);
         }
 
         tracing::debug!("Sending request to start session");
