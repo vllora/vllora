@@ -4,7 +4,6 @@ use serde::Deserialize;
 use uuid::Uuid;
 use vllora_core::metadata::models::session::DbSession;
 use vllora_core::{metadata::pool::DbPool, types::LANGDB_API_URL};
-use mid;
 
 pub fn get_api_url() -> String {
     std::env::var("LANGDB_API_URL").unwrap_or_else(|_| LANGDB_API_URL.to_string())
@@ -29,8 +28,7 @@ pub async fn fetch_session_id(pool: DbPool) -> DbSession {
 }
 
 pub fn device_id() -> Result<String, String> {
-    mid::get("vllora-device-id")
-        .map_err(|e| e.to_string())
+    mid::get("vllora-device-id").map_err(|e| e.to_string())
 }
 
 pub fn check_version(session_id: String) {
