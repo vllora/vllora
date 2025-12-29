@@ -92,21 +92,20 @@ pub fn find_model_by_full_name_with_provider_info(
     match llm_model {
         Some(model) => {
             // Fetch provider info if db_pool is available
-            let custom_inference_api_type = if let Some(db_pool) = db_pool {
+            let provider_info = if let Some(db_pool) = db_pool {
                 let provider_service = ProvidersServiceImpl::new(db_pool.clone());
                 let provider_name_to_fetch = provider_name.as_ref().unwrap_or(&model.provider_name);
                 provider_service
                     .get_provider_by_name(provider_name_to_fetch)
                     .ok()
                     .flatten()
-                    .and_then(|p| p.custom_inference_api_type)
             } else {
                 None
             };
 
             Ok(DbModel::to_model_metadata_with_provider(
                 &model,
-                custom_inference_api_type,
+                provider_info,
             ))
         }
         None => Err(GatewayApiError::LLMError(LLMError::ModelError(Box::new(

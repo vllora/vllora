@@ -1,4 +1,5 @@
 use crate::metadata::schema::models;
+use crate::types::metadata::provider::ProviderInfo;
 use chrono::NaiveDate;
 use diesel::helper_types::AsSelect;
 use diesel::helper_types::Select;
@@ -122,7 +123,10 @@ impl DbModel {
         endpoint: Option<&str>,
         custom_inference_api_type: Option<CustomInferenceApiType>,
     ) -> InferenceProvider {
-        let provider = InferenceModelProvider::from(provider_name.to_string());
+        let provider = match endpoint {
+            Some(_) => InferenceModelProvider::Proxy(provider_name.to_string()),
+            None => InferenceModelProvider::from(provider_name.to_string()),
+        };
 
         InferenceProvider {
             provider,
@@ -135,7 +139,7 @@ impl DbModel {
     /// Convert DbModel to ModelMetadata with optional provider custom_inference_api_type
     pub fn to_model_metadata_with_provider(
         val: &DbModel,
-        custom_inference_api_type: Option<CustomInferenceApiType>,
+        provider_info: Option<ProviderInfo>,
     ) -> ModelMetadata {
         // Parse JSON arrays/objects
         let capabilities: Vec<ModelCapability> = val
@@ -186,12 +190,21 @@ impl DbModel {
         let model_type = ModelType::from_str(&val.model_type).unwrap_or(ModelType::Completions);
 
         // Build inference provider with custom_inference_api_type
+        let endpoint = match (val.endpoint.as_ref(), provider_info.as_ref()) {
+            (Some(endpoint), _) => Some(endpoint),
+            (None, Some(provider_info)) => provider_info.endpoint.as_ref(),
+            (None, None) => None,
+        };
+
+        let custom_inference_api_type = provider_info
+            .as_ref()
+            .and_then(|p| p.custom_inference_api_type);
         let inference_provider = Self::build_inference_provider(
             &val.provider_name,
             val.model_name_in_provider
                 .as_deref()
                 .unwrap_or(&val.model_name),
-            val.endpoint.as_deref(),
+            endpoint.map(|s| s.as_str()),
             custom_inference_api_type,
         );
 
@@ -425,10 +438,22 @@ mod tests {
             is_custom: 0,
         };
 
-        let metadata = DbModel::to_model_metadata_with_provider(
-            &db_model,
-            Some(CustomInferenceApiType::Anthropic),
-        );
+        let provider_info = ProviderInfo {
+            id: "test-id".to_string(),
+            name: "custom-provider".to_string(),
+            description: Some("Test model".to_string()),
+            endpoint: Some("https://api.example.com".to_string()),
+            priority: 0,
+            privacy_policy_url: None,
+            terms_of_service_url: None,
+            provider_type: "api_key".to_string(),
+            has_credentials: false,
+            custom_endpoint: None,
+            custom_inference_api_type: Some(CustomInferenceApiType::Anthropic),
+            is_custom: false,
+        };
+
+        let metadata = DbModel::to_model_metadata_with_provider(&db_model, Some(provider_info));
 
         assert_eq!(metadata.model, "test-model");
         assert_eq!(

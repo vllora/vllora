@@ -3,7 +3,7 @@ use crate::metadata::models::model::{DbModel, DbNewModel};
 use crate::metadata::pool::DbPool;
 use crate::types::metadata::services::model::ModelService;
 use chrono::Utc;
-use diesel::{ExpressionMethods, OptionalExtension};
+use diesel::{define_sql_function, ExpressionMethods, OptionalExtension};
 use diesel::{QueryDsl, RunQueryDsl};
 use uuid::Uuid;
 
@@ -16,6 +16,8 @@ impl ModelServiceImpl {
         Self { db_pool }
     }
 }
+
+define_sql_function!(fn lower(a: diesel::sql_types::VarChar) -> diesel::sql_types::VarChar);
 
 impl ModelService for ModelServiceImpl {
     fn list(&self, project_id: Option<Uuid>) -> Result<Vec<DbModel>, DatabaseError> {
@@ -73,14 +75,14 @@ impl ModelService for ModelServiceImpl {
             Some(pid) => {
                 let project_id_str = pid.to_string();
                 DbModel::for_project(project_id_str)
-                    .filter(crate::metadata::schema::models::model_name.eq(model_name))
-                    .filter(crate::metadata::schema::models::provider_name.eq(provider_name))
+                    .filter(lower(crate::metadata::schema::models::model_name).eq(model_name))
+                    .filter(lower(crate::metadata::schema::models::provider_name).eq(provider_name))
                     .first(&mut conn)
                     .optional()?
             }
             None => DbModel::global_only()
-                .filter(crate::metadata::schema::models::model_name.eq(model_name))
-                .filter(crate::metadata::schema::models::provider_name.eq(provider_name))
+                .filter(lower(crate::metadata::schema::models::model_name).eq(model_name))
+                .filter(lower(crate::metadata::schema::models::provider_name).eq(provider_name))
                 .first(&mut conn)
                 .optional()?,
         };
