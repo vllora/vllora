@@ -47,7 +47,7 @@ aws-smithy-runtime-api = "1.9.3"
 aws-config = { version = "1.8.8", features = ["behavior-version-latest"] }
 bytemuck = { workspace = true }
 reqwest = { workspace = true }
-jsonwebtoken = { version = "9.3.0", default-features = false, features = ["use_pem"] }
+jsonwebtoken = { version = "10.2.0", default-features = false, features = ["use_pem"] }
 regex = "1.12.2"
 secrecy = { version = "0.10.3", features = ["serde"] }
 tonic = { workspace = true }
