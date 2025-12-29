@@ -61,29 +61,6 @@ impl From<&ChatCompletionMessageToolCalls> for Message {
     }
 }
 
-impl From<ChatCompletionMessageToolCalls> for Message {
-    fn from(val: ChatCompletionMessageToolCalls) -> Self {
-        match val {
-            ChatCompletionMessageToolCalls::Function(function) => Message::ToolCall {
-                name: function.function.name.clone(),
-                id: Some(function.id.clone()),
-                arguments: serde_json::to_value(&function.function.arguments).unwrap_or_default(),
-            },
-            ChatCompletionMessageToolCalls::Custom(custom) => Message::ToolCall {
-                name: custom.custom_tool.name.clone(),
-                id: Some(custom.id.clone()),
-                arguments: serde_json::to_value(&custom.custom_tool.input).unwrap_or_default(),
-            },
-        }
-    }
-}
-
-impl From<&ChatCompletionMessageToolCalls> for Message {
-    fn from(val: &ChatCompletionMessageToolCalls) -> Self {
-        val.clone().into()
-    }
-}
-
 pub fn map_request(request: &serde_json::Value) -> Result<Request, serde_json::Error> {
     if let serde_json::Value::String(obj) = request {
         serde_json::from_str(obj)
