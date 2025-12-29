@@ -134,9 +134,9 @@ pub struct MessageContentPart {
     pub r#type: MessageContentType,
     pub value: String,
     pub additional_options: Option<MessageContentPartOptions>,
+    pub file: Option<File>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cache_control: Option<CacheControl>,
-    pub file: Option<File>,
 }
 
 impl<'de> Deserialize<'de> for MessageContentPart {

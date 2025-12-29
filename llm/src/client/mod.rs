@@ -139,7 +139,7 @@ mod tests {
     use crate::types::credentials::Credentials;
     use crate::types::models::InferenceProvider;
     use crate::types::provider::InferenceModelProvider;
-    use async_openai::types::{
+    use async_openai::types::chat::{
         ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs,
         ChatCompletionRequestUserMessageArgs, CreateChatCompletionRequestArgs,
     };

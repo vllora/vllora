@@ -135,12 +135,14 @@ mod tests {
                 value: "image/base64".to_string(),
                 additional_options: None,
                 cache_control: None,
+                file: None,
             },
             MessageContentPart {
                 r#type: MessageContentType::Text,
                 value: "How is my image".to_string(),
                 additional_options: None,
                 cache_control: None,
+                file: None,
             },
         ];
 
@@ -149,8 +151,8 @@ mod tests {
         assert_eq!(
             str2,
             json!([
-                ["ImageUrl", "image/base64", null],
-                ["Text", "How is my image", null]
+                ["ImageUrl", "image/base64", null, null],
+                ["Text", "How is my image", null, null]
             ])
         );
     }
