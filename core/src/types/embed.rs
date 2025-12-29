@@ -35,14 +35,20 @@ impl EmbeddingResult {
     }
 }
 
-impl From<vllora_llm::async_openai::types::embeddings::CreateEmbeddingResponse> for EmbeddingResult {
+impl From<vllora_llm::async_openai::types::embeddings::CreateEmbeddingResponse>
+    for EmbeddingResult
+{
     fn from(value: vllora_llm::async_openai::types::embeddings::CreateEmbeddingResponse) -> Self {
         EmbeddingResult::Float(value)
     }
 }
 
-impl From<vllora_llm::async_openai::types::embeddings::CreateBase64EmbeddingResponse> for EmbeddingResult {
-    fn from(value: vllora_llm::async_openai::types::embeddings::CreateBase64EmbeddingResponse) -> Self {
+impl From<vllora_llm::async_openai::types::embeddings::CreateBase64EmbeddingResponse>
+    for EmbeddingResult
+{
+    fn from(
+        value: vllora_llm::async_openai::types::embeddings::CreateBase64EmbeddingResponse,
+    ) -> Self {
         EmbeddingResult::Base64(value)
     }
 }

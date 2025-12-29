@@ -312,7 +312,9 @@ checksum = "34ac096ce696dc2fcabef30516bb13c0a68a11d30131d3df6f04711467681b04"
 
 [[package]]
 name = "async-openai-compat"
-version = "0.30.3"
+version = "0.30.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc28e7675460b8d453726657ad7ede7dacf3b865ee8676ef099791713e75b5af"
 dependencies = [
  "async-openai-macros",
  "backoff",
@@ -321,22 +323,27 @@ dependencies = [
  "derive_builder",
  "eventsource-stream",
  "futures",
+ "getrandom 0.3.1",
  "rand 0.9.2",
  "reqwest",
  "reqwest-eventsource",
  "secrecy",
  "serde",
  "serde_json",
+ "serde_urlencoded",
  "thiserror 2.0.17",
  "tokio",
  "tokio-stream",
  "tokio-util",
  "tracing",
+ "url",
 ]
 
 [[package]]
 name = "async-openai-macros"
-version = "0.1.0"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "81872a8e595e8ceceab71c6ba1f9078e313b452a1e31934e6763ef5d308705e4"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1822,8 +1829,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "43a49c392881ce6d5c3b8cb70f98717b7c07aabbdff06687b9030dbfbe2725f8"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "wasi 0.13.3+wasi-0.2.2",
+ "wasm-bindgen",
  "windows-targets",
 ]
 

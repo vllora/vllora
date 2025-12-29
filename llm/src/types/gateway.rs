@@ -7,13 +7,17 @@ use crate::types::tools::ModelTool;
 use crate::types::tools::Tool;
 use crate::types::ModelFinishReason;
 use crate::types::ToolCallExtra;
-use async_openai::types::embeddings::Base64EmbeddingVector;
 use async_openai::types::chat::ChatChoiceStream;
+use async_openai::types::chat::ChatCompletionMessageToolCalls;
 use async_openai::types::chat::ChatCompletionRequestMessage;
 use async_openai::types::chat::ChatCompletionStreamResponseDelta;
+use async_openai::types::chat::ChatCompletionToolChoiceOption;
+use async_openai::types::chat::ChatCompletionTools;
 use async_openai::types::chat::CreateChatCompletionRequest;
 use async_openai::types::chat::CreateChatCompletionStreamResponse;
 use async_openai::types::chat::FinishReason;
+use async_openai::types::chat::ToolChoiceOptions;
+use async_openai::types::embeddings::Base64EmbeddingVector;
 use aws_sdk_bedrockruntime::types::TokenUsage;
 use clust::messages::DeltaUsage;
 use serde::{Deserialize, Serialize};
@@ -22,10 +26,6 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::hash::Hash;
 use thiserror::Error;
-use async_openai::types::chat::ChatCompletionMessageToolCalls;
-use async_openai::types::chat::ToolChoiceOptions;
-use async_openai::types::chat::ChatCompletionToolChoiceOption;
-use async_openai::types::chat::ChatCompletionTools;
 
 pub use async_openai::types::chat::ResponseFormat as OpenaiResponseFormat;
 pub use async_openai::types::chat::ResponseFormatJsonSchema;
@@ -98,7 +98,9 @@ impl From<CreateChatCompletionRequest> for ChatCompletionRequest {
             n: request.n.map(|n| n as u32),
             stream: request.stream,
             stop: request.stop.map(|stop| match &stop {
-                async_openai::types::chat::StopConfiguration::String(string) => vec![string.to_string()],
+                async_openai::types::chat::StopConfiguration::String(string) => {
+                    vec![string.to_string()]
+                }
                 async_openai::types::chat::StopConfiguration::StringArray(string_array) => {
                     string_array.iter().map(|s| s.to_string()).collect()
                 }
@@ -148,67 +150,55 @@ impl From<CreateChatCompletionRequest> for ChatCompletionRequest {
                     .into_iter()
                     .map(|tool| ChatCompletionTool {
                         tool_type: "function".to_string(),
-                        function: 
-                        match tool {
-                            ChatCompletionTools::Function(function) => {
-                                ChatCompletionFunction {
-                                    name: function.function.name.clone(),
-                                    description: function.function.description.clone(),
-                                    parameters: function.function.parameters.clone(),
-                                }
-                            }
-                            ChatCompletionTools::Custom(custom) => {
-                                ChatCompletionFunction {
-                                    name: custom.custom.name.clone(),
-                                    description: custom.custom.description.clone(),
-                                    parameters: None,
-                                }
-                            }
-                        }
+                        function: match tool {
+                            ChatCompletionTools::Function(function) => ChatCompletionFunction {
+                                name: function.function.name.clone(),
+                                description: function.function.description.clone(),
+                                parameters: function.function.parameters.clone(),
+                            },
+                            ChatCompletionTools::Custom(custom) => ChatCompletionFunction {
+                                name: custom.custom.name.clone(),
+                                description: custom.custom.description.clone(),
+                                parameters: None,
+                            },
+                        },
                     })
                     .collect()
             }),
             tool_choice: request.tool_choice.map(|tool_choice| match tool_choice {
-                    ChatCompletionToolChoiceOption::AllowedTools(_tools) => {
-                        todo!()
-                    },
-                    ChatCompletionToolChoiceOption::Function(function) => {
-                        let mut function_map = serde_json::Map::new();
-                        function_map.insert(
-                            "name".to_string(),
-                            Value::String(function.function.name.clone()),
-                        );
+                ChatCompletionToolChoiceOption::AllowedTools(_tools) => {
+                    todo!()
+                }
+                ChatCompletionToolChoiceOption::Function(function) => {
+                    let mut function_map = serde_json::Map::new();
+                    function_map.insert(
+                        "name".to_string(),
+                        Value::String(function.function.name.clone()),
+                    );
 
-                        let mut map = serde_json::Map::new();
-                        map.insert("function".to_string(), Value::Object(function_map));
+                    let mut map = serde_json::Map::new();
+                    map.insert("function".to_string(), Value::Object(function_map));
 
-                        Value::Object(map)
-                    }
-                    ChatCompletionToolChoiceOption::Custom(custom) => {
-                        let mut function_map = serde_json::Map::new();
-                        function_map.insert(
-                            "name".to_string(),
-                            Value::String(custom.custom.name.clone()),
-                        );
+                    Value::Object(map)
+                }
+                ChatCompletionToolChoiceOption::Custom(custom) => {
+                    let mut function_map = serde_json::Map::new();
+                    function_map.insert(
+                        "name".to_string(),
+                        Value::String(custom.custom.name.clone()),
+                    );
 
-                        let mut map = serde_json::Map::new();
-                        map.insert("function".to_string(), Value::Object(function_map));
+                    let mut map = serde_json::Map::new();
+                    map.insert("function".to_string(), Value::Object(function_map));
 
-                        Value::Object(map)
-                    }
-                    ChatCompletionToolChoiceOption::Mode(mode) =>
-                        match mode {
-                        ToolChoiceOptions::None => {
-                            Value::String("none".to_string())
-                        }
-                        ToolChoiceOptions::Auto => {
-                            Value::String("auto".to_string())
-                        }
-                        ToolChoiceOptions::Required => {
-                            Value::String("required".to_string())
-                        }
-                    }
-                }),
+                    Value::Object(map)
+                }
+                ChatCompletionToolChoiceOption::Mode(mode) => match mode {
+                    ToolChoiceOptions::None => Value::String("none".to_string()),
+                    ToolChoiceOptions::Auto => Value::String("auto".to_string()),
+                    ToolChoiceOptions::Required => Value::String("required".to_string()),
+                },
+            }),
             stream_options: request.stream_options.map(|stream_options| StreamOptions {
                 include_usage: stream_options.include_usage.unwrap_or(false),
             }),
@@ -609,7 +599,6 @@ pub struct Content {
     pub file: Option<File>,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum ChatCompletionContent {
@@ -736,7 +725,9 @@ impl From<ChatCompletionMessageWithFinishReason>
                     tool_calls: val.message.tool_calls.as_ref().map(|tool_calls| {
                         tool_calls
                             .iter()
-                            .map(|tool_call| ChatCompletionMessageToolCalls::Function(tool_call.clone().into()))
+                            .map(|tool_call| {
+                                ChatCompletionMessageToolCalls::Function(tool_call.clone().into())
+                            })
                             .collect::<Vec<ChatCompletionMessageToolCalls>>()
                     }),
                     refusal: val.message.refusal.clone(),
@@ -985,24 +976,30 @@ impl From<TokenUsage> for ChatCompletionUsage {
 }
 
 impl From<async_openai::types::chat::ChatCompletionRequestDeveloperMessageContentPart> for Content {
-    fn from(val: async_openai::types::chat::ChatCompletionRequestDeveloperMessageContentPart) -> Self {
+    fn from(
+        val: async_openai::types::chat::ChatCompletionRequestDeveloperMessageContentPart,
+    ) -> Self {
         match val {
-            async_openai::types::chat::ChatCompletionRequestDeveloperMessageContentPart::Text(text) => Content {
+            async_openai::types::chat::ChatCompletionRequestDeveloperMessageContentPart::Text(
+                text,
+            ) => Content {
                 r#type: ContentType::Text,
                 text: Some(text.text.clone()),
                 ..Default::default()
-            },   
+            },
         }
     }
 }
 
-
-impl From<&async_openai::types::chat::ChatCompletionRequestDeveloperMessageContentPart> for Content {
-    fn from(val: &async_openai::types::chat::ChatCompletionRequestDeveloperMessageContentPart) -> Self {
+impl From<&async_openai::types::chat::ChatCompletionRequestDeveloperMessageContentPart>
+    for Content
+{
+    fn from(
+        val: &async_openai::types::chat::ChatCompletionRequestDeveloperMessageContentPart,
+    ) -> Self {
         val.clone().into()
     }
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatModel {

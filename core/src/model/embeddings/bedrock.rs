@@ -9,7 +9,9 @@ use tracing::field;
 use tracing::Span;
 use tracing_futures::Instrument;
 use valuable::Valuable;
-use vllora_llm::async_openai::types::embeddings::{CreateEmbeddingResponse, Embedding, EmbeddingUsage};
+use vllora_llm::async_openai::types::embeddings::{
+    CreateEmbeddingResponse, Embedding, EmbeddingUsage,
+};
 use vllora_llm::client::error::ModelError;
 use vllora_llm::error::LLMResult;
 use vllora_llm::provider::bedrock::bedrock_client;

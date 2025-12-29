@@ -165,19 +165,24 @@ impl<C: Config + std::marker::Sync + std::marker::Send> EmbeddingsModelInstance
         outer_tx: tokio::sync::mpsc::Sender<Option<ModelEvent>>,
         tags: HashMap<String, String>,
     ) -> LLMResult<EmbeddingResult> {
-        let embedding_request = vllora_llm::async_openai::types::embeddings::CreateEmbeddingRequest {
-            model: request.model.clone(),
-            input: match &request.input {
-                Input::String(s) => s.into(),
-                Input::Array(vec) => vec.into(),
-            },
-            user: request.user.clone(),
-            dimensions: request.dimensions.map(|d| d as u32),
-            encoding_format: Some(match &request.encoding_format {
-                EncodingFormat::Float => vllora_llm::async_openai::types::embeddings::EncodingFormat::Float,
-                EncodingFormat::Base64 => vllora_llm::async_openai::types::embeddings::EncodingFormat::Base64,
-            }),
-        };
+        let embedding_request =
+            vllora_llm::async_openai::types::embeddings::CreateEmbeddingRequest {
+                model: request.model.clone(),
+                input: match &request.input {
+                    Input::String(s) => s.into(),
+                    Input::Array(vec) => vec.into(),
+                },
+                user: request.user.clone(),
+                dimensions: request.dimensions.map(|d| d as u32),
+                encoding_format: Some(match &request.encoding_format {
+                    EncodingFormat::Float => {
+                        vllora_llm::async_openai::types::embeddings::EncodingFormat::Float
+                    }
+                    EncodingFormat::Base64 => {
+                        vllora_llm::async_openai::types::embeddings::EncodingFormat::Base64
+                    }
+                }),
+            };
 
         let span = create_model_span!(
             SPAN_OPENAI,

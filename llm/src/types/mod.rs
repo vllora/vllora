@@ -231,7 +231,9 @@ impl From<ModelFinishReason> for async_openai::types::chat::FinishReason {
             ModelFinishReason::Stop => async_openai::types::chat::FinishReason::Stop,
             ModelFinishReason::Length => async_openai::types::chat::FinishReason::Length,
             ModelFinishReason::ToolCalls => async_openai::types::chat::FinishReason::ToolCalls,
-            ModelFinishReason::ContentFilter => async_openai::types::chat::FinishReason::ContentFilter,
+            ModelFinishReason::ContentFilter => {
+                async_openai::types::chat::FinishReason::ContentFilter
+            }
             // TODO: Handle stop sequence and guardrail in async-openai-compat
             ModelFinishReason::StopSequence => async_openai::types::chat::FinishReason::Stop,
             ModelFinishReason::Guardrail => async_openai::types::chat::FinishReason::Stop,

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
+use vllora_llm::async_openai::types::chat::ChatCompletionMessageToolCalls;
 use vllora_llm::async_openai::types::chat::CreateChatCompletionRequest;
 use vllora_llm::async_openai::types::chat::CreateChatCompletionResponse;
-use vllora_llm::async_openai::types::chat::ChatCompletionMessageToolCalls;
 use vllora_llm::clust::messages::{
     Content as ClustContent, ContentBlock, MessagesRequestBody, MessagesResponseBody,
     Role as ClustRole,

@@ -116,7 +116,7 @@ impl MessageMapper {
                                 additional_options: None,
                                 cache_control: c.cache_control.clone(),
                                 file: c.file.clone(),
-                            }
+                            },
                         })
                     })
                     .collect::<Result<Vec<MessageContentPart>, MessageMapperError>>(),

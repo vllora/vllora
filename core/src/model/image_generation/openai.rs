@@ -113,7 +113,9 @@ impl OpenAIImageGeneration {
             vllora_llm::types::gateway::ImageQuality::SD => {
                 async_openai::types::images::ImageQuality::Standard
             }
-            vllora_llm::types::gateway::ImageQuality::HD => async_openai::types::images::ImageQuality::HD,
+            vllora_llm::types::gateway::ImageQuality::HD => {
+                async_openai::types::images::ImageQuality::HD
+            }
         })
     }
 }
@@ -147,7 +149,9 @@ impl ImageGenerationModelInstance for OpenAIImageGeneration {
             size,
             response_format: request.response_format.as_ref().map(|f| match f {
                 ImageResponseFormat::Url => async_openai::types::images::ImageResponseFormat::Url,
-                ImageResponseFormat::B64Json => async_openai::types::images::ImageResponseFormat::B64Json,
+                ImageResponseFormat::B64Json => {
+                    async_openai::types::images::ImageResponseFormat::B64Json
+                }
             }),
             user: request.user.clone(),
             model: Some(model),
