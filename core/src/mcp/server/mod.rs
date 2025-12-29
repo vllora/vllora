@@ -529,7 +529,7 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
             start_time_min: None,
             start_time_max: None,
             // A reasonable default page size for an overview; can be expanded later if needed
-            limit: 100,
+            limit: 1000,
             offset: 0,
             text_search: None,
             sort_by: None,
