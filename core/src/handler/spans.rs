@@ -59,6 +59,7 @@ pub struct Pagination {
 /// GET /spans - List spans with optional filters
 ///
 /// Query parameters:
+/// - spanIds (optional): Filter by span IDs (comma-separated). Use for fetching specific spans by ID.
 /// - threadIds (optional): Filter by thread IDs (comma-separated). Special: "null"=no thread, "!null"=has thread
 /// - runIds (optional): Filter by run IDs (comma-separated). Special: "null"=no run, "!null"=has run
 /// - operationNames (optional): Filter by operation names (comma-separated). Special: "null"=no op, "!null"=has op
