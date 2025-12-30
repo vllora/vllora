@@ -37,6 +37,7 @@ use vllora_llm::types::tools::ModelTools;
 use vllora_llm::types::tools::Tool;
 use vllora_llm::types::{CustomEvent, ModelEvent, ModelEventType};
 use vllora_telemetry::events::{JsonValue, RecordResult, SPAN_MODEL_CALL};
+use crate::metrics;
 
 pub mod azure;
 pub mod bedrock;
@@ -209,6 +210,12 @@ impl ModelInstance for TracedModel {
         let model_name = self.definition.name.clone();
         let provider_name = self.definition.db_model.provider_name.clone();
         let (tx, mut rx) = channel::<Option<ModelEvent>>(outer_tx.max_capacity());
+        
+        // Track start time for latency calculation
+        let span_start_time = std::time::Instant::now();
+        
+        // Record request count
+        metrics::record_request(&model_name, &provider_name);
 
         let span = info_span!(
             target: "vllora::user_tracing::models",
@@ -256,6 +263,8 @@ impl ModelInstance for TracedModel {
 
         let cost_calculator = self.executor_context.cost_calculator.clone();
         let price = self.definition.db_model.price.clone();
+        let model_name_clone = model_name.clone();
+        let provider_name_clone = provider_name.clone();
         tokio::spawn(
             async move {
                 let mut start_time = None;
@@ -286,6 +295,9 @@ impl ModelInstance for TracedModel {
                                         c.cost = total_cost;
                                         current_span
                                             .record("cost", serde_json::to_string(&c).unwrap());
+                                        
+                                        // Record cost metric
+                                        metrics::record_cost(c.cost, &model_name_clone, &provider_name_clone);
                                     }
                                     Err(e) => {
                                         tracing::error!(
@@ -298,15 +310,35 @@ impl ModelInstance for TracedModel {
 
                                 usage.add_usage(u);
                                 current_span.record("usage", serde_json::to_string(u).unwrap());
+                                
+                                // Record token metrics
+                                metrics::record_tokens(
+                                    u.input_tokens as u64,
+                                    u.output_tokens as u64,
+                                    &model_name_clone,
+                                    &provider_name_clone,
+                                );
+                                
+                                // Calculate and record TPS if we have duration
+                                if let Some(start) = start_time {
+                                    let duration_us = msg.timestamp.timestamp_micros() as u64 - start;
+                                    if duration_us > 0 {
+                                        let total_tokens = u.input_tokens as u64 + u.output_tokens as u64;
+                                        let duration_sec = duration_us as f64 / 1_000_000.0;
+                                        let tps = total_tokens as f64 / duration_sec;
+                                        metrics::record_tps(tps, &model_name_clone, &provider_name_clone);
+                                    }
+                                }
                             }
                         }
                         ModelEventType::LlmFirstToken(_) => {
                             if let Some(start_time) = start_time {
                                 let current_span = tracing::Span::current();
-                                current_span.record(
-                                    "ttft",
-                                    msg.timestamp.timestamp_micros() as u64 - start_time,
-                                );
+                                let ttft_us = msg.timestamp.timestamp_micros() as u64 - start_time;
+                                current_span.record("ttft", ttft_us);
+                                
+                                // Record TTFT metric
+                                metrics::record_ttft(ttft_us, &model_name_clone, &provider_name_clone);
                             }
                         }
                         _ => (),
@@ -324,6 +356,8 @@ impl ModelInstance for TracedModel {
         );
 
         let tools = self.tools.clone();
+        let model_name_for_latency = model_name.clone();
+        let provider_name_for_latency = provider_name.clone();
         async {
             let instance =
                 init_model_instance(self.definition.model_params.engine.clone(), tools).await?;
@@ -367,6 +401,14 @@ impl ModelInstance for TracedModel {
                 .await
                 .map_err(|e| LLMError::BoxedError(Box::new(e)))?;
             }
+            
+            // Record latency and error metrics
+            let latency_ms = span_start_time.elapsed().as_secs_f64() * 1000.0;
+            metrics::record_latency(latency_ms, &model_name_for_latency, &provider_name_for_latency);
+            
+            if result.is_err() {
+                metrics::record_error(&model_name_for_latency, &provider_name_for_latency);
+            }
 
             result
         }
@@ -391,6 +433,12 @@ impl ModelInstance for TracedModel {
         let model_name = self.definition.name.clone();
         let provider_name = self.definition.db_model.provider_name.clone();
         let cost_calculator = self.executor_context.cost_calculator.clone();
+        
+        // Track start time for latency calculation
+        let span_start_time = std::time::Instant::now();
+        
+        // Record request count
+        metrics::record_request(&model_name, &provider_name);
 
         let span = info_span!(
             target: "vllora::user_tracing::models",
@@ -461,6 +509,8 @@ impl ModelInstance for TracedModel {
         );
 
         let price = self.definition.db_model.price.clone();
+        let model_name_clone = model_name.clone();
+        let provider_name_clone = provider_name.clone();
         tokio::spawn(
             async move {
                 let mut output = String::new();
@@ -475,10 +525,11 @@ impl ModelInstance for TracedModel {
                         ModelEventType::LlmFirstToken(_) => {
                             if let Some(start_time) = start_time {
                                 let current_span = tracing::Span::current();
-                                current_span.record(
-                                    "ttft",
-                                    msg.timestamp.timestamp_micros() as u64 - start_time,
-                                );
+                                let ttft_us = msg.timestamp.timestamp_micros() as u64 - start_time;
+                                current_span.record("ttft", ttft_us);
+                                
+                                // Record TTFT metric
+                                metrics::record_ttft(ttft_us, &model_name_clone, &provider_name_clone);
                             }
                         }
                         ModelEventType::LlmStop(llmfinish_event) => {
@@ -495,12 +546,34 @@ impl ModelInstance for TracedModel {
                                 match cost {
                                     Ok(c) => {
                                         s.record("cost", serde_json::to_string(&c).unwrap());
+                                        
+                                        // Record cost metric
+                                        metrics::record_cost(c.cost, &model_name_clone, &provider_name_clone);
                                     }
                                     Err(e) => {
                                         tracing::error!("Error calculating cost: {:?}", e);
                                     }
                                 }
                                 s.record("usage", serde_json::to_string(u).unwrap());
+                                
+                                // Record token metrics
+                                metrics::record_tokens(
+                                    u.input_tokens as u64,
+                                    u.output_tokens as u64,
+                                    &model_name_clone,
+                                    &provider_name_clone,
+                                );
+                                
+                                // Calculate and record TPS if we have duration
+                                if let Some(start) = start_time {
+                                    let duration_us = msg.timestamp.timestamp_micros() as u64 - start;
+                                    if duration_us > 0 {
+                                        let total_tokens = u.input_tokens as u64 + u.output_tokens as u64;
+                                        let duration_sec = duration_us as f64 / 1_000_000.0;
+                                        let tps = total_tokens as f64 / duration_sec;
+                                        metrics::record_tps(tps, &model_name_clone, &provider_name_clone);
+                                    }
+                                }
                             }
                             s.record("output", output.clone());
                         }
@@ -511,6 +584,14 @@ impl ModelInstance for TracedModel {
             }
             .instrument(span.clone()),
         );
+        
+        // Record latency and error metrics
+        let latency_ms = span_start_time.elapsed().as_secs_f64() * 1000.0;
+        metrics::record_latency(latency_ms, &model_name, &provider_name);
+        
+        if result.is_err() {
+            metrics::record_error(&model_name, &provider_name);
+        }
 
         result
     }

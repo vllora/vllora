@@ -25,6 +25,7 @@ use vllora_llm::{
     },
 };
 use vllora_telemetry::events::SPAN_MODEL_CALL;
+use crate::metrics;
 
 pub struct TracedResponsesModel {
     definition: ResponsesModelDefinition,
@@ -103,6 +104,12 @@ impl Responses for TracedResponsesModel {
         let input_str = self.clean_input_trace(&input)?;
         let model_name = self.definition.name.clone();
         let provider_name = self.definition.db_model.provider_name.clone();
+        
+        // Track start time for latency calculation
+        let span_start_time = std::time::Instant::now();
+        
+        // Record request count
+        metrics::record_request(&model_name, &provider_name);
 
         let span = info_span!(
             target: "vllora::user_tracing::models",
@@ -145,6 +152,8 @@ impl Responses for TracedResponsesModel {
 
         let cost_calculator = self.executor_context.cost_calculator.clone();
         let price = self.definition.db_model.price.clone();
+        let model_name_clone = model_name.clone();
+        let provider_name_clone = provider_name.clone();
 
         let (tx, mut rx) = channel::<Option<ModelEvent>>(capacity);
         tokio::spawn(async move {
@@ -169,6 +178,9 @@ impl Responses for TracedResponsesModel {
                                 total_cost += c.cost;
                                 c.cost = total_cost;
                                 current_span.record("cost", serde_json::to_string(&c).unwrap());
+                                
+                                // Record cost metric
+                                metrics::record_cost(c.cost, &model_name_clone, &provider_name_clone);
                             }
                             Err(e) => {
                                 tracing::error!(
@@ -181,6 +193,14 @@ impl Responses for TracedResponsesModel {
 
                         usage.add_usage(u);
                         current_span.record("usage", serde_json::to_string(u).unwrap());
+                        
+                        // Record token metrics
+                        metrics::record_tokens(
+                            u.input_tokens as u64,
+                            u.output_tokens as u64,
+                            &model_name_clone,
+                            &provider_name_clone,
+                        );
                     }
                 }
                 if let Some(tx) = outer_tx.as_ref() {
@@ -188,8 +208,18 @@ impl Responses for TracedResponsesModel {
                 }
             }
         });
-
-        instance.invoke(request, Some(tx)).await
+        
+        let result = instance.invoke(request, Some(tx)).await;
+        
+        // Record latency and error metrics
+        let latency_ms = span_start_time.elapsed().as_secs_f64() * 1000.0;
+        metrics::record_latency(latency_ms, &model_name, &provider_name);
+        
+        if result.is_err() {
+            metrics::record_error(&model_name, &provider_name);
+        }
+        
+        result
     }
 
     async fn stream(
@@ -206,6 +236,12 @@ impl Responses for TracedResponsesModel {
         let input_str = self.clean_input_trace(&input)?;
         let model_name = self.definition.name.clone();
         let provider_name = self.definition.db_model.provider_name.clone();
+        
+        // Track start time for latency calculation
+        let span_start_time = std::time::Instant::now();
+        
+        // Record request count
+        metrics::record_request(&model_name, &provider_name);
 
         let span = info_span!(
             target: "vllora::user_tracing::models",
@@ -238,6 +274,8 @@ impl Responses for TracedResponsesModel {
 
         let cost_calculator = self.executor_context.cost_calculator.clone();
         let price = self.definition.db_model.price.clone();
+        let model_name_clone = model_name.clone();
+        let provider_name_clone = provider_name.clone();
 
         tokio::spawn(async move {
             let mut usage = GatewayModelUsage::default();
@@ -261,6 +299,9 @@ impl Responses for TracedResponsesModel {
                                 total_cost += c.cost;
                                 c.cost = total_cost;
                                 current_span.record("cost", serde_json::to_string(&c).unwrap());
+                                
+                                // Record cost metric
+                                metrics::record_cost(c.cost, &model_name_clone, &provider_name_clone);
                             }
                             Err(e) => {
                                 tracing::error!(
@@ -273,6 +314,14 @@ impl Responses for TracedResponsesModel {
 
                         usage.add_usage(u);
                         current_span.record("usage", serde_json::to_string(u).unwrap());
+                        
+                        // Record token metrics
+                        metrics::record_tokens(
+                            u.input_tokens as u64,
+                            u.output_tokens as u64,
+                            &model_name_clone,
+                            &provider_name_clone,
+                        );
                     }
                 }
                 if let Some(tx) = outer_tx.as_ref() {
@@ -280,11 +329,21 @@ impl Responses for TracedResponsesModel {
                 }
             }
         });
-
-        instance
+        
+        let result = instance
             .stream(request, Some(tx))
             .instrument(span.clone())
-            .await
+            .await;
+        
+        // Record latency and error metrics
+        let latency_ms = span_start_time.elapsed().as_secs_f64() * 1000.0;
+        metrics::record_latency(latency_ms, &model_name, &provider_name);
+        
+        if result.is_err() {
+            metrics::record_error(&model_name, &provider_name);
+        }
+        
+        result
     }
 }
 
