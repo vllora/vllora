@@ -36,6 +36,8 @@ pub struct ListGroupQueryParams {
     pub group_by: Option<GroupBy>, // Grouping mode: "time" or "thread" (default: "time")
     pub limit: Option<i64>,
     pub offset: Option<i64>,
+    /// Comma-separated labels to filter by (attribute.label)
+    pub labels: Option<String>,
 }
 
 /// Generic response struct for all grouping types
@@ -134,6 +136,10 @@ pub async fn list_root_group<T: GroupService + DatabaseServiceTrait>(
         group_by: query.group_by.clone().unwrap_or_default(),
         limit: query.limit.unwrap_or(100),
         offset: query.offset.unwrap_or(0),
+        labels: query
+            .labels
+            .as_ref()
+            .map(|s| s.split(',').map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect()),
     };
 
     let groups = group_service.list_root_group(list_query.clone())?;

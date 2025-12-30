@@ -22,6 +22,8 @@ pub struct ListRunsQuery {
     pub limit: i64,
     pub offset: i64,
     pub include_mcp_templates: bool,
+    /// Labels to filter by (attribute.label) - only return runs that have spans with these labels
+    pub labels: Option<Vec<String>>,
 }
 
 pub trait RunService {

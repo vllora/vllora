@@ -123,6 +123,8 @@ pub struct BatchGroupSpansQuery {
     pub groups: Vec<GroupIdentifier>,
     #[serde(alias = "spansPerGroup", default = "default_spans_per_group")]
     pub spans_per_group: i64,
+    /// Comma-separated list of labels to filter spans by (attribute.label)
+    pub labels: Option<String>,
 }
 
 /// Individual group's spans with pagination info

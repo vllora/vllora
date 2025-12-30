@@ -26,6 +26,8 @@ pub struct ListRunsQuery {
     pub limit: i64,
     pub offset: i64,
     pub include_mcp_templates: bool,
+    /// Labels to filter by (attribute.label) - only return runs that have spans with these labels
+    pub labels: Option<Vec<String>>,
 }
 
 pub trait RunService {
@@ -117,6 +119,16 @@ impl RunServiceImpl {
 
         if let Some(start_max) = query.start_time_max {
             conditions.push(format!("start_time_us <= {}", start_max));
+        }
+
+        // Filter by labels (attribute.label)
+        if let Some(labels) = &query.labels {
+            if !labels.is_empty() {
+                conditions.push(format!(
+                    "json_extract(attribute, '$.label') IN ({})",
+                    Self::build_in_clause(labels)
+                ));
+            }
         }
 
         if conditions.is_empty() {
