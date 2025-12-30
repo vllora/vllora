@@ -26,6 +26,7 @@ opentelemetry = { workspace = true }
 opentelemetry-proto = { version = "0.31.0", features = [
   "gen-tonic",
   "trace",
+  "metrics",
   "with-serde",
 ] }
 tracing = { workspace = true }
