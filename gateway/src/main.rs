@@ -11,6 +11,7 @@ use vllora_core::events::broadcast_channel_manager::BroadcastChannelManager;
 use vllora_core::metadata::error::DatabaseError;
 use vllora_core::telemetry::RunSpanBuffer;
 
+mod agents;
 mod callback_handler;
 mod cli;
 mod config;
@@ -47,6 +48,8 @@ pub enum CliError {
     ModelsLoadError(#[from] run::models::ModelsLoadError),
     #[error(transparent)]
     ProvidersLoadError(#[from] run::providers::ProvidersLoadError),
+    #[error(transparent)]
+    AgentError(#[from] agents::AgentError),
     #[error("Error: {0}")]
     CustomError(String),
 }

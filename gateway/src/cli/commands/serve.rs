@@ -1,3 +1,4 @@
+use crate::agents;
 use crate::cli::{Commands, ServeArgs};
 use crate::config::Config;
 use crate::http::ApiServer;
@@ -101,6 +102,20 @@ pub async fn handle_serve(
             }
         }
     }
+
+    // Register agents with Distri server in background (non-blocking)
+    println!("📋 Registering agents with Distri server in background...");
+    tokio::spawn(async move {
+        match agents::register_agents().await {
+            Ok(_) => {
+                // Success message is logged inside register_agents
+            }
+            Err(e) => {
+                eprintln!("⚠️  Warning: Failed to register agents: {}", e);
+                eprintln!("   Agents may not be available.");
+            }
+        }
+    });
 
     // Extract ports from config after potential changes
     let backend_port = config.http.port;
