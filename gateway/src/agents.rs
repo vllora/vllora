@@ -1,3 +1,4 @@
+use serde::Serialize;
 use std::collections::HashMap;
 use std::path::Path;
 use thiserror::Error;
@@ -180,6 +181,99 @@ async fn register_agent(api_url: &str, agent: &AgentDefinition) -> Result<(), Ag
     }
 
     Ok(())
+}
+
+/// Agent registration status
+#[derive(Debug, Clone, Serialize)]
+pub struct AgentRegistrationStatus {
+    pub name: String,
+    pub success: bool,
+    pub error: Option<String>,
+}
+
+/// Detailed registration result
+#[derive(Debug, Clone, Serialize)]
+pub struct RegistrationResult {
+    pub distri_running: bool,
+    pub distri_endpoint: String,
+    pub agents: Vec<AgentRegistrationStatus>,
+}
+
+/// Register all agents with the Distri server and return detailed status
+pub async fn register_agents_with_status() -> Result<RegistrationResult, AgentError> {
+    let api_url = get_distri_api_url();
+    let distri_running = check_distri_running(&api_url).await;
+
+    let mut result = RegistrationResult {
+        distri_running,
+        distri_endpoint: api_url.clone(),
+        agents: Vec::new(),
+    };
+
+    if !distri_running {
+        warn!(
+            "Distri server is not running or not reachable at {}",
+            api_url
+        );
+        return Ok(result);
+    }
+
+    info!("Distri server is running. Registering agents...");
+
+    // Get working directory
+    let work_dir = std::env::current_dir().map_err(|e| {
+        AgentError::IoError(std::io::Error::other(format!(
+            "Failed to get current directory: {}",
+            e
+        )))
+    })?;
+
+    info!("Working directory: {:?}", work_dir);
+
+    // Load embedded agents
+    let embedded_agents = load_embedded_agents();
+    info!("Loaded {} embedded agents", embedded_agents.len());
+
+    // Load working directory agents
+    let working_dir_agents = load_working_directory_agents(&work_dir)?;
+    info!(
+        "Loaded {} agents from working directory",
+        working_dir_agents.len()
+    );
+
+    // Merge agents (working directory overrides embedded)
+    let agents = merge_agents(embedded_agents, working_dir_agents);
+
+    if agents.is_empty() {
+        warn!("No agents found to register");
+        return Ok(result);
+    }
+
+    info!("Registering {} agents...", agents.len());
+
+    // Register each agent and track status
+    for (name, agent) in &agents {
+        match register_agent(&api_url, agent).await {
+            Ok(_) => {
+                info!("Successfully registered agent: {}", name);
+                result.agents.push(AgentRegistrationStatus {
+                    name: name.clone(),
+                    success: true,
+                    error: None,
+                });
+            }
+            Err(e) => {
+                error!("Failed to register agent {}: {}", name, e);
+                result.agents.push(AgentRegistrationStatus {
+                    name: name.clone(),
+                    success: false,
+                    error: Some(e.to_string()),
+                });
+            }
+        }
+    }
+
+    Ok(result)
 }
 
 /// Register all agents with the Distri server

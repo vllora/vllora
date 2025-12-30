@@ -2,7 +2,7 @@ use crate::callback_handler::init_callback_handler;
 use crate::config::Config;
 use crate::cost::GatewayCostCalculator;
 use crate::guardrails::GuardrailsService;
-use crate::handlers::{debug, models, projects, session, threads};
+use crate::handlers::{agents, debug, models, projects, session, threads};
 use crate::middleware::project::ProjectMiddleware;
 use crate::middleware::thread_service::ThreadsServiceMiddleware;
 use crate::middleware::trace_logger::TraceLogger;
@@ -441,6 +441,9 @@ impl ApiServer {
                     .route("/track", web::post().to(session::track_session))
                     .route("/start", web::post().to(session::start_session))
                     .route("/fetch_key/{session_id}", web::get().to(session::fetch_key)),
+            )
+            .service(
+                web::scope("/agents").route("/register", web::post().to(agents::register_agents)),
             )
             .service(
                 web::scope("/debug")
