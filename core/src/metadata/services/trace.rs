@@ -115,11 +115,9 @@ impl TraceService for TraceServiceImpl {
                     .map(|l| format!("'{}'", l.replace('\'', "''")))
                     .collect::<Vec<_>>()
                     .join(",");
-                let sql_filter = format!(
-                    "json_extract(attribute, '$.label') IN ({})",
-                    labels_str
-                );
-                db_query = db_query.filter(diesel::dsl::sql::<diesel::sql_types::Bool>(&sql_filter));
+                let sql_filter = format!("json_extract(attribute, '$.label') IN ({})", labels_str);
+                db_query =
+                    db_query.filter(diesel::dsl::sql::<diesel::sql_types::Bool>(&sql_filter));
             }
         }
 
@@ -354,11 +352,9 @@ impl TraceService for TraceServiceImpl {
                     .map(|l| format!("'{}'", l.replace('\'', "''")))
                     .collect::<Vec<_>>()
                     .join(",");
-                let sql_filter = format!(
-                    "json_extract(attribute, '$.label') IN ({})",
-                    labels_str
-                );
-                db_query = db_query.filter(diesel::dsl::sql::<diesel::sql_types::Bool>(&sql_filter));
+                let sql_filter = format!("json_extract(attribute, '$.label') IN ({})", labels_str);
+                db_query =
+                    db_query.filter(diesel::dsl::sql::<diesel::sql_types::Bool>(&sql_filter));
             }
         }
 

@@ -136,10 +136,12 @@ pub async fn list_root_group<T: GroupService + DatabaseServiceTrait>(
         group_by: query.group_by.clone().unwrap_or_default(),
         limit: query.limit.unwrap_or(100),
         offset: query.offset.unwrap_or(0),
-        labels: query
-            .labels
-            .as_ref()
-            .map(|s| s.split(',').map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect()),
+        labels: query.labels.as_ref().map(|s| {
+            s.split(',')
+                .map(|l| l.trim().to_string())
+                .filter(|l| !l.is_empty())
+                .collect()
+        }),
     };
 
     let groups = group_service.list_root_group(list_query.clone())?;

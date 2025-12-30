@@ -81,10 +81,12 @@ pub async fn list_root_runs<T: RunService + DatabaseServiceTrait>(
         limit: query.limit.unwrap_or(100),
         offset: query.offset.unwrap_or(0),
         include_mcp_templates: query.include_mcp_templates.unwrap_or(false),
-        labels: query
-            .labels
-            .as_ref()
-            .map(|s| s.split(',').map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect()),
+        labels: query.labels.as_ref().map(|s| {
+            s.split(',')
+                .map(|l| l.trim().to_string())
+                .filter(|l| !l.is_empty())
+                .collect()
+        }),
     };
     let runs = run_service.list_root_runs(list_query.clone())?;
     let total = run_service.count_root_runs(list_query)?;
