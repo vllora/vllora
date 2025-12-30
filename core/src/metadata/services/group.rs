@@ -77,6 +77,17 @@ impl GroupServiceImpl {
             conditions.push(format!("start_time_us <= {}", start_max));
         }
 
+        // Filter by labels - only include groups that have spans with matching labels
+        if let Some(labels) = &query.labels {
+            if !labels.is_empty() {
+                let labels_in_clause = Self::build_in_clause(labels);
+                conditions.push(format!(
+                    "json_extract(attribute, '$.label') IN ({})",
+                    labels_in_clause
+                ));
+            }
+        }
+
         if conditions.is_empty() {
             String::new()
         } else {

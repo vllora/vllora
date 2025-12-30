@@ -34,6 +34,7 @@ use vllora_core::handler::chat::create_chat_completion;
 use vllora_core::handler::embedding::embeddings_handler;
 use vllora_core::handler::group;
 use vllora_core::handler::image::create_image;
+use vllora_core::handler::labels;
 use vllora_core::handler::mcp_configs;
 use vllora_core::handler::middleware::actix_otel::ActixOtelMiddleware;
 use vllora_core::handler::middleware::rate_limit::RateLimitMiddleware;
@@ -390,6 +391,7 @@ impl ApiServer {
                 "",
                 web::get().to(spans::list_spans::<MetadataTraceServiceImpl>),
             ))
+            .service(web::scope("/labels").route("", web::get().to(labels::list_labels)))
             .service(
                 web::scope("/mcp-configs")
                     .route("", web::get().to(mcp_configs::list_mcp_configs))

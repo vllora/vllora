@@ -534,6 +534,7 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
             text_search: None,
             sort_by: None,
             sort_order: None,
+            labels: None,
         };
 
         let paginated: PaginatedResult<LangdbSpan> = self
@@ -932,6 +933,7 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
                 text_search: None,
                 sort_by: Some("start_time".to_string()),
                 sort_order: Some("desc".to_string()),
+                labels: None,
             };
 
             let page: PaginatedResult<LangdbSpan> = self
@@ -1001,6 +1003,7 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
                 text_search: None,
                 sort_by: Some("start_time".to_string()),
                 sort_order: Some("desc".to_string()),
+                labels: None,
             };
 
             let page: PaginatedResult<LangdbSpan> = self

@@ -44,6 +44,8 @@ pub struct ListGroupQuery {
     pub group_by: GroupBy,        // NEW: Determines grouping type
     pub limit: i64,
     pub offset: i64,
+    /// Filter by labels (from attribute.label JSON field)
+    pub labels: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, QueryableByName)]

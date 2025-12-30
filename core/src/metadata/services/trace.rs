@@ -106,6 +106,21 @@ impl TraceService for TraceServiceImpl {
             }
         }
 
+        // Apply labels filter using JSON_EXTRACT
+        if let Some(labels) = &query.labels {
+            if !labels.is_empty() {
+                // Build OR condition for multiple labels (match any)
+                let labels_str = labels
+                    .iter()
+                    .map(|l| format!("'{}'", l.replace('\'', "''")))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                let sql_filter = format!("json_extract(attribute, '$.label') IN ({})", labels_str);
+                db_query =
+                    db_query.filter(diesel::dsl::sql::<diesel::sql_types::Bool>(&sql_filter));
+            }
+        }
+
         // Apply sorting - default to start_time descending
         let sort_by = query.sort_by.as_deref().unwrap_or("start_time");
         let sort_order = query.sort_order.as_deref().unwrap_or("desc");
@@ -328,6 +343,21 @@ impl TraceService for TraceServiceImpl {
             }
         }
 
+        // Apply labels filter using JSON_EXTRACT
+        if let Some(labels) = &query.labels {
+            if !labels.is_empty() {
+                // Build OR condition for multiple labels (match any)
+                let labels_str = labels
+                    .iter()
+                    .map(|l| format!("'{}'", l.replace('\'', "''")))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                let sql_filter = format!("json_extract(attribute, '$.label') IN ({})", labels_str);
+                db_query =
+                    db_query.filter(diesel::dsl::sql::<diesel::sql_types::Bool>(&sql_filter));
+            }
+        }
+
         let count = db_query
             .count()
             .get_result::<i64>(&mut conn)
@@ -525,6 +555,31 @@ impl TraceService for TraceServiceImpl {
         let limit = query.spans_per_group;
         let offset = 0; // Batch endpoint always starts from offset 0
 
+        // Parse labels filter if provided
+        let labels: Option<Vec<String>> = query.labels.as_ref().map(|l| {
+            l.split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect()
+        });
+
+        // Build SQL filter for labels if needed
+        let labels_sql_filter: Option<String> = labels.as_ref().and_then(|labels| {
+            if labels.is_empty() {
+                None
+            } else {
+                let labels_str = labels
+                    .iter()
+                    .map(|l| format!("'{}'", l.replace('\'', "''")))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                Some(format!(
+                    "json_extract(attribute, '$.label') IN ({})",
+                    labels_str
+                ))
+            }
+        });
+
         let mut result_map: HashMap<String, GroupSpansData> = HashMap::new();
 
         // Process each group sequentially to avoid SQLite lock contention
@@ -573,6 +628,14 @@ impl TraceService for TraceServiceImpl {
 
             count_query = count_query.filter(traces::project_id.eq(&project_slug));
             data_query = data_query.filter(traces::project_id.eq(&project_slug));
+
+            // Apply labels filter if provided
+            if let Some(ref sql_filter) = labels_sql_filter {
+                count_query =
+                    count_query.filter(diesel::dsl::sql::<diesel::sql_types::Bool>(sql_filter));
+                data_query =
+                    data_query.filter(diesel::dsl::sql::<diesel::sql_types::Bool>(sql_filter));
+            }
 
             // Get total count
             let total = count_query

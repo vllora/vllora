@@ -3,6 +3,7 @@ pub mod embedding;
 pub mod events;
 pub mod group;
 pub mod image;
+pub mod labels;
 pub mod mcp_configs;
 pub mod middleware;
 pub mod models;

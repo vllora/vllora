@@ -25,6 +25,8 @@ pub struct ListSpansQueryParams {
     pub end_time: Option<i64>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
+    /// Filter by labels (comma-separated, e.g., "flight_search,budget_agent")
+    pub labels: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -64,6 +66,7 @@ pub struct Pagination {
 /// - parentSpanIds (optional): Filter by parent span IDs (comma-separated). Special: "null"=root, "!null"=child
 /// - startTime (optional): Filter spans that started after this timestamp (microseconds)
 /// - endTime (optional): Filter spans that started before this timestamp (microseconds)
+/// - labels (optional): Filter by labels from attribute.label (comma-separated, e.g., "flight_search,budget_agent")
 /// - limit (optional): Number of results to return (default: 100)
 /// - offset (optional): Number of results to skip (default: 0)
 ///
@@ -164,6 +167,12 @@ pub async fn list_spans<T: TraceService + DatabaseServiceTrait>(
             .map(|s| s.split(',').map(|id| id.trim().to_string()).collect())
     };
 
+    // Parse labels filter
+    let labels = query
+        .labels
+        .as_ref()
+        .map(|s| s.split(',').map(|l| l.trim().to_string()).collect());
+
     let list_query = ListTracesQuery {
         project_slug: Some(project_slug.clone()),
         span_id: query.span_id.clone(),
@@ -188,6 +197,7 @@ pub async fn list_spans<T: TraceService + DatabaseServiceTrait>(
         text_search: None,
         sort_by: None,
         sort_order: None,
+        labels,
     };
 
     Ok(trace_service.list(list_query.clone()).map(|traces| {

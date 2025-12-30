@@ -24,6 +24,8 @@ pub struct ListRunsQueryParams {
     pub offset: Option<i64>,
     #[serde(alias = "includeMcpTemplates")]
     pub include_mcp_templates: Option<bool>,
+    /// Comma-separated labels to filter by (attribute.label)
+    pub labels: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -79,6 +81,12 @@ pub async fn list_root_runs<T: RunService + DatabaseServiceTrait>(
         limit: query.limit.unwrap_or(100),
         offset: query.offset.unwrap_or(0),
         include_mcp_templates: query.include_mcp_templates.unwrap_or(false),
+        labels: query.labels.as_ref().map(|s| {
+            s.split(',')
+                .map(|l| l.trim().to_string())
+                .filter(|l| !l.is_empty())
+                .collect()
+        }),
     };
     let runs = run_service.list_root_runs(list_query.clone())?;
     let total = run_service.count_root_runs(list_query)?;
@@ -117,6 +125,7 @@ pub async fn run_by_id<T: RunService + DatabaseServiceTrait>(
         limit: 1,
         offset: 0,
         include_mcp_templates: false,
+        labels: None,
     };
     let runs = run_service.list_root_runs(list_query.clone())?;
 

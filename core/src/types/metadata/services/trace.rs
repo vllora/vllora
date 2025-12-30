@@ -62,6 +62,8 @@ pub struct ListTracesQuery {
     pub sort_by: Option<String>,
     /// Sort order: "asc" or "desc". Defaults to "desc".
     pub sort_order: Option<String>,
+    /// Filter by labels (from attribute.label JSON field)
+    pub labels: Option<Vec<String>>,
 }
 
 /// Query parameters for unified GET /group/spans endpoint
@@ -121,6 +123,8 @@ pub struct BatchGroupSpansQuery {
     pub groups: Vec<GroupIdentifier>,
     #[serde(alias = "spansPerGroup", default = "default_spans_per_group")]
     pub spans_per_group: i64,
+    /// Comma-separated list of labels to filter spans by (attribute.label)
+    pub labels: Option<String>,
 }
 
 /// Individual group's spans with pagination info
@@ -161,6 +165,7 @@ impl Default for ListTracesQuery {
             text_search: None,
             sort_by: None,
             sort_order: None,
+            labels: None,
         }
     }
 }
