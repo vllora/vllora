@@ -514,6 +514,7 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
         let list_query = ListTracesQuery {
             project_slug: None,
             span_id: None,
+            span_ids: None,
             run_ids: Some(vec![params.run_id.clone()]),
             thread_ids: None,
             operation_names: None,
@@ -914,6 +915,7 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
             let list_query = ListTracesQuery {
                 project_slug: None,
                 span_id: None,
+                span_ids: None,
                 run_ids: None,
                 thread_ids: None,
                 operation_names: Some(llm_operations.iter().map(|s| s.to_string()).collect()),
@@ -984,6 +986,7 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
             let list_query = ListTracesQuery {
                 project_slug: None,
                 span_id: None,
+                span_ids: None,
                 run_ids: None,
                 thread_ids: None,
                 operation_names: Some(vec!["tools".to_string()]),

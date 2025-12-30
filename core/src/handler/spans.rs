@@ -9,8 +9,8 @@ use std::collections::HashMap;
 
 #[derive(Deserialize)]
 pub struct ListSpansQueryParams {
-    #[serde(alias = "spanId")]
-    pub span_id: Option<String>, // Specific span ID to fetch
+    #[serde(alias = "spanIds")]
+    pub span_ids: Option<String>, // Comma-separated span IDs to fetch (also supports single spanId)
     #[serde(alias = "threadIds")]
     pub thread_ids: Option<String>, // Comma-separated
     #[serde(alias = "runIds")]
@@ -59,7 +59,6 @@ pub struct Pagination {
 /// GET /spans - List spans with optional filters
 ///
 /// Query parameters:
-/// - spanId (optional): Get a specific span by ID. When provided, returns only that span (ignores other filters except project)
 /// - threadIds (optional): Filter by thread IDs (comma-separated). Special: "null"=no thread, "!null"=has thread
 /// - runIds (optional): Filter by run IDs (comma-separated). Special: "null"=no run, "!null"=has run
 /// - operationNames (optional): Filter by operation names (comma-separated). Special: "null"=no op, "!null"=has op
@@ -173,9 +172,16 @@ pub async fn list_spans<T: TraceService + DatabaseServiceTrait>(
         .as_ref()
         .map(|s| s.split(',').map(|l| l.trim().to_string()).collect());
 
+    // Parse span_ids filter
+    let span_ids_filter = query
+        .span_ids
+        .as_ref()
+        .map(|s| s.split(',').map(|id| id.trim().to_string()).collect());
+
     let list_query = ListTracesQuery {
         project_slug: Some(project_slug.clone()),
-        span_id: query.span_id.clone(),
+        span_id: None,
+        span_ids: span_ids_filter,
         run_ids,
         thread_ids,
         operation_names,

@@ -48,6 +48,7 @@ pub async fn list_traces<T: TraceService + DatabaseServiceTrait>(
     let list_query = ListTracesQuery {
         project_slug: Some(project_slug.clone()),
         span_id: None,
+        span_ids: None,
         run_ids,
         thread_ids,
         operation_names,
@@ -143,6 +144,7 @@ pub async fn get_spans_by_run<T: TraceService + DatabaseServiceTrait>(
             let count_query = ListTracesQuery {
                 project_slug: Some(project_slug.clone()),
                 span_id: None,
+                span_ids: None,
                 run_ids: Some(vec![run_id.into_inner()]),
                 thread_ids: None,
                 operation_names: None,
