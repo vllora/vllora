@@ -31,6 +31,10 @@ pub struct ServeArgs {
     #[arg(long, value_name = "ORIGINS")]
     pub cors_origins: Option<String>,
 
+    /// Port to listen on for OTLP metrics (e.g., 4317)
+    #[arg(long, value_name = "OTEL_PORT")]
+    pub otel_port: Option<u16>,
+
     /// Don't open UI in browser on startup
     #[arg(long, value_name = "OPEN_UI_ON_STARTUP", default_value = "true")]
     pub open_ui_on_startup: Option<bool>,

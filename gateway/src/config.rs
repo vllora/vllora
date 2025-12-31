@@ -125,6 +125,10 @@ impl Config {
                 self.http.cors_allowed_origins =
                     cors.split(',').map(|s| s.trim().to_string()).collect();
             }
+
+            if let Some(otel_port) = args.otel_port {
+                self.otel.port = otel_port;
+            }
         }
         self
     }
