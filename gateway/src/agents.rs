@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
-use tracing::{error, info, warn};
+use tracing::{debug, error, warn};
 
 /// Provider configuration for model settings
 /// Matches Distri's [model_settings.provider] section
@@ -115,7 +115,7 @@ fn apply_model_settings_override(content: &str, settings: &ModelSettingsConfig) 
     let frontmatter = parts[1];
     let body = parts[2];
 
-    info!(
+    debug!(
         "Applying model settings override with delimiter '{}': {:?}",
         delimiter, settings
     );
@@ -331,7 +331,7 @@ fn load_working_directory_agents(
 
             agents.insert(name.clone(), AgentDefinition { name, content });
 
-            info!("Loaded agent from working directory: {}", filename);
+            debug!("Loaded agent from working directory: {}", filename);
         }
     }
 
@@ -348,7 +348,7 @@ fn merge_agents(
 
     // Override with working directory agents
     for (name, agent) in working_dir {
-        info!(
+        debug!(
             "Overriding embedded agent with working directory version: {}",
             name
         );
@@ -385,7 +385,7 @@ pub fn load_lucy_config() -> Result<LucyConfig, AgentError> {
     let config_path = get_lucy_config_path()?;
 
     if !config_path.exists() {
-        info!(
+        debug!(
             "Lucy config file not found at {:?}, using defaults",
             config_path
         );
@@ -406,7 +406,7 @@ pub fn load_lucy_config() -> Result<LucyConfig, AgentError> {
         ))
     })?;
 
-    info!("Loaded Lucy config from {:?}", config_path);
+    debug!("Loaded Lucy config from {:?}", config_path);
     Ok(config)
 }
 
@@ -438,7 +438,7 @@ pub fn save_lucy_config(config: &LucyConfig) -> Result<(), AgentError> {
         )))
     })?;
 
-    info!("Saved Lucy config to {:?}", config_path);
+    debug!("Saved Lucy config to {:?}", config_path);
     Ok(())
 }
 
@@ -447,7 +447,7 @@ pub fn delete_lucy_config() -> Result<(), AgentError> {
     let config_path = get_lucy_config_path()?;
 
     if !config_path.exists() {
-        info!(
+        debug!(
             "Lucy config file does not exist at {:?}, nothing to delete",
             config_path
         );
@@ -461,7 +461,7 @@ pub fn delete_lucy_config() -> Result<(), AgentError> {
         )))
     })?;
 
-    info!("Deleted Lucy config from {:?}", config_path);
+    debug!("Deleted Lucy config from {:?}", config_path);
     Ok(())
 }
 
@@ -560,7 +560,7 @@ pub async fn register_agents_with_status(
         return Ok(result);
     }
 
-    info!("Distri server is running. Registering agents...");
+    debug!("Distri server is running. Registering agents...");
 
     // Get working directory
     let work_dir = std::env::current_dir().map_err(|e| {
@@ -570,15 +570,15 @@ pub async fn register_agents_with_status(
         )))
     })?;
 
-    info!("Working directory: {:?}", work_dir);
+    debug!("Working directory: {:?}", work_dir);
 
     // Load embedded agents
     let embedded_agents = load_embedded_agents();
-    info!("Loaded {} embedded agents", embedded_agents.len());
+    debug!("Loaded {} embedded agents", embedded_agents.len());
 
     // Load working directory agents
     let working_dir_agents = load_working_directory_agents(&work_dir)?;
-    info!(
+    debug!(
         "Loaded {} agents from working directory",
         working_dir_agents.len()
     );
@@ -588,7 +588,7 @@ pub async fn register_agents_with_status(
 
     // Apply model settings override if provided
     if let Some(settings) = model_settings {
-        info!("Applying model settings override: {:?}", settings);
+        debug!("Applying model settings override: {:?}", settings);
         for agent in agents.values_mut() {
             agent.content = apply_model_settings_override(&agent.content, settings);
         }
@@ -599,13 +599,13 @@ pub async fn register_agents_with_status(
         return Ok(result);
     }
 
-    info!("Registering {} agents...", agents.len());
+    debug!("Registering {} agents...", agents.len());
 
     // Register each agent and track status
     for (name, agent) in &agents {
         match register_agent(&api_url, agent).await {
             Ok(_) => {
-                info!("Successfully registered agent: {}", name);
+                debug!("Successfully registered agent: {}", name);
                 result.agents.push(AgentRegistrationStatus {
                     name: name.clone(),
                     success: true,
@@ -638,7 +638,7 @@ pub async fn register_agents() -> Result<(), AgentError> {
     // Use config values if available, otherwise fall back to env/defaults
     let api_url = lucy_config.distri_url.unwrap_or_else(get_distri_api_url);
 
-    info!("Checking if Distri server is running at: {}", api_url);
+    debug!("Checking if Distri server is running at: {}", api_url);
 
     // Check if Distri server is running before attempting registration
     if !check_distri_running(&api_url).await {
@@ -654,7 +654,7 @@ pub async fn register_agents() -> Result<(), AgentError> {
         return Ok(());
     }
 
-    info!("Distri server is running. Registering agents...");
+    debug!("Distri server is running. Registering agents...");
     println!("✅ Distri server is running. Registering agents...");
 
     // Get working directory
@@ -665,15 +665,15 @@ pub async fn register_agents() -> Result<(), AgentError> {
         )))
     })?;
 
-    info!("Working directory: {:?}", work_dir);
+    debug!("Working directory: {:?}", work_dir);
 
     // Load embedded agents
     let embedded_agents = load_embedded_agents();
-    info!("Loaded {} embedded agents", embedded_agents.len());
+    debug!("Loaded {} embedded agents", embedded_agents.len());
 
     // Load working directory agents
     let working_dir_agents = load_working_directory_agents(&work_dir)?;
-    info!(
+    debug!(
         "Loaded {} agents from working directory",
         working_dir_agents.len()
     );
@@ -688,13 +688,13 @@ pub async fn register_agents() -> Result<(), AgentError> {
 
     // Apply model settings override if provided in config
     if let Some(ref settings) = lucy_config.model_settings {
-        info!("Applying model settings override from lucy.json");
+        debug!("Applying model settings override from lucy.json");
         for agent in agents.values_mut() {
             agent.content = apply_model_settings_override(&agent.content, settings);
         }
     }
 
-    info!("Registering {} agents...", agents.len());
+    debug!("Registering {} agents...", agents.len());
 
     // Register each agent
     let mut success_count = 0;
@@ -703,7 +703,7 @@ pub async fn register_agents() -> Result<(), AgentError> {
     for (name, agent) in &agents {
         match register_agent(&api_url, agent).await {
             Ok(_) => {
-                info!("Successfully registered agent: {}", name);
+                debug!("Successfully registered agent: {}", name);
                 success_count += 1;
             }
             Err(e) => {
@@ -727,7 +727,7 @@ pub async fn register_agents() -> Result<(), AgentError> {
             error_count
         );
     } else {
-        info!("Successfully registered all {} agents", success_count);
+        debug!("Successfully registered all {} agents", success_count);
         println!("✅ Successfully registered all {} agents", success_count);
     }
 
