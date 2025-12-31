@@ -9,6 +9,10 @@ pub struct Cli {
     #[arg(short, long, default_value = "config.yaml")]
     pub config: String,
 
+    /// Serve arguments (used when no command is specified)
+    #[command(flatten)]
+    pub serve_args: ServeArgs,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }

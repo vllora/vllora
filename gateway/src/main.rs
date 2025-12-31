@@ -113,24 +113,33 @@ async fn main() -> Result<(), CliError> {
     // Seed the database with a default project if none exist
     seed::seed_database(&db_pool)?;
 
-    match cli
-        .command
-        .unwrap_or(cli::Commands::Serve(cli::ServeArgs::default()))
-    {
-        cli::Commands::Sync { models, providers } => {
+    match cli.command {
+        Some(cli::Commands::Sync { models, providers }) => {
             cli::commands::sync::handle_sync(db_pool, models, providers).await
         }
-        cli::Commands::List => cli::commands::list::handle_list(db_pool).await,
-        cli::Commands::Traces(_traces_cmd) => {
+        Some(cli::Commands::List) => cli::commands::list::handle_list(db_pool).await,
+        Some(cli::Commands::Traces(_traces_cmd)) => {
             unreachable!()
         }
-        cli::Commands::GenerateModelsJson { output } => {
+        Some(cli::Commands::GenerateModelsJson { output }) => {
             cli::commands::generate_models_json::handle_generate_models_json(output).await
         }
-        cli::Commands::Serve(serve_args) => {
+        Some(cli::Commands::Serve(subcommand_args)) => {
             cli::commands::serve::handle_serve(
                 db_pool,
-                serve_args,
+                subcommand_args,
+                cli.config,
+                project_trace_senders,
+                run_span_buffer,
+                session,
+            )
+            .await
+        }
+        None => {
+            // No command specified, use flattened serve args
+            cli::commands::serve::handle_serve(
+                db_pool,
+                cli.serve_args,
                 cli.config,
                 project_trace_senders,
                 run_span_buffer,
