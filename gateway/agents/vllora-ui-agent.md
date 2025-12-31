@@ -11,10 +11,6 @@ external = ["get_collapsed_spans", "navigate_to_experiment", "is_valid_for_optim
 model = "gpt-4o"
 temperature = 0.1
 max_tokens = 1500
-
-[model_settings.provider]
-name = "vllora"
-base_url = "http://localhost:9093/v1"
 ---
 
 # ROLE
