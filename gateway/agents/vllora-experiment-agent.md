@@ -11,10 +11,6 @@ external = ["get_experiment_data", "apply_experiment_data", "run_experiment", "e
 model = "gpt-4o"
 temperature = 0.1
 max_tokens = 2000
-
-[model_settings.provider]
-name = "vllora"
-base_url = "http://localhost:9093/v1"
 ---
 
 # ROLE

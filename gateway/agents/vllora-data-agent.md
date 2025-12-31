@@ -11,10 +11,6 @@ external = ["fetch_runs", "fetch_spans", "get_run_details", "fetch_groups", "fet
 model = "gpt-4o"
 temperature = 0.1
 max_tokens = 3000
-
-[model_settings.provider]
-name = "vllora"
-base_url = "http://localhost:9093/v1"
 ---
 
 # ROLE

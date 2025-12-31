@@ -1,8 +1,236 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 use thiserror::Error;
 use tracing::{error, info, warn};
+
+/// Provider configuration for model settings
+/// Matches Distri's [model_settings.provider] section
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ProviderConfig {
+    /// Provider type: "openai", "openai_compat", or "vllora"
+    pub name: String,
+    /// Base URL for the API endpoint
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub base_url: Option<String>,
+    /// API key for authentication
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<String>,
+    /// Project ID (used by vllora provider)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project_id: Option<String>,
+}
+
+/// Model settings configuration
+/// Matches Distri's [model_settings] section
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ModelSettingsConfig {
+    /// Model name (e.g., "gpt-4o", "gpt-4o-mini")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    /// Temperature for sampling (0.0 - 2.0)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub temperature: Option<f32>,
+    /// Maximum tokens in response
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_tokens: Option<u32>,
+    /// Provider configuration
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<ProviderConfig>,
+}
+
+/// Write provider TOML fields based on provider type
+/// Different provider types have different valid fields:
+/// - openai: NO fields (empty struct)
+/// - openai_compat: base_url, api_key, project_id
+/// - vllora: base_url only
+fn write_provider_toml(provider: &ProviderConfig) -> String {
+    let mut result = String::new();
+    result.push_str("[model_settings.provider]\n");
+    result.push_str(&format!("name = \"{}\"\n", provider.name));
+
+    match provider.name.as_str() {
+        "openai" => {
+            // OpenAI provider has NO additional fields
+        }
+        "openai_compat" => {
+            // OpenAI-compatible has base_url, api_key, project_id
+            if let Some(ref base_url) = provider.base_url {
+                result.push_str(&format!("base_url = \"{}\"\n", base_url));
+            }
+            if let Some(ref api_key) = provider.api_key {
+                result.push_str(&format!("api_key = \"{}\"\n", api_key));
+            }
+            if let Some(ref project_id) = provider.project_id {
+                result.push_str(&format!("project_id = \"{}\"\n", project_id));
+            }
+        }
+        "vllora" => {
+            // Vllora has only base_url
+            if let Some(ref base_url) = provider.base_url {
+                result.push_str(&format!("base_url = \"{}\"\n", base_url));
+            }
+        }
+        _ => {
+            // Unknown provider, include all fields as fallback
+            if let Some(ref base_url) = provider.base_url {
+                result.push_str(&format!("base_url = \"{}\"\n", base_url));
+            }
+            if let Some(ref api_key) = provider.api_key {
+                result.push_str(&format!("api_key = \"{}\"\n", api_key));
+            }
+            if let Some(ref project_id) = provider.project_id {
+                result.push_str(&format!("project_id = \"{}\"\n", project_id));
+            }
+        }
+    }
+    result
+}
+
+/// Apply model settings configuration override to agent content
+/// Replaces the [model_settings] and [model_settings.provider] sections in the TOML frontmatter
+fn apply_model_settings_override(content: &str, settings: &ModelSettingsConfig) -> String {
+    // Agent files can use either +++ or --- as frontmatter delimiters
+    // Detect which delimiter is used
+    let delimiter = if content.starts_with("+++") {
+        "+++"
+    } else if content.starts_with("---") {
+        "---"
+    } else {
+        warn!("Agent content does not start with +++ or --- frontmatter delimiter");
+        return content.to_string();
+    };
+
+    let parts: Vec<&str> = content.splitn(3, delimiter).collect();
+
+    if parts.len() != 3 {
+        warn!(
+            "Agent content does not have valid {} frontmatter (found {} parts)",
+            delimiter,
+            parts.len()
+        );
+        return content.to_string();
+    }
+
+    let frontmatter = parts[1];
+    let body = parts[2];
+
+    info!(
+        "Applying model settings override with delimiter '{}': {:?}",
+        delimiter, settings
+    );
+
+    // Process frontmatter line by line
+    let mut result = String::new();
+    let mut in_model_settings = false;
+    let mut in_provider_section = false;
+    let mut model_settings_written = false;
+    let mut provider_written = false;
+
+    for line in frontmatter.lines() {
+        let trimmed = line.trim();
+
+        // Detect section headers
+        if trimmed == "[model_settings]" {
+            in_model_settings = true;
+            in_provider_section = false;
+            result.push_str(line);
+            result.push('\n');
+
+            // Add overridden model settings right after the header
+            if let Some(ref model) = settings.model {
+                result.push_str(&format!("model = \"{}\"\n", model));
+            }
+            if let Some(temperature) = settings.temperature {
+                result.push_str(&format!("temperature = {}\n", temperature));
+            }
+            if let Some(max_tokens) = settings.max_tokens {
+                result.push_str(&format!("max_tokens = {}\n", max_tokens));
+            }
+            model_settings_written = true;
+            continue;
+        }
+
+        if trimmed == "[model_settings.provider]" {
+            in_provider_section = true;
+            in_model_settings = false;
+
+            // Write provider section with overrides (using helper for correct field handling)
+            if let Some(ref provider) = settings.provider {
+                result.push_str(&write_provider_toml(provider));
+                provider_written = true;
+            }
+            continue;
+        }
+
+        // Check if we've hit a new section
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            // If we were in model_settings and have a provider to write, write it now
+            if in_model_settings && !provider_written {
+                if let Some(ref provider) = settings.provider {
+                    result.push_str(&write_provider_toml(provider));
+                    provider_written = true;
+                }
+            }
+            in_model_settings = false;
+            in_provider_section = false;
+            result.push_str(line);
+            result.push('\n');
+            continue;
+        }
+
+        // Skip lines in model_settings that we're overriding
+        if in_model_settings {
+            if trimmed.starts_with("model =") && settings.model.is_some() {
+                continue;
+            }
+            if trimmed.starts_with("temperature =") && settings.temperature.is_some() {
+                continue;
+            }
+            if trimmed.starts_with("max_tokens =") && settings.max_tokens.is_some() {
+                continue;
+            }
+        }
+
+        // Skip all lines in provider section if we have overrides
+        if in_provider_section && settings.provider.is_some() {
+            continue;
+        }
+
+        result.push_str(line);
+        result.push('\n');
+    }
+
+    // If model_settings section doesn't exist and we have settings, add it
+    if !model_settings_written
+        && (settings.model.is_some()
+            || settings.temperature.is_some()
+            || settings.max_tokens.is_some()
+            || settings.provider.is_some())
+    {
+        result.push_str("\n[model_settings]\n");
+        if let Some(ref model) = settings.model {
+            result.push_str(&format!("model = \"{}\"\n", model));
+        }
+        if let Some(temperature) = settings.temperature {
+            result.push_str(&format!("temperature = {}\n", temperature));
+        }
+        if let Some(max_tokens) = settings.max_tokens {
+            result.push_str(&format!("max_tokens = {}\n", max_tokens));
+        }
+
+        if let Some(ref provider) = settings.provider {
+            result.push_str(&write_provider_toml(provider));
+        }
+    } else if !provider_written {
+        // Add provider section at the end if needed
+        if let Some(ref provider) = settings.provider {
+            result.push_str(&write_provider_toml(provider));
+        }
+    }
+
+    format!("{}{}{}{}", delimiter, result, delimiter, body)
+}
 
 /// Embedded agent definitions
 const EMBEDDED_AGENTS: &[(&str, &str)] = &[
@@ -200,8 +428,15 @@ pub struct RegistrationResult {
 }
 
 /// Register all agents with the Distri server and return detailed status
-pub async fn register_agents_with_status() -> Result<RegistrationResult, AgentError> {
-    let api_url = get_distri_api_url();
+/// If distri_url is provided, use it; otherwise fall back to DISTRI_URL env var or default
+/// If model_settings is provided, override the [model_settings] section in all agents
+pub async fn register_agents_with_status(
+    distri_url: Option<&str>,
+    model_settings: Option<&ModelSettingsConfig>,
+) -> Result<RegistrationResult, AgentError> {
+    let api_url = distri_url
+        .map(|s| s.to_string())
+        .unwrap_or_else(get_distri_api_url);
     let distri_running = check_distri_running(&api_url).await;
 
     let mut result = RegistrationResult {
@@ -242,7 +477,15 @@ pub async fn register_agents_with_status() -> Result<RegistrationResult, AgentEr
     );
 
     // Merge agents (working directory overrides embedded)
-    let agents = merge_agents(embedded_agents, working_dir_agents);
+    let mut agents = merge_agents(embedded_agents, working_dir_agents);
+
+    // Apply model settings override if provided
+    if let Some(settings) = model_settings {
+        info!("Applying model settings override: {:?}", settings);
+        for agent in agents.values_mut() {
+            agent.content = apply_model_settings_override(&agent.content, settings);
+        }
+    }
 
     if agents.is_empty() {
         warn!("No agents found to register");

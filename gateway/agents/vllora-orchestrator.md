@@ -8,10 +8,6 @@ tool_format = "provider"
 [model_settings]
 model = "gpt-4.1"
 temperature = 0.2
-
-[model_settings.provider]
-name = "vllora"
-base_url = "http://localhost:9093/v1"
 ---
 
 # ROLE
