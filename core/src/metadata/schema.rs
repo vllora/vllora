@@ -83,6 +83,21 @@ diesel::table! {
 }
 
 diesel::table! {
+    metrics (metric_name, timestamp_us, attributes, trace_id, span_id) {
+        metric_name -> Text,
+        metric_type -> Text,
+        value -> Double,
+        timestamp_us -> BigInt,
+        attributes -> Text,
+        project_id -> Nullable<Text>,
+        thread_id -> Nullable<Text>,
+        run_id -> Nullable<Text>,
+        trace_id -> Nullable<Text>,
+        span_id -> Nullable<Text>,
+    }
+}
+
+diesel::table! {
     traces (trace_id, span_id) {
         trace_id -> Text,
         span_id -> Text,
@@ -131,6 +146,7 @@ diesel::table! {
 diesel::joinable!(provider_credentials -> projects (project_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
+    metrics,
     models,
     projects,
     provider_credentials,

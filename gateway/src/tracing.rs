@@ -6,6 +6,7 @@ use std::sync::Arc;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Layer, Registry};
+use vllora_core::metadata::pool::DbPool;
 use vllora_core::telemetry::ProjectTraceSpanExporter;
 use vllora_core::telemetry::RunSpanBuffer;
 use vllora_core::telemetry::RunSpanBufferExporter;
@@ -17,6 +18,7 @@ use crate::metrics;
 pub fn init_tracing(
     project_trace_senders: Arc<ProjectTraceMap>,
     run_span_buffer: Arc<RunSpanBuffer>,
+    db_pool: Option<DbPool>,
 ) {
     let log_level = std::env::var("RUST_LOG").unwrap_or("info".to_string());
     let env_filter = EnvFilter::new(log_level).add_directive("actix_server=off".parse().unwrap());
@@ -69,14 +71,22 @@ pub fn init_tracing(
         .build();
     
     if let Ok(exporter) = otlp_metrics_exporter {
-        let reader = opentelemetry_sdk::metrics::PeriodicReader::builder(exporter)
+        let mut builder = SdkMeterProvider::builder().with_resource(resource);
+        
+        // Add OTLP reader
+        let otlp_reader = opentelemetry_sdk::metrics::PeriodicReader::builder(exporter)
             .with_interval(std::time::Duration::from_secs(10))
             .build();
+        builder = builder.with_reader(otlp_reader);
         
-        let meter_provider = SdkMeterProvider::builder()
-            .with_resource(resource)
-            .with_reader(reader)
-            .build();
+        // Add SQLite writer if db_pool is available
+        if let Some(_db_pool) = db_pool {
+            // SQLite metrics writer is now integrated via MetricsServiceServer
+            // Metrics will be written to database through the gRPC service
+            tracing::info!("SQLite metrics writer will be initialized via MetricsServiceServer");
+        }
+        
+        let meter_provider = builder.build();
         opentelemetry::global::set_meter_provider(meter_provider);
         
         // Initialize metrics module

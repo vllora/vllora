@@ -1,5 +1,6 @@
 pub mod group;
 pub mod mcp_config;
+pub mod metric;
 pub mod model;
 pub mod project;
 pub mod provider;

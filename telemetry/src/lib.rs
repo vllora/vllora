@@ -1,4 +1,7 @@
 pub mod events;
+pub mod metrics_service;
+
+pub use metrics_service::{MetricsDataPoint, MetricsServiceImpl, MetricsWriterTransport};
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -6,6 +9,7 @@ use std::time::Duration;
 
 use dashmap::DashMap;
 use opentelemetry::trace::{SpanId, SpanKind, TraceId};
+pub use opentelemetry_proto::tonic::collector::metrics::v1::metrics_service_server::MetricsServiceServer;
 pub use opentelemetry_proto::tonic::collector::trace::v1::trace_service_server::TraceServiceServer;
 use opentelemetry_proto::tonic::{
     collector::trace::v1::{

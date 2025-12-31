@@ -25,7 +25,6 @@ use vllora_llm::{
     },
 };
 use vllora_telemetry::events::SPAN_MODEL_CALL;
-use crate::metrics;
 
 pub struct TracedResponsesModel {
     definition: ResponsesModelDefinition,
@@ -108,8 +107,6 @@ impl Responses for TracedResponsesModel {
         // Track start time for latency calculation
         let span_start_time = std::time::Instant::now();
         
-        // Record request count
-        metrics::record_request(&model_name, &provider_name);
 
         let span = info_span!(
             target: "vllora::user_tracing::models",
@@ -179,8 +176,6 @@ impl Responses for TracedResponsesModel {
                                 c.cost = total_cost;
                                 current_span.record("cost", serde_json::to_string(&c).unwrap());
                                 
-                                // Record cost metric
-                                metrics::record_cost(c.cost, &model_name_clone, &provider_name_clone);
                             }
                             Err(e) => {
                                 tracing::error!(
@@ -194,13 +189,6 @@ impl Responses for TracedResponsesModel {
                         usage.add_usage(u);
                         current_span.record("usage", serde_json::to_string(u).unwrap());
                         
-                        // Record token metrics
-                        metrics::record_tokens(
-                            u.input_tokens as u64,
-                            u.output_tokens as u64,
-                            &model_name_clone,
-                            &provider_name_clone,
-                        );
                     }
                 }
                 if let Some(tx) = outer_tx.as_ref() {
@@ -210,14 +198,6 @@ impl Responses for TracedResponsesModel {
         });
         
         let result = instance.invoke(request, Some(tx)).await;
-        
-        // Record latency and error metrics
-        let latency_ms = span_start_time.elapsed().as_secs_f64() * 1000.0;
-        metrics::record_latency(latency_ms, &model_name, &provider_name);
-        
-        if result.is_err() {
-            metrics::record_error(&model_name, &provider_name);
-        }
         
         result
     }
@@ -240,8 +220,6 @@ impl Responses for TracedResponsesModel {
         // Track start time for latency calculation
         let span_start_time = std::time::Instant::now();
         
-        // Record request count
-        metrics::record_request(&model_name, &provider_name);
 
         let span = info_span!(
             target: "vllora::user_tracing::models",
@@ -300,8 +278,6 @@ impl Responses for TracedResponsesModel {
                                 c.cost = total_cost;
                                 current_span.record("cost", serde_json::to_string(&c).unwrap());
                                 
-                                // Record cost metric
-                                metrics::record_cost(c.cost, &model_name_clone, &provider_name_clone);
                             }
                             Err(e) => {
                                 tracing::error!(
@@ -315,13 +291,6 @@ impl Responses for TracedResponsesModel {
                         usage.add_usage(u);
                         current_span.record("usage", serde_json::to_string(u).unwrap());
                         
-                        // Record token metrics
-                        metrics::record_tokens(
-                            u.input_tokens as u64,
-                            u.output_tokens as u64,
-                            &model_name_clone,
-                            &provider_name_clone,
-                        );
                     }
                 }
                 if let Some(tx) = outer_tx.as_ref() {
@@ -334,14 +303,6 @@ impl Responses for TracedResponsesModel {
             .stream(request, Some(tx))
             .instrument(span.clone())
             .await;
-        
-        // Record latency and error metrics
-        let latency_ms = span_start_time.elapsed().as_secs_f64() * 1000.0;
-        metrics::record_latency(latency_ms, &model_name, &provider_name);
-        
-        if result.is_err() {
-            metrics::record_error(&model_name, &provider_name);
-        }
         
         result
     }

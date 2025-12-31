@@ -66,6 +66,10 @@ use vllora_llm::types::gateway::CostCalculator;
 use vllora_telemetry::SpanWriterTransport;
 use vllora_telemetry::TraceServiceImpl as TelemetryTraceServiceImpl;
 use vllora_telemetry::TraceServiceServer;
+use vllora_telemetry::MetricsServiceServer;
+use vllora_telemetry::MetricsServiceImpl;
+use crate::metrics_writer::SqliteMetricsWriterAdapter;
+use vllora_core::telemetry::metrics_database::SqliteMetricsWriterTransport;
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 #[serde(crate = "serde")]
@@ -206,8 +210,21 @@ impl ApiServer {
             Box::new(ProjectTraceTenantResolver::new(project_service)),
             project_trace_senders.inner().clone(),
         ));
+
+        // Create metrics service
+        let sqlite_metrics_writer = Arc::new(SqliteMetricsWriterTransport::new(
+            server_config.db_pool.clone(),
+        ));
+        let metrics_writer_adapter = Arc::new(SqliteMetricsWriterAdapter::new(sqlite_metrics_writer));
+        let metrics_project_service = ProjectServiceImpl::new(server_config.db_pool.clone());
+        let metrics_service = MetricsServiceServer::new(MetricsServiceImpl::new(
+            metrics_writer_adapter,
+            Box::new(ProjectTraceTenantResolver::new(metrics_project_service)),
+        ));
+
         let tonic_server = tonic::transport::Server::builder()
             .add_service(trace_service)
+            .add_service(metrics_service)
             .serve_with_shutdown(
                 format!("{}:{}", self.config.otel.host, self.config.otel.port).parse()?,
                 async {
