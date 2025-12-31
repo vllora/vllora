@@ -443,7 +443,9 @@ impl ApiServer {
                     .route("/fetch_key/{session_id}", web::get().to(session::fetch_key)),
             )
             .service(
-                web::scope("/agents").route("/register", web::post().to(agents::register_agents)),
+                web::scope("/agents")
+                    .route("/register", web::post().to(agents::register_agents))
+                    .route("/config", web::get().to(agents::get_lucy_config)),
             )
             .service(
                 web::scope("/debug")

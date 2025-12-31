@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use thiserror::Error;
 use tracing::{error, info, warn};
 
@@ -358,6 +358,113 @@ fn merge_agents(
     merged
 }
 
+/// Lucy configuration stored in HOME/.vllora/lucy.json
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LucyConfig {
+    /// Distri server URL
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub distri_url: Option<String>,
+    /// Model settings to override agent defaults
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model_settings: Option<ModelSettingsConfig>,
+}
+
+/// Get the path to lucy.json config file
+fn get_lucy_config_path() -> Result<PathBuf, AgentError> {
+    let home_dir = std::env::var("HOME").map_err(|_| {
+        AgentError::IoError(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "HOME environment variable not set",
+        ))
+    })?;
+    Ok(PathBuf::from(home_dir).join(".vllora").join("lucy.json"))
+}
+
+/// Load Lucy configuration from HOME/.vllora/lucy.json
+pub fn load_lucy_config() -> Result<LucyConfig, AgentError> {
+    let config_path = get_lucy_config_path()?;
+
+    if !config_path.exists() {
+        info!(
+            "Lucy config file not found at {:?}, using defaults",
+            config_path
+        );
+        return Ok(LucyConfig::default());
+    }
+
+    let content = std::fs::read_to_string(&config_path).map_err(|e| {
+        AgentError::IoError(std::io::Error::other(format!(
+            "Failed to read lucy.json: {}",
+            e
+        )))
+    })?;
+
+    let config: LucyConfig = serde_json::from_str(&content).map_err(|e| {
+        AgentError::IoError(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("Failed to parse lucy.json: {}", e),
+        ))
+    })?;
+
+    info!("Loaded Lucy config from {:?}", config_path);
+    Ok(config)
+}
+
+/// Save Lucy configuration to HOME/.vllora/lucy.json
+pub fn save_lucy_config(config: &LucyConfig) -> Result<(), AgentError> {
+    let config_path = get_lucy_config_path()?;
+
+    // Ensure .vllora directory exists
+    if let Some(parent) = config_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| {
+            AgentError::IoError(std::io::Error::other(format!(
+                "Failed to create .vllora directory: {}",
+                e
+            )))
+        })?;
+    }
+
+    let content = serde_json::to_string_pretty(config).map_err(|e| {
+        AgentError::IoError(std::io::Error::other(format!(
+            "Failed to serialize lucy.json: {}",
+            e
+        )))
+    })?;
+
+    std::fs::write(&config_path, content).map_err(|e| {
+        AgentError::IoError(std::io::Error::other(format!(
+            "Failed to write lucy.json: {}",
+            e
+        )))
+    })?;
+
+    info!("Saved Lucy config to {:?}", config_path);
+    Ok(())
+}
+
+/// Delete Lucy configuration file from HOME/.vllora/lucy.json
+pub fn delete_lucy_config() -> Result<(), AgentError> {
+    let config_path = get_lucy_config_path()?;
+
+    if !config_path.exists() {
+        info!(
+            "Lucy config file does not exist at {:?}, nothing to delete",
+            config_path
+        );
+        return Ok(());
+    }
+
+    std::fs::remove_file(&config_path).map_err(|e| {
+        AgentError::IoError(std::io::Error::other(format!(
+            "Failed to delete lucy.json: {}",
+            e
+        )))
+    })?;
+
+    info!("Deleted Lucy config from {:?}", config_path);
+    Ok(())
+}
+
 /// Get the Distri API URL from environment or use default
 fn get_distri_api_url() -> String {
     std::env::var("DISTRI_URL").unwrap_or_else(|_| "http://localhost:8081".to_string())
@@ -520,8 +627,17 @@ pub async fn register_agents_with_status(
 }
 
 /// Register all agents with the Distri server
+/// Loads config from lucy.json if available
 pub async fn register_agents() -> Result<(), AgentError> {
-    let api_url = get_distri_api_url();
+    // Try to load config from lucy.json
+    let lucy_config = load_lucy_config().unwrap_or_else(|e| {
+        warn!("Failed to load lucy.json config: {}, using defaults", e);
+        LucyConfig::default()
+    });
+
+    // Use config values if available, otherwise fall back to env/defaults
+    let api_url = lucy_config.distri_url.unwrap_or_else(get_distri_api_url);
+
     info!("Checking if Distri server is running at: {}", api_url);
 
     // Check if Distri server is running before attempting registration
@@ -563,11 +679,19 @@ pub async fn register_agents() -> Result<(), AgentError> {
     );
 
     // Merge agents (working directory overrides embedded)
-    let agents = merge_agents(embedded_agents, working_dir_agents);
+    let mut agents = merge_agents(embedded_agents, working_dir_agents);
 
     if agents.is_empty() {
         warn!("No agents found to register");
         return Ok(());
+    }
+
+    // Apply model settings override if provided in config
+    if let Some(ref settings) = lucy_config.model_settings {
+        info!("Applying model settings override from lucy.json");
+        for agent in agents.values_mut() {
+            agent.content = apply_model_settings_override(&agent.content, settings);
+        }
     }
 
     info!("Registering {} agents...", agents.len());
