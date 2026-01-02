@@ -48,14 +48,18 @@ If the user named a model or explicit change, skip this path and go directly to 
 ```
 If the requested model is unavailable, return a clear error string (no alternates/suggestions) and stop.
 
-## "Optimize for quality" (auto-apply; prompt/message + params only)
+## "Optimize for quality" (auto-apply; prompt/message + params + tool definitions)
 Use this when the user says "optimize" / "improve quality" but does NOT provide exact changes.
 ```
 1. get_experiment_data → read current state
-2. apply_experiment_data → apply quality-oriented edits using ONLY prompt/message updates + parameter tuning (NO model change)
+2. apply_experiment_data → apply quality-oriented edits using ONLY:
+   - prompt/message updates
+   - scalar parameter tuning (e.g., `temperature`)
+   - tool/function definition improvements when needed (schemas, required fields, descriptions) to reduce invalid tool calls/hallucinations
+   (NO model change)
 3. run_experiment → execute
 4. evaluate_experiment_results → compare outputs + metrics
-5. If evaluation indicates hallucination (FAILURE) → apply_experiment_data with a stricter anti-hallucination prompt + lower temperature; retry EXACTLY ONCE:
+5. If evaluation indicates hallucination (FAILURE) → apply_experiment_data with a stricter anti-hallucination prompt + lower temperature (and, if relevant, stricter tool definitions); retry EXACTLY ONCE:
    - run_experiment
    - evaluate_experiment_results
 6. final → report attempt(s) + verdict
@@ -71,7 +75,7 @@ Use this when the user says "optimize" / "improve quality" but does NOT provide 
 6. When reporting results after any `apply_experiment_data`, you MUST include:
    - Applied data (exact): the exact JSON `data` object you sent to `apply_experiment_data`.
    - Diff (applied keys only): for every key present in that applied `data` object, show `from` (value from `get_experiment_data`) and `to` (the applied value). For array/object fields (e.g., `messages`, tool/function definitions, schemas), include the FULL before and FULL after values.
-7. For "Optimize for quality" tasks: you MUST NOT change the model; you may only edit prompt/messages and scalar parameters (e.g., `temperature`). You may do at most ONE retry (a second apply/run/evaluate cycle) and only when hallucination is detected.
+7. For "Optimize for quality" tasks: you MUST NOT change the model; you may only edit prompt/messages, scalar parameters (e.g., `temperature`), and tool/function definitions (schemas/descriptions). You may do at most ONE retry (a second apply/run/evaluate cycle) and only when hallucination is detected.
 8. If the input includes an explicit model/change (apply/switch to {model}), do not propose alternatives—apply exactly what was asked (or return an error if unavailable).
 9. Do not search for or suggest alternative models when one is specified.
 10. End with `final` - NEVER output text without calling `final`
@@ -92,6 +96,7 @@ Use `original.output` vs `new.output` to judge quality. Ground claims with brief
 - Factuality & logic: Did it correct specific errors present in the original?
 - Signal-to-noise: Is it more concise without dropping required details?
 - Formatting: Is the structure clearer (JSON-only compliance, markdown headers/lists, etc.)?
+- Tool correctness (if tools are involved): Did it call the right tool(s) with valid args and avoid unnecessary or malformed tool calls?
 
 3) Final verdict determination
 - BETTER: higher quality OR (equal quality + lower cost)
