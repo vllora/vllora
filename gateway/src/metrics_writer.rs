@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 use vllora_core::metadata::models::metric::DbNewMetric;
 use vllora_core::telemetry::metrics_database::SqliteMetricsWriterTransport;
@@ -41,11 +40,9 @@ impl MetricsWriterTransport for SqliteMetricsWriterAdapter {
             .collect();
 
         match db_metrics {
-            Ok(db_metrics) => {
-                self.writer
-                    .write_metrics(db_metrics)
-                    .map_err(|e| Box::new(std::io::Error::new(std::io::ErrorKind::Other, e)) as Box<dyn std::error::Error + Send + Sync>)
-            }
+            Ok(db_metrics) => self.writer.write_metrics(db_metrics).map_err(|e| {
+                Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error + Send + Sync>
+            }),
             Err(e) => Err(Box::new(e) as Box<dyn std::error::Error + Send + Sync>),
         }
     }

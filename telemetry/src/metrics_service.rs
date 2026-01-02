@@ -1,4 +1,5 @@
 use crate::serialize_any_value;
+use crate::TraceTenantResolver;
 use opentelemetry_proto::tonic::collector::metrics::v1::{
     metrics_service_server::MetricsService, ExportMetricsPartialSuccess,
     ExportMetricsServiceRequest, ExportMetricsServiceResponse,
@@ -7,7 +8,6 @@ use opentelemetry_proto::tonic::metrics::v1 as metrics_proto;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
-use crate::TraceTenantResolver;
 
 #[async_trait::async_trait]
 pub trait MetricsWriterTransport: Send + Sync {
@@ -15,6 +15,15 @@ pub trait MetricsWriterTransport: Send + Sync {
         &self,
         metrics: Vec<MetricsDataPoint>,
     ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>>;
+}
+
+#[derive(Clone, Debug)]
+pub struct MetricContext {
+    pub project_id: Option<String>,
+    pub thread_id: Option<String>,
+    pub run_id: Option<String>,
+    pub trace_id: Option<String>,
+    pub span_id: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -53,15 +62,7 @@ impl MetricsServiceImpl {
         }
     }
 
-    fn extract_context_from_attributes(
-        attributes: &HashMap<String, Value>,
-    ) -> (
-        Option<String>,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-    ) {
+    fn extract_context_from_attributes(attributes: &HashMap<String, Value>) -> MetricContext {
         let project_id = attributes
             .get("project_id")
             .or_else(|| attributes.get("vllora.project_id"))
@@ -86,7 +87,13 @@ impl MetricsServiceImpl {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
-        (project_id, thread_id, run_id, trace_id, span_id)
+        MetricContext {
+            project_id,
+            thread_id,
+            run_id,
+            trace_id,
+            span_id,
+        }
     }
 
     fn convert_attributes_to_json(
@@ -114,8 +121,7 @@ impl MetricsServiceImpl {
             all_attrs.insert(key, value);
         }
 
-        let (project_id, thread_id, run_id, trace_id, span_id) =
-            Self::extract_context_from_attributes(&all_attrs);
+        let context = Self::extract_context_from_attributes(&all_attrs);
         let attributes_json = Self::convert_attributes_to_json(&all_attrs);
 
         let value = match data_point.value.as_ref() {
@@ -130,11 +136,11 @@ impl MetricsServiceImpl {
             value,
             timestamp_us,
             attributes: attributes_json,
-            project_id,
-            thread_id,
-            run_id,
-            trace_id,
-            span_id,
+            project_id: context.project_id,
+            thread_id: context.thread_id,
+            run_id: context.run_id,
+            trace_id: context.trace_id,
+            span_id: context.span_id,
         });
 
         Ok(metrics)
@@ -159,8 +165,7 @@ impl MetricsServiceImpl {
             all_attrs.insert(key, value);
         }
 
-        let (project_id, thread_id, run_id, trace_id, span_id) =
-            Self::extract_context_from_attributes(&all_attrs);
+        let context = Self::extract_context_from_attributes(&all_attrs);
         let attributes_json = Self::convert_attributes_to_json(&all_attrs);
 
         // Store count
@@ -171,11 +176,11 @@ impl MetricsServiceImpl {
             value: count_value,
             timestamp_us,
             attributes: attributes_json.clone(),
-            project_id: project_id.clone(),
-            thread_id: thread_id.clone(),
-            run_id: run_id.clone(),
-            trace_id: trace_id.clone(),
-            span_id: span_id.clone(),
+            project_id: context.project_id.clone(),
+            thread_id: context.thread_id.clone(),
+            run_id: context.run_id.clone(),
+            trace_id: context.trace_id.clone(),
+            span_id: context.span_id.clone(),
         });
 
         // Store sum if available
@@ -187,11 +192,11 @@ impl MetricsServiceImpl {
                 value: sum,
                 timestamp_us,
                 attributes: attributes_json,
-                project_id,
-                thread_id,
-                run_id,
-                trace_id,
-                span_id,
+                project_id: context.project_id.clone(),
+                thread_id: context.thread_id.clone(),
+                run_id: context.run_id.clone(),
+                trace_id: context.trace_id.clone(),
+                span_id: context.span_id.clone(),
             });
         }
 
@@ -217,8 +222,7 @@ impl MetricsServiceImpl {
             all_attrs.insert(key, value);
         }
 
-        let (project_id, thread_id, run_id, trace_id, span_id) =
-            Self::extract_context_from_attributes(&all_attrs);
+        let context = Self::extract_context_from_attributes(&all_attrs);
         let attributes_json = Self::convert_attributes_to_json(&all_attrs);
 
         let value = match data_point.value.as_ref() {
@@ -233,11 +237,11 @@ impl MetricsServiceImpl {
             value,
             timestamp_us,
             attributes: attributes_json,
-            project_id,
-            thread_id,
-            run_id,
-            trace_id,
-            span_id,
+            project_id: context.project_id,
+            thread_id: context.thread_id,
+            run_id: context.run_id,
+            trace_id: context.trace_id,
+            span_id: context.span_id,
         });
 
         Ok(metrics)
@@ -288,38 +292,32 @@ impl MetricsServiceImpl {
                 match metric.data.as_ref() {
                     Some(metrics_proto::metric::Data::Sum(sum)) => {
                         for data_point in &sum.data_points {
-                            all_metrics.extend(
-                                self.convert_metric_data_point_to_metrics(
-                                    &metric_name,
-                                    metric_type,
-                                    data_point,
-                                    &resource_attrs,
-                                )?,
-                            );
+                            all_metrics.extend(self.convert_metric_data_point_to_metrics(
+                                &metric_name,
+                                metric_type,
+                                data_point,
+                                &resource_attrs,
+                            )?);
                         }
                     }
                     Some(metrics_proto::metric::Data::Gauge(gauge)) => {
                         for data_point in &gauge.data_points {
-                            all_metrics.extend(
-                                self.convert_gauge_data_point_to_metrics(
-                                    &metric_name,
-                                    metric_type,
-                                    data_point,
-                                    &resource_attrs,
-                                )?,
-                            );
+                            all_metrics.extend(self.convert_gauge_data_point_to_metrics(
+                                &metric_name,
+                                metric_type,
+                                data_point,
+                                &resource_attrs,
+                            )?);
                         }
                     }
                     Some(metrics_proto::metric::Data::Histogram(histogram)) => {
                         for data_point in &histogram.data_points {
-                            all_metrics.extend(
-                                self.convert_histogram_data_point_to_metrics(
-                                    &metric_name,
-                                    metric_type,
-                                    data_point,
-                                    &resource_attrs,
-                                )?,
-                            );
+                            all_metrics.extend(self.convert_histogram_data_point_to_metrics(
+                                &metric_name,
+                                metric_type,
+                                data_point,
+                                &resource_attrs,
+                            )?);
                         }
                     }
                     _ => {

@@ -28,7 +28,13 @@ impl MetricsServiceImpl {
         for metric in &metric_list {
             diesel::insert_into(metrics::table)
                 .values(metric)
-                .on_conflict((metrics::metric_name, metrics::timestamp_us, metrics::attributes, metrics::trace_id, metrics::span_id))
+                .on_conflict((
+                    metrics::metric_name,
+                    metrics::timestamp_us,
+                    metrics::attributes,
+                    metrics::trace_id,
+                    metrics::span_id,
+                ))
                 .do_nothing()
                 .execute(&mut conn)?;
             inserted_count += 1;

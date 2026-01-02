@@ -1,9 +1,9 @@
+use opentelemetry::baggage::BaggageExt;
 use opentelemetry::global;
 use opentelemetry::metrics::{Counter, Histogram, Meter};
-use opentelemetry::KeyValue;
-use opentelemetry::Context;
-use opentelemetry::baggage::BaggageExt;
 use opentelemetry::trace::TraceContextExt;
+use opentelemetry::Context;
+use opentelemetry::KeyValue;
 use std::sync::OnceLock;
 
 /// Global meter instance for metrics
@@ -12,46 +12,41 @@ static METER: OnceLock<Meter> = OnceLock::new();
 /// Initialize the global meter (called during tracing initialization)
 pub fn init_meter() {
     let meter = global::meter("vllora");
-    METER.set(meter).expect("Meter should only be initialized once");
-}
-
-/// Get the global meter instance
-fn get_meter() -> &'static Meter {
-    METER.get().unwrap_or_else(|| {
-        // Fallback: initialize meter if not already initialized
-        let meter = global::meter("vllora");
-        METER.set(meter).ok();
-        METER.get().expect("Meter should be initialized")
-    })
+    METER
+        .set(meter)
+        .expect("Meter should only be initialized once");
 }
 
 /// Extract attributes from the current OpenTelemetry context (baggage and span)
 fn extract_context_attributes() -> Vec<KeyValue> {
     let mut attrs = Vec::new();
     let ctx = Context::current();
-    
+
     // Extract from baggage (set by BaggageSpanProcessor)
     let baggage = ctx.baggage();
     if let Some(project_id) = baggage.get("vllora.project_id") {
         attrs.push(KeyValue::new("project_id", project_id.to_string()));
     }
-    
+
     if let Some(thread_id) = baggage.get("vllora.thread_id") {
         attrs.push(KeyValue::new("thread_id", thread_id.to_string()));
     }
-    
+
     if let Some(run_id) = baggage.get("vllora.run_id") {
         attrs.push(KeyValue::new("run_id", run_id.to_string()));
     }
-    
+
     // Extract trace_id and span_id from current span context
     let span = ctx.span();
     let span_context = span.span_context();
     if span_context.is_valid() {
-        attrs.push(KeyValue::new("trace_id", span_context.trace_id().to_string()));
+        attrs.push(KeyValue::new(
+            "trace_id",
+            span_context.trace_id().to_string(),
+        ));
         attrs.push(KeyValue::new("span_id", span_context.span_id().to_string()));
     }
-    
+
     attrs
 }
 
@@ -170,7 +165,7 @@ pub fn record_ttft(ttft_us: u64, model_name: &str, provider_name: &str) {
     let mut attrs = extract_context_attributes();
     attrs.push(KeyValue::new("model_name", model_name.to_string()));
     attrs.push(KeyValue::new("provider_name", provider_name.to_string()));
-    
+
     // Convert microseconds to milliseconds
     let ttft_ms = ttft_us as f64 / 1000.0;
     get_ttft_histogram().record(ttft_ms, &attrs);
@@ -189,7 +184,7 @@ pub fn record_tokens(input: u64, output: u64, model_name: &str, provider_name: &
     let mut attrs = extract_context_attributes();
     attrs.push(KeyValue::new("model_name", model_name.to_string()));
     attrs.push(KeyValue::new("provider_name", provider_name.to_string()));
-    
+
     get_input_tokens_counter().add(input, &attrs);
     get_output_tokens_counter().add(output, &attrs);
     get_total_tokens_counter().add(input + output, &attrs);

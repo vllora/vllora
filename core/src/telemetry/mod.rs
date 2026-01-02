@@ -1,6 +1,5 @@
 pub mod database;
 pub mod metrics_database;
-pub mod metrics_reader;
 
 use crate::metadata::models::trace::DbTrace;
 use std::convert::TryFrom;

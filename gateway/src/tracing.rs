@@ -1,6 +1,6 @@
 use opentelemetry::trace::TracerProvider as _;
-use opentelemetry_sdk::trace::SdkTracerProvider;
 use opentelemetry_sdk::metrics::SdkMeterProvider;
+use opentelemetry_sdk::trace::SdkTracerProvider;
 use opentelemetry_sdk::Resource;
 use std::sync::Arc;
 use tracing::level_filters::LevelFilter;
@@ -10,10 +10,9 @@ use vllora_core::metadata::pool::DbPool;
 use vllora_core::telemetry::ProjectTraceSpanExporter;
 use vllora_core::telemetry::RunSpanBuffer;
 use vllora_core::telemetry::RunSpanBufferExporter;
-use vllora_telemetry::events::{self, BaggageSpanProcessor};
+use vllora_telemetry::baggage::BaggageSpanProcessor;
+use vllora_telemetry::events;
 use vllora_telemetry::ProjectTraceMap;
-
-use crate::metrics;
 
 pub fn init_tracing(
     project_trace_senders: Arc<ProjectTraceMap>,
@@ -61,41 +60,37 @@ pub fn init_tracing(
 
     // Initialize metrics
     let resource = Resource::builder()
-        .with_attributes(vec![
-            opentelemetry::KeyValue::new("service.name", "vllora"),
-        ])
+        .with_attributes(vec![opentelemetry::KeyValue::new("service.name", "vllora")])
         .build();
-    
+
     let otlp_metrics_exporter = opentelemetry_otlp::MetricExporterBuilder::new()
         .with_tonic()
         .build();
-    
+
     if let Ok(exporter) = otlp_metrics_exporter {
         let mut builder = SdkMeterProvider::builder().with_resource(resource);
-        
+
         // Add OTLP reader
         let otlp_reader = opentelemetry_sdk::metrics::PeriodicReader::builder(exporter)
             .with_interval(std::time::Duration::from_secs(10))
             .build();
         builder = builder.with_reader(otlp_reader);
-        
+
         // Add SQLite writer if db_pool is available
         if let Some(_db_pool) = db_pool {
             // SQLite metrics writer is now integrated via MetricsServiceServer
             // Metrics will be written to database through the gRPC service
             tracing::info!("SQLite metrics writer will be initialized via MetricsServiceServer");
         }
-        
+
         let meter_provider = builder.build();
         opentelemetry::global::set_meter_provider(meter_provider);
-        
-        // Initialize metrics module
-        metrics::init_meter();
-        metrics::init_built_in_metrics();
-        
+
         tracing::info!("Metrics provider initialized successfully");
     } else {
-        tracing::warn!("Failed to initialize metrics exporter. Metrics will not be exported via OTLP.");
+        tracing::warn!(
+            "Failed to initialize metrics exporter. Metrics will not be exported via OTLP."
+        );
     }
 
     let otel_layer = events::layer("vllora::user_tracing", LevelFilter::INFO, tracer);

@@ -20,6 +20,7 @@ use tracing_futures::Instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use valuable::Valuable;
 use vllora_llm::types::events::{CustomEventType, Event, EventRunContext};
+use vllora_telemetry::create_run_span;
 use vllora_telemetry::events::JsonValue;
 
 use actix_web::{web, HttpMessage, HttpRequest};
@@ -117,11 +118,7 @@ where
 
             if !is_remote_context {
                 // If the context is local, we need to start a new span for the run
-                let span = tracing::info_span!(
-                    target: "vllora::user_tracing::run",
-                    "run",
-                )
-                .clone();
+                let span = create_run_span!({});
 
                 run_span = Some(span.clone());
 

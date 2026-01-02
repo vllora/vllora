@@ -103,10 +103,9 @@ impl Responses for TracedResponsesModel {
         let input_str = self.clean_input_trace(&input)?;
         let model_name = self.definition.name.clone();
         let provider_name = self.definition.db_model.provider_name.clone();
-        
+
         // Track start time for latency calculation
-        let span_start_time = std::time::Instant::now();
-        
+        let _span_start_time = std::time::Instant::now();
 
         let span = info_span!(
             target: "vllora::user_tracing::models",
@@ -149,8 +148,8 @@ impl Responses for TracedResponsesModel {
 
         let cost_calculator = self.executor_context.cost_calculator.clone();
         let price = self.definition.db_model.price.clone();
-        let model_name_clone = model_name.clone();
-        let provider_name_clone = provider_name.clone();
+        let _model_name_clone = model_name.clone();
+        let _provider_name_clone = provider_name.clone();
 
         let (tx, mut rx) = channel::<Option<ModelEvent>>(capacity);
         tokio::spawn(async move {
@@ -175,7 +174,6 @@ impl Responses for TracedResponsesModel {
                                 total_cost += c.cost;
                                 c.cost = total_cost;
                                 current_span.record("cost", serde_json::to_string(&c).unwrap());
-                                
                             }
                             Err(e) => {
                                 tracing::error!(
@@ -188,7 +186,6 @@ impl Responses for TracedResponsesModel {
 
                         usage.add_usage(u);
                         current_span.record("usage", serde_json::to_string(u).unwrap());
-                        
                     }
                 }
                 if let Some(tx) = outer_tx.as_ref() {
@@ -196,9 +193,9 @@ impl Responses for TracedResponsesModel {
                 }
             }
         });
-        
+
         let result = instance.invoke(request, Some(tx)).await;
-        
+
         result
     }
 
@@ -216,10 +213,9 @@ impl Responses for TracedResponsesModel {
         let input_str = self.clean_input_trace(&input)?;
         let model_name = self.definition.name.clone();
         let provider_name = self.definition.db_model.provider_name.clone();
-        
+
         // Track start time for latency calculation
-        let span_start_time = std::time::Instant::now();
-        
+        let _span_start_time = std::time::Instant::now();
 
         let span = info_span!(
             target: "vllora::user_tracing::models",
@@ -252,8 +248,8 @@ impl Responses for TracedResponsesModel {
 
         let cost_calculator = self.executor_context.cost_calculator.clone();
         let price = self.definition.db_model.price.clone();
-        let model_name_clone = model_name.clone();
-        let provider_name_clone = provider_name.clone();
+        let _model_name_clone = model_name.clone();
+        let _provider_name_clone = provider_name.clone();
 
         tokio::spawn(async move {
             let mut usage = GatewayModelUsage::default();
@@ -277,7 +273,6 @@ impl Responses for TracedResponsesModel {
                                 total_cost += c.cost;
                                 c.cost = total_cost;
                                 current_span.record("cost", serde_json::to_string(&c).unwrap());
-                                
                             }
                             Err(e) => {
                                 tracing::error!(
@@ -290,7 +285,6 @@ impl Responses for TracedResponsesModel {
 
                         usage.add_usage(u);
                         current_span.record("usage", serde_json::to_string(u).unwrap());
-                        
                     }
                 }
                 if let Some(tx) = outer_tx.as_ref() {
@@ -298,12 +292,12 @@ impl Responses for TracedResponsesModel {
                 }
             }
         });
-        
+
         let result = instance
             .stream(request, Some(tx))
             .instrument(span.clone())
             .await;
-        
+
         result
     }
 }

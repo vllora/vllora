@@ -28,6 +28,7 @@ impl SqliteMetricsWriterTransport {
     }
 
     /// Helper function to create a DbNewMetric from metric data
+    #[allow(clippy::too_many_arguments)]
     pub fn create_metric(
         metric_name: String,
         metric_type: String,

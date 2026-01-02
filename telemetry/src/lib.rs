@@ -1,11 +1,13 @@
+pub mod baggage;
 pub mod events;
 pub mod metrics_service;
-
 pub use metrics_service::{MetricsDataPoint, MetricsServiceImpl, MetricsWriterTransport};
 
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::Duration;
+// Span creation macros are exported via #[macro_export] in events/span.rs
+// They can be imported and used like this:
+//   use vllora_telemetry::{create_model_span, create_thread_span, create_run_span,
+//                          create_agent_span, create_task_span, create_tool_span};
+// Then use them as: create_model_span!(...)
 
 use dashmap::DashMap;
 use opentelemetry::trace::{SpanId, SpanKind, TraceId};
@@ -22,6 +24,9 @@ use opentelemetry_proto::tonic::{
 use opentelemetry_sdk::trace::SpanData;
 use serde::{Serialize, Serializer};
 use serde_json::Value;
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Duration;
 use tokio::select;
 use tokio::sync::{broadcast, mpsc};
 use tonic::metadata::MetadataMap;

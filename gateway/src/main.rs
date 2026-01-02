@@ -19,7 +19,6 @@ mod cost;
 mod guardrails;
 mod handlers;
 mod http;
-mod metrics;
 mod metrics_writer;
 mod middleware;
 mod ports;

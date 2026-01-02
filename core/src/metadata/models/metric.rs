@@ -71,6 +71,7 @@ impl DbNewMetric {
     }
 
     /// Create a new metric from OpenTelemetry metric data point
+    #[allow(clippy::too_many_arguments)]
     pub fn from_metric_data_point(
         metric_name: String,
         metric_type: String,
@@ -87,7 +88,7 @@ impl DbNewMetric {
             .into_iter()
             .map(|(k, v)| (k, Value::String(v)))
             .collect();
-        
+
         Self::new(
             metric_name,
             metric_type,
