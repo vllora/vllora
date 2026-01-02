@@ -8,7 +8,6 @@ pub mod http;
 pub mod llm_gateway;
 pub mod mcp;
 pub mod metadata;
-pub mod metrics;
 pub mod model;
 pub mod pricing;
 pub mod routing;
