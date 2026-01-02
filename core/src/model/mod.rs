@@ -211,7 +211,6 @@ impl ModelInstance for TracedModel {
         let provider_name = self.definition.db_model.provider_name.clone();
         let (tx, mut rx) = channel::<Option<ModelEvent>>(outer_tx.max_capacity());
 
-
         let span = create_model_invoke_span!(
             &input_str,
             model_str,

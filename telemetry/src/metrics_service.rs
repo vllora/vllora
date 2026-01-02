@@ -1,13 +1,18 @@
 use crate::serialize_any_value;
 use crate::TraceTenantResolver;
+use opentelemetry::baggage::BaggageExt;
+use opentelemetry::propagation::{Extractor, TextMapPropagator};
+use opentelemetry::Context;
 use opentelemetry_proto::tonic::collector::metrics::v1::{
     metrics_service_server::MetricsService, ExportMetricsPartialSuccess,
     ExportMetricsServiceRequest, ExportMetricsServiceResponse,
 };
 use opentelemetry_proto::tonic::metrics::v1 as metrics_proto;
+use opentelemetry_sdk::propagation::TraceContextPropagator;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
+use tonic::metadata::MetadataMap;
 
 #[async_trait::async_trait]
 pub trait MetricsWriterTransport: Send + Sync {
@@ -43,6 +48,30 @@ pub struct MetricsDataPoint {
 pub struct MetricsServiceImpl {
     writer: Arc<dyn MetricsWriterTransport>,
     tenant_resolver: Box<dyn TraceTenantResolver>,
+    baggage_keys: Vec<&'static str>,
+}
+
+// Helper struct to extract baggage from gRPC metadata
+struct MetadataExtractor<'a>(&'a MetadataMap);
+
+impl<'a> Extractor for MetadataExtractor<'a> {
+    fn get(&self, key: &str) -> Option<&str> {
+        self.0.get(key).and_then(|v| v.to_str().ok())
+    }
+
+    fn keys(&self) -> Vec<&str> {
+        self.0
+            .keys()
+            .filter_map(|k| match k {
+                tonic::metadata::KeyRef::Ascii(k) => Some(k.as_str()),
+                tonic::metadata::KeyRef::Binary(_) => {
+                    // For binary keys, we can't easily convert to &str
+                    // This shouldn't happen for OpenTelemetry headers
+                    None
+                }
+            })
+            .collect()
+    }
 }
 
 impl std::fmt::Debug for MetricsServiceImpl {
@@ -59,6 +88,38 @@ impl MetricsServiceImpl {
         Self {
             writer,
             tenant_resolver,
+            baggage_keys: vec![
+                "vllora.run_id",
+                "vllora.thread_id",
+                "vllora.label",
+                "vllora.tenant",
+                "vllora.project_id",
+            ],
+        }
+    }
+
+    pub fn with_baggage_keys(mut self, keys: Vec<&'static str>) -> Self {
+        self.baggage_keys = keys;
+        self
+    }
+
+    /// Extract baggage values from gRPC metadata and add them to resource attributes
+    fn extract_baggage_from_metadata(
+        &self,
+        metadata: &MetadataMap,
+        resource_attrs: &mut HashMap<String, Value>,
+    ) {
+        // Try to extract context from metadata (if trace context is propagated)
+        let extractor = MetadataExtractor(metadata);
+        let propagator = TraceContextPropagator::new();
+        let context = propagator.extract_with_context(&Context::current(), &extractor);
+
+        // Extract baggage values
+        let baggage = context.baggage();
+        for key in &self.baggage_keys {
+            if let Some(value) = baggage.get(key) {
+                resource_attrs.insert(key.to_string(), value.to_string().into());
+            }
         }
     }
 
@@ -251,6 +312,7 @@ impl MetricsServiceImpl {
         &self,
         resource_metrics: metrics_proto::ResourceMetrics,
         tenant_from_header: Option<(String, String)>,
+        metadata: Option<&MetadataMap>,
     ) -> Result<Vec<MetricsDataPoint>, String> {
         let mut all_metrics = Vec::new();
 
@@ -275,6 +337,11 @@ impl MetricsServiceImpl {
         if let Some((tenant_id, project_id)) = tenant_from_header {
             resource_attrs.insert("vllora.tenant".to_string(), tenant_id.into());
             resource_attrs.insert("vllora.project_id".to_string(), project_id.into());
+        }
+
+        // Extract baggage from metadata and add to resource attributes
+        if let Some(metadata) = metadata {
+            self.extract_baggage_from_metadata(metadata, &mut resource_attrs);
         }
 
         for scope_metrics in resource_metrics.scope_metrics {
@@ -341,12 +408,17 @@ impl MetricsService for MetricsServiceImpl {
         let mut rejected = 0;
         let mut all_metrics = Vec::new();
 
-        let headers = request.metadata();
-        let tenant_from_header = self.tenant_resolver.get_tenant_id(headers).await;
+        let headers = request.metadata().clone();
+        let tenant_from_header = self.tenant_resolver.get_tenant_id(&headers).await;
+        let inner = request.into_inner();
 
-        for resource_metrics in request.into_inner().resource_metrics {
+        for resource_metrics in inner.resource_metrics {
             match self
-                .convert_resource_metrics_to_metrics(resource_metrics, tenant_from_header.clone())
+                .convert_resource_metrics_to_metrics(
+                    resource_metrics,
+                    tenant_from_header.clone(),
+                    Some(&headers),
+                )
                 .await
             {
                 Ok(mut metrics) => {
