@@ -181,9 +181,7 @@ impl Responses for TracedResponsesModel {
             }
         });
 
-        let result = instance.invoke(request, Some(tx)).await;
-
-        result
+        instance.invoke(request, Some(tx)).await
     }
 
     async fn stream(
@@ -266,12 +264,10 @@ impl Responses for TracedResponsesModel {
             }
         });
 
-        let result = instance
+        instance
             .stream(request, Some(tx))
             .instrument(span.clone())
-            .await;
-
-        result
+            .await
     }
 }
 
