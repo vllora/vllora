@@ -123,6 +123,12 @@ impl ApiServer {
             self.config.http.host, self.config.otel.port
         );
 
+        println!("\n🌐 Starting Distri server...");
+        println!(
+            "   🚀 Distri server ready at: \x1b[36mhttp://{}:{}\x1b[0m",
+            self.config.http.host, self.config.distri.port
+        );
+
         // Add documentation and community links
         println!("\n📚 Where the cool kids hang out:");
         println!(

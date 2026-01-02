@@ -1,6 +1,7 @@
 use crate::agents;
 use crate::cli::{Commands, ServeArgs};
 use crate::config::Config;
+use crate::distri;
 use crate::http::ApiServer;
 use crate::ports::{resolve_ports, Service, ServicePort};
 use crate::seed;
@@ -88,6 +89,11 @@ pub async fn handle_serve(
                                 .suggested_port
                                 .expect("Suggested port should be present");
                         }
+                        Service::Distri => {
+                            config.distri.port = service
+                                .suggested_port
+                                .expect("Suggested port should be present");
+                        }
                     }
                 }
 
@@ -103,9 +109,39 @@ pub async fn handle_serve(
         }
     }
 
+    // Start Distri server if not already running
+    let distri_api_url =
+        std::env::var("DISTRI_URL").unwrap_or_else(|_| "http://localhost:8081".to_string());
+
+    if !distri::is_distri_running(&distri_api_url).await {
+        println!("📥 Downloading and starting Distri server...");
+        match distri::start_distri_server(config.distri.port).await {
+            Ok(mut child) => {
+                println!("✅ Distri server started successfully");
+
+                // Spawn a task to monitor the Distri process
+                tokio::spawn(async move {
+                    let status = child.wait().await;
+                    if let Ok(status) = status {
+                        eprintln!("⚠️  Distri server process exited with status: {:?}", status);
+                    }
+                });
+            }
+            Err(e) => {
+                eprintln!("⚠️  Warning: Failed to start Distri server: {}", e);
+                eprintln!("   Agents may not be available. You can start Distri manually.");
+            }
+        }
+    } else {
+        println!("✅ Distri server is already running");
+    }
+
     // Register agents with Distri server in background (non-blocking)
     println!("📋 Registering agents with Distri server in background...");
     tokio::spawn(async move {
+        // Wait a bit for Distri to be fully ready
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+
         match agents::register_agents().await {
             Ok(_) => {
                 // Success message is logged inside register_agents

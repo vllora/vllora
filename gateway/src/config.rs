@@ -31,6 +31,8 @@ pub struct Config {
     #[serde(default)]
     pub otel: OTelConfig,
     #[serde(default)]
+    pub distri: DistriConfig,
+    #[serde(default)]
     pub providers: Option<ProvidersConfig>,
     #[serde(default)]
     pub guards: Option<HashMap<String, Guard>>,
@@ -73,6 +75,17 @@ impl Default for OTelConfig {
             host: "[::]".to_string(),
             port: 4317,
         }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DistriConfig {
+    pub port: u16,
+}
+
+impl Default for DistriConfig {
+    fn default() -> Self {
+        Self { port: 8081 }
     }
 }
 

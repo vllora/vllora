@@ -6,6 +6,7 @@ pub enum Service {
     Backend,
     UI,
     Otel,
+    Distri,
 }
 
 impl std::fmt::Display for Service {
@@ -14,6 +15,7 @@ impl std::fmt::Display for Service {
             Service::Backend => write!(f, "Backend"),
             Service::UI => write!(f, "UI"),
             Service::Otel => write!(f, "OTEL"),
+            Service::Distri => write!(f, "Distri"),
         }
     }
 }
@@ -43,6 +45,12 @@ pub async fn resolve_ports(config: &Config) -> Result<Vec<ServicePort>, CliError
             service: Service::Otel,
             initial_port: config.otel.port,
             host: config.otel.host.clone(),
+            suggested_port: None,
+        },
+        ServicePort {
+            service: Service::Distri,
+            initial_port: config.distri.port,
+            host: config.http.host.clone(),
             suggested_port: None,
         },
     ];

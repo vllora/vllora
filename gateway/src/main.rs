@@ -16,6 +16,7 @@ mod callback_handler;
 mod cli;
 mod config;
 mod cost;
+mod distri;
 mod guardrails;
 mod handlers;
 mod http;

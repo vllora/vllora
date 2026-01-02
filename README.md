@@ -148,6 +148,8 @@ vLLora is [fair-code](https://faircode.io/) distributed under the [Elastic Licen
 
 The inner package `llm` is distributed under the [Apache License 2.0](llm/LICENSE-APACHE).
 
+vLLora includes [Distri](https://distri.dev/) as an optional component for AI agent functionality. Distri is distributed under the [Elastic License 2.0 (ELv2)](https://github.com/distrihub/distri/blob/main/LICENSE) and is downloaded separately at runtime. Distri is a separate project maintained by [DistriHub](https://github.com/distrihub).
+
 - **Source Available**: Always visible vLLora source code
 - **Self-Hostable**: Deploy vLLora anywhere you need
 - **Extensible**: Add your own providers, tools, MCP servers, and custom functionality
