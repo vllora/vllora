@@ -135,8 +135,6 @@ impl Responses for TracedResponsesModel {
 
         let cost_calculator = self.executor_context.cost_calculator.clone();
         let price = self.definition.db_model.price.clone();
-        let _model_name_clone = model_name.clone();
-        let _provider_name_clone = provider_name.clone();
 
         let (tx, mut rx) = channel::<Option<ModelEvent>>(capacity);
         tokio::spawn(async move {
