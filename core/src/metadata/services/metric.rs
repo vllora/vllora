@@ -23,23 +23,28 @@ impl MetricsServiceImpl {
         }
 
         let mut conn = self.db_pool.get()?;
-        let mut inserted_count = 0;
+        let mut total_inserted = 0;
 
-        for metric in &metric_list {
-            diesel::insert_into(metrics::table)
-                .values(metric)
-                .on_conflict((
-                    metrics::metric_name,
-                    metrics::timestamp_us,
-                    metrics::attributes,
-                    metrics::trace_id,
-                    metrics::span_id,
-                ))
-                .do_nothing()
-                .execute(&mut conn)?;
-            inserted_count += 1;
-        }
+        // SQLite doesn't support batch inserts with on_conflict in a single query.
+        // We wrap all inserts in a transaction for better performance.
+        conn.transaction::<_, DatabaseError, _>(|conn| {
+            for metric in &metric_list {
+                let inserted_count = diesel::insert_into(metrics::table)
+                    .values(metric)
+                    .on_conflict((
+                        metrics::metric_name,
+                        metrics::timestamp_us,
+                        metrics::attributes,
+                        metrics::trace_id,
+                        metrics::span_id,
+                    ))
+                    .do_nothing()
+                    .execute(conn)?;
+                total_inserted += inserted_count;
+            }
+            Ok(())
+        })?;
 
-        Ok(inserted_count)
+        Ok(total_inserted)
     }
 }
