@@ -8,9 +8,8 @@ tool_format = "provider"
 external = ["get_collapsed_spans", "navigate_to_experiment", "is_valid_for_optimize", "apply_label_filter"]
 
 [model_settings]
-model = "gpt-4o"
+model = "gpt-4.1"
 temperature = 0.1
-max_tokens = 1500
 ---
 
 # ROLE
