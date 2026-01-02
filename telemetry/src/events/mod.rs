@@ -1,7 +1,4 @@
 use bytemuck::TransparentWrapper;
-use opentelemetry::{baggage::BaggageExt as _, global::ObjectSafeSpan as _};
-use opentelemetry_sdk::error::OTelSdkError;
-use opentelemetry_sdk::trace::SpanProcessor;
 use serde_json::Value;
 use valuable::{Listable, Mappable, Valuable, Visit};
 
@@ -41,45 +38,6 @@ pub const SPAN_REQUEST_ROUTING: &str = "request_routing";
 pub const SPAN_GUARD_EVAULATION: &str = "guard_evaluation";
 
 pub const SPAN_VIRTUAL_MODEL: &str = "virtual_model";
-
-#[derive(Debug)]
-pub struct BaggageSpanProcessor<const N: usize> {
-    keys: [&'static str; N],
-}
-
-impl<const N: usize> BaggageSpanProcessor<N> {
-    pub const fn new(keys: [&'static str; N]) -> Self {
-        Self { keys }
-    }
-}
-
-impl<const N: usize> SpanProcessor for BaggageSpanProcessor<N> {
-    fn on_start(&self, span: &mut opentelemetry_sdk::trace::Span, cx: &opentelemetry::Context) {
-        for key in self.keys {
-            let value = cx.baggage().get(key);
-            if let Some(value) = value {
-                span.set_attribute(opentelemetry::KeyValue::new(key, value.clone()));
-            }
-        }
-    }
-
-    fn on_end(&self, _span: opentelemetry_sdk::trace::SpanData) {}
-
-    fn force_flush(&self) -> std::result::Result<(), OTelSdkError> {
-        Ok(())
-    }
-
-    fn shutdown(&self) -> std::result::Result<(), OTelSdkError> {
-        Ok(())
-    }
-
-    fn shutdown_with_timeout(
-        &self,
-        _timeout: std::time::Duration,
-    ) -> std::result::Result<(), OTelSdkError> {
-        Ok(())
-    }
-}
 
 #[repr(transparent)]
 pub struct JsonValue<'a>(pub &'a Value);

@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::sync::Arc;
 use tokio::sync::mpsc::{self, channel};
-use tracing::{info_span, Instrument};
+use tracing::Instrument;
 use valuable::Valuable;
 use vllora_llm::client::completions::response_stream::ResultStream;
 use vllora_llm::client::completions::CompletionsClient;
@@ -36,7 +36,8 @@ use vllora_llm::types::provider::ModelPrice;
 use vllora_llm::types::tools::ModelTools;
 use vllora_llm::types::tools::Tool;
 use vllora_llm::types::{CustomEvent, ModelEvent, ModelEventType};
-use vllora_telemetry::events::{JsonValue, RecordResult, SPAN_MODEL_CALL};
+use vllora_telemetry::create_model_invoke_span;
+use vllora_telemetry::events::{JsonValue, RecordResult};
 
 pub mod azure;
 pub mod bedrock;
@@ -210,23 +211,15 @@ impl ModelInstance for TracedModel {
         let provider_name = self.definition.db_model.provider_name.clone();
         let (tx, mut rx) = channel::<Option<ModelEvent>>(outer_tx.max_capacity());
 
-        let span = info_span!(
-            target: "vllora::user_tracing::models",
-            parent: self.router_span.clone(),
-            SPAN_MODEL_CALL,
-            input = &input_str,
-            model = model_str,
-            provider_name = provider_name,
-            model_name = model_name.clone(),
-            inference_model_name = self.definition.db_model.inference_model_name.to_string(),
-            output = tracing::field::Empty,
-            error = tracing::field::Empty,
-            credentials_identifier = credentials_ident.to_string(),
-            cost = tracing::field::Empty,
-            usage = tracing::field::Empty,
-            ttft = tracing::field::Empty,
-            tags = JsonValue(&serde_json::to_value(tags.clone())?).as_value(),
-            cache = tracing::field::Empty
+        let span = create_model_invoke_span!(
+            &input_str,
+            model_str,
+            provider_name,
+            model_name.clone(),
+            self.definition.db_model.inference_model_name.to_string(),
+            credentials_ident.to_string(),
+            tags.clone(),
+            parent = self.router_span.clone()
         );
 
         if let Some(state) = &self.response_cache_state {
@@ -256,6 +249,8 @@ impl ModelInstance for TracedModel {
 
         let cost_calculator = self.executor_context.cost_calculator.clone();
         let price = self.definition.db_model.price.clone();
+        let _model_name_clone = model_name.clone();
+        let _provider_name_clone = provider_name.clone();
         tokio::spawn(
             async move {
                 let mut start_time = None;
@@ -303,10 +298,8 @@ impl ModelInstance for TracedModel {
                         ModelEventType::LlmFirstToken(_) => {
                             if let Some(start_time) = start_time {
                                 let current_span = tracing::Span::current();
-                                current_span.record(
-                                    "ttft",
-                                    msg.timestamp.timestamp_micros() as u64 - start_time,
-                                );
+                                let ttft_us = msg.timestamp.timestamp_micros() as u64 - start_time;
+                                current_span.record("ttft", ttft_us);
                             }
                         }
                         _ => (),
@@ -392,23 +385,15 @@ impl ModelInstance for TracedModel {
         let provider_name = self.definition.db_model.provider_name.clone();
         let cost_calculator = self.executor_context.cost_calculator.clone();
 
-        let span = info_span!(
-            target: "vllora::user_tracing::models",
-            parent: self.router_span.clone(),
-            SPAN_MODEL_CALL,
-            input = &input_str,
-            model = model_str,
-            provider_name = provider_name,
-            model_name = model_name.clone(),
-            inference_model_name = self.definition.db_model.inference_model_name.to_string(),
-            output = tracing::field::Empty,
-            error = tracing::field::Empty,
-            credentials_identifier = credentials_ident.to_string(),
-            cost = tracing::field::Empty,
-            usage = tracing::field::Empty,
-            tags = JsonValue(&serde_json::to_value(tags.clone())?).as_value(),
-            ttft = tracing::field::Empty,
-            cache = tracing::field::Empty
+        let span = create_model_invoke_span!(
+            &input_str,
+            model_str,
+            provider_name,
+            model_name.clone(),
+            self.definition.db_model.inference_model_name.to_string(),
+            credentials_ident.to_string(),
+            tags.clone(),
+            parent = self.router_span.clone()
         );
 
         if let Some(state) = &self.response_cache_state {
@@ -475,10 +460,8 @@ impl ModelInstance for TracedModel {
                         ModelEventType::LlmFirstToken(_) => {
                             if let Some(start_time) = start_time {
                                 let current_span = tracing::Span::current();
-                                current_span.record(
-                                    "ttft",
-                                    msg.timestamp.timestamp_micros() as u64 - start_time,
-                                );
+                                let ttft_us = msg.timestamp.timestamp_micros() as u64 - start_time;
+                                current_span.record("ttft", ttft_us);
                             }
                         }
                         ModelEventType::LlmStop(llmfinish_event) => {

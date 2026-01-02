@@ -19,6 +19,7 @@ mod cost;
 mod guardrails;
 mod handlers;
 mod http;
+mod metrics_writer;
 mod middleware;
 mod ports;
 mod run;
@@ -102,6 +103,7 @@ async fn main() -> Result<(), CliError> {
     tracing::init_tracing(
         project_trace_senders.inner().clone(),
         run_span_buffer.clone(),
+        Some(db_pool.clone()),
     );
 
     vllora_core::metadata::utils::init_db(&db_pool);

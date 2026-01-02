@@ -23,9 +23,11 @@ tonic = { workspace = true }
 tokio = { workspace = true }
 valuable = { workspace = true }
 opentelemetry = { workspace = true }
+opentelemetry-otlp = { workspace = true }
 opentelemetry-proto = { version = "0.31.0", features = [
   "gen-tonic",
   "trace",
+  "metrics",
   "with-serde",
 ] }
 tracing = { workspace = true }
@@ -38,6 +40,11 @@ chrono = { workspace = true }
 dashmap = { workspace = true }
 bytemuck = { workspace = true }
 futures = { workspace = true }
+clap = { version = "4.5", features = ["derive"] }
+
+[[example]]
+name = "tracing_example"
+path = "examples/tracing_example.rs"
 
 [features]
 default = []

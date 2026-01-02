@@ -4,7 +4,6 @@ use crate::executor::context::ExecutorContext;
 use serde::Serialize;
 use serde_json::{json, Value};
 use tokio::sync::mpsc::channel;
-use tracing::info_span;
 use tracing_futures::Instrument;
 use vllora_llm::async_openai::types::responses::{CreateResponse, Response};
 use vllora_llm::{
@@ -24,7 +23,7 @@ use vllora_llm::{
         CustomEvent, ModelEvent, ModelEventType,
     },
 };
-use vllora_telemetry::events::SPAN_MODEL_CALL;
+use vllora_telemetry::create_model_invoke_span;
 
 pub struct TracedResponsesModel {
     definition: ResponsesModelDefinition,
@@ -104,22 +103,13 @@ impl Responses for TracedResponsesModel {
         let model_name = self.definition.name.clone();
         let provider_name = self.definition.db_model.provider_name.clone();
 
-        let span = info_span!(
-            target: "vllora::user_tracing::models",
-            SPAN_MODEL_CALL,
-            input = &input_str,
-            model = model_str,
-            provider_name = provider_name,
-            model_name = model_name.clone(),
-            inference_model_name = self.definition.db_model.inference_model_name.to_string(),
-            output = tracing::field::Empty,
-            error = tracing::field::Empty,
-            credentials_identifier = credentials_ident.to_string(),
-            cost = tracing::field::Empty,
-            usage = tracing::field::Empty,
-            ttft = tracing::field::Empty,
-            tags = tracing::field::Empty,
-            cache = tracing::field::Empty
+        let span = create_model_invoke_span!(
+            &input_str,
+            model_str,
+            provider_name,
+            model_name.clone(),
+            self.definition.db_model.inference_model_name.to_string(),
+            credentials_ident.to_string()
         );
 
         let instance = init_responses_model_instance(
@@ -207,22 +197,13 @@ impl Responses for TracedResponsesModel {
         let model_name = self.definition.name.clone();
         let provider_name = self.definition.db_model.provider_name.clone();
 
-        let span = info_span!(
-            target: "vllora::user_tracing::models",
-            SPAN_MODEL_CALL,
-            input = &input_str,
-            model = model_str,
-            provider_name = provider_name,
-            model_name = model_name.clone(),
-            inference_model_name = self.definition.db_model.inference_model_name.to_string(),
-            output = tracing::field::Empty,
-            error = tracing::field::Empty,
-            credentials_identifier = credentials_ident.to_string(),
-            cost = tracing::field::Empty,
-            usage = tracing::field::Empty,
-            ttft = tracing::field::Empty,
-            tags = tracing::field::Empty,
-            cache = tracing::field::Empty
+        let span = create_model_invoke_span!(
+            &input_str,
+            model_str,
+            provider_name,
+            model_name.clone(),
+            self.definition.db_model.inference_model_name.to_string(),
+            credentials_ident.to_string()
         );
 
         let instance = init_responses_model_instance(

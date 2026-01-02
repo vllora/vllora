@@ -3,6 +3,7 @@ use crate::config::Config;
 use crate::cost::GatewayCostCalculator;
 use crate::guardrails::GuardrailsService;
 use crate::handlers::{agents, debug, models, projects, session, threads};
+use crate::metrics_writer::SqliteMetricsWriterAdapter;
 use crate::middleware::project::ProjectMiddleware;
 use crate::middleware::thread_service::ThreadsServiceMiddleware;
 use crate::middleware::trace_logger::TraceLogger;
@@ -57,12 +58,15 @@ use vllora_core::metadata::services::run::RunServiceImpl;
 use vllora_core::metadata::services::trace::TraceServiceImpl as MetadataTraceServiceImpl;
 use vllora_core::metadata::DatabaseService;
 use vllora_core::telemetry::database::SqliteTraceWriterTransport;
+use vllora_core::telemetry::metrics_database::SqliteMetricsWriterTransport;
 use vllora_core::telemetry::RunSpanBuffer;
 use vllora_core::types::guardrails::service::GuardrailsEvaluator;
 use vllora_core::types::guardrails::Guard;
 use vllora_core::types::metadata::services::model::ModelService;
 use vllora_core::usage::InMemoryStorage;
 use vllora_llm::types::gateway::CostCalculator;
+use vllora_telemetry::MetricsServiceImpl;
+use vllora_telemetry::MetricsServiceServer;
 use vllora_telemetry::SpanWriterTransport;
 use vllora_telemetry::TraceServiceImpl as TelemetryTraceServiceImpl;
 use vllora_telemetry::TraceServiceServer;
@@ -206,8 +210,22 @@ impl ApiServer {
             Box::new(ProjectTraceTenantResolver::new(project_service)),
             project_trace_senders.inner().clone(),
         ));
+
+        // Create metrics service
+        let sqlite_metrics_writer = Arc::new(SqliteMetricsWriterTransport::new(
+            server_config.db_pool.clone(),
+        ));
+        let metrics_writer_adapter =
+            Arc::new(SqliteMetricsWriterAdapter::new(sqlite_metrics_writer));
+        let metrics_project_service = ProjectServiceImpl::new(server_config.db_pool.clone());
+        let metrics_service = MetricsServiceServer::new(MetricsServiceImpl::new(
+            metrics_writer_adapter,
+            Box::new(ProjectTraceTenantResolver::new(metrics_project_service)),
+        ));
+
         let tonic_server = tonic::transport::Server::builder()
             .add_service(trace_service)
+            .add_service(metrics_service)
             .serve_with_shutdown(
                 format!("{}:{}", self.config.otel.host, self.config.otel.port).parse()?,
                 async {
