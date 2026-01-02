@@ -146,4 +146,25 @@ macro_rules! create_model_invoke_span {
             cache = tracing::field::Empty,
         )
     }};
+
+    // Variant without parent span and tags
+    ($input:expr, $model:expr, $provider_name:expr, $model_name:expr, $inference_model_name:expr, $credentials_identifier:expr) => {{
+        tracing::info_span!(
+            target: "vllora::user_tracing::models",
+            $crate::events::SPAN_MODEL_CALL,
+            input = $input,
+            model = $model,
+            provider_name = $provider_name,
+            model_name = $model_name,
+            inference_model_name = $inference_model_name,
+            credentials_identifier = $credentials_identifier,
+            output = tracing::field::Empty,
+            error = tracing::field::Empty,
+            cost = tracing::field::Empty,
+            usage = tracing::field::Empty,
+            ttft = tracing::field::Empty,
+            tags = tracing::field::Empty,
+            cache = tracing::field::Empty,
+        )
+    }};
 }
