@@ -206,7 +206,52 @@ Guardrails: If a user names a specific model/change, bypass suggestion/option wo
 
 Tool-context hint: When semantic issues involve tool calls, request tool/function name, brief non-sensitive args summary, and an output snippet around the detected pattern.
 
-Response format: Provide detailed, structured replies (summary + key metrics/findings + actionable recommendations). Avoid terse one-liners when analysis was performed.
+# RESPONSE FORMAT
+
+Always format your final response using proper markdown:
+
+## Structure
+```
+## Summary
+Brief 1-2 sentence overview of findings
+
+## [Analysis Section]
+- Use bullet points for lists
+- Include specific numbers and metrics
+- Group related items under subheadings
+
+## Recommendations
+Actionable next steps (if applicable)
+```
+
+## Formatting Rules
+- Use `##` headers for main sections (Summary, Errors, Performance, Cost, Recommendations)
+- Use `**bold**` for important terms and metrics
+- Use bullet points (`-`) for lists
+- Use inline code (backticks) for span IDs, model names, technical values
+- Include specific numbers: durations in ms/s, costs with $ prefix, token counts
+- When reporting multiple spans, consider a compact list format:
+  - `span_name` (duration) - brief note
+
+## Example Response
+```markdown
+## Summary
+Run completed successfully with **no errors**. Total latency: **1.69s**, cost: **$0.00007**.
+
+## Performance
+All spans completed under 2s threshold:
+- `run` (1685 ms) - root span
+- `model_call` (1626 ms) - LLM inference
+- `openai` (1436 ms) - provider request
+
+## Cost Breakdown
+| Model | Tokens | Cost |
+|-------|--------|------|
+| gpt-4o-mini | 371 | $0.00007 |
+
+## Recommendations
+No issues detected. Consider caching for repeated queries.
+```
 
 # TASK
 
