@@ -283,7 +283,7 @@ pub async fn create_chat_completion(
     } else {
         project.id
     };
-    
+
     let db_pool = db_pool.into_inner();
     let executor_context = ExecutorContext::new(
         callback_handler_fn,

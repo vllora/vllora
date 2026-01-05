@@ -1,9 +1,12 @@
 use crate::CliError;
 use clap::Subcommand;
+use uuid::Uuid;
 use vllora_core::mcp::server::VlloraMcp;
 use vllora_core::metadata::pool::DbPool;
+use vllora_core::metadata::services::project::ProjectServiceImpl;
 use vllora_core::metadata::services::trace::TraceServiceImpl as MetadataTraceServiceImpl;
 use vllora_core::metadata::DatabaseServiceTrait;
+use vllora_core::types::metadata::services::project::ProjectService;
 
 mod call_info;
 mod list;
@@ -75,9 +78,14 @@ pub enum TracesCommands {
 }
 
 pub async fn handle_traces(db_pool: DbPool, cmd: TracesCommands) -> Result<(), CliError> {
+    let project_service = ProjectServiceImpl::new(db_pool.clone());
+    let project_slug = project_service
+        .get_default(Uuid::nil())
+        .ok()
+        .map(|p| p.slug);
     // Create VlloraMcp instance with the trace service
     let trace_service = MetadataTraceServiceImpl::init(db_pool.clone());
-    let vllora_mcp = VlloraMcp::new(trace_service);
+    let vllora_mcp = VlloraMcp::new(trace_service, project_slug);
 
     match cmd {
         TracesCommands::List {

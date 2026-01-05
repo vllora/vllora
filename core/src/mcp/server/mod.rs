@@ -50,18 +50,21 @@ pub struct VlloraMcp<T: TraceService + Send + Sync + 'static> {
     trace_service: T,
     /// Prompts loaded from separate files
     prompts: Prompts,
+    /// Default project slug for filtering traces
+    project_slug: Option<String>,
 }
 
 #[tool_router]
 #[prompt_router]
 impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
     #[allow(dead_code)]
-    pub fn new(trace_service: T) -> Self {
+    pub fn new(trace_service: T, project_slug: Option<String>) -> Self {
         Self {
             tool_router: Self::tool_router(),
             prompt_router: Self::prompt_router(),
             trace_service,
             prompts: Prompts::new(),
+            project_slug,
         }
     }
 
@@ -80,7 +83,10 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
         Parameters(params): Parameters<SearchTracesParams>,
     ) -> Result<Json<SearchTracesResponse>, String> {
         // Map high-level MCP params onto the existing ListTracesQuery.
-        let mut list_query: ListTracesQuery = ListTracesQuery::default();
+        let mut list_query: ListTracesQuery = ListTracesQuery {
+            project_slug: self.project_slug.clone(),
+            ..Default::default()
+        };
         // Basic pagination mapping
         if let Some(page) = &params.page {
             list_query.limit = page.limit;
@@ -336,6 +342,7 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
     ) -> Result<Json<GetLlmCallResponse>, String> {
         // Query for the specific span by trace_id and span_id
         let list_query = ListTracesQuery {
+            project_slug: self.project_slug.clone(),
             span_id: Some(params.span_id.to_string()),
             limit: 1,
             offset: 0,
@@ -512,7 +519,7 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
     ) -> Result<Json<GetRunOverviewResponse>, String> {
         // For now we query spans for this run (up to a reasonable limit).
         let list_query = ListTracesQuery {
-            project_slug: None,
+            project_slug: self.project_slug.clone(),
             span_id: None,
             span_ids: None,
             run_ids: Some(vec![params.run_id.clone()]),
@@ -913,7 +920,7 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
 
         loop {
             let list_query = ListTracesQuery {
-                project_slug: None,
+                project_slug: self.project_slug.clone(),
                 span_id: None,
                 span_ids: None,
                 run_ids: None,
@@ -984,7 +991,7 @@ impl<T: TraceService + Send + Sync + 'static> VlloraMcp<T> {
 
         loop {
             let list_query = ListTracesQuery {
-                project_slug: None,
+                project_slug: self.project_slug.clone(),
                 span_id: None,
                 span_ids: None,
                 run_ids: None,

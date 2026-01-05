@@ -29,6 +29,10 @@ impl DatabaseService {
     pub fn init<T: DatabaseServiceTrait>(&self) -> T {
         T::init(self.db_pool.clone())
     }
+
+    pub fn db_pool(&self) -> &DbPool {
+        &self.db_pool
+    }
 }
 
 pub trait DatabaseServiceTrait {
