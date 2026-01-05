@@ -185,6 +185,7 @@ impl ApiServer {
         );
 
         let breakpoint_manager_for_closure = breakpoint_manager.clone();
+        let config = self.config.clone();
         let server = HttpServer::new(move || {
             let cors = Self::get_cors(CorsOptions::Permissive);
             Self::create_app_entry(
@@ -200,6 +201,7 @@ impl ApiServer {
                 session.clone(),
                 session_manager.clone(),
                 breakpoint_manager_for_closure.clone(),
+                config.clone(),
             )
         })
         .bind((self.config.http.host.as_str(), self.config.http.port))?
@@ -261,6 +263,7 @@ impl ApiServer {
         session: DbSession,
         session_manager: Arc<LocalSessionManager>,
         breakpoint_manager: Arc<BreakpointManager>,
+        config: Config,
     ) -> App<
         impl ServiceFactory<
             ServiceRequest,
@@ -315,6 +318,7 @@ impl ApiServer {
             .app_data(Data::new(database_service))
             .app_data(Data::from(breakpoint_manager.clone()))
             .app_data(Data::new(model_service))
+            .app_data(Data::new(config))
             .service(
                 service
                     .app_data(Data::new(callback))

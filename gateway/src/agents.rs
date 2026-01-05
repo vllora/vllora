@@ -465,57 +465,72 @@ pub fn delete_lucy_config() -> Result<(), AgentError> {
     Ok(())
 }
 
+/// Client for interacting with the Distri server
+#[derive(Debug, Clone)]
+pub struct DistriClient {
+    api_url: String,
+}
+
+impl DistriClient {
+    /// Create a DistriClient from a full URL string
+    pub fn from_url(url: impl Into<String>) -> Self {
+        Self {
+            api_url: url.into(),
+        }
+    }
+
+    /// Check if Distri server is running by calling GET /v1/agents
+    pub async fn check_distri_running(&self) -> bool {
+        let url = format!("{}/v1/agents", self.api_url);
+
+        let client = reqwest::Client::new();
+        match client
+            .get(&url)
+            .header("Content-Type", "application/json")
+            .send()
+            .await
+        {
+            Ok(response) => {
+                // Any 2xx or 4xx response means the server is running
+                // (404 is OK - it just means no agents registered yet)
+                response.status().is_client_error() || response.status().is_success()
+            }
+            Err(_) => false,
+        }
+    }
+
+    /// Register a single agent with the Distri server
+    pub async fn register_agent(&self, agent: &AgentDefinition) -> Result<(), AgentError> {
+        let url = format!("{}/v1/agents", self.api_url);
+
+        let client = reqwest::Client::new();
+        let response = client
+            .post(&url)
+            .header("Content-Type", "text/markdown")
+            .body(agent.content.clone())
+            .send()
+            .await
+            .map_err(|e| AgentError::RegistrationError(format!("HTTP request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(AgentError::RegistrationError(format!(
+                "HTTP {}: {}",
+                status, error_text
+            )));
+        }
+
+        Ok(())
+    }
+}
+
 /// Get the Distri API URL from environment or use default
 fn get_distri_api_url() -> String {
     std::env::var("DISTRI_URL").unwrap_or_else(|_| "http://localhost:8081".to_string())
-}
-
-/// Check if Distri server is running by calling GET /v1/agents
-async fn check_distri_running(api_url: &str) -> bool {
-    let url = format!("{}/v1/agents", api_url);
-
-    let client = reqwest::Client::new();
-    match client
-        .get(&url)
-        .header("Content-Type", "application/json")
-        .send()
-        .await
-    {
-        Ok(response) => {
-            // Any 2xx or 4xx response means the server is running
-            // (404 is OK - it just means no agents registered yet)
-            response.status().is_client_error() || response.status().is_success()
-        }
-        Err(_) => false,
-    }
-}
-
-/// Register a single agent with the Distri server
-async fn register_agent(api_url: &str, agent: &AgentDefinition) -> Result<(), AgentError> {
-    let url = format!("{}/v1/agents", api_url);
-
-    let client = reqwest::Client::new();
-    let response = client
-        .post(&url)
-        .header("Content-Type", "text/markdown")
-        .body(agent.content.clone())
-        .send()
-        .await
-        .map_err(|e| AgentError::RegistrationError(format!("HTTP request failed: {}", e)))?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let error_text = response
-            .text()
-            .await
-            .unwrap_or_else(|_| "Unknown error".to_string());
-        return Err(AgentError::RegistrationError(format!(
-            "HTTP {}: {}",
-            status, error_text
-        )));
-    }
-
-    Ok(())
 }
 
 /// Agent registration status
@@ -544,7 +559,8 @@ pub async fn register_agents_with_status(
     let api_url = distri_url
         .map(|s| s.to_string())
         .unwrap_or_else(get_distri_api_url);
-    let distri_running = check_distri_running(&api_url).await;
+    let client = DistriClient::from_url(api_url.clone());
+    let distri_running = client.check_distri_running().await;
 
     let mut result = RegistrationResult {
         distri_running,
@@ -603,7 +619,7 @@ pub async fn register_agents_with_status(
 
     // Register each agent and track status
     for (name, agent) in &agents {
-        match register_agent(&api_url, agent).await {
+        match client.register_agent(agent).await {
             Ok(_) => {
                 debug!("Successfully registered agent: {}", name);
                 result.agents.push(AgentRegistrationStatus {
@@ -628,7 +644,7 @@ pub async fn register_agents_with_status(
 
 /// Register all agents with the Distri server
 /// Loads config from lucy.json if available
-pub async fn register_agents() -> Result<(), AgentError> {
+pub async fn register_agents(distri_url: Option<String>) -> Result<(), AgentError> {
     // Try to load config from lucy.json
     let lucy_config = load_lucy_config().unwrap_or_else(|e| {
         warn!("Failed to load lucy.json config: {}, using defaults", e);
@@ -636,12 +652,13 @@ pub async fn register_agents() -> Result<(), AgentError> {
     });
 
     // Use config values if available, otherwise fall back to env/defaults
-    let api_url = lucy_config.distri_url.unwrap_or_else(get_distri_api_url);
+    let api_url = distri_url.unwrap_or(lucy_config.distri_url.unwrap_or_else(get_distri_api_url));
+    let client = DistriClient::from_url(api_url.clone());
 
     debug!("Checking if Distri server is running at: {}", api_url);
 
     // Check if Distri server is running before attempting registration
-    if !check_distri_running(&api_url).await {
+    if !client.check_distri_running().await {
         eprintln!(
             "⚠️  Distri server is not running or not reachable at {}",
             api_url
@@ -701,7 +718,7 @@ pub async fn register_agents() -> Result<(), AgentError> {
     let mut error_count = 0;
 
     for (name, agent) in &agents {
-        match register_agent(&api_url, agent).await {
+        match client.register_agent(agent).await {
             Ok(_) => {
                 debug!("Successfully registered agent: {}", name);
                 success_count += 1;

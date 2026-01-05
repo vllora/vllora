@@ -39,6 +39,10 @@ pub struct ServeArgs {
     #[arg(long, value_name = "OTEL_PORT")]
     pub otel_port: Option<u16>,
 
+    /// Port to listen on for Distri server (e.g., 8081)
+    #[arg(long, value_name = "DISTRI_PORT")]
+    pub distri_port: Option<u16>,
+
     /// Don't open UI in browser on startup
     #[arg(long, value_name = "OPEN_UI_ON_STARTUP", default_value = "true")]
     pub open_ui_on_startup: Option<bool>,

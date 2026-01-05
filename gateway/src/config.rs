@@ -134,6 +134,10 @@ impl Config {
                 self.ui.open_on_startup = *open_ui_on_startup;
             }
 
+            if let Some(distri_port) = args.distri_port {
+                self.distri.port = distri_port;
+            }
+
             if let Some(cors) = &args.cors_origins {
                 self.http.cors_allowed_origins =
                     cors.split(',').map(|s| s.trim().to_string()).collect();

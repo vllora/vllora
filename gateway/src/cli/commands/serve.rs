@@ -123,7 +123,9 @@ pub async fn handle_serve(
                 tokio::spawn(async move {
                     let status = child.wait().await;
                     if let Ok(status) = status {
-                        eprintln!("⚠️  Distri server process exited with status: {:?}", status);
+                        if status.code().unwrap_or(0) > 2 {
+                            eprintln!("⚠️  Distri server process exited with status: {:?}", status);
+                        }
                     }
                 });
             }
@@ -136,13 +138,20 @@ pub async fn handle_serve(
         println!("✅ Distri server is already running");
     }
 
+    // Extract ports from config after potential changes
+    let backend_port = config.http.port;
+    let ui_port = config.ui.port;
+    let otel_port = config.otel.port;
+    let open_ui_on_startup = config.ui.open_on_startup;
+    let distri_port = config.distri.port;
+
     // Register agents with Distri server in background (non-blocking)
     println!("📋 Registering agents with Distri server in background...");
     tokio::spawn(async move {
         // Wait a bit for Distri to be fully ready
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
-        match agents::register_agents().await {
+        match agents::register_agents(Some(format!("http://localhost:{}", distri_port))).await {
             Ok(_) => {
                 // Success message is logged inside register_agents
             }
@@ -152,12 +161,6 @@ pub async fn handle_serve(
             }
         }
     });
-
-    // Extract ports from config after potential changes
-    let backend_port = config.http.port;
-    let ui_port = config.ui.port;
-    let otel_port = config.otel.port;
-    let open_ui_on_startup = config.ui.open_on_startup;
 
     let api_server = ApiServer::new(config, db_pool.clone());
     let server_handle = tokio::spawn(async move {
@@ -182,7 +185,8 @@ pub async fn handle_serve(
             axum::Json(serde_json::json!({
                 "VITE_BACKEND_PORT": backend_port,
                 "VITE_OTEL_PORT": otel_port,
-                "VERSION": env!("CARGO_PKG_VERSION")
+                "VERSION": env!("CARGO_PKG_VERSION"),
+                "DISTRI_PORT": distri_port
             }))
         };
 
