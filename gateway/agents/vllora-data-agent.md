@@ -97,18 +97,33 @@ run (root)
 
 # AVAILABLE TOOLS
 
-## Basic Tools
+## Basic Tools (return RAW data)
 - `fetch_runs` - Get runs with filters (threadIds, projectId, status, period, limit)
-- `fetch_spans` - Get spans with filters (spanIds, threadIds, runIds, operationNames, parentSpanIds, labels, limit). Default limit: 10
+- `fetch_spans` - Get RAW span data with filters. Returns full span objects including content.
+  ⚠️ Use ONLY for metadata queries on 1-3 specific spans. RAW DATA consumes LLM context.
 - `get_run_details` - Get detailed run info including all spans (runId)
 - `fetch_groups` - Get aggregated metrics (groupBy: time/model/thread, bucketSize, period)
 
-## Two-Phase Analysis Tools (RECOMMENDED for comprehensive analysis)
-- `fetch_spans_summary` - Fetch ALL spans, store in memory, return lightweight summary. Supports label filtering.
-- `get_span_content` - Perform client-side deep analysis on specific spans, returns ANALYSIS RESULTS (not raw data)
+## Two-Phase Analysis Tools (context-efficient - PREFERRED for analysis)
+- `fetch_spans_summary` - Phase 1: Fetches ALL spans via API, stores in browser memory, returns lightweight summary only.
+- `get_span_content` - Phase 2: Analyzes CACHED spans from memory, returns ANALYSIS RESULTS only (not raw data).
+  ✓ Requires `fetch_spans_summary` to be called first. Max 5 spans per call.
+  ✓ Returns: semantic_issues, content_stats, assessment - NOT the raw span content.
 
 ## Label Tools
 - `list_labels` - Get available labels with counts (threadId optional to scope to a thread)
+
+## Tool Selection Decision Tree
+```
+Q: What do I need?
+├─ Analyze thread/run content? → fetch_spans_summary + get_span_content (PREFERRED)
+├─ Get metadata for 1-3 specific spans? → fetch_spans
+├─ Get run structure with all spans? → get_run_details
+└─ Get aggregated metrics? → fetch_groups
+
+⚠️ NEVER use fetch_spans for content analysis - causes context overflow
+⚠️ NEVER use get_span_content without calling fetch_spans_summary first
+```
 
 # TWO-PHASE ANALYSIS
 
@@ -271,10 +286,16 @@ Example (comprehensive analysis):
 
 1. For comprehensive analysis: Use `fetch_spans_summary` with runIds when provided; otherwise use threadIds (ONE call fetches ALL spans).
 2. For deep semantic analysis: Use `get_span_content` with specific span IDs (max 5 per call), prioritizing flagged spans (errors/semantic/slow/expensive) and tool spans when tool-related.
-3. For targeted span queries: Use `fetch_spans` with spanIds (limit 10) when only a few spans are needed.
+3. For metadata-only queries: Use `fetch_spans` ONLY when you need raw metadata for 1-3 specific spans (e.g., "what model was used in span X?"). NEVER use for content analysis.
 4. For tool-context issues: Report operation_name and, for tool spans, include tool/function name, brief non-sensitive args summary, and output snippet near detected pattern with severity.
 5. For label discovery: Use `list_labels` to see available labels before filtering.
 6. Other tools: Call only ONCE (fetch_runs, get_run_details, fetch_groups). After collecting data, call `final` with your analysis.
+
+## CRITICAL: fetch_spans vs get_span_content
+- `fetch_spans` → API call → returns RAW span data → consumes LLM context → use sparingly
+- `get_span_content` → client-side → returns ANALYSIS ONLY → context-efficient → requires fetch_spans_summary first
+- If you need to analyze span content: ALWAYS use fetch_spans_summary + get_span_content
+- If you only need span metadata (model, duration, status): fetch_spans is acceptable
 
 ## CRITICAL: Labels vs ThreadIds
 - **labels** and **threadIds** are COMPLETELY DIFFERENT parameters
