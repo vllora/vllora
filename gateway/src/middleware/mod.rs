@@ -1,3 +1,4 @@
+pub mod lucy_project;
 pub mod project;
 pub mod thread_service;
 pub mod trace_logger;

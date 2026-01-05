@@ -3,6 +3,7 @@ use crate::metadata::models::project::{DbNewProject, DbProject, NewProjectDTO, U
 use crate::metadata::pool::DbPool;
 use crate::types::metadata::project::Project;
 use crate::types::metadata::services::project::ProjectService;
+use crate::types::project_settings::ProjectSettings;
 use diesel::dsl::count;
 use diesel::ExpressionMethods;
 use diesel::OptionalExtension;
@@ -33,9 +34,52 @@ impl ProjectServiceImpl {
             .trim_matches('-')
             .to_string()
     }
+
+    pub fn create_lucy_project(&self) -> Result<(), DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+        let project_id = Uuid::new_v4().to_string();
+        let slug = Self::slugify("lucy");
+        let settings_json = serde_json::to_string(&ProjectSettings::default()).map_err(|e| {
+            DatabaseError::QueryError(diesel::result::Error::DeserializationError(Box::new(e)))
+        })?;
+
+        let db_new_project = DbNewProject {
+            id: Some(project_id),
+            name: "lucy".to_string(),
+            description: None,
+            slug,
+            settings: Some(settings_json),
+            is_default: Some(0),
+        };
+
+        diesel::insert_into(crate::metadata::schema::projects::table)
+            .values(&db_new_project)
+            .execute(&mut conn)?;
+
+        Ok(())
+    }
+
+    pub fn get_by_slug(&self, slug: &str) -> Result<Option<Project>, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+        DbProject::not_archived()
+            .filter(crate::metadata::schema::projects::slug.eq(slug))
+            .first(&mut conn)
+            .optional()
+            .map_err(DatabaseError::QueryError)
+            .map(|db_project| db_project.map(|db_project| db_project.into()))
+    }
 }
 
 impl ProjectService for ProjectServiceImpl {
+    fn get_default(&self, _owner_id: Uuid) -> Result<Project, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+        DbProject::not_archived()
+            .filter(crate::metadata::schema::projects::is_default.eq(1))
+            .first(&mut conn)
+            .map_err(DatabaseError::QueryError)
+            .map(|db_project| db_project.into())
+    }
+
     fn get_by_id(&self, id: Uuid, _owner_id: Uuid) -> Result<Project, DatabaseError> {
         let mut conn = self.db_pool.get()?;
         DbProject::not_archived()

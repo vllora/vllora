@@ -45,6 +45,10 @@ pub fn seed_database(db_pool: &DbPool) -> Result<(), DatabaseError> {
         info!("Found {} existing projects in database", project_count);
     }
 
+    if project_count < 2 {
+        project_service.create_lucy_project()?;
+    }
+
     Ok(())
 }
 

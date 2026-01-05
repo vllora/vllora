@@ -4,6 +4,7 @@ use crate::cost::GatewayCostCalculator;
 use crate::guardrails::GuardrailsService;
 use crate::handlers::{agents, debug, models, projects, session, threads};
 use crate::metrics_writer::SqliteMetricsWriterAdapter;
+use crate::middleware::lucy_project::LucyProjectMiddleware;
 use crate::middleware::project::ProjectMiddleware;
 use crate::middleware::thread_service::ThreadsServiceMiddleware;
 use crate::middleware::trace_logger::TraceLogger;
@@ -280,8 +281,11 @@ impl ApiServer {
             service = service.app_data(in_memory_storage);
         }
 
-        let guardrails_service = Box::new(GuardrailsService::new(guards.unwrap_or_default()))
-            as Box<dyn GuardrailsEvaluator>;
+        let lucy_service = Self::attach_gateway_routes(web::scope("/lucy/v1"));
+
+        let guardrails_service =
+            Arc::new(Box::new(GuardrailsService::new(guards.unwrap_or_default()))
+                as Box<dyn GuardrailsEvaluator>);
 
         let broadcaster = EventsUIBroadcaster::new(events_senders_container.clone());
 
@@ -321,14 +325,26 @@ impl ApiServer {
             .app_data(Data::new(config))
             .service(
                 service
+                    .app_data(Data::new(callback.clone()))
+                    .app_data(Data::new(
+                        Box::new(cost_calculator.clone()) as Box<dyn CostCalculator>
+                    ))
+                    .app_data(Data::from(guardrails_service.clone()))
+                    .wrap(ActixOtelMiddleware)
+                    .wrap(TracingContext)
+                    .wrap(RateLimitMiddleware),
+            )
+            .service(
+                lucy_service
                     .app_data(Data::new(callback))
                     .app_data(Data::new(
                         Box::new(cost_calculator) as Box<dyn CostCalculator>
                     ))
-                    .app_data(Data::new(guardrails_service))
+                    .app_data(Data::from(guardrails_service))
                     .wrap(ActixOtelMiddleware)
                     .wrap(TracingContext)
-                    .wrap(RateLimitMiddleware),
+                    .wrap(RateLimitMiddleware)
+                    .wrap(LucyProjectMiddleware),
             )
             .service(
                 web::scope("/projects")

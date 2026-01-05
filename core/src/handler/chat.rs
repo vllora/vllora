@@ -7,10 +7,12 @@ use crate::events::callback_handler::GatewaySpanStartEvent;
 use crate::executor::context::ExecutorContext;
 use crate::handler::ModelEventWithDetails;
 use crate::metadata::pool::DbPool;
+use crate::metadata::services::project::ProjectServiceImpl;
 use crate::model::DefaultModelMetadataFactory;
 use crate::routing::interceptor::rate_limiter::InMemoryRateLimiterService;
 use crate::routing::RoutingStrategy;
 use crate::types::guardrails::service::GuardrailsEvaluator;
+use crate::types::metadata::services::project::ProjectService;
 use crate::usage::InMemoryStorage;
 use actix_web::{web, HttpRequest, HttpResponse};
 use std::sync::Arc;
@@ -253,7 +255,17 @@ pub async fn create_chat_completion(
     let rate_limiter_service = InMemoryRateLimiterService::new();
     let guardrails_evaluator_service = evaluator_service.clone().into_inner();
 
-    let project_slug = project.slug.clone();
+    // If the project is Lucy, we need to use the default project for execution
+    let (project_id, project_slug) = if project.slug == "lucy" {
+        let project_service = ProjectServiceImpl::new(db_pool.get_ref().clone());
+        let project = project_service
+            .get_default(project.company_id)
+            .map_err(|e| GatewayApiError::CustomError(e.to_string()))?;
+
+        (project.id, project.slug)
+    } else {
+        (project.id, project.slug.clone())
+    };
     let thread_id = thread_id.value();
 
     let cost_calculator = cost_calculator.into_inner();
@@ -282,7 +294,7 @@ pub async fn create_chat_completion(
         HashMap::new(),
         guardrails_evaluator_service,
         Arc::new(rate_limiter_service),
-        project.id,
+        project_id,
         key_storage.into_inner(),
         None,
     )?;

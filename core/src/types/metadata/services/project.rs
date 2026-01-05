@@ -16,4 +16,5 @@ pub trait ProjectService {
         proj: UpdateProjectDTO,
     ) -> Result<Project, DatabaseError>;
     fn set_default(&self, id: Uuid, owner_id: Uuid) -> Result<Project, DatabaseError>;
+    fn get_default(&self, owner_id: Uuid) -> Result<Project, DatabaseError>;
 }
