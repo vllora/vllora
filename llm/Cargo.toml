@@ -55,7 +55,7 @@ base64 = { workspace = true }
 regex = { workspace = true }
 
 validator = { version = "0.20", features = ["derive"] }
-minijinja = "2.12.0"
+minijinja = "2.14.0"
 futures = { workspace = true }
 reqwest-eventsource = { workspace = true }
 tokio-stream = { workspace = true }
