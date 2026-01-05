@@ -255,17 +255,6 @@ pub async fn create_chat_completion(
     let rate_limiter_service = InMemoryRateLimiterService::new();
     let guardrails_evaluator_service = evaluator_service.clone().into_inner();
 
-    // If the project is Lucy, we need to use the default project for execution
-    let (project_id, project_slug) = if project.slug == "lucy" {
-        let project_service = ProjectServiceImpl::new(db_pool.get_ref().clone());
-        let project = project_service
-            .get_default(project.company_id)
-            .map_err(|e| GatewayApiError::CustomError(e.to_string()))?;
-
-        (project.id, project.slug)
-    } else {
-        (project.id, project.slug.clone())
-    };
     let thread_id = thread_id.value();
 
     let cost_calculator = cost_calculator.into_inner();
@@ -273,7 +262,7 @@ pub async fn create_chat_completion(
     let (_handle, callback_handler_fn) = prepare_request(
         &callback_handler.get_ref().clone(),
         "vllora",
-        &project_slug,
+        &project.slug,
         vec![],
         Some(run_id.value()),
         Some(thread_id.clone()),
@@ -283,6 +272,18 @@ pub async fn create_chat_completion(
     )
     .await?;
 
+    // If the project is Lucy, we need to use the default project for execution
+    let project_id = if project.slug == "lucy" {
+        let project_service = ProjectServiceImpl::new(db_pool.get_ref().clone());
+        let project = project_service
+            .get_default(project.company_id)
+            .map_err(|e| GatewayApiError::CustomError(e.to_string()))?;
+
+        project.id
+    } else {
+        project.id
+    };
+    
     let db_pool = db_pool.into_inner();
     let executor_context = ExecutorContext::new(
         callback_handler_fn,

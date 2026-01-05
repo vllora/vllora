@@ -47,7 +47,7 @@ impl EventsUIBroadcaster {
                                     parent_span_id: span.parent_span_id,
                                 };
                                 if span.operation_name == "run" {
-                                    let _ =sender.send(Event::RunFinished {
+                                    let _ = sender.send(Event::RunFinished {
                                         run_context,
                                         timestamp: span.end_time_unix_nano / 1000000,
                                     }).await;
