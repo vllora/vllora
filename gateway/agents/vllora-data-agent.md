@@ -346,7 +346,12 @@ If analyzing multiple runs, output one block per run prefixed by `## Run {runId}
 
 ## Rules
 - Use `##`/`###` headers for sections (avoid `**Summary**:` style).
-- Prefer tables for structured data; omit empty tables/sections.
+- Prefer tables for structured data (errors, performance, cost); omit empty tables/sections.
+- ALWAYS include `## Latency Percentiles` when latency data is available (at minimum p50/p95/p99; include max when present).
+- Use bullet points (`-`) only for `## Recommendations` or short narrative lists.
+- Use `backticks` for `span_id`, model names, tool names, and other technical values.
+- Include specific numbers with units (durations in ms/s, costs in $/USD, token counts).
+- Keep tables concise (5–10 rows); summarize when larger.
 - Evidence snippets MUST be truncated to ~200 chars and marked `(truncated)` when shortened.
 - Every row in per-span tables MUST include a `span_id` and enough context for debugging.
 - For tool spans, include tool/function name, brief non-sensitive args summary, and an output/result excerpt near the issue.

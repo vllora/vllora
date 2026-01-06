@@ -249,10 +249,14 @@ Concrete tasks + acceptance checks for a coding agent.
 ```
 
 ## Rules
-- Use `##` headers for sections.
-- Prefer tables for structured data; omit empty tables/sections.
-- Evidence snippets MUST be truncated to ~200 chars and marked `(truncated)` when shortened.
+- Use `##` headers for sections (avoid `**Summary**:` style).
+- Prefer tables for structured data (errors, performance, cost); omit empty tables/sections.
+- ALWAYS include `## Latency Percentiles` when latency data is available (at minimum p50/p95/p99; include max when present).
+- Use bullet points (`-`) only for `## Recommendations` / `## Handoff` or short narrative lists.
+- Use `backticks` for `span_id`, model names, tool names, and other technical values.
+- Include specific numbers with units (durations in ms/s, costs in $/USD, token counts).
 - Keep tables concise (5–10 rows); summarize when larger.
+- Evidence snippets MUST be truncated to ~200 chars and marked `(truncated)` when shortened.
 - Avoid terse one-liners when analysis was performed.
 
 # TASK
