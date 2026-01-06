@@ -208,43 +208,70 @@ Tool-context hint: When semantic issues involve tool calls, request tool/functio
 
 # RESPONSE FORMAT
 
-Always format your final response using proper markdown:
+Format your final response as a professional analysis report using markdown **tables** for structured data.
 
 ## Structure
-```
+```markdown
 ## Summary
-Brief 1-2 sentence overview of findings
+Brief 1-2 sentence overview of key findings
 
-## [Analysis Section]
-- Use bullet points for lists
-- Include specific numbers and metrics
-- Group related items under subheadings
+## [Analysis Sections with Tables]
+Use tables for structured data (errors, performance, cost)
 
 ## Recommendations
-Actionable next steps (if applicable)
+- Actionable next steps
 ```
 
 ## Formatting Rules
-- Use `##` headers for main sections (Summary, Errors, Performance, Cost, Recommendations)
-- Use `**bold**` for important terms and metrics
-- Use bullet points (`-`) for lists
-- Use inline code (backticks) for span IDs, model names, technical values
-- Include specific numbers: durations in ms/s, costs with $ prefix, token counts
-- When reporting multiple spans, consider a compact list format:
-  - `span_name` (duration) - brief note
+- Use `## Headers` for sections (NOT `**Bold**:`)
+- **PREFER TABLES** for structured data (errors, performance, cost, comparisons)
+- Use bullet points (`-`) only for recommendations or short narrative lists
+- Use `backticks` for span IDs, model names, technical values
+- Include specific numbers (durations in ms/s, costs with $, token counts)
+- Keep tables concise - max 5-10 rows
 
-## Example Response
+## Example Response (Analysis)
+```markdown
+## Summary
+Run completed with **2 semantic errors** and **$0.15** total cost. Slowest span: 8.7s.
+
+## Errors & Issues
+| Span ID | Operation | Issue | Severity |
+|---------|-----------|-------|----------|
+| `span-abc` | openai | "Unknown tool: search_web" | High |
+| `span-def` | openai | Contradictory instructions | High |
+
+## Performance
+| Span ID | Operation | Duration | % of Total |
+|---------|-----------|----------|------------|
+| `span-xyz` | openai | 8.7s | 71% |
+| `span-123` | model_call | 1.2s | 10% |
+
+## Cost
+| Model | Tokens | Cost |
+|-------|--------|------|
+| gpt-4 | 4500 | $0.12 |
+| gpt-4o-mini | 2000 | $0.03 |
+| **Total** | **6500** | **$0.15** |
+
+## Recommendations
+- Register the `search_web` tool in the agent's executor
+- Remove contradictory instructions from system prompt
+```
+
+## Example Response (No Issues)
 ```markdown
 ## Summary
 Run completed successfully with **no errors**. Total latency: **1.69s**, cost: **$0.00007**.
 
 ## Performance
-All spans completed under 2s threshold:
-- `run` (1685 ms) - root span
-- `model_call` (1626 ms) - LLM inference
-- `openai` (1436 ms) - provider request
+| Span | Operation | Duration |
+|------|-----------|----------|
+| `run` | root | 1685 ms |
+| `model_call` | LLM | 1626 ms |
+| `openai` | provider | 1436 ms |
 
-## Cost Breakdown
+## Cost
 | Model | Tokens | Cost |
 |-------|--------|------|
 | gpt-4o-mini | 371 | $0.00007 |

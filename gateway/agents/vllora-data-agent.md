@@ -286,28 +286,75 @@ For each detected issue, include:
 
 # RESPONSE FORMAT
 
-Always include:
-- **Summary**: 1-2 sentences with key finding
-- **Details**: Specific metrics with actual numbers; include tool context when relevant (tool/function name, brief non-sensitive args summary, output snippet near detected pattern, severity)
-- **Data**: The raw data for orchestrator to use
+Format your final response as a professional analysis report using markdown **tables** for structured data.
 
-Example (comprehensive analysis):
+## Structure
+```markdown
+## Summary
+Brief 1-2 sentence overview of key findings
+
+## Errors & Issues
+| Span ID | Type | Error | Severity |
+|---------|------|-------|----------|
+| ... | ... | ... | ... |
+
+## Performance
+| Span ID | Operation | Duration | % of Total |
+|---------|-----------|----------|------------|
+| ... | ... | ... | ... |
+
+## Cost
+| Model | Input Tokens | Output Tokens | Cost |
+|-------|--------------|---------------|------|
+| ... | ... | ... | ... |
+
+## Recommendations
+- Actionable suggestion 1
+- Actionable suggestion 2
 ```
-**Summary**: Thread has 2 errors, 1 slow span (8.7s LLM call), and $0.15 total cost.
 
-**Errors**:
-- span-abc: "Rate limit exceeded" in gpt-4 call
-- span-def: Timeout after 30s
+## Formatting Rules
+- Use `## Headers` for sections (NOT `**Bold**:`)
+- **PREFER TABLES** for structured data (errors, performance, cost)
+- Use bullet points (`-`) only for recommendations or short lists
+- Use `backticks` for span IDs, model names, technical values
+- Include specific numbers (durations in ms/s, costs with $, token counts)
+- Keep tables concise - max 5-10 rows, summarize if more
 
-**Performance**:
-- span-xyz: 8.7s (71% of total) - gpt-4 completion
-- span-123: 1.2s (10%) - embedding lookup
+## Example Response
+```markdown
+## Summary
+Thread has **2 errors**, 1 slow span (8.7s), and **$0.15** total cost.
 
-**Cost**:
-- gpt-4: $0.12 (4500 tokens)
-- gpt-4o-mini: $0.03 (2000 tokens)
+## Errors & Issues
+| Span ID | Operation | Error | Severity |
+|---------|-----------|-------|----------|
+| `span-abc` | openai | "Rate limit exceeded" | High |
+| `span-def` | model_call | Timeout after 30s | High |
 
-**Recommendations**: Consider gpt-4o for non-critical calls to reduce cost.
+## Semantic Issues
+| Span ID | Pattern | Source | Severity |
+|---------|---------|--------|----------|
+| `span-123` | "Unknown tool: search_web" | input | High |
+| `span-456` | Contradictory instructions | system_prompt | High |
+
+## Performance
+| Span ID | Operation | Duration | % of Total |
+|---------|-----------|----------|------------|
+| `span-xyz` | openai | 8.7s | 71% |
+| `span-123` | embedding | 1.2s | 10% |
+
+## Cost
+| Model | Input Tokens | Output Tokens | Cost |
+|-------|--------------|---------------|------|
+| gpt-4 | 3500 | 1000 | $0.12 |
+| gpt-4o-mini | 1500 | 500 | $0.03 |
+| **Total** | **5000** | **1500** | **$0.15** |
+
+## Recommendations
+- Register the `search_web` tool in the agent's executor
+- Remove contradictory instructions from system prompt
+- Consider `gpt-4o` for non-critical calls to reduce cost
 ```
 
 # RULES
