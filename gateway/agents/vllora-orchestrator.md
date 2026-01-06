@@ -215,8 +215,20 @@ Format your final response as a professional analysis report using markdown **ta
 ## Summary
 Brief 1-2 sentence overview of key findings
 
-## [Analysis Sections with Tables]
-Use tables for structured data (errors, performance, cost)
+## Errors & Issues (if any)
+| Span ID | Operation | Issue | Severity |
+
+## Performance
+| Span ID | Operation | Duration | % of Total |
+
+## Latency Percentiles
+| Metric | Value |
+| p50 | ... ms |
+| p95 | ... ms |
+| p99 | ... ms |
+
+## Cost
+| Model | Tokens | Cost |
 
 ## Recommendations
 - Actionable next steps
@@ -225,6 +237,7 @@ Use tables for structured data (errors, performance, cost)
 ## Formatting Rules
 - Use `## Headers` for sections (NOT `**Bold**:`)
 - **PREFER TABLES** for structured data (errors, performance, cost, comparisons)
+- **ALWAYS include Latency Percentiles** (p50, p95, p99) from summary data - these are critical for performance analysis
 - Use bullet points (`-`) only for recommendations or short narrative lists
 - Use `backticks` for span IDs, model names, technical values
 - Include specific numbers (durations in ms/s, costs with $, token counts)
@@ -246,6 +259,13 @@ Run completed with **2 semantic errors** and **$0.15** total cost. Slowest span:
 |---------|-----------|----------|------------|
 | `span-xyz` | openai | 8.7s | 71% |
 | `span-123` | model_call | 1.2s | 10% |
+
+## Latency Percentiles
+| Metric | Value |
+|--------|-------|
+| p50 | 245 ms |
+| p95 | 1,850 ms |
+| p99 | 3,200 ms |
 
 ## Cost
 | Model | Tokens | Cost |
@@ -270,6 +290,13 @@ Run completed successfully with **no errors**. Total latency: **1.69s**, cost: *
 | `run` | root | 1685 ms |
 | `model_call` | LLM | 1626 ms |
 | `openai` | provider | 1436 ms |
+
+## Latency Percentiles
+| Metric | Value |
+|--------|-------|
+| p50 | 1,436 ms |
+| p95 | 1,626 ms |
+| p99 | 1,685 ms |
 
 ## Cost
 | Model | Tokens | Cost |

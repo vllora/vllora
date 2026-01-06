@@ -303,6 +303,14 @@ Brief 1-2 sentence overview of key findings
 |---------|-----------|----------|------------|
 | ... | ... | ... | ... |
 
+## Latency Percentiles
+| Metric | Value |
+|--------|-------|
+| p50 | 245 ms |
+| p95 | 1,850 ms |
+| p99 | 3,200 ms |
+| max | 8,700 ms |
+
 ## Cost
 | Model | Input Tokens | Output Tokens | Cost |
 |-------|--------------|---------------|------|
@@ -316,6 +324,7 @@ Brief 1-2 sentence overview of key findings
 ## Formatting Rules
 - Use `## Headers` for sections (NOT `**Bold**:`)
 - **PREFER TABLES** for structured data (errors, performance, cost)
+- **ALWAYS include Latency Percentiles** (p50, p95, p99) from the `latency` field in summary data - these are critical for performance analysis
 - Use bullet points (`-`) only for recommendations or short lists
 - Use `backticks` for span IDs, model names, technical values
 - Include specific numbers (durations in ms/s, costs with $, token counts)
@@ -343,6 +352,13 @@ Thread has **2 errors**, 1 slow span (8.7s), and **$0.15** total cost.
 |---------|-----------|----------|------------|
 | `span-xyz` | openai | 8.7s | 71% |
 | `span-123` | embedding | 1.2s | 10% |
+
+## Latency Percentiles
+| Metric | Value |
+|--------|-------|
+| p50 | 245 ms |
+| p95 | 1,850 ms |
+| p99 | 3,200 ms |
 
 ## Cost
 | Model | Input Tokens | Output Tokens | Cost |
