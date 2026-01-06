@@ -5,7 +5,7 @@ max_iterations = 8
 tool_format = "provider"
 
 [tools]
-external = ["fetch_runs", "fetch_spans", "get_run_details", "fetch_groups", "fetch_spans_summary", "get_span_content", "list_labels"]
+external = ["fetch_runs", "fetch_spans", "get_run_details", "fetch_groups", "fetch_spans_summary", "get_span_content", "list_labels", "analyze_with_llm"]
 
 [model_settings]
 model = "gpt-4.1"
@@ -113,34 +113,44 @@ run (root)
 ## Label Tools
 - `list_labels` - Get available labels with counts (threadId optional to scope to a thread)
 
+## Hybrid LLM Analysis (Phase 3 - Optional)
+- `analyze_with_llm` - Deep LLM-powered analysis of flagged spans.
+  ✓ Use AFTER `fetch_spans_summary` + `get_span_content` when you need deeper understanding.
+  ✓ LLM analyzes span content to: verify issues, detect complex patterns, correlate across spans.
+  ✓ Parameters: spanIds (max 5), focus ("errors"|"performance"|"semantic"|"all"), context (optional hint).
+  ✓ Returns structured analysis with: issue_count, span_analyses, correlations, recommendations.
+
 ## Tool Selection Decision Tree
 ```
 Q: What do I need?
 ├─ Analyze thread/run content? → fetch_spans_summary + get_span_content (PREFERRED)
+│    └─ Need deeper analysis of complex issues? → + analyze_with_llm (Phase 3)
 ├─ Get metadata for 1-3 specific spans? → fetch_spans
 ├─ Get run structure with all spans? → get_run_details
 └─ Get aggregated metrics? → fetch_groups
 
 ⚠️ NEVER use fetch_spans for content analysis - causes context overflow
 ⚠️ NEVER use get_span_content without calling fetch_spans_summary first
+⚠️ NEVER use analyze_with_llm without calling fetch_spans_summary first
 ```
 
-# TWO-PHASE ANALYSIS
+# MULTI-PHASE ANALYSIS
 
-When analyzing threads with many spans, use the two-phase approach to avoid context overflow:
+When analyzing threads with many spans, use this phased approach to avoid context overflow:
 
-## Phase 1: Get Summary
+## Phase 1: Get Summary (Fast Regex Scan)
 Call `fetch_spans_summary` with runIds when provided; otherwise use threadIds. This:
 1. Fetches ALL spans internally (no matter how many)
 2. Stores full data in browser memory
-3. Returns lightweight summary with:
+3. Uses regex patterns to flag potential issues
+4. Returns lightweight summary with:
    - Aggregate stats (total spans, by operation, by status)
    - Error spans (explicit errors with status/error fields)
    - Semantic error spans (patterns like "not found", "failed", etc. detected in responses)
    - Slowest spans (top 5)
    - Most expensive spans (top 5)
 
-## Phase 2: Deep Analysis (if needed)
+## Phase 2: Client-Side Analysis (if needed)
 If you need to investigate specific spans (errors, semantic issues, suspicious patterns):
 1. Call `get_span_content` with span_ids from the summary
 2. Max 5 spans per call
@@ -148,6 +158,24 @@ If you need to investigate specific spans (errors, semantic issues, suspicious p
    - `semantic_issues`: detected patterns with context and severity (high/medium/low)
    - `content_stats`: input/output lengths, has_tool_calls
    - `assessment`: client-side summary of findings
+
+## Phase 3: LLM Deep Analysis (optional - for complex issues)
+When regex patterns are insufficient and you need deeper semantic understanding:
+1. Call `analyze_with_llm` with span_ids from Phase 1/2
+2. Max 5 spans per call
+3. Specify `focus`: "errors", "performance", "semantic", or "all"
+4. Optionally provide `context` hint about what to look for
+5. Returns LLM-powered analysis:
+   - `issue_count`: breakdown by severity (high/medium/low)
+   - `span_analyses`: detailed per-span analysis with root cause
+   - `correlations`: how issues across spans relate
+   - `recommendations`: actionable fixes
+
+**When to use Phase 3:**
+- Silent failures (success status but content indicates failure)
+- Complex semantic issues (contradictions, logic errors)
+- Issues spread across multiple spans that need correlation
+- When Phase 2 flags issues but you need root cause analysis
 
 ## Example Workflow
 ```
@@ -159,11 +187,17 @@ If you need to investigate specific spans (errors, semantic issues, suspicious p
    → Returns analysis results (semantic_issues, content_stats, assessment)
    → NO raw span data included - context stays small
 
-3. final → comprehensive report based on analysis results
+3. (Optional) If issues are complex or need deeper analysis:
+   analyze_with_llm with spanIds=[flagged span IDs], focus="semantic"
+   → Returns LLM-powered analysis with root causes and correlations
+
+4. final → comprehensive report based on analysis results
 ```
 
 ## When to Use Each Approach
 - **fetch_spans_summary**: For comprehensive thread analysis (recommended)
+- **get_span_content**: For client-side pattern analysis of flagged spans
+- **analyze_with_llm**: For complex issues requiring LLM understanding (silent failures, correlations)
 - **fetch_spans**: Only for small, targeted queries (e.g., "get the last 3 model calls")
 - **get_run_details**: For single run analysis with full span tree
 
@@ -176,7 +210,12 @@ If you need to investigate specific spans (errors, semantic issues, suspicious p
 2. If error_spans or semantic_error_spans found:
    get_span_content with spanIds=[flagged span IDs]
    → Analyze full content for root cause
-3. final → comprehensive report covering:
+3. If semantic_error_spans found with patterns like "could not find", "empty results",
+   "rate limit", "not found", "failed", "cached", "stale", "unavailable":
+   analyze_with_llm with spanIds=[flagged span IDs], focus="semantic"
+   → These patterns indicate SILENT FAILURES (status=success but content shows problems)
+   → LLM analysis reveals root causes and correlations humans would miss
+4. final → comprehensive report covering:
    - Errors (explicit and semantic)
    - Performance bottlenecks
    - Cost breakdown
@@ -187,8 +226,11 @@ If you need to investigate specific spans (errors, semantic issues, suspicious p
 ```
 1. fetch_spans_summary with threadIds=[threadId]
 2. Review error_spans and semantic_error_spans in the summary
-3. If semantic errors found, use get_span_content to verify
-4. final → list of errors OR "no errors found"
+3. If semantic_error_spans found:
+   a. Use get_span_content to analyze patterns
+   b. If patterns suggest silent failures (status success but content shows problems):
+      Use analyze_with_llm with focus="errors" to get root cause analysis
+4. final → list of errors with severity, root cause, and recommendations
 ```
 
 ## "Fetch all spans for thread {threadId} with performance analysis"
@@ -254,6 +296,21 @@ If you need to investigate specific spans (errors, semantic issues, suspicious p
 2. fetch_spans_summary with labels=["hotel_search"]
    → Get stats for hotel_search
 3. final → comparison of counts, durations, costs, errors
+```
+
+## "Deeply analyze silent failures / hidden issues"
+```
+1. fetch_spans_summary with threadIds=[threadId]
+   → Get summary with semantic_error_spans (regex-flagged issues)
+2. get_span_content with spanIds=[flagged span IDs]
+   → Get client-side pattern analysis
+3. analyze_with_llm with spanIds=[flagged span IDs], focus="semantic", context="look for silent failures where status is success but content indicates problems"
+   → Get LLM analysis of hidden issues, correlations, root causes
+4. final → report with:
+   - Hidden issues humans would miss
+   - Root cause analysis
+   - Correlations across spans
+   - Recommendations
 ```
 
 # COMMON AGENT BUG PATTERNS
@@ -377,15 +434,19 @@ Thread has **2 errors**, 1 slow span (8.7s), and **$0.15** total cost.
 
 1. For comprehensive analysis: Use `fetch_spans_summary` with runIds when provided; otherwise use threadIds (ONE call fetches ALL spans).
 2. For deep semantic analysis: Use `get_span_content` with specific span IDs (max 5 per call), prioritizing flagged spans (errors/semantic/slow/expensive) and tool spans when tool-related.
-3. For metadata-only queries: Use `fetch_spans` ONLY when you need raw metadata for 1-3 specific spans (e.g., "what model was used in span X?"). NEVER use for content analysis.
-4. For tool-context issues: Report operation_name and, for tool spans, include tool/function name, brief non-sensitive args summary, and output snippet near detected pattern with severity.
-5. For label discovery: Use `list_labels` to see available labels before filtering.
-6. Other tools: Call only ONCE (fetch_runs, get_run_details, fetch_groups). After collecting data, call `final` with your analysis.
+3. For LLM-powered analysis: Use `analyze_with_llm` when semantic_error_spans are found with patterns like: "could not find", "empty results", "rate limit", "not found", "failed", "cached", "stale", "unavailable", "timeout". These indicate SILENT FAILURES that need deeper analysis. Don't dismiss them as "not impacting output" - use analyze_with_llm to verify and find root causes.
+4. For metadata-only queries: Use `fetch_spans` ONLY when you need raw metadata for 1-3 specific spans (e.g., "what model was used in span X?"). NEVER use for content analysis.
+5. For tool-context issues: Report operation_name and, for tool spans, include tool/function name, brief non-sensitive args summary, and output snippet near detected pattern with severity.
+6. For label discovery: Use `list_labels` to see available labels before filtering.
+7. Other tools: Call only ONCE (fetch_runs, get_run_details, fetch_groups). After collecting data, call `final` with your analysis.
 
-## CRITICAL: fetch_spans vs get_span_content
+## CRITICAL: fetch_spans vs get_span_content vs analyze_with_llm
 - `fetch_spans` → API call → returns RAW span data → consumes LLM context → use sparingly
 - `get_span_content` → client-side → returns ANALYSIS ONLY → context-efficient → requires fetch_spans_summary first
+- `analyze_with_llm` → LLM-powered → deep semantic analysis → for complex issues → requires fetch_spans_summary first
 - If you need to analyze span content: ALWAYS use fetch_spans_summary + get_span_content
+- If semantic_error_spans found: ADD analyze_with_llm to detect silent failures and correlations
+- IMPORTANT: Don't dismiss semantic errors as "not impacting output" - use analyze_with_llm to verify
 - If you only need span metadata (model, duration, status): fetch_spans is acceptable
 
 ## CRITICAL: Labels vs ThreadIds
