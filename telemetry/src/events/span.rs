@@ -46,6 +46,7 @@ macro_rules! create_thread_span {
             router_name = tracing::field::Empty,
             tags = JsonValue(&serde_json::to_value($tags.clone()).unwrap_or_default()).as_value(),
             user = tracing::field::Empty,
+            usage = tracing::field::Empty,
         )
     }};
 }
