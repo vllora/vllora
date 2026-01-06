@@ -166,25 +166,54 @@ where
             let run_span_id = run_span_for_body
                 .as_ref()
                 .map(|span| span.context().span().span_context().span_id());
+            let run_span_for_parent = run_span_for_future.clone();
             async move {
-                let span: Span = tracing::info_span!(
-                    target: "vllora::user_tracing::cloud_api",
-                    "cloud_api_invoke",
-                    http.request.method = req.method().to_string(),
-                    http.request.path = req.path().to_string(),
-                    http.request.header = JsonValue(
-                        &serde_json::to_value(
-                            req.headers()
-                                .iter()
-                                .filter(|(k, _)| !IGNORED_HEADERS.contains(&k.as_str()))
-                                .map(|(k, v)| (k.as_str(), v.to_str().unwrap_or_default())).collect::<HashMap<_, _>>()
-                        ).unwrap_or_default()
-                    ).as_value(),
-                    HTTP_RESPONSE_STATUS_CODE = field::Empty,
-                    status = field::Empty,
-                    error = field::Empty,
-                    ip = get_client_ip(req.request())
-                );
+                // Enter the run span to keep it active during request handling
+                // It will also be entered during body streaming in SpanInstrumentedBody
+                let _run_span_guard = run_span_for_future.as_ref().map(|s| s.enter());
+                
+                // Create the span with the run span as its explicit parent
+                // This ensures the run span doesn't end before this span is created
+                let span: Span = if let Some(ref parent_span) = run_span_for_parent {
+                    tracing::info_span!(
+                        target: "vllora::user_tracing::cloud_api",
+                        parent: parent_span.clone(),
+                        "cloud_api_invoke",
+                        http.request.method = req.method().to_string(),
+                        http.request.path = req.path().to_string(),
+                        http.request.header = JsonValue(
+                            &serde_json::to_value(
+                                req.headers()
+                                    .iter()
+                                    .filter(|(k, _)| !IGNORED_HEADERS.contains(&k.as_str()))
+                                    .map(|(k, v)| (k.as_str(), v.to_str().unwrap_or_default())).collect::<HashMap<_, _>>()
+                            ).unwrap_or_default()
+                        ).as_value(),
+                        HTTP_RESPONSE_STATUS_CODE = field::Empty,
+                        status = field::Empty,
+                        error = field::Empty,
+                        ip = get_client_ip(req.request())
+                    )
+                } else {
+                    tracing::info_span!(
+                        target: "vllora::user_tracing::cloud_api",
+                        "cloud_api_invoke",
+                        http.request.method = req.method().to_string(),
+                        http.request.path = req.path().to_string(),
+                        http.request.header = JsonValue(
+                            &serde_json::to_value(
+                                req.headers()
+                                    .iter()
+                                    .filter(|(k, _)| !IGNORED_HEADERS.contains(&k.as_str()))
+                                    .map(|(k, v)| (k.as_str(), v.to_str().unwrap_or_default())).collect::<HashMap<_, _>>()
+                            ).unwrap_or_default()
+                        ).as_value(),
+                        HTTP_RESPONSE_STATUS_CODE = field::Empty,
+                        status = field::Empty,
+                        error = field::Empty,
+                        ip = get_client_ip(req.request())
+                    )
+                };
 
 
                 if let (Some(run_id), Some(thread_id)) = (run_id, thread_id) {
@@ -239,8 +268,7 @@ where
                         Err(err)
                     }
                 }
-            }.instrument(run_span_for_future.unwrap_or(Span::current()))
-            .await
+            }.await
         })
     }
 }
@@ -283,6 +311,8 @@ where
     ) -> Poll<Option<Result<Bytes, Self::Error>>> {
         let this = self.project();
         let _entered = this.span.enter();
+        // Keep the run span active during body streaming
+        let _run_span_entered = this.run_span.as_ref().map(|s| s.enter());
 
         match this.inner.poll_next(cx) {
             Poll::Ready(None) => {
