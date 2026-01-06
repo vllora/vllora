@@ -256,6 +256,34 @@ If you need to investigate specific spans (errors, semantic issues, suspicious p
 3. final → comparison of counts, durations, costs, errors
 ```
 
+# COMMON AGENT BUG PATTERNS
+
+When analyzing spans, look for these common issues:
+
+## Tool Execution Errors
+- **"Unknown tool: X"** - Tool name mismatch between schema and executor
+- **"Function not found"** - Similar to above
+- Tool calls repeatedly failing with same error
+
+## Prompt Issues (check system messages in input)
+- **Contradictory instructions**: Look for opposing directives like:
+  - "MUST use tools" vs "answer directly"
+  - "at least N times" vs "minimize calls"
+  - "always do X" vs "never do X"
+- **Format confusion**: "Respond in JSON" vs "respond in plain text"
+
+## Tool Call Patterns
+- **Repeated failures**: Same tool failing multiple times in a row
+- **Missing parameters**: Tool always uses defaults (check if args are sparse)
+- **Error not propagated**: Tool returns error but agent continues without addressing it
+
+## When Reporting Issues
+For each detected issue, include:
+1. **What**: The specific error/pattern found
+2. **Where**: Span ID and operation name
+3. **Impact**: How it affects the agent behavior
+4. **Suggestion**: Possible root cause
+
 # RESPONSE FORMAT
 
 Always include:
