@@ -171,7 +171,7 @@ where
                 // Enter the run span to keep it active during request handling
                 // It will also be entered during body streaming in SpanInstrumentedBody
                 let _run_span_guard = run_span_for_future.as_ref().map(|s| s.enter());
-                
+
                 // Create the span with the run span as its explicit parent
                 // This ensures the run span doesn't end before this span is created
                 let span: Span = if let Some(ref parent_span) = run_span_for_parent {
