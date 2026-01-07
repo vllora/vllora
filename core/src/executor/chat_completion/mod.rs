@@ -1,4 +1,3 @@
-use crate::credentials::GatewayCredentials;
 use crate::error::GatewayError;
 use crate::executor::chat_completion::basic_executor::BasicCacheContext;
 use crate::executor::chat_completion::stream_executor::{stream_chunks, StreamCacheContext};
@@ -63,8 +62,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
     llm_model: &ModelMetadata,
     breakpoint_manager: Option<&BreakpointManager>,
     thread_id: Option<&String>,
-    project_slug: &str,
-    tenant_name: &str,
+    key: Option<&Credentials>,
 ) -> Result<ChatCompletionExecutionResult, GatewayApiError> {
     let span = Span::current();
 
@@ -114,15 +112,6 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         }
     }
 
-    let key = GatewayCredentials::extract_key_from_model(
-        llm_model,
-        project_slug,
-        tenant_name,
-        executor_context.key_storage.as_ref().as_ref(),
-    )
-    .await
-    .map_err(|e| GatewayApiError::CustomError(e.to_string()))?;
-
     // Create a modified request_with_tools with the potentially modified request
     let mut modified_request_with_tools = request_with_tools.clone();
     modified_request_with_tools.request = request_to_use.clone();
@@ -138,7 +127,7 @@ pub async fn execute<T: Serialize + DeserializeOwned + Debug + Clone>(
         cached_instance,
         cache_state,
         llm_model,
-        key.as_ref(),
+        key,
     )
     .await?;
 

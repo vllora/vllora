@@ -1,3 +1,4 @@
+use crate::credentials::GatewayCredentials;
 use crate::executor::chat_completion::basic_executor::BasicCacheContext;
 use crate::executor::chat_completion::breakpoint::BreakpointManager;
 use crate::executor::context::ExecutorContext;
@@ -227,6 +228,15 @@ impl RoutedExecutor {
                 return Err(e);
             }
         };
+        let key = GatewayCredentials::extract_key_from_model(
+            &llm_model,
+            project_slug,
+            tenant_name,
+            executor_context.key_storage.as_ref().as_ref(),
+        )
+        .await
+        .map_err(|e| GatewayApiError::CustomError(e.to_string()))?;
+
         let response = execute(
             request,
             executor_context,
@@ -236,8 +246,7 @@ impl RoutedExecutor {
             &llm_model,
             breakpoint_manager,
             thread_id,
-            project_slug,
-            tenant_name,
+            key.as_ref(),
         )
         .instrument(span.clone())
         .await?;
