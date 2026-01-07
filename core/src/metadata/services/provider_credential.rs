@@ -34,7 +34,7 @@ impl ProviderCredentialsService for ProviderCredentialsServiceImpl {
             .into_boxed();
 
         if let Some(project_slug) = project_slug_param {
-            query = query.filter(p::slug.eq(project_slug));
+            query = query.filter(p::slug.eq(project_slug).or(pc::project_id.is_null()));
         } else {
             query = query.filter(pc::project_id.is_null());
         }

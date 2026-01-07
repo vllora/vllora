@@ -20,6 +20,7 @@ use crate::ok_json;
 #[derive(Deserialize)]
 pub struct UpdateProviderRequest {
     pub credentials: Option<Credentials>,
+    pub single_project_use: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -55,7 +56,13 @@ pub async fn update_provider_key<T: ProviderService>(
     let provider_credentials_id = ProviderCredentialsId::new(
         tenant.name.clone(),
         provider_name.clone(),
-        project.id.to_string(),
+        req.single_project_use.and_then(|s| {
+            if s {
+                Some(project.id.to_string())
+            } else {
+                None
+            }
+        }),
     );
     let storage = key_storage.into_inner();
     // Check if provider already exists
@@ -205,7 +212,7 @@ pub async fn delete_provider(
         .delete_key(ProviderCredentialsId::new(
             "default".to_string(),
             provider_name.clone(),
-            project.id.to_string(),
+            None,
         ))
         .await
     {
