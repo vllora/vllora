@@ -2,7 +2,7 @@
 //!
 //! This example shows:
 //! 1. How to set up OpenTelemetry tracing with OTLP exporter
-//! 2. How to use the span macros (create_model_span, create_thread_span, etc.)
+//! 2. How to use the span macros (create_model_span, create_api_invoke_span, etc.)
 //! 3. How to create and instrument spans with attributes
 //! 4. How to export traces to an OTLP endpoint
 //!
@@ -33,8 +33,8 @@ use vllora_telemetry::baggage::BaggageSpanProcessor;
 use vllora_telemetry::events::{self, JsonValue};
 // Import span creation macros - these are exported via #[macro_export] in events/span.rs
 use vllora_telemetry::{
-    create_agent_span, create_model_invoke_span, create_model_span, create_run_span,
-    create_task_span, create_thread_span, create_tool_span,
+    create_agent_span, create_api_invoke_span, create_model_invoke_span, create_model_span,
+    create_run_span, create_task_span, create_tool_span,
 };
 
 /// A simple console exporter that prints spans using tracing::info!
@@ -198,7 +198,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         run_id,
         thread_id
     );
-    
+
     // Attach context BEFORE executing flow so BaggageSpanProcessor can read it
     execute_flow().with_context(context).await;
 
@@ -215,9 +215,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn execute_flow() {
-
     let span = tracing::info_span!(
-        target: "app::runtime::execution", 
+        target: "app::runtime::execution",
         "execution",
         execution_id = 123,
     );
@@ -274,7 +273,7 @@ async fn thread_operation() {
         tags
     };
 
-    let thread_span = create_thread_span!(thread_tags);
+    let thread_span = create_api_invoke_span!(thread_tags);
 
     tracing::info!("4. Created thread span");
     thread_operation_inner().instrument(thread_span).await;

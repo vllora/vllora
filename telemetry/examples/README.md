@@ -87,7 +87,7 @@ execution (custom app span, target: "app::runtime::execution")
 └── run (vLLora span, target: "vllora::user_tracing::run")
     └── agent (vLLora span, target: "vllora::user_tracing::agent")
         └── task (vLLora span, target: "vllora::user_tracing::task")
-            └── thread (vLLora span, target: "vllora::user_tracing::api_invoke")
+            └── api_invoke (vLLora span, target: "vllora::user_tracing::api_invoke")
                 └── model_invoke (vLLora span, target: "vllora::user_tracing::models")
                     └── openai (vLLora span, target: "vllora::user_tracing::openai")
                         └── tool (vLLora span, target: "vllora::user_tracing::tool")
@@ -119,7 +119,7 @@ The example creates a nested span hierarchy representing an AI agent workflow:
 run (top-level execution)
 └── agent (agent instance)
     └── task (specific task)
-        └── thread (conversation thread)
+        └── api_invoke (api invoke)
             └── model_invoke (LLM invocation)
                 └── openai (provider-specific call)
                     └── tool (tool execution)
@@ -246,10 +246,10 @@ drop(global::tracer_provider());
 - **Attributes**: Task name
 - **Macro**: `create_task_span!`
 
-### 4. Thread Span (`thread_operation`)
-- **Purpose**: Represents a conversation thread
+### 4. Api Invoke Span (`api_invoke_operation`)
+- **Purpose**: Represents a conversation api invoke
 - **Attributes**: `user_id`, `session_id`
-- **Macro**: `create_thread_span!`
+- **Macro**: `create_api_invoke_span!`
 
 ### 5. Model Invoke Span (`model_invoke_operation`)
 - **Purpose**: Represents an LLM invocation

@@ -5,7 +5,7 @@ pub use metrics_service::{MetricsDataPoint, MetricsServiceImpl, MetricsWriterTra
 
 // Span creation macros are exported via #[macro_export] in events/span.rs
 // They can be imported and used like this:
-//   use vllora_telemetry::{create_model_span, create_thread_span, create_run_span,
+//   use vllora_telemetry::{create_model_span, create_api_invoke_span, create_run_span,
 //                          create_agent_span, create_task_span, create_tool_span};
 // Then use them as: create_model_span!(...)
 
