@@ -34,6 +34,65 @@ let trace_provider = SdkTracerProvider::builder()
     .build();
 ```
 
+### Combining vLLora Traces with Custom App Traces
+
+This example demonstrates how to combine vLLora's built-in tracing with your own custom application traces. This is achieved by using **multiple OpenTelemetry layers** with different target filters:
+
+```rust
+// Create separate layers for vLLora traces and custom app traces
+let vllora_layer = events::layer("vllora::user_tracing", LevelFilter::INFO, tracer.clone());
+let custom_layer = events::layer("app::runtime", LevelFilter::INFO, tracer);
+
+// Register both layers with the subscriber
+Registry::default()
+    .with(env_filter)
+    .with(fmt_layer)
+    .with(vllora_layer)    // Captures vLLora spans (target: "vllora::user_tracing")
+    .with(custom_layer)    // Captures custom app spans (target: "app::runtime")
+    .try_init()
+    .expect("Failed to initialize tracing subscriber");
+```
+
+**How it works**:
+- **Target filtering**: Each layer only processes spans that match its target prefix
+- **vLLora layer**: Processes spans created by vLLora macros (e.g., `create_run_span!`, `create_agent_span!`, etc.) which have target `"vllora::user_tracing::*"`
+- **Custom layer**: Processes your application's custom spans with target `"app::runtime::*"`
+- **Shared tracer**: Both layers use the same tracer, so all spans are part of the same trace and share the same trace ID
+
+**Creating custom app spans**:
+
+```rust
+async fn execute_flow() {
+    // Create a custom span with target "app::runtime::execution"
+    let span = tracing::info_span!(
+        target: "app::runtime::execution", 
+        "execution",
+        execution_id = 123,
+    );
+
+    // Instrument async functions using .instrument(span)
+    run_operation().instrument(span).await;
+}
+```
+
+**Key points**:
+1. **Target prefix**: Custom spans must use a target that starts with `"app::runtime"` to be captured by the custom layer
+2. **Async instrumentation**: Use `.instrument(span)` for async functions (not `span.in_scope()` which only works for sync code)
+3. **Span hierarchy**: Your custom spans can be parents or children of vLLora spans - they'll all be part of the same trace
+4. **Baggage propagation**: Baggage values set in the context are automatically propagated to both vLLora and custom spans via `BaggageSpanProcessor`
+
+**Example trace structure**:
+```
+execution (custom app span, target: "app::runtime::execution")
+└── run (vLLora span, target: "vllora::user_tracing::run")
+    └── agent (vLLora span, target: "vllora::user_tracing::agent")
+        └── task (vLLora span, target: "vllora::user_tracing::task")
+            └── thread (vLLora span, target: "vllora::user_tracing::api_invoke")
+                └── model_invoke (vLLora span, target: "vllora::user_tracing::models")
+                    └── openai (vLLora span, target: "vllora::user_tracing::openai")
+                        └── tool (vLLora span, target: "vllora::user_tracing::tool")
+```
+
 ### Step 2: Set Up Context with Baggage
 
 Before creating spans, we establish an OpenTelemetry context with baggage values:
@@ -42,6 +101,7 @@ Before creating spans, we establish an OpenTelemetry context with baggage values
 let context = Context::current().with_baggage(vec![
     KeyValue::new("vllora.run_id", run_id),
     KeyValue::new("vllora.thread_id", thread_id),
+    KeyValue::new("vllora.tenant", "default"),
 ]);
 ```
 
@@ -49,6 +109,7 @@ let context = Context::current().with_baggage(vec![
 - Baggage values are automatically attached to all spans by `BaggageSpanProcessor`
 - This enables correlation across different parts of your application
 - The context must be set **before** creating spans for baggage to be propagated
+- Baggage values propagate to both vLLora spans and custom app spans
 
 ### Step 3: Create Hierarchical Spans
 
@@ -66,12 +127,25 @@ run (top-level execution)
 
 **How span hierarchy works**:
 
-1. **Create a span** using a macro (e.g., `create_run_span!`)
+1. **Create a span** using a macro (e.g., `create_run_span!`) or `tracing::info_span!` for custom spans
 2. **Record attributes** directly on the span before instrumenting
 3. **Instrument function calls** using `.instrument(span)` to associate the span with execution
 4. **Nest spans** by creating child spans in the instrumented functions
 
 ```rust
+// Custom app span
+async fn execute_flow() {
+    let span = tracing::info_span!(
+        target: "app::runtime::execution", 
+        "execution",
+        execution_id = 123,
+    );
+    
+    // Instrument async function calls
+    run_operation().instrument(span).await;
+}
+
+// vLLora span
 async fn run_operation() {
     let run_span = create_run_span!({...});
     
@@ -242,36 +316,63 @@ The OpenTelemetry context carries:
 
 The recommended pattern is to directly instrument function calls:
 
-1. **`.instrument(span)`**: For async function calls
+1. **`.instrument(span)`**: For async function calls (recommended for async code)
    ```rust
    async fn operation() {
-       let span = create_span!(...);
+       let span = tracing::info_span!(
+           target: "app::runtime::operation",
+           "operation"
+       );
        
        // Record attributes directly on the span
        span.record("key", "value");
        
-       // Instrument the function call
+       // Instrument the async function call
        operation_inner().instrument(span).await;
    }
    
    async fn operation_inner() {
        // This code runs within the span's context
        // You can also record attributes here using tracing::Span::current()
+       let current_span = tracing::Span::current();
+       current_span.record("another_key", "another_value");
    }
    ```
 
-2. **`span.in_scope(|| { ... })`**: For synchronous code
+2. **`span.enter()`**: Alternative for async code (returns a guard)
+   ```rust
+   async fn operation() {
+       let span = tracing::info_span!(...);
+       
+       // Enter the span - guard keeps it active across await points
+       let _span_guard = span.enter();
+       
+       // All code here runs within the span context
+       await some_async_operation();
+       await another_async_operation();
+       
+       // Guard is dropped here, span exits
+   }
+   ```
+
+3. **`span.in_scope(|| { ... })`**: For synchronous code only
    ```rust
    span.in_scope(|| {
        // Synchronous code runs within span context
+       // NOTE: Cannot use await inside this closure!
    });
    ```
 
-**Why this pattern?**
-- Avoids unnecessary async block wrappers
+**Why use `.instrument(span)` for async functions?**
+- Works seamlessly with async/await
 - Clear separation between span setup and execution
 - Attributes can be recorded before or during execution
 - Easier to read and maintain
+- Automatically handles span lifecycle across await points
+
+**When to use `span.enter()` vs `.instrument()`:**
+- Use `.instrument(span)` when you want to instrument a specific async function call
+- Use `span.enter()` when you want to keep a span active across multiple async operations in the same function
 
 ### Attribute Recording
 
@@ -318,9 +419,37 @@ Attributes can be recorded in several ways:
 - Verify `BaggageSpanProcessor` is configured with the correct baggage keys
 - Check that `.with_context(context)` is called on the outermost async block
 
+### Custom spans not appearing in traces
+
+- Verify the span target matches the layer filter (e.g., `"app::runtime::*"` for custom layer)
+- Ensure the custom layer is registered with the subscriber
+- Check that the span is created before being instrumented
+- Verify you're using `.instrument(span)` for async functions, not `span.in_scope()`
+
+## Summary: Combining vLLora and Custom Traces
+
+This example demonstrates a complete setup for combining vLLora's built-in tracing with your custom application traces:
+
+1. **Dual Layer Setup**: Use separate OpenTelemetry layers for vLLora traces (`vllora::user_tracing`) and your own application's traces (e.g., `my_app::backend` or another prefix you choose; `app::runtime` is just an example)
+
+2. **Shared Context**: All spans share the same trace ID and baggage values, enabling end-to-end trace correlation
+
+3. **Async Instrumentation**: Use `.instrument(span)` for async functions to properly handle span lifecycle across await points
+
+4. **Hierarchical Structure**: Custom app spans can wrap vLLora spans, creating a unified trace hierarchy
+
+5. **Baggage Propagation**: Context baggage (run_id, thread_id, tenant, etc.) automatically propagates to all spans via `BaggageSpanProcessor`
+
+**Quick Reference**:
+- **vLLora spans**: Use macros like `create_run_span!`, `create_agent_span!`, etc. (target: `vllora::user_tracing::*`)
+- **Custom spans**: Use `tracing::info_span!` with target `app::runtime::*`
+- **Async instrumentation**: `function().instrument(span).await`
+- **Sync instrumentation**: `span.in_scope(|| { ... })`
+
 ## Next Steps
 
 - Integrate tracing into your own application
 - Configure additional exporters (e.g., Jaeger, Tempo, Datadog)
 - Add custom span attributes relevant to your use case
 - Set up trace analysis and visualization tools
+- Experiment with different span hierarchies to match your application structure

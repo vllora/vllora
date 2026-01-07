@@ -407,7 +407,7 @@ impl TraceService for TraceServiceImpl {
                         .or(tenant_from_header.as_ref().map(|v| v.0.clone()));
 
                     if tenant_id.is_none() {
-                        tracing::debug!(
+                        tracing::warn!(
                             target: "otel",
                             "No tenant id found in span {} with attributes: {:#?}",
                             span.name,
