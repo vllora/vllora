@@ -32,6 +32,12 @@ fn get_distri_binary_path() -> Result<PathBuf, DistriError> {
     Ok(distri_dir.join("distri"))
 }
 
+/// Get the path to the Distri server binary
+fn get_distri_server_binary_path() -> Result<PathBuf, DistriError> {
+    let distri_dir = get_distri_dir()?;
+    Ok(distri_dir.join("distri-server"))
+}
+
 /// Detect the OS and architecture for downloading the correct binary
 fn detect_platform() -> Result<(String, String, String), DistriError> {
     let os = std::env::consts::OS;
@@ -67,10 +73,14 @@ fn detect_platform() -> Result<(String, String, String), DistriError> {
 async fn download_distri() -> Result<PathBuf, DistriError> {
     let distri_dir = get_distri_dir()?;
     let binary_path = get_distri_binary_path()?;
+    let server_binary_path = get_distri_server_binary_path()?;
 
-    // Check if binary already exists
-    if binary_path.exists() {
-        info!("Distri binary already exists at {:?}", binary_path);
+    // Check if both binaries already exist
+    if binary_path.exists() && server_binary_path.exists() {
+        info!(
+            "Distri binaries already exist at {:?} and {:?}",
+            binary_path, server_binary_path
+        );
         return Ok(binary_path);
     }
 
@@ -127,63 +137,109 @@ async fn download_distri() -> Result<PathBuf, DistriError> {
         )));
     }
 
+    // Helper function to find a binary by name recursively
+    fn find_binary_recursive(
+        dir: &Path,
+        binary_name: &str,
+    ) -> Result<Option<PathBuf>, std::io::Error> {
+        for entry in std::fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+
+            if path.is_file() {
+                if let Some(name) = path.file_name() {
+                    if name == binary_name {
+                        return Ok(Some(path));
+                    }
+                }
+            } else if path.is_dir() {
+                if let Some(found) = find_binary_recursive(&path, binary_name)? {
+                    return Ok(Some(found));
+                }
+            }
+        }
+        Ok(None)
+    }
+
     // Find the distri binary in the extracted files
     // The install script looks for: EXTRACT_ROOT/distri or searches for it
     let extract_root = extract_dir.join(&slug);
 
     // Try the expected path first (matching install script logic)
     let expected_binary = extract_root.join("distri");
-    let found_binary = if expected_binary.exists() {
+    let found_distri = if expected_binary.exists() {
         Some(expected_binary)
     } else {
-        // Search recursively for the binary (matching install script's find command)
-        fn find_binary_recursive(dir: &Path) -> Result<Option<PathBuf>, std::io::Error> {
-            for entry in std::fs::read_dir(dir)? {
-                let entry = entry?;
-                let path = entry.path();
-
-                if path.is_file() {
-                    if let Some(name) = path.file_name() {
-                        if name == "distri" {
-                            return Ok(Some(path));
-                        }
-                    }
-                } else if path.is_dir() {
-                    if let Some(found) = find_binary_recursive(&path)? {
-                        return Ok(Some(found));
-                    }
-                }
-            }
-            Ok(None)
-        }
-
-        find_binary_recursive(&extract_dir)
-            .map_err(|e| DistriError::ExtractError(format!("Failed to search for binary: {}", e)))?
+        find_binary_recursive(&extract_dir, "distri").map_err(|e| {
+            DistriError::ExtractError(format!("Failed to search for distri binary: {}", e))
+        })?
     };
 
-    let source_binary = found_binary.ok_or_else(|| {
+    let source_distri = found_distri.ok_or_else(|| {
         DistriError::BinaryNotFound(format!(
             "distri binary not found in extracted archive at {:?}",
             extract_dir
         ))
     })?;
 
-    // Copy binary to final location
-    std::fs::copy(&source_binary, &binary_path)
-        .map_err(|e| DistriError::DownloadError(format!("Failed to copy binary: {}", e)))?;
+    // Find the distri-server binary (typically in server/distri-server)
+    let expected_server_binary = extract_root.join("server").join("distri-server");
+    let found_server = if expected_server_binary.exists() {
+        Some(expected_server_binary)
+    } else {
+        find_binary_recursive(&extract_dir, "distri-server").map_err(|e| {
+            DistriError::ExtractError(format!("Failed to search for distri-server binary: {}", e))
+        })?
+    };
 
-    // Make binary executable
+    let source_server = found_server.ok_or_else(|| {
+        DistriError::BinaryNotFound(format!(
+            "distri-server binary not found in extracted archive at {:?}",
+            extract_dir
+        ))
+    })?;
+
+    let server_binary_path = get_distri_server_binary_path()?;
+
+    // Copy both binaries to final location
+    std::fs::copy(&source_distri, &binary_path)
+        .map_err(|e| DistriError::DownloadError(format!("Failed to copy distri binary: {}", e)))?;
+
+    std::fs::copy(&source_server, &server_binary_path).map_err(|e| {
+        DistriError::DownloadError(format!("Failed to copy distri-server binary: {}", e))
+    })?;
+
+    // Make both binaries executable
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
+
+        // Set permissions for distri binary
         let mut perms = std::fs::metadata(&binary_path)
             .map_err(|e| {
-                DistriError::DownloadError(format!("Failed to get binary metadata: {}", e))
+                DistriError::DownloadError(format!("Failed to get distri binary metadata: {}", e))
             })?
             .permissions();
         perms.set_mode(0o755);
         std::fs::set_permissions(&binary_path, perms).map_err(|e| {
-            DistriError::DownloadError(format!("Failed to set binary permissions: {}", e))
+            DistriError::DownloadError(format!("Failed to set distri binary permissions: {}", e))
+        })?;
+
+        // Set permissions for distri-server binary
+        let mut perms = std::fs::metadata(&server_binary_path)
+            .map_err(|e| {
+                DistriError::DownloadError(format!(
+                    "Failed to get distri-server binary metadata: {}",
+                    e
+                ))
+            })?
+            .permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&server_binary_path, perms).map_err(|e| {
+            DistriError::DownloadError(format!(
+                "Failed to set distri-server binary permissions: {}",
+                e
+            ))
         })?;
     }
 
@@ -191,8 +247,8 @@ async fn download_distri() -> Result<PathBuf, DistriError> {
     let _ = std::fs::remove_dir_all(&temp_dir);
 
     info!(
-        "✅ Distri binary downloaded successfully to {:?}",
-        binary_path
+        "✅ Distri binaries downloaded successfully to {:?} and {:?}",
+        binary_path, server_binary_path
     );
     Ok(binary_path)
 }
