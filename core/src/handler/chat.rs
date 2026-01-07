@@ -273,15 +273,15 @@ pub async fn create_chat_completion(
     .await?;
 
     // If the project is Lucy, we need to use the default project for execution
-    let project_id = if project.slug == "lucy" {
+    let (project_id, project_slug) = if project.slug == "lucy" {
         let project_service = ProjectServiceImpl::new(db_pool.get_ref().clone());
         let project = project_service
             .get_default(project.company_id)
             .map_err(|e| GatewayApiError::CustomError(e.to_string()))?;
 
-        project.id
+        (project.id, project.slug)
     } else {
-        project.id
+        (project.id, project.slug.clone())
     };
 
     let db_pool = db_pool.into_inner();
@@ -308,7 +308,7 @@ pub async fn create_chat_completion(
             None,
             Some(&thread_id),
             Some(&breakpoint_manager.into_inner()),
-            &project.slug,
+            &project_slug,
             "default",
         )
         .instrument(span.clone())
