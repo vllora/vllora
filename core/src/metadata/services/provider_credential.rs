@@ -1,9 +1,11 @@
 use crate::metadata::error::DatabaseError;
+use crate::metadata::models::project::DbProject;
 use crate::metadata::models::provider::get_provider_type;
 use crate::metadata::models::provider_credential::{
     DbInsertProviderCredentials, DbProviderCredentials, DbUpdateProviderCredentials,
 };
 use crate::metadata::pool::DbPool;
+use crate::metadata::schema::projects as p;
 use crate::metadata::schema::provider_credentials as pc;
 use crate::metadata::schema::provider_credentials::dsl::provider_credentials;
 use crate::types::metadata::provider_credential::ProviderCredentialsInfo;
@@ -21,22 +23,26 @@ impl ProviderCredentialsService for ProviderCredentialsServiceImpl {
     fn get_provider_credentials(
         &self,
         provider_name_param: &str,
-        project_id_param: Option<&str>,
+        project_slug_param: Option<&str>,
     ) -> Result<Option<DbProviderCredentials>, DatabaseError> {
         let mut conn = self.db_pool.get()?;
 
         let mut query = provider_credentials
             .filter(pc::provider_name.eq(provider_name_param))
             .filter(pc::is_active.eq(1))
+            .left_join(p::table)
             .into_boxed();
 
-        if let Some(project_id) = project_id_param {
-            query = query.filter(pc::project_id.eq(project_id));
+        if let Some(project_slug) = project_slug_param {
+            query = query.filter(p::slug.eq(project_slug));
         } else {
             query = query.filter(pc::project_id.is_null());
         }
 
-        Ok(query.first(&mut conn).optional()?)
+        Ok(query
+            .first::<(DbProviderCredentials, Option<DbProject>)>(&mut conn)
+            .optional()?
+            .map(|(creds, _project)| creds))
     }
 
     fn save_provider(&self, provider: DbInsertProviderCredentials) -> Result<(), DatabaseError> {
@@ -351,7 +357,7 @@ mod tests {
         service.save_provider(insert).unwrap();
 
         let retrieved = service
-            .get_provider_credentials("anthropic", Some(&project.id.to_string()))
+            .get_provider_credentials("anthropic", Some(&project.slug.to_string()))
             .unwrap()
             .unwrap();
 

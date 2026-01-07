@@ -63,6 +63,7 @@ impl RoutedExecutor {
         Self { request }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn execute(
         &self,
         executor_context: &ExecutorContext,
@@ -70,6 +71,8 @@ impl RoutedExecutor {
         project_id: Option<&uuid::Uuid>,
         thread_id: Option<&String>,
         breakpoint_manager: Option<&BreakpointManager>,
+        project_slug: &str,
+        tenant_name: &str,
     ) -> Result<HttpResponse, GatewayApiError> {
         let span = Span::current();
 
@@ -156,6 +159,8 @@ impl RoutedExecutor {
                     project_id,
                     thread_id,
                     breakpoint_manager,
+                    project_slug,
+                    tenant_name,
                 )
                 .instrument(span.clone())
                 .await;
@@ -185,6 +190,8 @@ impl RoutedExecutor {
         project_id: Option<&uuid::Uuid>,
         thread_id: Option<&String>,
         breakpoint_manager: Option<&BreakpointManager>,
+        project_slug: &str,
+        tenant_name: &str,
     ) -> Result<HttpResponse, GatewayApiError> {
         let span = tracing::Span::current();
         span.record("request", &serde_json::to_string(&request)?);
@@ -229,6 +236,8 @@ impl RoutedExecutor {
             &llm_model,
             breakpoint_manager,
             thread_id,
+            project_slug,
+            tenant_name,
         )
         .instrument(span.clone())
         .await?;

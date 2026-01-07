@@ -308,6 +308,8 @@ pub async fn create_chat_completion(
             None,
             Some(&thread_id),
             Some(&breakpoint_manager.into_inner()),
+            &project.slug,
+            "default",
         )
         .instrument(span.clone())
         .await

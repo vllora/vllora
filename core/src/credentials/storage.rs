@@ -44,11 +44,11 @@ impl KeyStorage for ProviderKeyResolver {
         key_id: ProviderCredentialsId,
     ) -> Result<Option<String>, KeyStorageError> {
         let provider_name = key_id.provider_name();
-        let project_id = key_id.project_slug();
+        let project_slug = key_id.project_slug();
 
         match self
             .provider_service
-            .get_provider_credentials(&provider_name, Some(&project_id))
+            .get_provider_credentials(&provider_name, Some(&project_slug))
         {
             Ok(Some(creds)) if creds.is_active_credential() => {
                 return Ok(Some(creds.credentials));
