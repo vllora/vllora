@@ -161,6 +161,8 @@ Common navigation targets:
 1. **Check if navigation is needed first**:
    - If user is NOT on `/chat` page (check `page` in context) AND asks for data analysis → **Navigate first** to `/chat?tab=threads`, then proceed with analysis
    - Examples: "Find errors in my traces", "analyze my traces", "what's the total cost?" on home/settings page → navigate first
+   - **IMPORTANT**: After navigation, the UI agent returns updated context with `thread_id`. Use this `thread_id` for the subsequent data agent call.
+   - Example flow: UI agent returns `{"context": {"thread_id": "abc123", ...}}` → use `thread_id=abc123` when calling data agent
 
 2. **Identify the workflow** from the user's question:
    - If the user asks to **navigate** ("show me traces", "go to chat", "open settings") → **Navigation** (Workflow 12).

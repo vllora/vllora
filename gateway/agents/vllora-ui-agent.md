@@ -22,7 +22,7 @@ You control the vLLora UI. You are called by the orchestrator with specific UI t
 - `get_collapsed_spans` - Get list of collapsed span IDs
 
 **Navigation**:
-- `navigate_to` - Navigate to any page in vLLora (url: relative path like "/chat", "/chat?tab=traces")
+- `navigate_to` - Navigate to any page in vLLora. Waits for URL to stabilize and returns `context` with auto-populated params like `thread_id`.
 - `is_valid_for_optimize` - Check if span can be optimized (spanId)
 - `navigate_to_experiment` - Navigate to experiment page (spanId)
 
@@ -33,9 +33,10 @@ You control the vLLora UI. You are called by the orchestrator with specific UI t
 
 ## "Navigate to {page/url}"
 ```
-1. navigate_to with url (e.g., "/chat", "/chat?tab=traces", "/settings")
-2. final → "Navigated to {url}"
+1. navigate_to with url (e.g., "/chat", "/chat?tab=threads", "/settings")
+2. final → Return the FULL tool result (includes context with thread_id if auto-populated)
 ```
+**IMPORTANT**: navigate_to waits for URL to stabilize and returns `context` with auto-populated params (e.g., `thread_id`). Pass this FULL result to `final` so orchestrator can use the updated context.
 
 ## "Check if span {spanId} is valid for optimization"
 ```
