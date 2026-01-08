@@ -5,7 +5,7 @@ max_iterations = 5
 tool_format = "provider"
 
 [tools]
-external = ["get_collapsed_spans", "navigate_to_experiment", "is_valid_for_optimize", "apply_label_filter"]
+external = ["get_collapsed_spans", "navigate_to", "navigate_to_experiment", "is_valid_for_optimize", "apply_label_filter"]
 
 [model_settings]
 model = "gpt-4.1"
@@ -22,6 +22,7 @@ You control the vLLora UI. You are called by the orchestrator with specific UI t
 - `get_collapsed_spans` - Get list of collapsed span IDs
 
 **Navigation**:
+- `navigate_to` - Navigate to any page in vLLora (url: relative path like "/chat", "/chat?tab=traces")
 - `is_valid_for_optimize` - Check if span can be optimized (spanId)
 - `navigate_to_experiment` - Navigate to experiment page (spanId)
 
@@ -29,6 +30,12 @@ You control the vLLora UI. You are called by the orchestrator with specific UI t
 - `apply_label_filter` - Apply label filter to UI (labels, action: set/add/clear)
 
 # TASK TYPES
+
+## "Navigate to {page/url}"
+```
+1. navigate_to with url (e.g., "/chat", "/chat?tab=traces", "/settings")
+2. final → "Navigated to {url}"
+```
 
 ## "Check if span {spanId} is valid for optimization"
 ```

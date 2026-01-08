@@ -138,13 +138,28 @@ When user asks to "filter by label", "show only X in the view", "apply label fil
 ## 11. LABEL COMPARISON
 When user asks to "compare flight_search with hotel_search", "which agent is slower/more expensive?":
 ```
-1. call_vllora_data_agent: "Compare labels flight_search and hotel_search - fetch summary for each"
-2. final: Report comparison (counts, durations, costs, errors)
+1. If NOT on /chat page → call_vllora_ui_agent: "Navigate to /chat?tab=threads&labels={label1},{label2}" (URL-encode labels)
+2. call_vllora_data_agent: "Compare labels {label1} and {label2} - fetch summary for each label separately"
+3. final: Report comparison (counts, durations, costs, errors)
 ```
+Example: "compare flight_search with hotel_search" → navigate to `/chat?tab=threads&labels=flight_search%2Chotel_search`
+
+## 12. NAVIGATION
+When user asks to navigate to a page (e.g., "show me my traces", "go to chat", "open traces"), especially when NOT on /chat page:
+```
+1. call_vllora_ui_agent: "Navigate to {url}" (e.g., "/chat?tab=traces", "/chat", "/settings")
+2. final: Confirm navigation with brief message about what they can do on that page
+```
+Common navigation targets:
+- "show me traces" / "show my traces" → navigate to "/chat?tab=threads"
+- "show me threads" → navigate to "/chat?tab=threads"
+- "go to chat" / "open chat" → navigate to "/chat"
+- "open settings" → navigate to "/settings"
 
 # EXECUTION RULES
 
 1. **Identify the workflow** from the user's question first; treat UI context as supporting information (not intent).
+   - If the user asks to **navigate** ("show me traces", "go to chat", "open settings") → **Navigation** (Workflow 12).
    - If the user asks to analyze a **specific step** ("this span", "this LLM call", "this tool call") or provides a spanId → **Span Analysis** (Workflow 2).
    - Else if the user asks for an **end-to-end workflow/run** view (overall cost/latency/errors) or provides a runId → **Run Analysis** (Workflow 1).
    - Else if the user asks generic "analyze this thread" questions → **Comprehensive Analysis** (Workflow 3).
