@@ -334,9 +334,25 @@ async fn download_distri() -> Result<PathBuf, DistriError> {
     Ok(binary_path)
 }
 
+/// Start downloading Distri in the background
+/// Returns a JoinHandle that can be awaited to get the binary path
+pub fn download_distri_background() -> tokio::task::JoinHandle<Result<PathBuf, DistriError>> {
+    tokio::spawn(async move { download_distri().await })
+}
+
 /// Start Distri server as a background process
-pub async fn start_distri_server(port: u16) -> Result<tokio::process::Child, DistriError> {
-    let binary_path = download_distri().await?;
+/// If download_handle is provided, it will be awaited to get the binary path
+pub async fn start_distri_server(
+    port: u16,
+    download_handle: Option<tokio::task::JoinHandle<Result<PathBuf, DistriError>>>,
+) -> Result<tokio::process::Child, DistriError> {
+    let binary_path = if let Some(handle) = download_handle {
+        handle
+            .await
+            .map_err(|e| DistriError::DownloadError(format!("Download task failed: {}", e)))??
+    } else {
+        download_distri().await?
+    };
 
     if !binary_path.exists() {
         return Err(DistriError::BinaryNotFound(format!(
