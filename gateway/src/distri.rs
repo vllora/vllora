@@ -1,3 +1,4 @@
+use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use thiserror::Error;
@@ -38,6 +39,59 @@ fn get_distri_server_binary_path() -> Result<PathBuf, DistriError> {
     Ok(distri_dir.join("distri-server"))
 }
 
+#[derive(Deserialize)]
+struct GithubRelease {
+    tag_name: String,
+}
+
+/// Get the latest Distri version from GitHub releases
+async fn get_latest_distri_version() -> Result<String, DistriError> {
+    let client = reqwest::Client::new();
+    let resp = client
+        .get("https://api.github.com/repos/distrihub/distri/releases/latest")
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .header("User-Agent", "vllora-ai-gateway")
+        .send()
+        .await
+        .map_err(|e| DistriError::DownloadError(format!("GitHub API error: {}", e)))?;
+
+    if !resp.status().is_success() {
+        return Err(DistriError::DownloadError(format!(
+            "GitHub API returned status: {}",
+            resp.status()
+        )));
+    }
+
+    let release: GithubRelease = resp.json().await.map_err(|e| {
+        DistriError::DownloadError(format!("Failed to parse GitHub release JSON: {}", e))
+    })?;
+
+    // tag names are typically "v0.2.7" – strip leading 'v' to compare with `distri --version`
+    let version = release.tag_name.trim_start_matches('v').to_string();
+    Ok(version)
+}
+
+/// Get the local Distri binary version by calling `distri --version`
+fn get_local_distri_version(binary_path: &Path) -> Option<String> {
+    if !binary_path.exists() {
+        return None;
+    }
+
+    let output = Command::new(binary_path).arg("--version").output().ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let stdout = String::from_utf8(output.stdout).ok()?;
+    let mut parts = stdout.split_whitespace();
+
+    // assume format like: "distri 0.2.7"
+    let _program = parts.next();
+    parts.next().map(|s| s.to_string())
+}
+
 /// Detect the OS and architecture for downloading the correct binary
 fn detect_platform() -> Result<(String, String, String), DistriError> {
     let os = std::env::consts::OS;
@@ -75,13 +129,39 @@ async fn download_distri() -> Result<PathBuf, DistriError> {
     let binary_path = get_distri_binary_path()?;
     let server_binary_path = get_distri_server_binary_path()?;
 
-    // Check if both binaries already exist
+    // Check if both binaries already exist and are up to date
     if binary_path.exists() && server_binary_path.exists() {
-        info!(
-            "Distri binaries already exist at {:?} and {:?}",
-            binary_path, server_binary_path
-        );
-        return Ok(binary_path);
+        match get_latest_distri_version().await {
+            Ok(latest_version) => match get_local_distri_version(&binary_path) {
+                Some(local_ver) if local_ver == latest_version => {
+                    info!(
+                        "Distri binaries already exist and are up to date at {:?} and {:?} (version {}).",
+                        binary_path, server_binary_path, local_ver
+                    );
+                    return Ok(binary_path);
+                }
+                Some(local_ver) => {
+                    info!(
+                        "Distri binaries out of date. Local version: {}, latest version: {}. Re-downloading.",
+                        local_ver, latest_version
+                    );
+                }
+                None => {
+                    info!(
+                        "Distri binaries exist but local version is unknown. Re-downloading latest {}.",
+                        latest_version
+                    );
+                }
+            },
+            Err(e) => {
+                // If we cannot reach GitHub to check for updates, keep using existing binaries
+                warn!(
+                    "Failed to get latest Distri version from GitHub: {}. Using existing binaries at {:?} and {:?}.",
+                    e, binary_path, server_binary_path
+                );
+                return Ok(binary_path);
+            }
+        }
     }
 
     info!("Downloading Distri binary...");
@@ -94,6 +174,7 @@ async fn download_distri() -> Result<PathBuf, DistriError> {
         "https://github.com/distrihub/distri/releases/latest/download/{}",
         asset
     );
+    println!("Downloading from: {}", download_url);
 
     debug!("Downloading from: {}", download_url);
 
