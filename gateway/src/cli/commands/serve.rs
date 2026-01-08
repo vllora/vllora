@@ -186,7 +186,7 @@ pub async fn handle_serve(
                 "VITE_BACKEND_PORT": backend_port,
                 "VITE_OTEL_PORT": otel_port,
                 "VERSION": env!("CARGO_PKG_VERSION"),
-                "DISTRI_PORT": distri_port
+                "VITE_DISTRI_PORT": distri_port
             }))
         };
 
