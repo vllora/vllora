@@ -27,6 +27,15 @@ use actix_web::{web, HttpMessage, HttpRequest};
 
 use opentelemetry_semantic_conventions::trace::HTTP_RESPONSE_STATUS_CODE;
 
+/// Extension type to store the run span in request extensions
+pub struct RunSpanExtension(pub Option<Span>);
+
+impl Clone for RunSpanExtension {
+    fn clone(&self) -> Self {
+        RunSpanExtension(self.0.clone())
+    }
+}
+
 pub fn get_client_ip(req: &HttpRequest) -> String {
     let header = req
         .headers()
@@ -50,49 +59,44 @@ pub fn get_client_ip(req: &HttpRequest) -> String {
         .to_string()
 }
 
-pub struct ActixOtelMiddleware;
+// ============================================================================
+// Run Span Middleware - Creates and manages the run span
+// ============================================================================
 
-impl<S, B> Transform<S, ServiceRequest> for ActixOtelMiddleware
+pub struct RunSpanMiddleware;
+
+impl<S, B> Transform<S, ServiceRequest> for RunSpanMiddleware
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
     S::Future: 'static,
     B: MessageBody + 'static,
     B::Error: std::fmt::Display,
 {
-    type Response = ServiceResponse<BoxBody>;
+    type Response = ServiceResponse<B>;
     type Error = Error;
     type InitError = ();
-    type Transform = ActixOtelMiddlewareService<S>;
+    type Transform = RunSpanMiddlewareService<S>;
     type Future = Ready<Result<Self::Transform, Self::InitError>>;
 
     fn new_transform(&self, service: S) -> Self::Future {
-        ready(Ok(ActixOtelMiddlewareService {
+        ready(Ok(RunSpanMiddlewareService {
             service: service.into(),
         }))
     }
 }
-pub struct ActixOtelMiddlewareService<S> {
+
+pub struct RunSpanMiddlewareService<S> {
     service: Rc<S>,
 }
 
-const IGNORED_HEADERS: [&str; 5] = [
-    "authorization",
-    "cookie",
-    "x-amzn-trace-id",
-    "x-amz-cf-id",
-    "via",
-];
-
-type LocalBoxFuture<T> = Pin<Box<dyn Future<Output = T> + 'static>>;
-
-impl<S, B> Service<ServiceRequest> for ActixOtelMiddlewareService<S>
+impl<S, B> Service<ServiceRequest> for RunSpanMiddlewareService<S>
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
     S::Future: 'static,
     B: MessageBody + 'static,
     B::Error: std::fmt::Display,
 {
-    type Response = ServiceResponse<BoxBody>;
+    type Response = ServiceResponse<B>;
     type Error = Error;
     type Future = LocalBoxFuture<Result<Self::Response, Self::Error>>;
 
@@ -102,6 +106,15 @@ where
         let service = Rc::clone(&self.service);
 
         Box::pin(async move {
+            // Only create run span for specific routes
+            let path = req.path();
+            let method = req.method();
+            let should_create_run_span = method == "POST"
+                && (path.ends_with("/chat/completions")
+                    || path.ends_with("/embeddings")
+                    || path.ends_with("/images/generations")
+                    || path.ends_with("/responses"));
+
             let run_id = req.extensions().get::<CompletionsRunId>().cloned();
             let thread_id = req.extensions().get::<CompletionsThreadId>().cloned();
             let broadcaster: Option<web::Data<EventsUIBroadcaster>> = req.app_data().cloned();
@@ -116,7 +129,7 @@ where
 
             let mut run_span = None;
 
-            if !is_remote_context {
+            if should_create_run_span && !is_remote_context {
                 // If the context is local, we need to start a new span for the run
                 let span = create_run_span!({});
 
@@ -160,115 +173,191 @@ where
                 }
             }
 
-            let run_span_for_future = run_span.clone();
-            let mut run_span_for_body = run_span;
+            // Store the run span in request extensions for the next middleware
+            req.extensions_mut()
+                .insert(RunSpanExtension(run_span.clone()));
 
-            let run_span_id = run_span_for_body
+            // Enter the run span to keep it active during request handling
+            let _run_span_guard = run_span.as_ref().map(|s| s.enter());
+
+            // Proceed with the request
+            service.call(req).await
+        })
+    }
+}
+
+// ============================================================================
+// Cloud API Invoke Middleware - Creates the cloud_api_invoke span and instruments the request
+// ============================================================================
+
+pub struct CloudApiInvokeMiddleware;
+
+impl<S, B> Transform<S, ServiceRequest> for CloudApiInvokeMiddleware
+where
+    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
+    S::Future: 'static,
+    B: MessageBody + 'static,
+    B::Error: std::fmt::Display,
+{
+    type Response = ServiceResponse<BoxBody>;
+    type Error = Error;
+    type InitError = ();
+    type Transform = CloudApiInvokeMiddlewareService<S>;
+    type Future = Ready<Result<Self::Transform, Self::InitError>>;
+
+    fn new_transform(&self, service: S) -> Self::Future {
+        ready(Ok(CloudApiInvokeMiddlewareService {
+            service: service.into(),
+        }))
+    }
+}
+
+pub struct CloudApiInvokeMiddlewareService<S> {
+    service: Rc<S>,
+}
+
+const IGNORED_HEADERS: [&str; 5] = [
+    "authorization",
+    "cookie",
+    "x-amzn-trace-id",
+    "x-amz-cf-id",
+    "via",
+];
+
+type LocalBoxFuture<T> = Pin<Box<dyn Future<Output = T> + 'static>>;
+
+impl<S, B> Service<ServiceRequest> for CloudApiInvokeMiddlewareService<S>
+where
+    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
+    S::Future: 'static,
+    B: MessageBody + 'static,
+    B::Error: std::fmt::Display,
+{
+    type Response = ServiceResponse<BoxBody>;
+    type Error = Error;
+    type Future = LocalBoxFuture<Result<Self::Response, Self::Error>>;
+
+    forward_ready!(service);
+
+    fn call(&self, req: ServiceRequest) -> Self::Future {
+        let service = Rc::clone(&self.service);
+
+        Box::pin(async move {
+            let run_id = req.extensions().get::<CompletionsRunId>().cloned();
+            let thread_id = req.extensions().get::<CompletionsThreadId>().cloned();
+            let broadcaster: Option<web::Data<EventsUIBroadcaster>> = req.app_data().cloned();
+            let project = req.extensions().get::<Project>().cloned();
+
+            // Get the run span from request extensions (set by RunSpanMiddleware)
+            let run_span = req
+                .extensions()
+                .get::<RunSpanExtension>()
+                .and_then(|ext| ext.0.clone());
+            let mut run_span_for_body = run_span.clone();
+
+            let run_span_id = run_span
                 .as_ref()
                 .map(|span| span.context().span().span_context().span_id());
-            let run_span_for_parent = run_span_for_future.clone();
-            async move {
-                // Enter the run span to keep it active during request handling
-                // It will also be entered during body streaming in SpanInstrumentedBody
-                let _run_span_guard = run_span_for_future.as_ref().map(|s| s.enter());
 
-                // Create the span with the run span as its explicit parent
-                // This ensures the run span doesn't end before this span is created
-                let span: Span = if let Some(ref parent_span) = run_span_for_parent {
-                    tracing::info_span!(
-                        target: "vllora::user_tracing::cloud_api",
-                        parent: parent_span.clone(),
-                        "cloud_api_invoke",
-                        http.request.method = req.method().to_string(),
-                        http.request.path = req.path().to_string(),
-                        http.request.header = JsonValue(
-                            &serde_json::to_value(
-                                req.headers()
-                                    .iter()
-                                    .filter(|(k, _)| !IGNORED_HEADERS.contains(&k.as_str()))
-                                    .map(|(k, v)| (k.as_str(), v.to_str().unwrap_or_default())).collect::<HashMap<_, _>>()
-                            ).unwrap_or_default()
-                        ).as_value(),
-                        HTTP_RESPONSE_STATUS_CODE = field::Empty,
-                        status = field::Empty,
-                        error = field::Empty,
-                        ip = get_client_ip(req.request())
-                    )
-                } else {
-                    tracing::info_span!(
-                        target: "vllora::user_tracing::cloud_api",
-                        "cloud_api_invoke",
-                        http.request.method = req.method().to_string(),
-                        http.request.path = req.path().to_string(),
-                        http.request.header = JsonValue(
-                            &serde_json::to_value(
-                                req.headers()
-                                    .iter()
-                                    .filter(|(k, _)| !IGNORED_HEADERS.contains(&k.as_str()))
-                                    .map(|(k, v)| (k.as_str(), v.to_str().unwrap_or_default())).collect::<HashMap<_, _>>()
-                            ).unwrap_or_default()
-                        ).as_value(),
-                        HTTP_RESPONSE_STATUS_CODE = field::Empty,
-                        status = field::Empty,
-                        error = field::Empty,
-                        ip = get_client_ip(req.request())
-                    )
+            // Enter the run span to keep it active during request handling
+            // It will also be entered during body streaming in SpanInstrumentedBody
+            let _run_span_guard = run_span.as_ref().map(|s| s.enter());
+
+            // Create the span with the run span as its explicit parent
+            // This ensures the run span doesn't end before this span is created
+            let span: Span = if let Some(ref parent_span) = run_span {
+                tracing::info_span!(
+                    target: "vllora::user_tracing::cloud_api",
+                    parent: parent_span.clone(),
+                    "cloud_api_invoke",
+                    http.request.method = req.method().to_string(),
+                    http.request.path = req.path().to_string(),
+                    http.request.header = JsonValue(
+                        &serde_json::to_value(
+                            req.headers()
+                                .iter()
+                                .filter(|(k, _)| !IGNORED_HEADERS.contains(&k.as_str()))
+                                .map(|(k, v)| (k.as_str(), v.to_str().unwrap_or_default())).collect::<HashMap<_, _>>()
+                        ).unwrap_or_default()
+                    ).as_value(),
+                    HTTP_RESPONSE_STATUS_CODE = field::Empty,
+                    status = field::Empty,
+                    error = field::Empty,
+                    ip = get_client_ip(req.request())
+                )
+            } else {
+                tracing::info_span!(
+                    target: "vllora::user_tracing::cloud_api",
+                    "cloud_api_invoke",
+                    http.request.method = req.method().to_string(),
+                    http.request.path = req.path().to_string(),
+                    http.request.header = JsonValue(
+                        &serde_json::to_value(
+                            req.headers()
+                                .iter()
+                                .filter(|(k, _)| !IGNORED_HEADERS.contains(&k.as_str()))
+                                .map(|(k, v)| (k.as_str(), v.to_str().unwrap_or_default())).collect::<HashMap<_, _>>()
+                        ).unwrap_or_default()
+                    ).as_value(),
+                    HTTP_RESPONSE_STATUS_CODE = field::Empty,
+                    status = field::Empty,
+                    error = field::Empty,
+                    ip = get_client_ip(req.request())
+                )
+            };
+
+            if let (Some(run_id), Some(thread_id)) = (run_id, thread_id) {
+                let event = Event::Custom {
+                    run_context: EventRunContext {
+                        run_id: Some(run_id.value()),
+                        thread_id: Some(thread_id.value()),
+                        span_id: Some(span.context().span().span_context().span_id()),
+                        parent_span_id: run_span_id,
+                    },
+                    timestamp: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as u64,
+                    custom_event: CustomEventType::SpanStart {
+                        operation_name: "cloud_api_invoke".to_string(),
+                        attributes: serde_json::json!({}),
+                    },
                 };
 
-
-                if let (Some(run_id), Some(thread_id)) = (run_id, thread_id) {
-                    let event = Event::Custom {
-                        run_context: EventRunContext {
-                            run_id: Some(run_id.value()),
-                            thread_id: Some(thread_id.value()),
-                            span_id: Some(span.context().span().span_context().span_id()),
-                            parent_span_id: run_span_id,
-                        },
-                        timestamp: std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_millis() as u64,
-                        custom_event: CustomEventType::SpanStart {
-                            operation_name: "cloud_api_invoke".to_string(),
-                            attributes: serde_json::json!({}),
-                        },
-                    };
-
-                    if let (Some(broadcaster), Some(project)) = (broadcaster, project) {
-                        broadcaster
-                            .send_events(&project.slug.to_string(), &[event])
-                            .await;
-                    }
+                if let (Some(broadcaster), Some(project)) = (broadcaster, project) {
+                    broadcaster
+                        .send_events(&project.slug.to_string(), &[event])
+                        .await;
                 }
+            }
 
-                // Proceed with the request if within limits
-                match service.call(req).instrument(span.clone()).await {
-                    Ok(ok_res) => {
-                        span.record(HTTP_RESPONSE_STATUS_CODE, ok_res.status().as_u16() as i64);
-                        span.record("status", ok_res.status().as_u16() as i64);
-                        if let Some(error) = ok_res.response().error() {
-                            span.record("error", error.to_string());
-                        }
-
-                        let span_for_body = span.clone();
-                        let instrumented = ok_res.map_body(move |_, body| {
-                            let run_span = run_span_for_body.take();
-                            BoxBody::new(SpanInstrumentedBody::new(
-                                body,
-                                span_for_body.clone(),
-                                run_span,
-                            ))
-                        });
-
-                        Ok(instrumented)
+            // Proceed with the request
+            match service.call(req).instrument(span.clone()).await {
+                Ok(ok_res) => {
+                    span.record(HTTP_RESPONSE_STATUS_CODE, ok_res.status().as_u16() as i64);
+                    span.record("status", ok_res.status().as_u16() as i64);
+                    if let Some(error) = ok_res.response().error() {
+                        span.record("error", error.to_string());
                     }
-                    Err(err) => {
-                        span.record("error", err.to_string());
-                        span.record(HTTP_RESPONSE_STATUS_CODE, 500);
-                        Err(err)
-                    }
+
+                    let span_for_body = span.clone();
+                    let instrumented = ok_res.map_body(move |_, body| {
+                        let run_span = run_span_for_body.take();
+                        BoxBody::new(SpanInstrumentedBody::new(
+                            body,
+                            span_for_body.clone(),
+                            run_span,
+                        ))
+                    });
+
+                    Ok(instrumented)
                 }
-            }.await
+                Err(err) => {
+                    span.record("error", err.to_string());
+                    span.record(HTTP_RESPONSE_STATUS_CODE, 500);
+                    Err(err)
+                }
+            }
         })
     }
 }
@@ -310,9 +399,10 @@ where
         cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Bytes, Self::Error>>> {
         let this = self.project();
-        let _entered = this.span.enter();
         // Keep the run span active during body streaming
         let _run_span_entered = this.run_span.as_ref().map(|s| s.enter());
+
+        let _entered = this.span.enter();
 
         match this.inner.poll_next(cx) {
             Poll::Ready(None) => {
