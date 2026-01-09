@@ -2,6 +2,41 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.21](https://github.com/vllora/vllora/compare/v0.1.20...v0.1.21) (2026-01-09)
+
+
+### Features
+
+* Add distri as component ([2c2f382](https://github.com/vllora/vllora/commit/2c2f3823209855275ad2bb5c1a795894ba2e5d94))
+* Add Lucy configuration management for agents ([f89df0e](https://github.com/vllora/vllora/commit/f89df0e938b86eb52ac8ea68a0033571b815c56e))
+* Add OTLP metrics port configuration ([4d150c4](https://github.com/vllora/vllora/commit/4d150c480f270b324ce51f040f8c4f57433eea24))
+* Add project_slug support to VlloraMcp and related services ([84d5082](https://github.com/vllora/vllora/commit/84d50828cd84bb6b4dcdce726426663a8eb83730))
+* Add support for distri agents ([f79a1a2](https://github.com/vllora/vllora/commit/f79a1a252b12c7e176a70ff85f35f04e987643fb))
+* Add totals to run overview ([f6b8fa5](https://github.com/vllora/vllora/commit/f6b8fa59b87f142d7704237596a586dc54ed482c))
+* Dont block main thread for distri download and startup ([911c328](https://github.com/vllora/vllora/commit/911c3284f49216157162553853c06f229fea3108))
+* Enhance Distri client functionality and configuration management ([57cbad1](https://github.com/vllora/vllora/commit/57cbad113201e7e22ddd5774c765397bde45c796))
+* Enhance SQLite connection handling in DbPool ([c5694ad](https://github.com/vllora/vllora/commit/c5694ad1c37468a748109a77a2293aea97d64148))
+* Implement agent registration with detailed status reporting ([d742b20](https://github.com/vllora/vllora/commit/d742b20876dfaac0071ab9bd75cbef5d5ad87038))
+* Implement Lucy project handling and middleware integration ([2d1dd1d](https://github.com/vllora/vllora/commit/2d1dd1d229f348e9221ac25c12c3f758cefabc3e))
+* Support metrics in telemetery ([#241](https://github.com/vllora/vllora/issues/241)) ([3212952](https://github.com/vllora/vllora/commit/3212952aca365c5445316b2962fd4c85ba006d68))
+* Update distri based on current version and latest release ([c5e990c](https://github.com/vllora/vllora/commit/c5e990cf4e45e149c9f842ab423c8c6702cc7b6d))
+
+
+### Bug Fixes
+
+* Add missing property to api_invoke span ([92bbaba](https://github.com/vllora/vllora/commit/92bbaba6eead7a1dea6e3e4cb267804663700b09))
+* Fix API key usage for lucy ([6fd6a12](https://github.com/vllora/vllora/commit/6fd6a12be29c73540e90312a38ad89ee6865fc2e))
+* Fix download of distri-server ([5d0eed6](https://github.com/vllora/vllora/commit/5d0eed6792f2261e8b16dbc51496645cb73ca374))
+* Fix run span timing ([66c7807](https://github.com/vllora/vllora/commit/66c7807b4babebc39c721bea3950d56f0af359b7))
+* getSpanContent return data ([53763fc](https://github.com/vllora/vllora/commit/53763fcbc364366123b295d5931a97a8dd9c1e25))
+* Increase default limit for overview pagination from 100 to 1000 ([ef941f4](https://github.com/vllora/vllora/commit/ef941f4cea6a02bb150f683fdc54122e16b6c977))
+* Integrate KeyStorageError into GatewayApiError and update key retrieval in chat completion executors ([39c94a6](https://github.com/vllora/vllora/commit/39c94a6c2d7ca18732f9e7f230fe015ae7a991b9))
+* Update provider info handling in model metadata ([90dcf62](https://github.com/vllora/vllora/commit/90dcf621d4fe2599a5a1a5c608928e601d501ad0))
+* Use correct project in events stream ([db39467](https://github.com/vllora/vllora/commit/db3946700fd7ecfe48e97d51b8a2a0beaeb3aec3))
+* Use project slug for credentials retrieve ([bc6c8dc](https://github.com/vllora/vllora/commit/bc6c8dc9854948ef05a6d8cb0de0f70e10b9b577))
+* Use server port args from cli when no command is defined ([af6df7d](https://github.com/vllora/vllora/commit/af6df7d97a383c3b10565ee22f8167bba790d8eb))
+* when clone request in lucy project ([738b62d](https://github.com/vllora/vllora/commit/738b62d87b63b91d572007ea04a9d31f4891add5))
+
 ### [0.1.20](https://github.com/vllora/vllora/compare/v0.1.19...v0.1.20) (2025-12-23)
 
 
