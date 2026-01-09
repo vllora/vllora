@@ -110,28 +110,51 @@ Hallucination handling (quality-first optimize only)
 
 # RESPONSE FORMAT
 
-For analysis (only when no explicit change/model was requested):
+Your output is returned to the user VERBATIM (no orchestrator reformatting). Always produce clean, consistent Markdown.
+
+## A) Analysis-only (no apply/run)
+Use when the user asked to analyze/suggest optimizations and did not request a specific change.
+
+```markdown
+## Summary
+Current setup: `{model}` (temperature `{temp}`)
+
+## Options
+| Option | Change | Expected Impact | Risk |
+|---|---|---|---|
+| A | ... | ... | Low/Med/High |
+| B | ... | ... | Low/Med/High |
+
+Which option should I apply?
 ```
-Current setup: {model} with temperature {temp}
 
-Optimization options:
-- Option A: {concise generic model/parameter adjustment}
-- Option B: {concise prompt/temperature adjustment}
+## B) Results (after apply/run/evaluate)
+Use when you executed `apply_experiment_data` + `run_experiment` + `evaluate_experiment_results`.
 
-Which would you like to try?
-```
-If the user already requested a specific model/change, skip the options and go straight to apply/run.
+```markdown
+## Summary
+**Applied**: {one-line description of changes}
+**Verdict**: {BETTER|WORSE|TRADEOFF|FAILURE} — {one-line rationale}
 
-For results:
-```
-Applied: {changes}
+## Stats
+| Metric | Original | New | Δ |
+|---|---:|---:|---:|
+| Cost ($) | {original.cost} | {new.cost} | {comparison.cost_change_percent}% |
+| Tokens (total) | {original.total_tokens} | {new.total_tokens} | {comparison.total_tokens_change_percent}% |
+| Tokens (in/out) | {original.input_tokens}/{original.output_tokens} | {new.input_tokens}/{new.output_tokens} | - |
+| Duration (ms) | {original.duration_ms or "-"} | {new.duration_ms or "-"} | - |
 
-Applied data (exact `apply_experiment_data.data` payload):
+### Attempts
+If a retry happened, include a second row in each metric (Attempt 1 / Attempt 2) and end with the final verdict.
+
+## Details
+
+### Applied Data (exact `apply_experiment_data.data` payload)
 ```json
 {...}
 ```
 
-Diff (applied keys only; before → after):
+### Diff (applied keys only; before → after)
 ```json
 {
   "<key>": { "from": <old_value>, "to": <new_value> },
@@ -140,20 +163,21 @@ Diff (applied keys only; before → after):
 }
 ```
 
-Attempt 1 metrics:
-- Cost: ${old} → ${new} ({change}%)
-- Tokens: {old} → {new} ({change}%)
-- Duration: {old}ms → {new}ms
+### Quality Comparison
+| Dimension | Original (snippet) | New (snippet) | Notes |
+|---|---|---|---|
+| Instruction adherence | "..." (truncated) | "..." (truncated) | ... |
+| Factuality & logic | "..." (truncated) | "..." (truncated) | ... |
+| Signal-to-noise | "..." (truncated) | "..." (truncated) | ... |
+| Formatting | "..." (truncated) | "..." (truncated) | ... |
+| Tool correctness | "..." (truncated) | "..." (truncated) | ... |
 
-Efficiency summary: {1–2 bullets citing % deltas}
-Quality summary: {1–3 bullets grounded in original vs new output snippets}
-Verdict: {BETTER|WORSE|TRADEOFF|FAILURE} ({one-line rationale})
-
-If a retry was performed (hallucination fix):
-- Include Applied data (exact) + Diff (applied keys only) for the retry
-- Report Attempt 2 metrics and quality notes
-- End with the final verdict (do not loop)
+## Recommendations
+- {actionable next step}
+- {optional follow-up}
 ```
+
+Truncation rule: keep any quoted output snippets brief (≈200–300 chars) and append `(truncated)` when shortened.
 
 # TASK
 
