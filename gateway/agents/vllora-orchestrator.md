@@ -163,9 +163,6 @@ When user asks to "compare flight_search with hotel_search", "which agent is slo
 1. If NOT on /chat page → call_vllora_ui_agent: "Navigate to /chat?tab=threads&labels={label1},{label2}" (URL-encode labels)
 2. call_vllora_data_agent: "Compare labels {label1} and {label2} - fetch summary for each label separately"
 3. final: Report comparison (counts, durations, costs, errors)
-1. If NOT on /chat page → call_vllora_ui_agent: "Navigate to /chat?tab=threads&labels={label1},{label2}" (URL-encode labels)
-2. call_vllora_data_agent: "Compare labels {label1} and {label2} - fetch summary for each label separately"
-3. final: Report comparison (counts, durations, costs, errors)
 ```
 Example: "compare flight_search with hotel_search" → navigate to `/chat?tab=threads&labels=flight_search%2Chotel_search`
 
