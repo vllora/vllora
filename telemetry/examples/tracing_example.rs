@@ -2,7 +2,7 @@
 //!
 //! This example shows:
 //! 1. How to set up OpenTelemetry tracing with OTLP exporter
-//! 2. How to use the span macros (create_model_span, create_thread_span, etc.)
+//! 2. How to use the span macros (create_model_span, create_api_invoke_span, etc.)
 //! 3. How to create and instrument spans with attributes
 //! 4. How to export traces to an OTLP endpoint
 //!
@@ -33,8 +33,8 @@ use vllora_telemetry::baggage::BaggageSpanProcessor;
 use vllora_telemetry::events::{self, JsonValue};
 // Import span creation macros - these are exported via #[macro_export] in events/span.rs
 use vllora_telemetry::{
-    create_agent_span, create_model_invoke_span, create_model_span, create_run_span,
-    create_task_span, create_thread_span, create_tool_span,
+    create_agent_span, create_api_invoke_span, create_model_invoke_span, create_model_span,
+    create_run_span, create_task_span, create_tool_span,
 };
 
 /// A simple console exporter that prints spans using tracing::info!
@@ -72,8 +72,8 @@ impl opentelemetry_sdk::trace::SpanExporter for ConsoleSpanExporter {
                 attrs.truncate(attrs.len() - 2);
             }
 
-            tracing::info!(
-                target: "console_exporter",
+            println!(
+                // target: "console_exporter",
                 "\n[Console Exporter] Span: {} (trace_id={}, span_id={}, parent_span_id={}, duration={:?})",
                 span.name,
                 trace_id,
@@ -134,7 +134,9 @@ fn init_tracing(otlp_endpoint: &str) -> Result<(), Box<dyn std::error::Error>> {
     global::set_tracer_provider(trace_provider);
 
     // Set up tracing subscriber with OpenTelemetry layer
-    let otel_layer = events::layer("vllora::user_tracing", LevelFilter::INFO, tracer);
+    // let otel_layer = events::layer("vllora::user_tracing,app::runtime", LevelFilter::INFO, tracer);
+    let vllora_layer = events::layer("vllora::user_tracing", LevelFilter::INFO, tracer.clone());
+    let custom_layer = events::layer("app::runtime", LevelFilter::INFO, tracer);
 
     // Set up fmt layer with env filter for RUST_LOG support
     let log_level = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
@@ -148,7 +150,8 @@ fn init_tracing(otlp_endpoint: &str) -> Result<(), Box<dyn std::error::Error>> {
     Registry::default()
         .with(env_filter)
         .with(fmt_layer)
-        .with(otel_layer)
+        .with(vllora_layer)
+        .with(custom_layer)
         .try_init()
         .expect("Failed to initialize tracing subscriber");
 
@@ -187,6 +190,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let context = Context::current().with_baggage(vec![
         KeyValue::new("vllora.run_id", run_id.clone()),
         KeyValue::new("vllora.thread_id", thread_id.clone()),
+        KeyValue::new("vllora.tenant", "default".to_string()),
     ]);
 
     tracing::info!(
@@ -195,9 +199,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         thread_id
     );
 
-    // Attach context BEFORE creating spans so BaggageSpanProcessor can read it
-    // Hierarchy: run -> agent -> task -> thread -> model_invoke -> openai -> tool
-    run_operation().with_context(context).await;
+    // Attach context BEFORE executing flow so BaggageSpanProcessor can read it
+    execute_flow().with_context(context).await;
 
     // Give time for traces to be exported
     tracing::info!("\nWaiting for traces to be exported...");
@@ -209,6 +212,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("Example completed! Check your OTLP endpoint for traces.");
 
     Ok(())
+}
+
+async fn execute_flow() {
+    let span = tracing::info_span!(
+        target: "app::runtime::execution",
+        "execution",
+        execution_id = 123,
+    );
+
+    // Hierarchy: run -> agent -> task -> thread -> model_invoke -> openai -> tool
+    run_operation().instrument(span).await;
 }
 
 // Helper functions for span hierarchy
@@ -259,7 +273,7 @@ async fn thread_operation() {
         tags
     };
 
-    let thread_span = create_thread_span!(thread_tags);
+    let thread_span = create_api_invoke_span!(thread_tags);
 
     tracing::info!("4. Created thread span");
     thread_operation_inner().instrument(thread_span).await;

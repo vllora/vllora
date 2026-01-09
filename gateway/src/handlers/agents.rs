@@ -15,7 +15,7 @@ pub struct RegisterAgentsRequest {
 pub async fn get_lucy_config() -> Result<HttpResponse, GatewayApiError> {
     let config = agents::load_lucy_config().unwrap_or_else(|e| {
         tracing::warn!("Failed to load lucy.json config: {}", e);
-        agents::LucyConfig::default()
+        Some(agents::LucyConfig::default())
     });
     Ok(HttpResponse::Ok().json(config))
 }

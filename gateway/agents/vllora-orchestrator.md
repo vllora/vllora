@@ -1,7 +1,7 @@
 ---
 name = "vllora_orchestrator"
 description = "Coordinates vLLora workflows across specialized sub-agents"
-sub_agents = ["vllora_ui_agent", "vllora_data_agent", "vllora_experiment_agent"]
+sub_agents = ["vllora_ui_agent", "vllora_data_agent"]
 max_iterations = 10
 tool_format = "provider"
 
@@ -160,6 +160,9 @@ When user asks to "filter by label", "show only X in the view", "apply label fil
 ## 12. LABEL COMPARISON
 When user asks to "compare flight_search with hotel_search", "which agent is slower/more expensive?":
 ```
+1. If NOT on /chat page → call_vllora_ui_agent: "Navigate to /chat?tab=threads&labels={label1},{label2}" (URL-encode labels)
+2. call_vllora_data_agent: "Compare labels {label1} and {label2} - fetch summary for each label separately"
+3. final: Report comparison (counts, durations, costs, errors)
 1. If NOT on /chat page → call_vllora_ui_agent: "Navigate to /chat?tab=threads&labels={label1},{label2}" (URL-encode labels)
 2. call_vllora_data_agent: "Compare labels {label1} and {label2} - fetch summary for each label separately"
 3. final: Report comparison (counts, durations, costs, errors)

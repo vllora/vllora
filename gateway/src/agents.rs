@@ -21,6 +21,17 @@ pub struct ProviderConfig {
     pub project_id: Option<String>,
 }
 
+impl Default for ProviderConfig {
+    fn default() -> Self {
+        Self {
+            name: "vllora".to_string(),
+            base_url: Some("http://localhost:9090/lucy/v1".to_string()),
+            api_key: None,
+            project_id: None,
+        }
+    }
+}
+
 /// Model settings configuration
 /// Matches Distri's [model_settings] section
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -37,6 +48,17 @@ pub struct ModelSettingsConfig {
     /// Provider configuration
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider: Option<ProviderConfig>,
+}
+
+impl Default for ModelSettingsConfig {
+    fn default() -> Self {
+        Self {
+            model: None,
+            temperature: None,
+            max_tokens: None,
+            provider: Some(ProviderConfig::default()),
+        }
+    }
 }
 
 /// Write provider TOML fields based on provider type
@@ -260,6 +282,8 @@ pub enum AgentError {
     RegistrationError(String),
     #[error("Distri API URL not configured")]
     MissingApiUrl,
+    #[error("Distri is not running")]
+    DistriNotRunning,
 }
 
 /// Agent definition with name and content
@@ -359,7 +383,7 @@ fn merge_agents(
 }
 
 /// Lucy configuration stored in HOME/.vllora/lucy.json
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LucyConfig {
     /// Distri server URL
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -367,6 +391,15 @@ pub struct LucyConfig {
     /// Model settings to override agent defaults
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model_settings: Option<ModelSettingsConfig>,
+}
+
+impl Default for LucyConfig {
+    fn default() -> Self {
+        Self {
+            distri_url: None,
+            model_settings: Some(ModelSettingsConfig::default()),
+        }
+    }
 }
 
 /// Get the path to lucy.json config file
@@ -381,7 +414,7 @@ fn get_lucy_config_path() -> Result<PathBuf, AgentError> {
 }
 
 /// Load Lucy configuration from HOME/.vllora/lucy.json
-pub fn load_lucy_config() -> Result<LucyConfig, AgentError> {
+pub fn load_lucy_config() -> Result<Option<LucyConfig>, AgentError> {
     let config_path = get_lucy_config_path()?;
 
     if !config_path.exists() {
@@ -389,7 +422,7 @@ pub fn load_lucy_config() -> Result<LucyConfig, AgentError> {
             "Lucy config file not found at {:?}, using defaults",
             config_path
         );
-        return Ok(LucyConfig::default());
+        return Ok(None);
     }
 
     let content = std::fs::read_to_string(&config_path).map_err(|e| {
@@ -407,7 +440,7 @@ pub fn load_lucy_config() -> Result<LucyConfig, AgentError> {
     })?;
 
     debug!("Loaded Lucy config from {:?}", config_path);
-    Ok(config)
+    Ok(Some(config))
 }
 
 /// Save Lucy configuration to HOME/.vllora/lucy.json
@@ -642,14 +675,31 @@ pub async fn register_agents_with_status(
     Ok(result)
 }
 
+fn set_backend_url(config: &mut LucyConfig, backend_url: Option<String>) {
+    if let Some(backend_url) = backend_url {
+        if let Some(model_settings) = config.model_settings.as_mut() {
+            if let Some(provider) = model_settings.provider.as_mut() {
+                provider.base_url = Some(format!("{}/lucy/v1", backend_url));
+            }
+        }
+    }
+}
+
 /// Register all agents with the Distri server
 /// Loads config from lucy.json if available
-pub async fn register_agents(distri_url: Option<String>) -> Result<(), AgentError> {
+pub async fn register_agents(
+    distri_url: Option<String>,
+    backend_url: Option<String>,
+) -> Result<(), AgentError> {
     // Try to load config from lucy.json
-    let lucy_config = load_lucy_config().unwrap_or_else(|e| {
-        warn!("Failed to load lucy.json config: {}, using defaults", e);
-        LucyConfig::default()
-    });
+    let lucy_config = match load_lucy_config() {
+        Ok(Some(config)) => config,
+        _ => {
+            let mut config = LucyConfig::default();
+            set_backend_url(&mut config, backend_url);
+            config
+        }
+    };
 
     // Use config values if available, otherwise fall back to env/defaults
     let api_url = distri_url.unwrap_or(lucy_config.distri_url.unwrap_or_else(get_distri_api_url));
@@ -659,16 +709,7 @@ pub async fn register_agents(distri_url: Option<String>) -> Result<(), AgentErro
 
     // Check if Distri server is running before attempting registration
     if !client.check_distri_running().await {
-        eprintln!(
-            "⚠️  Distri server is not running or not reachable at {}",
-            api_url
-        );
-        eprintln!("   Skipping agent registration. Start Distri server to register agents.");
-        warn!(
-            "Distri server is not running or not reachable at {}",
-            api_url
-        );
-        return Ok(());
+        return Err(AgentError::DistriNotRunning);
     }
 
     debug!("Distri server is running. Registering agents...");

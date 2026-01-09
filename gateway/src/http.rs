@@ -38,7 +38,8 @@ use vllora_core::handler::group;
 use vllora_core::handler::image::create_image;
 use vllora_core::handler::labels;
 use vllora_core::handler::mcp_configs;
-use vllora_core::handler::middleware::actix_otel::ActixOtelMiddleware;
+use vllora_core::handler::middleware::actix_otel::CloudApiInvokeMiddleware;
+use vllora_core::handler::middleware::actix_otel::RunSpanMiddleware;
 use vllora_core::handler::middleware::rate_limit::RateLimitMiddleware;
 use vllora_core::handler::middleware::run_id::RunId;
 use vllora_core::handler::middleware::thread_id::ThreadId;
@@ -330,7 +331,8 @@ impl ApiServer {
                         Box::new(cost_calculator.clone()) as Box<dyn CostCalculator>
                     ))
                     .app_data(Data::from(guardrails_service.clone()))
-                    .wrap(ActixOtelMiddleware)
+                    .wrap(CloudApiInvokeMiddleware)
+                    .wrap(RunSpanMiddleware)
                     .wrap(TracingContext)
                     .wrap(RateLimitMiddleware),
             )
@@ -341,7 +343,8 @@ impl ApiServer {
                         Box::new(cost_calculator) as Box<dyn CostCalculator>
                     ))
                     .app_data(Data::from(guardrails_service))
-                    .wrap(ActixOtelMiddleware)
+                    .wrap(CloudApiInvokeMiddleware)
+                    .wrap(RunSpanMiddleware)
                     .wrap(TracingContext)
                     .wrap(RateLimitMiddleware)
                     .wrap(LucyProjectMiddleware),

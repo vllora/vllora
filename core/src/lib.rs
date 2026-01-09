@@ -14,6 +14,7 @@ pub mod routing;
 pub mod telemetry;
 pub mod types;
 
+use crate::credentials::KeyStorageError;
 use crate::error::GatewayError;
 use actix_web::http::header::ContentType;
 use actix_web::http::StatusCode;
@@ -62,6 +63,9 @@ pub enum GatewayApiError {
 
     #[error(transparent)]
     RoutedExecutorError(#[from] RoutedExecutorError),
+
+    #[error(transparent)]
+    KeyStorageError(#[from] KeyStorageError),
 }
 
 impl GatewayApiError {
@@ -107,6 +111,7 @@ impl actix_web::error::ResponseError for GatewayApiError {
             GatewayApiError::RouteError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             GatewayApiError::RoutedExecutorError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             GatewayApiError::TokenUsageLimit => StatusCode::BAD_REQUEST,
+            GatewayApiError::KeyStorageError(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }

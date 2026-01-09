@@ -10,6 +10,9 @@ use diesel::OptionalExtension;
 use diesel::{QueryDsl, RunQueryDsl};
 use uuid::Uuid;
 
+// Hardcoded project id for the LUCY project
+const LUCY_PROJECT_ID: &str = "123e4567-e89b-12d3-a456-426614174000";
+
 pub struct ProjectServiceImpl {
     db_pool: DbPool,
 }
@@ -37,17 +40,15 @@ impl ProjectServiceImpl {
 
     pub fn create_lucy_project(&self) -> Result<(), DatabaseError> {
         let mut conn = self.db_pool.get()?;
-        let project_id = Uuid::new_v4().to_string();
-        let slug = Self::slugify("lucy");
         let settings_json = serde_json::to_string(&ProjectSettings::default()).map_err(|e| {
             DatabaseError::QueryError(diesel::result::Error::DeserializationError(Box::new(e)))
         })?;
 
         let db_new_project = DbNewProject {
-            id: Some(project_id),
+            id: Some(LUCY_PROJECT_ID.to_string()),
             name: "lucy".to_string(),
             description: None,
-            slug,
+            slug: "lucy".to_string(),
             settings: Some(settings_json),
             is_default: Some(0),
         };

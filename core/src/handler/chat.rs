@@ -2,10 +2,9 @@ use std::collections::HashMap;
 
 use crate::events::callback_handler::GatewayCallbackHandlerFn;
 use crate::events::callback_handler::GatewayEvent;
-use crate::events::callback_handler::GatewayModelEventWithDetails;
 use crate::events::callback_handler::GatewaySpanStartEvent;
+use crate::events::model_events_handler::ModelEventsHandler;
 use crate::executor::context::ExecutorContext;
-use crate::handler::ModelEventWithDetails;
 use crate::metadata::pool::DbPool;
 use crate::metadata::services::project::ProjectServiceImpl;
 use crate::model::DefaultModelMetadataFactory;
@@ -19,15 +18,9 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use valuable::Valuable;
-use vllora_llm::types::events::CustomEventType;
 use vllora_llm::types::gateway::ChatCompletionRequestWithTools;
 use vllora_llm::types::gateway::Extra;
 use vllora_llm::types::gateway::GatewayModelUsage;
-use vllora_llm::types::gateway::Usage;
-use vllora_llm::types::CostEvent;
-use vllora_llm::types::CustomEvent;
-use vllora_llm::types::ModelEvent;
-use vllora_llm::types::ModelEventType;
 use vllora_telemetry::events::JsonValue;
 
 use super::can_execute_llm_for_request;
@@ -64,7 +57,7 @@ pub(crate) async fn prepare_request(
     cost_calculator: Arc<Box<dyn CostCalculator>>,
     request: &ChatCompletionRequestWithTools<RoutingStrategy>,
 ) -> Result<(JoinHandle<()>, CallbackHandlerFn), GatewayApiError> {
-    let (tx, mut rx) = tokio::sync::broadcast::channel(10000);
+    let (tx, rx) = tokio::sync::broadcast::channel(10000);
     let callback_handler = CallbackHandlerFn(Some(tx));
 
     let tenant_name = tenant_name.to_string();
@@ -92,105 +85,17 @@ pub(crate) async fn prepare_request(
 
     let span = span.clone();
     let cost_calculator = cost_calculator.clone();
-    let handle = tokio::spawn(async move {
-        let mut content = String::new();
-        while let Ok(model_event) = rx.recv().await {
-            match &model_event.event.event {
-                ModelEventType::LlmContent(e) => {
-                    content.push_str(&e.content);
-                }
-                ModelEventType::LlmStop(e) => {
-                    if let Some(output) = e.output.clone() {
-                        content.push_str(&output);
-                    }
-
-                    if let Some(model) = &model_event.model {
-                        let (cost, usage) = match &e.usage {
-                            Some(usage) => {
-                                let cost = cost_calculator
-                                    .as_ref()
-                                    .calculate_cost(
-                                        &model.price,
-                                        &Usage::CompletionModelUsage(usage.clone()),
-                                        &model.credentials_ident,
-                                    )
-                                    .await
-                                    .map(|c| (c.cost, Some(usage.clone())))
-                                    .unwrap_or((0.0, Some(usage.clone())));
-
-                                if cost.0 == 0.0 {
-                                    tracing::error!(
-                                        "Cost is 0 for event {e:?}. Event: {event:?}",
-                                        event = model_event.event
-                                    );
-                                }
-
-                                cost
-                            }
-                            None => {
-                                tracing::info!(
-                                    "Usage is none for event {:?}. Event: {:?}",
-                                    e,
-                                    model_event.event
-                                );
-                                (0.0, None)
-                            }
-                        };
-
-                        let cost_event = CostEvent::new(cost, usage.clone());
-                        let _ = cloud_callback_handler
-                            .on_message(
-                                GatewayModelEventWithDetails {
-                                    event: ModelEventWithDetails::new(
-                                        ModelEvent::new(
-                                            &span,
-                                            ModelEventType::Custom(CustomEvent::new(
-                                                CustomEventType::Cost {
-                                                    value: cost_event.clone(),
-                                                },
-                                            )),
-                                        ),
-                                        model_event.model.clone(),
-                                    ),
-                                    tenant_name: tenant_name.clone(),
-                                    project_id: project_id.clone(),
-                                    usage_identifiers: identifiers.clone(),
-                                    run_id: run_id.clone(),
-                                    thread_id: thread_id.clone(),
-                                }
-                                .into(),
-                            )
-                            .await;
-
-                        if let Some(span) = &model_event.event.span {
-                            span.record("cost", serde_json::to_string(&cost).unwrap());
-                            span.record("usage", serde_json::to_string(&usage).unwrap());
-                            span.record("response", content.clone());
-                        }
-
-                        span.record("cost", serde_json::to_string(&cost).unwrap());
-                        span.record("usage", serde_json::to_string(&usage).unwrap());
-                        span.record("response", content.clone());
-                    }
-                }
-                _ => {}
-            }
-
-            cloud_callback_handler
-                .on_message(
-                    GatewayModelEventWithDetails {
-                        event: model_event,
-                        tenant_name: tenant_name.clone(),
-                        project_id: project_id.clone(),
-                        usage_identifiers: identifiers.clone(),
-                        run_id: run_id.clone(),
-                        thread_id: thread_id.clone(),
-                    }
-                    .into(),
-                )
-                .await;
-        }
-    });
+    let handler = ModelEventsHandler::new(
+        cloud_callback_handler.clone(),
+        tenant_name.clone(),
+        project_id.clone(),
+        identifiers.clone(),
+        run_id.clone(),
+        thread_id.clone(),
+        cost_calculator.clone(),
+    );
+    let handle =
+        tokio::spawn(async move { handler.handle_events(rx).await }.instrument(span.clone()));
 
     Ok((handle, callback_handler))
 }
@@ -273,15 +178,15 @@ pub async fn create_chat_completion(
     .await?;
 
     // If the project is Lucy, we need to use the default project for execution
-    let project_id = if project.slug == "lucy" {
+    let (project_id, project_slug) = if project.slug == "lucy" {
         let project_service = ProjectServiceImpl::new(db_pool.get_ref().clone());
         let project = project_service
             .get_default(project.company_id)
             .map_err(|e| GatewayApiError::CustomError(e.to_string()))?;
 
-        project.id
+        (project.id, project.slug)
     } else {
-        project.id
+        (project.id, project.slug.clone())
     };
 
     let db_pool = db_pool.into_inner();
@@ -308,6 +213,8 @@ pub async fn create_chat_completion(
             None,
             Some(&thread_id),
             Some(&breakpoint_manager.into_inner()),
+            &project_slug,
+            "default",
         )
         .instrument(span.clone())
         .await

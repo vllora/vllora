@@ -109,31 +109,40 @@ pub async fn handle_serve(
         }
     }
 
-    // Start Distri server if not already running
+    // Start Distri server if not already running (in background, non-blocking)
     let distri_api_url =
         std::env::var("DISTRI_URL").unwrap_or_else(|_| "http://localhost:8081".to_string());
+    let distri_port = config.distri.port;
 
-    if !distri::is_distri_running(&distri_api_url).await {
-        println!("📥 Downloading and starting Distri server...");
-        match distri::start_distri_server(config.distri.port).await {
-            Ok(mut child) => {
-                println!("✅ Distri server started successfully");
+    let distri_running = distri::is_distri_running(&distri_api_url).await;
+    if !distri_running {
+        println!("📥 Downloading and starting Distri server in background...");
+        // Spawn distri download and start in background (non-blocking)
+        tokio::spawn(async move {
+            let distri_download_handle = distri::download_distri_background();
+            match distri::start_distri_server(distri_port, Some(distri_download_handle)).await {
+                Ok(mut child) => {
+                    println!("✅ Distri server started successfully");
 
-                // Spawn a task to monitor the Distri process
-                tokio::spawn(async move {
-                    let status = child.wait().await;
-                    if let Ok(status) = status {
-                        if status.code().unwrap_or(0) > 2 {
-                            eprintln!("⚠️  Distri server process exited with status: {:?}", status);
+                    // Spawn a task to monitor the Distri process
+                    tokio::spawn(async move {
+                        let status = child.wait().await;
+                        if let Ok(status) = status {
+                            if status.code().unwrap_or(0) > 2 {
+                                eprintln!(
+                                    "⚠️  Distri server process exited with status: {:?}",
+                                    status
+                                );
+                            }
                         }
-                    }
-                });
+                    });
+                }
+                Err(e) => {
+                    eprintln!("⚠️  Warning: Failed to start Distri server: {}", e);
+                    eprintln!("   Agents may not be available. You can start Distri manually.");
+                }
             }
-            Err(e) => {
-                eprintln!("⚠️  Warning: Failed to start Distri server: {}", e);
-                eprintln!("   Agents may not be available. You can start Distri manually.");
-            }
-        }
+        });
     } else {
         println!("✅ Distri server is already running");
     }
@@ -143,21 +152,36 @@ pub async fn handle_serve(
     let ui_port = config.ui.port;
     let otel_port = config.otel.port;
     let open_ui_on_startup = config.ui.open_on_startup;
-    let distri_port = config.distri.port;
 
     // Register agents with Distri server in background (non-blocking)
     println!("📋 Registering agents with Distri server in background...");
     tokio::spawn(async move {
-        // Wait a bit for Distri to be fully ready
-        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+        const MAX_RETRIES: u32 = 100;
+        const RETRY_DELAY_SECS: u64 = 4;
 
-        match agents::register_agents(Some(format!("http://localhost:{}", distri_port))).await {
-            Ok(_) => {
-                // Success message is logged inside register_agents
-            }
-            Err(e) => {
-                eprintln!("⚠️  Warning: Failed to register agents: {}", e);
-                eprintln!("   Agents may not be available.");
+        for attempt in 1..=MAX_RETRIES {
+            match agents::register_agents(
+                Some(format!("http://localhost:{}", distri_port)),
+                Some(format!("http://localhost:{}", backend_port)),
+            )
+            .await
+            {
+                Ok(_) => {
+                    // Success message is logged inside register_agents
+                    return;
+                }
+                Err(e) => {
+                    if attempt < MAX_RETRIES {
+                        tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_DELAY_SECS))
+                            .await;
+                    } else {
+                        eprintln!(
+                            "⚠️  Warning: Failed to register agents after {} attempts: {}",
+                            MAX_RETRIES, e
+                        );
+                        eprintln!("   Agents may not be available.");
+                    }
+                }
             }
         }
     });
@@ -186,7 +210,7 @@ pub async fn handle_serve(
                 "VITE_BACKEND_PORT": backend_port,
                 "VITE_OTEL_PORT": otel_port,
                 "VERSION": env!("CARGO_PKG_VERSION"),
-                "DISTRI_PORT": distri_port
+                "VITE_DISTRI_PORT": distri_port
             }))
         };
 

@@ -46,16 +46,20 @@ pub trait KeyStorage: Send + Sync {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProviderCredentialsId {
     value: String,
-    project_slug: String,
+    project_slug: Option<String>,
     provider_name: String,
     #[allow(dead_code)]
     tenant_name: String,
 }
 
 impl ProviderCredentialsId {
-    pub fn new(tenant_name: String, provider_name: String, project_slug: String) -> Self {
+    pub fn new(tenant_name: String, provider_name: String, project_slug: Option<String>) -> Self {
+        let value = match project_slug.as_ref() {
+            Some(project_slug) => format!("{tenant_name}_{provider_name}_{project_slug}"),
+            None => format!("{tenant_name}_{provider_name}"),
+        };
         Self {
-            value: format!("{tenant_name}_{provider_name}_{project_slug}"),
+            value,
             project_slug,
             provider_name,
             tenant_name,
@@ -66,7 +70,7 @@ impl ProviderCredentialsId {
         self.value.clone()
     }
 
-    pub fn project_slug(&self) -> String {
+    pub fn project_slug(&self) -> Option<String> {
         self.project_slug.clone()
     }
 
@@ -79,7 +83,7 @@ impl ProviderCredentialsId {
             value: value.clone(),
             tenant_name: "".to_string(),
             provider_name: "".to_string(),
-            project_slug: "".to_string(),
+            project_slug: None,
         }
     }
 }
@@ -93,7 +97,7 @@ pub fn construct_key_id(
     ProviderCredentialsId::new(
         tenant_name.to_string(),
         provider_name.to_string(),
-        project_slug.to_string(),
+        Some(project_slug.to_string()),
     )
 }
 

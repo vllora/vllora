@@ -55,7 +55,7 @@ pub async fn update_provider_key<T: ProviderService>(
     let provider_credentials_id = ProviderCredentialsId::new(
         tenant.name.clone(),
         provider_name.clone(),
-        project.id.to_string(),
+        Some(project.id.to_string()),
     );
     let storage = key_storage.into_inner();
     // Check if provider already exists
@@ -205,7 +205,7 @@ pub async fn delete_provider(
         .delete_key(ProviderCredentialsId::new(
             "default".to_string(),
             provider_name.clone(),
-            project.id.to_string(),
+            None,
         ))
         .await
     {

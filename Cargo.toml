@@ -5,7 +5,7 @@ default-members = ["gateway"]
 exclude = ["llm/examples/*"]
 
 [workspace.dependencies]
-async-openai = { package = "async-openai-compat", version = "0.30.4", features = [
+async-openai = { package = "async-openai-compat", version = "0.30.5", features = [
   "chat-completion-types",
   "chat-completion",
   "completions",

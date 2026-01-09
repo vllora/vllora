@@ -5,6 +5,7 @@ use crate::events::callback_handler::GatewayEvent;
 
 pub mod broadcast_channel_manager;
 pub mod callback_handler;
+pub mod model_events_handler;
 pub mod ui_broadcaster;
 
 pub fn map_cloud_event_to_agui_events(value: &GatewayEvent) -> Vec<Event> {

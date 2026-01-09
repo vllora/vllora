@@ -1,3 +1,4 @@
+use crate::credentials::GatewayCredentials;
 use crate::executor::chat_completion::basic_executor::BasicCacheContext;
 use crate::executor::chat_completion::breakpoint::BreakpointManager;
 use crate::executor::context::ExecutorContext;
@@ -63,6 +64,7 @@ impl RoutedExecutor {
         Self { request }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn execute(
         &self,
         executor_context: &ExecutorContext,
@@ -70,6 +72,8 @@ impl RoutedExecutor {
         project_id: Option<&uuid::Uuid>,
         thread_id: Option<&String>,
         breakpoint_manager: Option<&BreakpointManager>,
+        project_slug: &str,
+        tenant_name: &str,
     ) -> Result<HttpResponse, GatewayApiError> {
         let span = Span::current();
 
@@ -156,6 +160,8 @@ impl RoutedExecutor {
                     project_id,
                     thread_id,
                     breakpoint_manager,
+                    project_slug,
+                    tenant_name,
                 )
                 .instrument(span.clone())
                 .await;
@@ -185,6 +191,8 @@ impl RoutedExecutor {
         project_id: Option<&uuid::Uuid>,
         thread_id: Option<&String>,
         breakpoint_manager: Option<&BreakpointManager>,
+        project_slug: &str,
+        tenant_name: &str,
     ) -> Result<HttpResponse, GatewayApiError> {
         let span = tracing::Span::current();
         span.record("request", &serde_json::to_string(&request)?);
@@ -220,6 +228,15 @@ impl RoutedExecutor {
                 return Err(e);
             }
         };
+        let key = GatewayCredentials::extract_key_from_model(
+            &llm_model,
+            project_slug,
+            tenant_name,
+            executor_context.key_storage.as_ref().as_ref(),
+        )
+        .await
+        .map_err(|e| GatewayApiError::CustomError(e.to_string()))?;
+
         let response = execute(
             request,
             executor_context,
@@ -229,6 +246,7 @@ impl RoutedExecutor {
             &llm_model,
             breakpoint_manager,
             thread_id,
+            key.as_ref(),
         )
         .instrument(span.clone())
         .await?;
