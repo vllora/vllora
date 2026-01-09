@@ -1,7 +1,7 @@
 ---
 name = "vllora_orchestrator"
 description = "Coordinates vLLora workflows across specialized sub-agents"
-sub_agents = ["vllora_ui_agent", "vllora_data_agent"]
+sub_agents = ["vllora_ui_agent", "vllora_data_agent", "vllora_experiment_agent"]
 max_iterations = 10
 tool_format = "provider"
 

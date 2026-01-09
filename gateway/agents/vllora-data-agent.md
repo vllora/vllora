@@ -7,8 +7,6 @@ tool_format = "provider"
 [tools]
 builtin = ["final"]
 external = ["fetch_runs", "fetch_spans", "get_run_details", "fetch_groups", "fetch_spans_summary", "get_span_content", "list_labels", "analyze_with_llm"]
-builtin = ["final"]
-external = ["fetch_runs", "fetch_spans", "get_run_details", "fetch_groups", "fetch_spans_summary", "get_span_content", "list_labels", "analyze_with_llm"]
 
 [model_settings]
 model = "gpt-4.1"
