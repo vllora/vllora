@@ -1,5 +1,6 @@
 pub mod agents;
 pub mod debug;
+pub mod finetune;
 pub mod models;
 pub mod projects;
 pub mod session;

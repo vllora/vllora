@@ -2,7 +2,7 @@ use crate::callback_handler::init_callback_handler;
 use crate::config::Config;
 use crate::cost::GatewayCostCalculator;
 use crate::guardrails::GuardrailsService;
-use crate::handlers::{agents, debug, models, projects, session, threads};
+use crate::handlers::{agents, debug, finetune, models, projects, session, threads};
 use crate::metrics_writer::SqliteMetricsWriterAdapter;
 use crate::middleware::lucy_project::LucyProjectMiddleware;
 use crate::middleware::project::ProjectMiddleware;
@@ -359,6 +359,13 @@ impl ApiServer {
                     .route(
                         "/{id}/default",
                         web::post().to(projects::set_default_project),
+                    )
+            )
+            .service(
+                web::scope("/finetune")
+                    .service(
+                        web::scope("/jobs")
+                            .route("", web::post().to(finetune::create_finetuning_job)),
                     ),
             )
             .service(
