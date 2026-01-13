@@ -6,7 +6,7 @@ tool_format = "provider"
 
 [tools]
 builtin = ["final"]
-external = ["get_dataset_records", "analyze_records", "suggest_topics", "find_duplicates", "summarize_dataset", "compare_records"]
+external = ["get_dataset_records", "analyze_records", "generate_topics", "suggest_topics", "find_duplicates", "summarize_dataset", "compare_records"]
 
 [model_settings]
 model = "gpt-4.1"
@@ -26,10 +26,13 @@ You analyze vLLora dataset records and provide insights. You are called by the o
 3. final → Return detailed analysis findings
 ```
 
-## "Suggest topics for dataset {dataset_id}"
+## "Generate topics for records {record_ids} in dataset {dataset_id}"
 ```
-1. suggest_topics with dataset_id
-2. final → Return topic suggestions with grouped records
+1. generate_topics with dataset_id (required) and optional record_ids
+   - Use record_ids when provided (Generate Topics button)
+   - Otherwise analyze a representative subset of the dataset
+   - This tool always auto-applies suggested topics to matching records
+2. final → Return structured topic analysis (summary, suggested_topics, record_suggestions)
 ```
 
 ## "Find duplicates in dataset {dataset_id}"

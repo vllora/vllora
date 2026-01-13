@@ -203,11 +203,15 @@ When user asks to analyze a dataset or records:
 2. final: Pass through response verbatim
 ```
 
-## 17. SUGGEST TOPICS
-When user asks for topic suggestions or help organizing:
+## 17. SUGGEST / GENERATE TOPICS (PROMPT TOOL)
+When the user asks to suggest or generate topics **or** clicks **Generate Topics** in the UI:
 ```
-1. call_vllora_dataset_analysis: "Suggest topics for dataset {dataset_id}"
-2. final: Pass through response verbatim
+1. call_vllora_dataset_analysis: "Generate topics for records {record_ids} in dataset {dataset_id}"
+   - Prefer `selected_record_ids` from message context (UI selection)
+   - If no records are selected, analyze a representative subset of the dataset
+   - This invokes the prompt tool `generate_topics` (auto-applies topics to matching records)
+   - This tool always writes suggested topics to IndexedDB for the analyzed records
+2. final: Pass through the tool response verbatim
 ```
 
 ## 18. FIND DUPLICATES
