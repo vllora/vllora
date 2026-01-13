@@ -272,6 +272,23 @@ const EMBEDDED_AGENTS: &[(&str, &str)] = &[
         "vllora-ui-agent.md",
         include_str!("../agents/vllora-ui-agent.md"),
     ),
+    (
+        "vllora-dataset-orchestrator.md",
+        include_str!("../agents/finetune-dataset/vllora-dataset-orchestrator.md"),
+    ),
+    (
+        "vllora-dataset-ui.md",
+        include_str!("../agents/finetune-dataset/vllora-dataset-ui.md"),
+    ),
+    (
+        "vllora-dataset-data.md",
+        include_str!("../agents/finetune-dataset/vllora-dataset-data.md"),
+    ),
+    (
+        "vllora-dataset-analysis.md",
+        include_str!("../agents/finetune-dataset/vllora-dataset-analysis.md"),
+    ),
+
 ];
 
 #[derive(Debug, Error)]
