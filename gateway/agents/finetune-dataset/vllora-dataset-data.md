@@ -33,8 +33,14 @@ You perform data operations on vLLora datasets. You are called by the orchestrat
 
 ## "Get records for dataset {dataset_id}"
 ```
-1. get_dataset_records with dataset_id and optional limit
+1. get_dataset_records with dataset_id (use optional filters/sorting as needed)
 2. final → Return records summary (don't dump full data unless requested)
+```
+
+## "Get record IDs for dataset {dataset_id}"
+```
+1. get_dataset_records with dataset_id and ids_only=true
+2. final → Return the record_ids array
 ```
 
 ## "Create dataset with name '{name}'"

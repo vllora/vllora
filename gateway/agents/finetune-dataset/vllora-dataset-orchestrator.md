@@ -146,11 +146,20 @@ When user asks to assign topic to multiple/all selected records:
 ```
 
 ## 10. SELECT RECORDS
-When user asks to select records:
+When user asks to select records (e.g., "select all records", "select records with topic X"):
 ```
-1. call_vllora_dataset_ui: "Select records {record_ids}" or "Select all records"
-2. final: Confirm selection
+Step 1: Get record IDs first (REQUIRED - never use fake IDs)
+  call_vllora_dataset_data: "Get record IDs for dataset {dataset_id} with ids_only=true" (add filters if specified)
+
+Step 2: Select the records using real IDs from step 1
+  call_vllora_dataset_ui: "Select records {record_ids} in dataset {dataset_id}"
+
+Step 3: Confirm
+  final: "Selected {count} records"
 ```
+
+**IMPORTANT**: Always fetch real record IDs first using get_dataset_records with ids_only=true.
+Never guess or fabricate record IDs. The select_records tool validates IDs and will reject fake ones.
 
 ## 11. CLEAR SELECTION
 When user asks to clear selection:
