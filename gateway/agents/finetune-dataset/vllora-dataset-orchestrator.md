@@ -209,9 +209,12 @@ When the user asks to suggest or generate topics **or** clicks **Generate Topics
 1. call_vllora_dataset_analysis: "Generate topics for records {record_ids} in dataset {dataset_id}"
    - Prefer `selected_record_ids` from message context (UI selection)
    - If no records are selected, analyze a representative subset of the dataset
-   - This invokes the prompt tool `generate_topics` (auto-applies topics to matching records)
-   - This tool always writes suggested topics to IndexedDB for the analyzed records
+   - This invokes the prompt tool `generate_topics`
+   - Default tree shape: max_depth=3, degree=2 (UI defaults)
+   - If the user explicitly requests a different tree shape, pass max_depth and degree/branching
+   - This tool auto-applies topic hierarchy to IndexedDB for the analyzed records
 2. final: Pass through the tool response verbatim
+   - Shape: { topic_trees: [{ record_id, operation, topic_paths: string[][] }] }
 ```
 
 ## 18. FIND DUPLICATES
