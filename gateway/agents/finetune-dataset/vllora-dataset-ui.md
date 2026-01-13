@@ -37,9 +37,9 @@ You control the vLLora Datasets page UI. You are called by the orchestrator with
 2. final → "Collapsed dataset {dataset_name}"
 ```
 
-## "Select records {record_ids}" or "Select all records"
+## "Select records {record_ids} in dataset {dataset_id}" or "Select all records in dataset {dataset_id}"
 ```
-1. select_records with record_ids (or all record IDs for "select all")
+1. select_records with dataset_id and record_ids (or all record IDs for "select all")
 2. final → "Selected {count} records"
 ```
 
