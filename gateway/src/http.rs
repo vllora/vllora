@@ -359,13 +359,21 @@ impl ApiServer {
                     .route(
                         "/{id}/default",
                         web::post().to(projects::set_default_project),
-                    )
+                    ),
             )
             .service(
                 web::scope("/finetune")
                     .service(
-                        web::scope("/jobs")
-                            .route("", web::post().to(finetune::create_finetuning_job)),
+                        web::scope("/datasets").route("", web::post().to(finetune::upload_dataset)),
+                    )
+                    .service(
+                        web::scope("/reinforcement-jobs")
+                            .route("", web::post().to(finetune::create_reinforcement_job))
+                            .route("", web::get().to(finetune::list_reinforcement_jobs))
+                            .route(
+                                "/{job_id}/status",
+                                web::get().to(finetune::get_reinforcement_job_status),
+                            ),
                     ),
             )
             .service(
