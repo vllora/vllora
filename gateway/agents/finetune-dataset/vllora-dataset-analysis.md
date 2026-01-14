@@ -42,7 +42,10 @@ You analyze vLLora dataset records and provide insights. You are called by the o
 ```
 1. generate_traces with dataset_id (required)
    - Optional: record_ids (seed from selection)
-   - Optional: count (default 5) and max_turns (default 3)
+   - Optional: count (default 5)
+     - If record_ids is provided, count is PER selected record
+     - If record_ids is omitted, count is TOTAL
+   - Optional: max_turns (default 3)
    - Tool writes generated trace records to IndexedDB with is_generated=true
 2. final → Return tool JSON verbatim
 ```
