@@ -346,9 +346,9 @@ pub async fn start_distri_server(
     port: u16,
     download_handle: Option<tokio::task::JoinHandle<Result<PathBuf, DistriError>>>,
 ) -> Result<tokio::process::Child, DistriError> {
-    let home_dir = std::env::var("HOME").map(PathBuf::from).map_err(|_| {
-        DistriError::HomeDirError("HOME environment variable not set".to_string())
-    })?;
+    let home_dir = std::env::var("HOME")
+        .map(PathBuf::from)
+        .map_err(|_| DistriError::HomeDirError("HOME environment variable not set".to_string()))?;
 
     let binary_path = if let Some(handle) = download_handle {
         handle

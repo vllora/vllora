@@ -320,7 +320,6 @@ fn load_working_directory_agents(
 ) -> Result<HashMap<String, AgentDefinition>, AgentError> {
     let agents_dir = work_dir.join("agents");
     let mut agents = HashMap::new();
-
     // Check if agents directory exists
     if !agents_dir.exists() {
         return Ok(agents);
@@ -334,28 +333,38 @@ fn load_working_directory_agents(
         return Ok(agents);
     }
 
-    // Read all .md files from the agents directory
-    let entries = std::fs::read_dir(&agents_dir)?;
+    // Recursively read all .md files from the agents directory and its subdirectories
+    let mut dirs_to_visit = vec![agents_dir];
 
-    for entry in entries {
-        let entry = entry?;
-        let path = entry.path();
+    while let Some(dir) = dirs_to_visit.pop() {
+        let entries = std::fs::read_dir(&dir)?;
 
-        // Only process .md files
-        if path.extension().and_then(|s| s.to_str()) == Some("md") {
-            let filename = path.file_name().and_then(|n| n.to_str()).ok_or_else(|| {
-                AgentError::IoError(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "Invalid filename",
-                ))
-            })?;
+        for entry in entries {
+            let entry = entry?;
+            let path = entry.path();
+            let file_type = entry.file_type()?;
 
-            let name = filename.strip_suffix(".md").unwrap_or(filename).to_string();
-            let content = std::fs::read_to_string(&path)?;
+            if file_type.is_dir() {
+                dirs_to_visit.push(path);
+                continue;
+            }
 
-            agents.insert(name.clone(), AgentDefinition { name, content });
+            // Only process .md files
+            if path.extension().and_then(|s| s.to_str()) == Some("md") {
+                let filename = path.file_name().and_then(|n| n.to_str()).ok_or_else(|| {
+                    AgentError::IoError(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Invalid filename",
+                    ))
+                })?;
 
-            debug!("Loaded agent from working directory: {}", filename);
+                let name = filename.strip_suffix(".md").unwrap_or(filename).to_string();
+                let content = std::fs::read_to_string(&path)?;
+
+                agents.insert(name.clone(), AgentDefinition { name, content });
+
+                debug!("Loaded agent from working directory: {}", filename);
+            }
         }
     }
 
