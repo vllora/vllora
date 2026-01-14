@@ -1,12 +1,66 @@
 use actix_multipart::Multipart;
-use actix_web::{web, HttpRequest, HttpResponse, Result};
+use actix_web::{web, HttpResponse, Result};
 use futures::StreamExt;
+use reqwest::header::HeaderMap;
+use reqwest::header::HeaderValue;
+use reqwest::header::AUTHORIZATION;
 use serde::{Deserialize, Serialize};
+use vllora_core::credentials::KeyStorage;
+use vllora_core::credentials::ProviderCredentialsId;
+use vllora_core::GatewayApiError;
+use vllora_llm::types::credentials::Credentials;
 
 /// Get cloud API URL
 fn get_api_url() -> String {
     std::env::var("LANGDB_API_URL")
         .unwrap_or_else(|_| vllora_core::types::LANGDB_API_URL.to_string())
+}
+
+async fn get_langdb_api_key(
+    key_storage: &dyn KeyStorage,
+    project_slug: Option<&str>,
+) -> Result<String, GatewayApiError> {
+    let credentials = key_storage
+        .get_key(ProviderCredentialsId::new(
+            "default".to_string(),
+            "langdb".to_string(),
+            project_slug.map(|s| s.to_string()),
+        ))
+        .await
+        .map_err(|e| GatewayApiError::CustomError(format!("Failed to get credentials: {}", e)))?;
+
+    if let Some(Ok(c)) = credentials.map(|c| serde_json::from_str::<Credentials>(&c)) {
+        match c {
+            Credentials::ApiKey(key) => Ok(key.api_key),
+            _ => Err(GatewayApiError::CustomError(
+                "Invalid credentials".to_string(),
+            )),
+        }
+    } else {
+        std::env::var("LANGDB_API_KEY")
+            .map_err(|e| GatewayApiError::CustomError(format!("LANGDB_API_KEY not set: {}", e)))
+    }
+}
+
+async fn get_langdb_cloud_client(
+    key_storage: &dyn KeyStorage,
+    project_slug: Option<&str>,
+) -> Result<reqwest::Client, GatewayApiError> {
+    let api_key = get_langdb_api_key(key_storage, project_slug).await?;
+    let mut headers = HeaderMap::new();
+    let authorization_value = format!("Bearer {}", api_key);
+    headers.insert(
+        AUTHORIZATION,
+        HeaderValue::from_str(&authorization_value).map_err(|e| {
+            GatewayApiError::CustomError(format!("Failed to create authorization header: {}", e))
+        })?,
+    );
+    reqwest::Client::builder()
+        .default_headers(headers)
+        .build()
+        .map_err(|e| {
+            GatewayApiError::CustomError(format!("Failed to build langdb cloud client: {}", e))
+        })
 }
 
 // ============================================================================
@@ -72,11 +126,9 @@ pub struct ReinforcementInferenceParameters {
 /// This forwards the multipart request to the cloud API
 pub async fn upload_dataset(
     mut payload: Multipart,
-    req: HttpRequest,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
+    key_storage: web::Data<Box<dyn KeyStorage>>,
 ) -> Result<HttpResponse> {
-    let _project_id = project.id;
-
     // Parse multipart form data to get JSONL file
     let mut jsonl_data: Option<Vec<u8>> = None;
 
@@ -114,7 +166,8 @@ pub async fn upload_dataset(
     }
 
     // Forward multipart request to cloud API
-    let client = reqwest::Client::new();
+    let client =
+        get_langdb_cloud_client(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
     let mut form = reqwest::multipart::Form::new();
 
     // Add JSONL file
@@ -130,20 +183,9 @@ pub async fn upload_dataset(
     form = form.part("file", jsonl_part);
 
     // Build request to cloud API
-    let mut cloud_request = client
+    let cloud_request = client
         .post(format!("{}/finetune/datasets", get_api_url()))
         .multipart(form);
-
-    // Add authorization header
-    let api_key = std::env::var("LANGDB_API_KEY").unwrap_or_default();
-    cloud_request = cloud_request.header("Authorization", format!("Bearer {}", api_key));
-
-    // Forward project header if present
-    if let Some(project_header) = req.headers().get("x-project-id") {
-        if let Ok(project_str) = project_header.to_str() {
-            cloud_request = cloud_request.header("x-project-id", project_str);
-        }
-    }
 
     // Send request to cloud API
     let response = cloud_request.send().await.map_err(|e| {
@@ -164,27 +206,16 @@ pub async fn upload_dataset(
 /// This forwards the request to the cloud API
 pub async fn create_reinforcement_job(
     request: web::Json<CreateReinforcementFinetuningJobRequest>,
-    req: HttpRequest,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
+    key_storage: web::Data<Box<dyn KeyStorage>>,
 ) -> Result<HttpResponse> {
-    let _project_id = project.id;
+    let client =
+        get_langdb_cloud_client(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
 
     // Forward request to cloud API
-    let client = reqwest::Client::new();
-    let mut cloud_request = client
+    let cloud_request = client
         .post(format!("{}/finetune/reinforcement-jobs", get_api_url()))
         .json(&*request);
-
-    // Add authorization header
-    let api_key = std::env::var("LANGDB_API_KEY").unwrap_or_default();
-    cloud_request = cloud_request.header("Authorization", format!("Bearer {}", api_key));
-
-    // Forward project header if present
-    if let Some(project_header) = req.headers().get("x-project-id") {
-        if let Ok(project_str) = project_header.to_str() {
-            cloud_request = cloud_request.header("x-project-id", project_str);
-        }
-    }
 
     // Send request to cloud API
     let response = cloud_request.send().await.map_err(|e| {
@@ -212,10 +243,9 @@ pub struct ReinforcementJobQuery {
 pub async fn get_reinforcement_job_status(
     job_id: web::Path<String>,
     query: web::Query<ReinforcementJobQuery>,
-    req: HttpRequest,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
+    key_storage: web::Data<Box<dyn KeyStorage>>,
 ) -> Result<HttpResponse> {
-    let _project_id = project.id;
     let job_id_str = job_id.into_inner();
 
     // Build URL with query parameters
@@ -237,19 +267,9 @@ pub async fn get_reinforcement_job_status(
     }
 
     // Forward request to cloud API
-    let client = reqwest::Client::new();
-    let mut cloud_request = client.get(&url);
-
-    // Add authorization header
-    let api_key = std::env::var("LANGDB_API_KEY").unwrap_or_default();
-    cloud_request = cloud_request.header("Authorization", format!("Bearer {}", api_key));
-
-    // Forward project header if present
-    if let Some(project_header) = req.headers().get("x-project-id") {
-        if let Ok(project_str) = project_header.to_str() {
-            cloud_request = cloud_request.header("x-project-id", project_str);
-        }
-    }
+    let client =
+        get_langdb_cloud_client(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
+    let cloud_request = client.get(&url);
 
     // Send request to cloud API
     let response = cloud_request.send().await.map_err(|e| {
@@ -270,11 +290,9 @@ pub async fn get_reinforcement_job_status(
 /// This forwards the request to the cloud API
 pub async fn list_reinforcement_jobs(
     query: web::Query<ReinforcementJobQuery>,
-    req: HttpRequest,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
+    key_storage: web::Data<Box<dyn KeyStorage>>,
 ) -> Result<HttpResponse> {
-    let _project_id = project.id;
-
     // Build URL with query parameters
     let mut url = format!("{}/finetune/reinforcement-jobs", get_api_url());
     let mut query_params = Vec::new();
@@ -290,19 +308,9 @@ pub async fn list_reinforcement_jobs(
     }
 
     // Forward request to cloud API
-    let client = reqwest::Client::new();
-    let mut cloud_request = client.get(&url);
-
-    // Add authorization header
-    let api_key = std::env::var("LANGDB_API_KEY").unwrap_or_default();
-    cloud_request = cloud_request.header("Authorization", format!("Bearer {}", api_key));
-
-    // Forward project header if present
-    if let Some(project_header) = req.headers().get("x-project-id") {
-        if let Ok(project_str) = project_header.to_str() {
-            cloud_request = cloud_request.header("x-project-id", project_str);
-        }
-    }
+    let client =
+        get_langdb_cloud_client(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
+    let cloud_request = client.get(&url);
 
     // Send request to cloud API
     let response = cloud_request.send().await.map_err(|e| {
@@ -317,4 +325,91 @@ pub async fn list_reinforcement_jobs(
     })?;
 
     Ok(HttpResponse::build(status_code).json(body))
+}
+
+// ============================================================================
+// Deployment Handlers
+// ============================================================================
+
+/// Request to create a deployment for a fine-tuned model
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateDeploymentRequest {
+    pub model_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accelerator_type: Option<String>,
+}
+
+/// Deploy a fine-tuned model
+/// This forwards the request to the cloud API
+pub async fn deploy_model(
+    request: web::Json<CreateDeploymentRequest>,
+    project: web::ReqData<vllora_core::types::metadata::project::Project>,
+    key_storage: web::Data<Box<dyn KeyStorage>>,
+) -> Result<HttpResponse> {
+    let _project_id = project.id;
+
+    // Forward request to cloud API
+    let client =
+        get_langdb_cloud_client(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
+    let cloud_request = client
+        .post(format!("{}/finetune/deployments", get_api_url()))
+        .json(&*request);
+
+    // Send request to cloud API
+    let response = cloud_request.send().await.map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Failed to call cloud API: {}", e))
+    })?;
+
+    // Forward response
+    let status_code = actix_web::http::StatusCode::from_u16(response.status().as_u16())
+        .unwrap_or(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR);
+    let body: serde_json::Value = response.json().await.map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Failed to read response: {}", e))
+    })?;
+
+    Ok(HttpResponse::build(status_code).json(body))
+}
+
+/// Delete a deployment
+/// This forwards the request to the cloud API
+pub async fn delete_deployment(
+    deployment_id: web::Path<String>,
+    project: web::ReqData<vllora_core::types::metadata::project::Project>,
+    key_storage: web::Data<Box<dyn KeyStorage>>,
+) -> Result<HttpResponse> {
+    let deployment_id_str = deployment_id.into_inner();
+
+    // Build URL
+    let url = format!(
+        "{}/finetune/deployments/{}",
+        get_api_url(),
+        deployment_id_str
+    );
+
+    // Forward request to cloud API
+    let client =
+        get_langdb_cloud_client(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
+    let cloud_request = client.delete(&url);
+
+    // Send request to cloud API
+    let response = cloud_request.send().await.map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Failed to call cloud API: {}", e))
+    })?;
+
+    // Forward response status
+    let status_code = actix_web::http::StatusCode::from_u16(response.status().as_u16())
+        .unwrap_or(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR);
+
+    // For DELETE requests, return the status code directly (204 No Content on success)
+    if status_code == actix_web::http::StatusCode::NO_CONTENT {
+        Ok(HttpResponse::NoContent().finish())
+    } else {
+        // If there's an error, try to read the error body
+        let body: serde_json::Value = response.json().await.unwrap_or(serde_json::json!({
+            "error": "Failed to delete deployment"
+        }));
+        Ok(HttpResponse::build(status_code).json(body))
+    }
 }
