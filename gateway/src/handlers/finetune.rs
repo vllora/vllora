@@ -136,7 +136,7 @@ pub async fn upload_dataset(
 
     // Add authorization header
     let api_key = std::env::var("LANGDB_API_KEY").unwrap_or_default();
-    cloud_request = cloud_request.header("Authorization", api_key);
+    cloud_request = cloud_request.header("Authorization", format!("Bearer {}", api_key));
 
     // Forward project header if present
     if let Some(project_header) = req.headers().get("x-project-id") {
@@ -177,7 +177,7 @@ pub async fn create_reinforcement_job(
 
     // Add authorization header
     let api_key = std::env::var("LANGDB_API_KEY").unwrap_or_default();
-    cloud_request = cloud_request.header("Authorization", api_key);
+    cloud_request = cloud_request.header("Authorization", format!("Bearer {}", api_key));
 
     // Forward project header if present
     if let Some(project_header) = req.headers().get("x-project-id") {
@@ -242,7 +242,7 @@ pub async fn get_reinforcement_job_status(
 
     // Add authorization header
     let api_key = std::env::var("LANGDB_API_KEY").unwrap_or_default();
-    cloud_request = cloud_request.header("Authorization", api_key);
+    cloud_request = cloud_request.header("Authorization", format!("Bearer {}", api_key));
 
     // Forward project header if present
     if let Some(project_header) = req.headers().get("x-project-id") {
@@ -295,7 +295,7 @@ pub async fn list_reinforcement_jobs(
 
     // Add authorization header
     let api_key = std::env::var("LANGDB_API_KEY").unwrap_or_default();
-    cloud_request = cloud_request.header("Authorization", api_key);
+    cloud_request = cloud_request.header("Authorization", format!("Bearer {}", api_key));
 
     // Forward project header if present
     if let Some(project_header) = req.headers().get("x-project-id") {
