@@ -374,6 +374,14 @@ impl ApiServer {
                                 "/{job_id}/status",
                                 web::get().to(finetune::get_reinforcement_job_status),
                             ),
+                    )
+                    .service(
+                        web::scope("/deployments")
+                            .route("", web::post().to(finetune::deploy_model))
+                            .route(
+                                "/{deployment_id}",
+                                web::delete().to(finetune::delete_deployment),
+                            ),
                     ),
             )
             .service(
