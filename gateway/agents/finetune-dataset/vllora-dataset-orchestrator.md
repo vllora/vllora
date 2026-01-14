@@ -214,10 +214,18 @@ When the user asks to suggest or generate topics **or** clicks **Generate Topics
    - If the user explicitly requests a different tree shape, pass max_depth and degree/branching
    - This tool auto-applies topic hierarchy to IndexedDB for the analyzed records
 2. final: Pass through the tool response verbatim
-   - Shape: { topic_trees: [{ record_id, operation, topic_paths: string[][] }] }
+   - Shape: { topic_trees: [{ record_id, topic_paths: string[][] }] }
 ```
 
-## 18. FIND DUPLICATES
+## 18. GENERATE TRACES
+When the user asks to generate synthetic traces for a dataset:
+```
+1. call_vllora_dataset_analysis: "Generate traces for dataset {dataset_id}"
+   - Prefer selected_record_ids from context when present
+2. final: Pass through the tool response verbatim
+```
+
+## 19. FIND DUPLICATES
 When user asks to find duplicate records:
 ```
 1. call_vllora_dataset_analysis: "Find duplicates in dataset {dataset_id}"

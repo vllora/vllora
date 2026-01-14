@@ -6,7 +6,7 @@ tool_format = "provider"
 
 [tools]
 builtin = ["final"]
-external = ["get_dataset_records", "analyze_records", "generate_topics", "suggest_topics", "find_duplicates", "summarize_dataset", "compare_records"]
+external = ["get_dataset_records", "analyze_records", "generate_topics", "generate_traces", "suggest_topics", "find_duplicates", "summarize_dataset", "compare_records"]
 
 [model_settings]
 model = "gpt-4.1"
@@ -34,8 +34,17 @@ You analyze vLLora dataset records and provide insights. You are called by the o
    - Optional: pass max_depth (default 3) and degree/branching (default 2) when the user asks for a specific tree shape
    - This tool auto-applies topic hierarchy to IndexedDB for the analyzed records
 2. final → Return the tool response verbatim (JSON)
-   - Shape: { topic_trees: [{ record_id, operation, topic_paths: string[][] }] }
+   - Shape: { topic_trees: [{ record_id, topic_paths: string[][] }] }
    - topic_paths is a list of ALL node paths in the tree (includes internal nodes)
+```
+
+## "Generate traces for dataset {dataset_id}"
+```
+1. generate_traces with dataset_id (required)
+   - Optional: record_ids (seed from selection)
+   - Optional: count (default 5) and max_turns (default 3)
+   - Tool writes generated trace records to IndexedDB with is_generated=true
+2. final → Return tool JSON verbatim
 ```
 
 ## "Find duplicates in dataset {dataset_id}"
