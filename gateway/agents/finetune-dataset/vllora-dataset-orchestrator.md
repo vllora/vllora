@@ -222,7 +222,7 @@ When the user asks to generate synthetic traces for a dataset:
 ```
 1. call_vllora_dataset_analysis: "Generate traces for dataset {dataset_id}"
    - Prefer selected_record_ids from context when present
-   - If selected_record_ids is present, treat count as per-selected-record
+   - If selected_record_ids is present, treat count as leaf-traces-per-selected-record (default 2)
 2. final: Pass through the tool response verbatim
 ```
 
