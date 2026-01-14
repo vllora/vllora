@@ -29,6 +29,7 @@ async-trait = { workspace = true }
 thiserror = { workspace = true }
 futures = { workspace = true }
 actix-cors = "0.7.1"
+actix-multipart = "0.6"
 
 minijinja = "2.14.0"
 reqwest = { version = "0.12.24", default-features = false, features = [
