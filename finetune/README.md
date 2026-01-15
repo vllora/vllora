@@ -165,50 +165,128 @@ The wrapper API converts `DatasetWithRecords` into JSONL format compatible with 
      - `validation_file`: Optional validation JSONL (if provided)
    - Handle response and error propagation
 
-### Database Schema
+## Data Storage
 
-**Datasets Table:**
-```sql
-CREATE TABLE finetune_datasets (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    project_id TEXT NOT NULL,
-    tenant_id TEXT NOT NULL,
-    name TEXT NOT NULL,
-    description TEXT,
-    status TEXT NOT NULL DEFAULT 'draft',  -- draft, ready, training, completed, failed
-    jsonl_file_url TEXT,                    -- S3/storage URL for generated JSONL
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    FOREIGN KEY (project_id, tenant_id) REFERENCES projects(project_id, tenant_id)
-);
+Entities are stored across different systems depending on their type and lifecycle:
+
+### AI Gateway Storage (IndexedDB)
+
+#### Datasets
+
+**Storage**: Browser IndexedDB (client-side)
+
+Datasets are stored locally in the browser using IndexedDB for the AI Gateway UI. This allows users to manage datasets without requiring server-side storage.
+
+**Database**: `vllora-datasets` (IndexedDB)
+
+**Object Stores**:
+
+1. **`datasets`** - Dataset metadata
+   ```typescript
+   interface Dataset {
+     id: string;                    // Primary key
+     name: string;                  // Dataset name
+     createdAt: number;             // Timestamp
+     updatedAt: number;             // Timestamp
+   }
+   ```
+   - Indexes: `name`, `createdAt`, `updatedAt`
+
+2. **`records`** - Dataset records (training examples)
+   ```typescript
+   interface DatasetRecord {
+     id: string;                    // Primary key
+     datasetId: string;            // Foreign key to dataset
+     data: unknown;                // Span data (DataInfo) or imported object
+     spanId?: string;              // Optional reference to trace span
+     topic?: string;               // Topic classification
+     evaluation?: DatasetEvaluation; // Evaluation data
+     createdAt: number;
+     updatedAt: number;
+   }
+   ```
+   - Indexes: `datasetId`, `topic`, `createdAt`, `spanId`, `datasetId_spanId` (composite)
+
+**Access Pattern**:
+- Datasets are created and managed in the AI Gateway UI
+- When uploading to cloud API, records are converted to JSONL format
+- Dataset ID from IndexedDB is not persisted in cloud - cloud generates its own dataset ID
+
+**Service Functions**: See `ai-gateway/ui/src/services/datasets-db.ts` for IndexedDB operations.
+
+### Server Storage
+
+#### Fine-tuning Jobs
+
+**Current Status**: Jobs are currently tracked via provider APIs only. Database persistence is planned but not yet implemented.
+
+**Storage**: Provider API
+- Job metadata is retrieved directly from provider API
+- No local database persistence yet
+
+#### Deployed Models
+
+Deployed fine-tuned models are automatically registered when a deployment is created. This makes them available for inference within the project.
+
+**Key Fields**:
+- `project_id` - Associates the model with the project that created it
+- `model_name_in_provider` - The provider-specific model identifier (e.g., `"accounts/langdb/models/my-custom-model-v1"`)
+- `provider_info_id` - References the provider
+- `model_type` - Type of model (typically `"chat"` for reinforcement fine-tuned models)
+
+**Registration Flow**:
+When a deployment is created:
+1. Deployment is created via provider API
+2. Model is automatically registered with `project_id` set to the creating project
+3. Model becomes available for inference within that project
+
+#### Deployments
+
+**Storage**: Provider API
+
+Deployments are managed entirely via provider APIs. There is no local database table for deployments.
+
+- Deployment metadata is stored by the provider
+- Deployment IDs are returned from provider APIs
+- No local persistence required - deployments are ephemeral and can be recreated
+
+### Storage Summary
+
+| Entity | Storage Location | Persistence | Scoping |
+|--------|-----------------|-------------|---------|
+| **Datasets** | AI Gateway IndexedDB | Client-side only | Per browser |
+| **Fine-tuning Jobs** | Provider API | Provider-managed | Per project (via API) |
+| **Deployed Models** | `global_model_info` | Persistent | `project_id` |
+| **Deployments** | Provider API | Provider-managed | Per account |
+
+### Data Flow
+
 ```
-
-**Dataset Rows Table:**
-```sql
-CREATE TABLE finetune_dataset_rows (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    dataset_id UUID NOT NULL REFERENCES finetune_datasets(id),
-    original_span_id TEXT,                  -- References traces.span_id
-    generated_span_id TEXT,
-    topic_id UUID REFERENCES finetune_topics(id),
-    evaluation_score FLOAT,
-    messages JSONB NOT NULL,                -- Training messages in OpenAI format
-    metadata JSONB DEFAULT '{}',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
-);
-```
-
-**Topics Table:**
-```sql
-CREATE TABLE finetune_topics (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    dataset_id UUID NOT NULL REFERENCES finetune_datasets(id),
-    parent_id UUID REFERENCES finetune_topics(id),
-    name TEXT NOT NULL,
-    description TEXT,
-    evaluation_prompt TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
-);
+┌─────────────────────────────────────────────────────────────┐
+│                    AI Gateway (Client)                      │
+│                                                              │
+│  IndexedDB: vllora-datasets                                 │
+│    ├── datasets (metadata)                                  │
+│    └── records (training examples)                          │
+│                                                              │
+│  When uploading:                                            │
+│    datasets + records → JSONL → Cloud API                    │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            │ JSONL upload
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Cloud Package (Server)                    │
+│                                                              │
+│  Server Storage:                                            │
+│    └── global_model_info (deployed models)                 │
+│        └── project_id: UUID (scoped to project)             │
+│                                                              │
+│  Provider APIs:                                              │
+│    ├── Datasets (temporary, for job creation)                 │
+│    ├── Reinforcement Fine-tuning Jobs                        │
+│    └── Deployments                                           │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ## API Endpoints
