@@ -1,22 +1,52 @@
 use actix_multipart::Multipart;
 use actix_web::{web, HttpResponse, Result};
 use futures::StreamExt;
-use reqwest::header::HeaderMap;
-use reqwest::header::HeaderValue;
-use reqwest::header::AUTHORIZATION;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use vllora_core::credentials::KeyStorage;
 use vllora_core::credentials::ProviderCredentialsId;
+use vllora_core::metadata::models::finetune_job::DbNewFinetuneJob;
+use vllora_core::metadata::pool::DbPool;
+use vllora_core::metadata::services::finetune_job::FinetuneJobService;
 use vllora_core::GatewayApiError;
+use vllora_finetune::{
+    CreateDeploymentRequest, CreateReinforcementFinetuningJobRequest, LangdbCloudFinetuneClient,
+};
 use vllora_llm::types::credentials::Credentials;
 
-/// Get cloud API URL
-fn get_api_url() -> String {
-    std::env::var("LANGDB_API_URL")
-        .unwrap_or_else(|_| vllora_core::types::LANGDB_API_URL.to_string())
+#[derive(Debug, Deserialize)]
+pub struct ReinforcementJobQuery {
+    pub limit: Option<u32>,
+    pub after: Option<String>,
 }
 
-async fn get_langdb_api_key(
+#[derive(Debug, Serialize)]
+pub struct ReinforcementJobStatusResponse {
+    pub provider_job_id: String,
+    pub status: String,
+    pub fine_tuned_model: Option<String>,
+    pub error_message: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FinetuningJobResponse {
+    pub id: String,
+    pub provider_job_id: String,
+    pub status: String,
+    pub base_model: String,
+    pub fine_tuned_model: Option<String>,
+    pub provider: String,
+    pub hyperparameters: Option<serde_json::Value>,
+    pub suffix: Option<String>,
+    pub error_message: Option<String>,
+    pub training_file_id: String,
+    pub validation_file_id: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+    pub completed_at: Option<String>,
+}
+
+pub async fn get_langdb_api_key(
     key_storage: &dyn KeyStorage,
     project_slug: Option<&str>,
 ) -> Result<String, GatewayApiError> {
@@ -42,85 +72,9 @@ async fn get_langdb_api_key(
     }
 }
 
-async fn get_langdb_cloud_client(
-    key_storage: &dyn KeyStorage,
-    project_slug: Option<&str>,
-) -> Result<reqwest::Client, GatewayApiError> {
-    let api_key = get_langdb_api_key(key_storage, project_slug).await?;
-    let mut headers = HeaderMap::new();
-    let authorization_value = format!("Bearer {}", api_key);
-    headers.insert(
-        AUTHORIZATION,
-        HeaderValue::from_str(&authorization_value).map_err(|e| {
-            GatewayApiError::CustomError(format!("Failed to create authorization header: {}", e))
-        })?,
-    );
-    reqwest::Client::builder()
-        .default_headers(headers)
-        .build()
-        .map_err(|e| {
-            GatewayApiError::CustomError(format!("Failed to build langdb cloud client: {}", e))
-        })
-}
-
 // ============================================================================
 // Reinforcement Fine-Tuning Handlers
 // ============================================================================
-
-/// Request to create a reinforcement fine-tuning job
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CreateReinforcementFinetuningJobRequest {
-    pub dataset: String,
-    pub base_model: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub output_model: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub evaluation_dataset: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub display_name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub training_config: Option<ReinforcementTrainingConfig>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub inference_parameters: Option<ReinforcementInferenceParameters>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub chunk_size: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub node_count: Option<u32>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReinforcementTrainingConfig {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub learning_rate: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_context_length: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub lora_rank: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub epochs: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub batch_size: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub gradient_accumulation_steps: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub learning_rate_warmup_steps: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub batch_size_samples: Option<u32>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReinforcementInferenceParameters {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_output_tokens: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub temperature: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub top_p: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub top_k: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub response_candidates_count: Option<u32>,
-}
 
 /// Upload a dataset file (JSONL format) to the provider
 /// This forwards the multipart request to the cloud API
@@ -165,181 +119,191 @@ pub async fn upload_dataset(
         ));
     }
 
-    // Forward multipart request to cloud API
-    let client =
-        get_langdb_cloud_client(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
-    let mut form = reqwest::multipart::Form::new();
-
-    // Add JSONL file
-    let jsonl_part = reqwest::multipart::Part::bytes(jsonl_data)
-        .file_name("training.jsonl")
-        .mime_str("application/x-ndjson")
-        .map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!(
-                "Failed to create multipart part: {}",
-                e
-            ))
-        })?;
-    form = form.part("file", jsonl_part);
-
-    // Build request to cloud API
-    let cloud_request = client
-        .post(format!("{}/finetune/datasets", get_api_url()))
-        .multipart(form);
-
-    // Send request to cloud API
-    let response = cloud_request.send().await.map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to call cloud API: {}", e))
+    // Get API key and create client
+    let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
+    let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
     })?;
 
-    // Forward response
-    let status_code = actix_web::http::StatusCode::from_u16(response.status().as_u16())
-        .unwrap_or(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR);
-    let body: serde_json::Value = response.json().await.map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to read response: {}", e))
+    // Upload dataset using client
+    let response = client.upload_dataset(jsonl_data).await.map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Failed to upload dataset: {}", e))
     })?;
 
-    Ok(HttpResponse::build(status_code).json(body))
+    Ok(HttpResponse::Created().json(response))
 }
 
 /// Create a reinforcement fine-tuning job
-/// This forwards the request to the cloud API
+/// This forwards the request to the cloud API and saves to local database
 pub async fn create_reinforcement_job(
     request: web::Json<CreateReinforcementFinetuningJobRequest>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
+    db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
-    let client =
-        get_langdb_cloud_client(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
+    // Extract owned request body once so we can reuse it
+    let request_body = request.into_inner();
 
-    // Forward request to cloud API
-    let cloud_request = client
-        .post(format!("{}/finetune/reinforcement-jobs", get_api_url()))
-        .json(&*request);
-
-    // Send request to cloud API
-    let response = cloud_request.send().await.map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to call cloud API: {}", e))
+    // Get API key and create client
+    let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
+    let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
     })?;
 
-    // Forward response
-    let status_code = actix_web::http::StatusCode::from_u16(response.status().as_u16())
-        .unwrap_or(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR);
-    let body: serde_json::Value = response.json().await.map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to read response: {}", e))
-    })?;
+    // Create job using client (forwards to cloud API)
+    let cloud_response = client
+        .create_reinforcement_job(request_body.clone())
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!("Failed to create job: {}", e))
+        })?;
 
-    Ok(HttpResponse::build(status_code).json(body))
-}
+    // Save job to local database
+    let finetune_job_service = FinetuneJobService::new(db_pool.get_ref().clone());
 
-#[derive(Debug, Deserialize)]
-pub struct ReinforcementJobQuery {
-    pub limit: Option<u32>,
-    pub after: Option<String>,
+    // Convert training config to hyperparameters HashMap
+    let hyperparameters = request_body.training_config.as_ref().map(|tc| {
+        let mut h = HashMap::new();
+        if let Some(lr) = tc.learning_rate {
+            h.insert("learning_rate".to_string(), serde_json::json!(lr));
+        }
+        if let Some(mcl) = tc.max_context_length {
+            h.insert("max_context_length".to_string(), serde_json::json!(mcl));
+        }
+        if let Some(lr) = tc.lora_rank {
+            h.insert("lora_rank".to_string(), serde_json::json!(lr));
+        }
+        if let Some(epochs) = tc.epochs {
+            h.insert("epochs".to_string(), serde_json::json!(epochs));
+        }
+        if let Some(bs) = tc.batch_size {
+            h.insert("batch_size".to_string(), serde_json::json!(bs));
+        }
+        if let Some(gas) = tc.gradient_accumulation_steps {
+            h.insert(
+                "gradient_accumulation_steps".to_string(),
+                serde_json::json!(gas),
+            );
+        }
+        if let Some(lrw) = tc.learning_rate_warmup_steps {
+            h.insert(
+                "learning_rate_warmup_steps".to_string(),
+                serde_json::json!(lrw),
+            );
+        }
+        if let Some(bss) = tc.batch_size_samples {
+            h.insert("batch_size_samples".to_string(), serde_json::json!(bss));
+        }
+        h
+    });
+
+    let new_job = DbNewFinetuneJob::new(
+        project.id.to_string(),
+        request_body.dataset.clone(),
+        "langdb".to_string(),
+        cloud_response.provider_job_id.clone(),
+        request_body.base_model.clone(),
+    )
+    .with_fine_tuned_model(cloud_response.fine_tuned_model.clone())
+    .with_training_file_id(Some(request_body.dataset.clone()))
+    .with_validation_file_id(request_body.evaluation_dataset.clone())
+    .with_hyperparameters(hyperparameters);
+
+    // Save to database (ignore errors - job is already created in cloud)
+    if let Err(e) = finetune_job_service.create(new_job) {
+        tracing::warn!("Failed to save finetune job to local database: {}", e);
+    }
+
+    Ok(HttpResponse::Created().json(cloud_response))
 }
 
 /// Get reinforcement fine-tuning job status
-/// This forwards the request to the cloud API
+/// Queries local database first, falls back to cloud API if not found
 pub async fn get_reinforcement_job_status(
     job_id: web::Path<String>,
-    query: web::Query<ReinforcementJobQuery>,
+    _query: web::Query<ReinforcementJobQuery>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
+    db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
     let job_id_str = job_id.into_inner();
 
-    // Build URL with query parameters
-    let mut url = format!(
-        "{}/finetune/reinforcement-jobs/{}/status",
-        get_api_url(),
-        job_id_str
-    );
-    let mut query_params = Vec::new();
-    if let Some(limit) = query.limit {
-        query_params.push(format!("limit={}", limit));
-    }
-    if let Some(after) = &query.after {
-        query_params.push(format!("after={}", after));
-    }
-    if !query_params.is_empty() {
-        url.push('?');
-        url.push_str(&query_params.join("&"));
+    // Try to find job in local database
+    let finetune_job_service = FinetuneJobService::new(db_pool.get_ref().clone());
+
+    if let Ok(Some(db_job)) =
+        finetune_job_service.get_by_provider_job_id(&job_id_str, &project.id.to_string())
+    {
+        return Ok(HttpResponse::Ok().json(ReinforcementJobStatusResponse {
+            provider_job_id: db_job.provider_job_id,
+            status: db_job.state,
+            fine_tuned_model: db_job.fine_tuned_model,
+            error_message: db_job.error_message,
+        }));
     }
 
-    // Forward request to cloud API
-    let client =
-        get_langdb_cloud_client(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
-    let cloud_request = client.get(&url);
-
-    // Send request to cloud API
-    let response = cloud_request.send().await.map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to call cloud API: {}", e))
+    // If not found in database, query cloud API (backward compatibility)
+    let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
+    let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
     })?;
 
-    // Forward response
-    let status_code = actix_web::http::StatusCode::from_u16(response.status().as_u16())
-        .unwrap_or(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR);
-    let body: serde_json::Value = response.json().await.map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to read response: {}", e))
-    })?;
+    // Get job status using client
+    let response = client
+        .get_reinforcement_job_status(&job_id_str)
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!("Failed to get job status: {}", e))
+        })?;
 
-    Ok(HttpResponse::build(status_code).json(body))
+    Ok(HttpResponse::Ok().json(response))
 }
 
 /// List reinforcement fine-tuning jobs
-/// This forwards the request to the cloud API
+/// Queries local database
 pub async fn list_reinforcement_jobs(
     query: web::Query<ReinforcementJobQuery>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
-    key_storage: web::Data<Box<dyn KeyStorage>>,
+    _key_storage: web::Data<Box<dyn KeyStorage>>,
+    db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
-    // Build URL with query parameters
-    let mut url = format!("{}/finetune/reinforcement-jobs", get_api_url());
-    let mut query_params = Vec::new();
-    if let Some(limit) = query.limit {
-        query_params.push(format!("limit={}", limit));
-    }
-    if let Some(after) = &query.after {
-        query_params.push(format!("after={}", after));
-    }
-    if !query_params.is_empty() {
-        url.push('?');
-        url.push_str(&query_params.join("&"));
-    }
+    // Query local database
+    let finetune_job_service = FinetuneJobService::new(db_pool.get_ref().clone());
 
-    // Forward request to cloud API
-    let client =
-        get_langdb_cloud_client(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
-    let cloud_request = client.get(&url);
+    let db_jobs = finetune_job_service
+        .list_by_project(&project.id.to_string(), query.limit, query.after.as_deref())
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!("Failed to list jobs: {}", e))
+        })?;
 
-    // Send request to cloud API
-    let response = cloud_request.send().await.map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to call cloud API: {}", e))
-    })?;
+    let response: Vec<FinetuningJobResponse> = db_jobs
+        .into_iter()
+        .map(|job| FinetuningJobResponse {
+            id: job.id,
+            provider_job_id: job.provider_job_id,
+            status: job.state,
+            base_model: job.base_model,
+            fine_tuned_model: job.fine_tuned_model,
+            provider: job.provider,
+            hyperparameters: job
+                .hyperparameters
+                .and_then(|h| serde_json::from_str(&h).ok()),
+            suffix: None,
+            error_message: job.error_message,
+            training_file_id: job.training_file_id.unwrap_or_default(),
+            validation_file_id: job.validation_file_id,
+            created_at: job.created_at,
+            updated_at: job.updated_at,
+            completed_at: job.completed_at,
+        })
+        .collect();
 
-    // Forward response
-    let status_code = actix_web::http::StatusCode::from_u16(response.status().as_u16())
-        .unwrap_or(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR);
-    let body: serde_json::Value = response.json().await.map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to read response: {}", e))
-    })?;
-
-    Ok(HttpResponse::build(status_code).json(body))
+    Ok(HttpResponse::Ok().json(response))
 }
 
 // ============================================================================
 // Deployment Handlers
 // ============================================================================
-
-/// Request to create a deployment for a fine-tuned model
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CreateDeploymentRequest {
-    pub model_id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub display_name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub accelerator_type: Option<String>,
-}
 
 /// Deploy a fine-tuned model
 /// This forwards the request to the cloud API
@@ -348,28 +312,21 @@ pub async fn deploy_model(
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
 ) -> Result<HttpResponse> {
-    let _project_id = project.id;
-
-    // Forward request to cloud API
-    let client =
-        get_langdb_cloud_client(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
-    let cloud_request = client
-        .post(format!("{}/finetune/deployments", get_api_url()))
-        .json(&*request);
-
-    // Send request to cloud API
-    let response = cloud_request.send().await.map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to call cloud API: {}", e))
+    // Get API key and create client
+    let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
+    let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
     })?;
 
-    // Forward response
-    let status_code = actix_web::http::StatusCode::from_u16(response.status().as_u16())
-        .unwrap_or(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR);
-    let body: serde_json::Value = response.json().await.map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to read response: {}", e))
-    })?;
+    // Deploy model using client
+    let response = client
+        .deploy_model(request.into_inner())
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!("Failed to deploy model: {}", e))
+        })?;
 
-    Ok(HttpResponse::build(status_code).json(body))
+    Ok(HttpResponse::Created().json(response))
 }
 
 /// Delete a deployment
@@ -381,35 +338,22 @@ pub async fn delete_deployment(
 ) -> Result<HttpResponse> {
     let deployment_id_str = deployment_id.into_inner();
 
-    // Build URL
-    let url = format!(
-        "{}/finetune/deployments/{}",
-        get_api_url(),
-        deployment_id_str
-    );
-
-    // Forward request to cloud API
-    let client =
-        get_langdb_cloud_client(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
-    let cloud_request = client.delete(&url);
-
-    // Send request to cloud API
-    let response = cloud_request.send().await.map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to call cloud API: {}", e))
+    // Get API key and create client
+    let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
+    let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
     })?;
 
-    // Forward response status
-    let status_code = actix_web::http::StatusCode::from_u16(response.status().as_u16())
-        .unwrap_or(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR);
+    // Delete deployment using client
+    client
+        .delete_deployment(&deployment_id_str)
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!(
+                "Failed to delete deployment: {}",
+                e
+            ))
+        })?;
 
-    // For DELETE requests, return the status code directly (204 No Content on success)
-    if status_code == actix_web::http::StatusCode::NO_CONTENT {
-        Ok(HttpResponse::NoContent().finish())
-    } else {
-        // If there's an error, try to read the error body
-        let body: serde_json::Value = response.json().await.unwrap_or(serde_json::json!({
-            "error": "Failed to delete deployment"
-        }));
-        Ok(HttpResponse::build(status_code).json(body))
-    }
+    Ok(HttpResponse::NoContent().finish())
 }

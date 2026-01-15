@@ -17,6 +17,7 @@ mod cli;
 mod config;
 mod cost;
 mod distri;
+mod finetune_state_tracker;
 mod guardrails;
 mod handlers;
 mod http;

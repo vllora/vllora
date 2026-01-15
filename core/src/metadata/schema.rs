@@ -143,9 +143,32 @@ diesel::table! {
         id -> Text,
     }
 }
+
+diesel::table! {
+    finetune_jobs (id) {
+        id -> Text,
+        project_id -> Text,
+        dataset_id -> Text,
+        state -> Text,
+        provider -> Text,
+        provider_job_id -> Text,
+        base_model -> Text,
+        fine_tuned_model -> Nullable<Text>,
+        error_message -> Nullable<Text>,
+        hyperparameters -> Nullable<Text>,
+        training_file_id -> Nullable<Text>,
+        validation_file_id -> Nullable<Text>,
+        created_at -> Text,
+        updated_at -> Text,
+        completed_at -> Nullable<Text>,
+    }
+}
+
 diesel::joinable!(provider_credentials -> projects (project_id));
+diesel::joinable!(finetune_jobs -> projects (project_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
+    finetune_jobs,
     metrics,
     models,
     projects,

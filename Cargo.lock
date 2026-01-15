@@ -4747,6 +4747,7 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "vllora_core",
+ "vllora_finetune",
  "vllora_guardrails",
  "vllora_llm",
  "vllora_telemetry",
@@ -4807,6 +4808,17 @@ dependencies = [
  "valuable",
  "vllora_llm",
  "vllora_telemetry",
+]
+
+[[package]]
+name = "vllora_finetune"
+version = "0.1.21"
+dependencies = [
+ "chrono",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "uuid",
 ]
 
 [[package]]

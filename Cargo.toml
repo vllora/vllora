@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["gateway", "core", "guardrails", "telemetry", "llm"]
+members = ["gateway", "core", "guardrails", "telemetry", "llm", "finetune"]
 default-members = ["gateway"]
 exclude = ["llm/examples/*"]
 
