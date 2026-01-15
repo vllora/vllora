@@ -15,7 +15,7 @@ CREATE TABLE finetune_jobs (
     base_model TEXT NOT NULL,
     fine_tuned_model TEXT,
     error_message TEXT,
-    hyperparameters TEXT, -- JSON stored as text
+    training_config TEXT, -- JSON stored as text
     training_file_id TEXT,
     validation_file_id TEXT,
     created_at TEXT DEFAULT (datetime('now')) NOT NULL,

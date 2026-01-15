@@ -1,7 +1,7 @@
 use crate::metadata::schema::finetune_jobs;
 use diesel::{AsChangeset, Identifiable, Insertable, Queryable, Selectable};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use vllora_finetune::types::ReinforcementTrainingConfig;
 
 /// Finetune job state enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -56,7 +56,7 @@ pub struct DbFinetuneJob {
     pub base_model: String,
     pub fine_tuned_model: Option<String>,
     pub error_message: Option<String>,
-    pub hyperparameters: Option<String>, // JSON stored as text
+    pub training_config: Option<String>, // JSON stored as text
     pub training_file_id: Option<String>,
     pub validation_file_id: Option<String>,
     pub created_at: String,
@@ -88,7 +88,7 @@ pub struct DbNewFinetuneJob {
     pub base_model: String,
     pub fine_tuned_model: Option<String>,
     pub error_message: Option<String>,
-    pub hyperparameters: Option<String>,
+    pub training_config: Option<String>,
     pub training_file_id: Option<String>,
     pub validation_file_id: Option<String>,
 }
@@ -111,7 +111,7 @@ impl DbNewFinetuneJob {
             base_model,
             fine_tuned_model: None,
             error_message: None,
-            hyperparameters: None,
+            training_config: None,
             training_file_id: None,
             validation_file_id: None,
         }
@@ -127,11 +127,11 @@ impl DbNewFinetuneJob {
         self
     }
 
-    pub fn with_hyperparameters(
+    pub fn with_training_config(
         mut self,
-        hyperparameters: Option<HashMap<String, serde_json::Value>>,
+        training_config: Option<ReinforcementTrainingConfig>,
     ) -> Self {
-        self.hyperparameters = hyperparameters.and_then(|h| serde_json::to_string(&h).ok());
+        self.training_config = training_config.and_then(|tc| serde_json::to_string(&tc).ok());
         self
     }
 
@@ -152,7 +152,7 @@ pub struct DbUpdateFinetuneJob {
     pub state: Option<String>,
     pub fine_tuned_model: Option<Option<String>>,
     pub error_message: Option<Option<String>>,
-    pub hyperparameters: Option<Option<String>>,
+    pub training_config: Option<Option<String>>,
     pub completed_at: Option<Option<String>>,
     pub updated_at: Option<String>,
 }
@@ -183,11 +183,11 @@ impl DbUpdateFinetuneJob {
         self
     }
 
-    pub fn with_hyperparameters(
+    pub fn with_training_config(
         mut self,
-        hyperparameters: Option<HashMap<String, serde_json::Value>>,
+        training_config: Option<ReinforcementTrainingConfig>,
     ) -> Self {
-        self.hyperparameters = Some(hyperparameters.and_then(|h| serde_json::to_string(&h).ok()));
+        self.training_config = Some(training_config.and_then(|tc| serde_json::to_string(&tc).ok()));
         self.updated_at = Some(chrono::Utc::now().to_rfc3339());
         self
     }
