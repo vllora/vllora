@@ -4806,6 +4806,7 @@ dependencies = [
  "uuid",
  "validator",
  "valuable",
+ "vllora_finetune",
  "vllora_llm",
  "vllora_telemetry",
 ]

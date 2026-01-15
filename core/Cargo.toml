@@ -18,6 +18,7 @@ path = "src/lib.rs"
 [dependencies]
 vllora_llm = { path = "../llm", version = "0.1.21", features = ["schemars"] }
 vllora_telemetry = { path = "../telemetry", version = "0.1.21" }
+vllora_finetune = { path = "../finetune", version = "0.1.21" }
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
 tracing-futures = { workspace = true }

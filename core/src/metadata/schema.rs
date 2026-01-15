@@ -155,7 +155,7 @@ diesel::table! {
         base_model -> Text,
         fine_tuned_model -> Nullable<Text>,
         error_message -> Nullable<Text>,
-        hyperparameters -> Nullable<Text>,
+        training_config -> Nullable<Text>,
         training_file_id -> Nullable<Text>,
         validation_file_id -> Nullable<Text>,
         created_at -> Text,

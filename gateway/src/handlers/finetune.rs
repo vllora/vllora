@@ -2,13 +2,13 @@ use actix_multipart::Multipart;
 use actix_web::{web, HttpResponse, Result};
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use vllora_core::credentials::KeyStorage;
 use vllora_core::credentials::ProviderCredentialsId;
 use vllora_core::metadata::models::finetune_job::DbNewFinetuneJob;
 use vllora_core::metadata::pool::DbPool;
 use vllora_core::metadata::services::finetune_job::FinetuneJobService;
 use vllora_core::GatewayApiError;
+use vllora_finetune::ReinforcementTrainingConfig;
 use vllora_finetune::{
     CreateDeploymentRequest, CreateReinforcementFinetuningJobRequest, LangdbCloudFinetuneClient,
 };
@@ -36,7 +36,7 @@ pub struct FinetuningJobResponse {
     pub base_model: String,
     pub fine_tuned_model: Option<String>,
     pub provider: String,
-    pub hyperparameters: Option<serde_json::Value>,
+    pub training_config: Option<ReinforcementTrainingConfig>,
     pub suffix: Option<String>,
     pub error_message: Option<String>,
     pub training_file_id: String,
@@ -161,42 +161,6 @@ pub async fn create_reinforcement_job(
     // Save job to local database
     let finetune_job_service = FinetuneJobService::new(db_pool.get_ref().clone());
 
-    // Convert training config to hyperparameters HashMap
-    let hyperparameters = request_body.training_config.as_ref().map(|tc| {
-        let mut h = HashMap::new();
-        if let Some(lr) = tc.learning_rate {
-            h.insert("learning_rate".to_string(), serde_json::json!(lr));
-        }
-        if let Some(mcl) = tc.max_context_length {
-            h.insert("max_context_length".to_string(), serde_json::json!(mcl));
-        }
-        if let Some(lr) = tc.lora_rank {
-            h.insert("lora_rank".to_string(), serde_json::json!(lr));
-        }
-        if let Some(epochs) = tc.epochs {
-            h.insert("epochs".to_string(), serde_json::json!(epochs));
-        }
-        if let Some(bs) = tc.batch_size {
-            h.insert("batch_size".to_string(), serde_json::json!(bs));
-        }
-        if let Some(gas) = tc.gradient_accumulation_steps {
-            h.insert(
-                "gradient_accumulation_steps".to_string(),
-                serde_json::json!(gas),
-            );
-        }
-        if let Some(lrw) = tc.learning_rate_warmup_steps {
-            h.insert(
-                "learning_rate_warmup_steps".to_string(),
-                serde_json::json!(lrw),
-            );
-        }
-        if let Some(bss) = tc.batch_size_samples {
-            h.insert("batch_size_samples".to_string(), serde_json::json!(bss));
-        }
-        h
-    });
-
     let new_job = DbNewFinetuneJob::new(
         project.id.to_string(),
         request_body.dataset.clone(),
@@ -207,7 +171,7 @@ pub async fn create_reinforcement_job(
     .with_fine_tuned_model(cloud_response.fine_tuned_model.clone())
     .with_training_file_id(Some(request_body.dataset.clone()))
     .with_validation_file_id(request_body.evaluation_dataset.clone())
-    .with_hyperparameters(hyperparameters);
+    .with_training_config(request_body.training_config.clone());
 
     // Save to database (ignore errors - job is already created in cloud)
     if let Err(e) = finetune_job_service.create(new_job) {
@@ -285,9 +249,9 @@ pub async fn list_reinforcement_jobs(
             base_model: job.base_model,
             fine_tuned_model: job.fine_tuned_model,
             provider: job.provider,
-            hyperparameters: job
-                .hyperparameters
-                .and_then(|h| serde_json::from_str(&h).ok()),
+            training_config: job
+                .training_config
+                .and_then(|tc| serde_json::from_str(&tc).ok()),
             suffix: None,
             error_message: job.error_message,
             training_file_id: job.training_file_id.unwrap_or_default(),
