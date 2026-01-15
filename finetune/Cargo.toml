@@ -1,0 +1,15 @@
+[package]
+name = "vllora_finetune"
+version = "0.1.21"
+edition = "2021"
+
+[lib]
+name = "vllora_finetune"
+path = "src/lib.rs"
+
+[dependencies]
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }

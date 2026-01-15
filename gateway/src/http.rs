@@ -1,6 +1,7 @@
 use crate::callback_handler::init_callback_handler;
 use crate::config::Config;
 use crate::cost::GatewayCostCalculator;
+use crate::finetune_state_tracker::FinetuneJobStateTracker;
 use crate::guardrails::GuardrailsService;
 use crate::handlers::{agents, debug, finetune, models, projects, session, threads};
 use crate::metrics_writer::SqliteMetricsWriterAdapter;
@@ -187,6 +188,7 @@ impl ApiServer {
         );
 
         let breakpoint_manager_for_closure = breakpoint_manager.clone();
+        let events_senders_container_for_tracker = events_senders_container.clone();
         let config = self.config.clone();
         let server = HttpServer::new(move || {
             let cors = Self::get_cors(CorsOptions::Permissive);
@@ -244,6 +246,20 @@ impl ApiServer {
             );
 
         let tonic_fut = tonic_server.map_err(ServerError::Tonic);
+
+        // Initialize and start finetune job state tracker
+        let key_storage_for_tracker = Arc::new(Box::new(ProviderKeyResolver::new(
+            server_config.db_pool.clone(),
+        )) as Box<dyn KeyStorage>);
+        let broadcaster_for_tracker = Arc::new(EventsUIBroadcaster::new(
+            events_senders_container_for_tracker.clone(),
+        ));
+        let state_tracker = FinetuneJobStateTracker::new(
+            server_config.db_pool.clone(),
+            key_storage_for_tracker,
+            broadcaster_for_tracker,
+        );
+        let _state_tracker_handle = state_tracker.start();
 
         // Print useful info after servers are bound and ready
         self.print_useful_info();

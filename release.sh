@@ -59,10 +59,11 @@ echo "Updating version to $NEW_VERSION in Cargo.toml files..."
 (cd guardrails && cargo set-version $NEW_VERSION)
 (cd llm && cargo set-version $NEW_VERSION)
 (cd telemetry && cargo set-version $NEW_VERSION)
+(cd finetune && cargo set-version $NEW_VERSION)
 
 cargo build --release
 
-git add CHANGELOG.md core/Cargo.toml gateway/Cargo.toml guardrails/Cargo.toml telemetry/Cargo.toml llm/Cargo.toml Cargo.lock
+git add CHANGELOG.md core/Cargo.toml gateway/Cargo.toml guardrails/Cargo.toml telemetry/Cargo.toml llm/Cargo.toml finetune/Cargo.toml Cargo.lock
 
 # Install standard-version if not already installed
 if ! command -v npx &> /dev/null; then
@@ -83,5 +84,6 @@ cargo publish -p vllora_telemetry
 cargo publish -p vllora_llm
 cargo publish -p vllora_core
 cargo publish -p vllora_guardrails
+cargo publish -p vllora_finetune
 cargo publish -p vllora
 

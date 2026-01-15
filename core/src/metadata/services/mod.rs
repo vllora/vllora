@@ -1,3 +1,4 @@
+pub mod finetune_job;
 pub mod group;
 pub mod mcp_config;
 pub mod metric;

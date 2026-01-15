@@ -21,6 +21,7 @@ vllora_core = { path = "../core", version = "0.1.21", features = ["sqlite"], def
 vllora_llm = { path = "../llm", version = "0.1.21" }
 vllora_guardrails = { path = "../guardrails", version = "0.1.21" }
 vllora_telemetry = { path = "../telemetry", version = "0.1.21" }
+vllora_finetune = { path = "../finetune", version = "0.1.21" }
 
 tokio = { workspace = true }
 serde = { workspace = true }
