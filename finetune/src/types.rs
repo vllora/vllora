@@ -116,4 +116,5 @@ pub struct AutoscalingPolicy {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DeploymentResponse {
     pub deployment_id: String,
+    pub inference_model_name: Option<String>,
 }
