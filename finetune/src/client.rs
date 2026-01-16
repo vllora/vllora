@@ -1,6 +1,7 @@
 use crate::types::{
     CreateDeploymentRequest, CreateReinforcementFinetuningJobRequest, DeploymentResponse,
-    FinetuningJobResponse, ReinforcementJobStatusResponse, UploadDatasetResponse,
+    FinetuningJobResponse, FinetuningJobResult, ReinforcementJobStatusResponse,
+    UploadDatasetResponse,
 };
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 
@@ -93,12 +94,20 @@ impl LangdbCloudFinetuneClient {
             return Err(format!("API error {}: {}", status, body));
         }
 
-        let body: FinetuningJobResponse = response
-            .json()
+        let text = response
+            .text()
             .await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
+            .map_err(|e| format!("Failed to get response: {}", e))?;
 
-        Ok(body)
+        let body: FinetuningJobResult = serde_json::from_str(&text)
+            .map_err(|e| format!("Failed to parse response: {}. Response: {}", e, text))?;
+
+        match body {
+            FinetuningJobResult::Success(response) => Ok(*response),
+            FinetuningJobResult::Error(error) => {
+                Err(format!("Failed to create job: {}", error.message))
+            }
+        }
     }
 
     /// Get reinforcement fine-tuning job status
