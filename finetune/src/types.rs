@@ -80,6 +80,19 @@ pub struct FinetuningJobResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct FinetuningJobError {
+    pub code: u16,
+    pub message: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum FinetuningJobResult {
+    Success(Box<FinetuningJobResponse>),
+    Error(FinetuningJobError),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ReinforcementJobStatusResponse {
     pub provider_job_id: String,
     pub status: String,
