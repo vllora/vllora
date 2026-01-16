@@ -18,6 +18,7 @@ use vllora_llm::types::credentials::Credentials;
 pub struct ReinforcementJobQuery {
     pub limit: Option<u32>,
     pub after: Option<String>,
+    pub dataset_id: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -228,14 +229,18 @@ pub async fn get_reinforcement_job_status(
 pub async fn list_reinforcement_jobs(
     query: web::Query<ReinforcementJobQuery>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
-    _key_storage: web::Data<Box<dyn KeyStorage>>,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
     // Query local database
     let finetune_job_service = FinetuneJobService::new(db_pool.get_ref().clone());
 
     let db_jobs = finetune_job_service
-        .list_by_project(&project.id.to_string(), query.limit, query.after.as_deref())
+        .list_by_project(
+            &project.id.to_string(),
+            query.limit,
+            query.after.as_deref(),
+            query.dataset_id.as_deref(),
+        )
         .map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!("Failed to list jobs: {}", e))
         })?;
