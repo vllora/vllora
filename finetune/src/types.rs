@@ -68,8 +68,9 @@ pub struct FinetuningJobResponse {
     pub status: String,
     pub base_model: String,
     pub fine_tuned_model: Option<String>,
+    #[serde(default = "default_provider")]
     pub provider: String,
-    pub hyperparameters: Option<serde_json::Value>,
+    pub training_config: Option<ReinforcementTrainingConfig>,
     pub suffix: Option<String>,
     pub error_message: Option<String>,
     pub training_file_id: String,
@@ -77,6 +78,10 @@ pub struct FinetuningJobResponse {
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
     pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+fn default_provider() -> String {
+    "langdb".to_string()
 }
 
 #[derive(Debug, Serialize, Deserialize)]
