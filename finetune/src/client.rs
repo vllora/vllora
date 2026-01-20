@@ -42,6 +42,7 @@ impl LangdbCloudFinetuneClient {
     pub async fn upload_dataset(
         &self,
         jsonl_data: Vec<u8>,
+        topic_hierarchy: Option<String>,
     ) -> Result<UploadDatasetResponse, String> {
         let mut form = reqwest::multipart::Form::new();
 
@@ -50,6 +51,13 @@ impl LangdbCloudFinetuneClient {
             .mime_str("application/x-ndjson")
             .map_err(|e| format!("Failed to create multipart part: {}", e))?;
         form = form.part("file", jsonl_part);
+
+        if let Some(topic_hierarchy) = topic_hierarchy {
+            let topic_part = reqwest::multipart::Part::text(topic_hierarchy)
+                .mime_str("application/json")
+                .map_err(|e| format!("Failed to create topic_hierarchy part: {}", e))?;
+            form = form.part("topic_hierarchy", topic_part);
+        }
 
         let url = format!("{}/finetune/datasets", self.api_url);
 
