@@ -171,8 +171,8 @@ pub async fn upload_dataset(
         .upload_dataset(jsonl_data, topic_hierarchy)
         .await
         .map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to upload dataset: {}", e))
-    })?;
+            actix_web::error::ErrorInternalServerError(format!("Failed to upload dataset: {}", e))
+        })?;
 
     Ok(HttpResponse::Created().json(response))
 }
