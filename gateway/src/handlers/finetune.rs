@@ -86,6 +86,7 @@ pub async fn upload_dataset(
 ) -> Result<HttpResponse> {
     // Parse multipart form data to get JSONL file
     let mut jsonl_data: Option<Vec<u8>> = None;
+    let mut topic_hierarchy: Option<String> = None;
 
     while let Some(field) = payload.next().await {
         let mut field = field.map_err(|e| {
@@ -94,19 +95,58 @@ pub async fn upload_dataset(
 
         let field_name = field.name();
 
-        if field_name == "file" {
-            // Read JSONL file
-            let mut bytes = Vec::new();
-            while let Some(chunk) = field.next().await {
-                let chunk = chunk.map_err(|e| {
-                    actix_web::error::ErrorBadRequest(format!("Failed to read file field: {}", e))
-                })?;
-                bytes.extend_from_slice(&chunk);
+        match field_name {
+            "file" => {
+                // Read JSONL file
+                let mut bytes = Vec::new();
+                while let Some(chunk) = field.next().await {
+                    let chunk = chunk.map_err(|e| {
+                        actix_web::error::ErrorBadRequest(format!(
+                            "Failed to read file field: {}",
+                            e
+                        ))
+                    })?;
+                    bytes.extend_from_slice(&chunk);
+                }
+                jsonl_data = Some(bytes);
             }
-            jsonl_data = Some(bytes);
-        } else {
-            // Ignore unknown fields
-            continue;
+            "topicHierarchy" | "topic_hierarchy" => {
+                // Read topic hierarchy config (JSON string)
+                let mut bytes = Vec::new();
+                while let Some(chunk) = field.next().await {
+                    let chunk = chunk.map_err(|e| {
+                        actix_web::error::ErrorBadRequest(format!(
+                            "Failed to read topicHierarchy field: {}",
+                            e
+                        ))
+                    })?;
+                    bytes.extend_from_slice(&chunk);
+                }
+
+                if !bytes.is_empty() {
+                    let s = String::from_utf8(bytes).map_err(|e| {
+                        actix_web::error::ErrorBadRequest(format!(
+                            "topicHierarchy must be UTF-8 encoded JSON: {}",
+                            e
+                        ))
+                    })?;
+                    let trimmed = s.trim();
+                    if !trimmed.is_empty() {
+                        // Validate it's JSON before forwarding
+                        serde_json::from_str::<serde_json::Value>(trimmed).map_err(|e| {
+                            actix_web::error::ErrorBadRequest(format!(
+                                "Invalid topicHierarchy JSON: {}",
+                                e
+                            ))
+                        })?;
+                        topic_hierarchy = Some(trimmed.to_string());
+                    }
+                }
+            }
+            _ => {
+                // Ignore unknown fields
+                continue;
+            }
         }
     }
 
@@ -127,7 +167,10 @@ pub async fn upload_dataset(
     })?;
 
     // Upload dataset using client
-    let response = client.upload_dataset(jsonl_data).await.map_err(|e| {
+    let response = client
+        .upload_dataset(jsonl_data, topic_hierarchy)
+        .await
+        .map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to upload dataset: {}", e))
     })?;
 
