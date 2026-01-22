@@ -1,6 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use crate::executor::responses::handle_create_response;
+use crate::handler::extract_tags;
 use crate::GatewayApiError;
 use crate::{
     credentials::KeyStorage,
@@ -230,6 +231,7 @@ pub async fn create(
 
     let rate_limiter_service = InMemoryRateLimiterService::new();
     let guardrails_evaluator_service = evaluator_service.clone().into_inner();
+    let tags = extract_tags(&req)?;
 
     let executor_context = ExecutorContext::new(
         callback_handler,
@@ -237,14 +239,14 @@ pub async fn create(
         Arc::new(Box::new(DefaultModelMetadataFactory::new(
             models_service.into_inner(),
         )) as Box<dyn ModelMetadataFactory>),
-        &req,
+        tags,
         HashMap::new(),
         guardrails_evaluator_service,
         Arc::new(rate_limiter_service),
         project.id,
         key_storage.into_inner(),
         None,
-    )?;
+    );
 
     handle_create_response(&request, &executor_context)
         .instrument(span.clone())
