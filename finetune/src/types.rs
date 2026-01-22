@@ -64,7 +64,6 @@ pub struct ReinforcementInferenceParameters {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FinetuningJobResponse {
     pub id: uuid::Uuid,
-    pub provider_job_id: String,
     pub status: String,
     pub base_model: String,
     pub fine_tuned_model: Option<String>,

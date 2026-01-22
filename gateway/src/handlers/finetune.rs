@@ -209,7 +209,7 @@ pub async fn create_reinforcement_job(
         project.id.to_string(),
         request_body.dataset.clone(),
         "langdb".to_string(),
-        cloud_response.provider_job_id.clone(),
+        cloud_response.id.to_string(),
         request_body.base_model.clone(),
     )
     .with_fine_tuned_model(cloud_response.fine_tuned_model.clone())

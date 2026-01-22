@@ -5,6 +5,7 @@ use crate::events::callback_handler::GatewayEvent;
 use crate::events::callback_handler::GatewaySpanStartEvent;
 use crate::events::model_events_handler::ModelEventsHandler;
 use crate::executor::context::ExecutorContext;
+use crate::handler::extract_tags;
 use crate::metadata::pool::DbPool;
 use crate::metadata::services::project::ProjectServiceImpl;
 use crate::model::DefaultModelMetadataFactory;
@@ -190,20 +191,21 @@ pub async fn create_chat_completion(
     };
 
     let db_pool = db_pool.into_inner();
+    let tags = extract_tags(&req)?;
     let executor_context = ExecutorContext::new(
         callback_handler_fn,
         cost_calculator,
         Arc::new(Box::new(
             DefaultModelMetadataFactory::new(models_service.into_inner()).with_db_pool(&db_pool),
         ) as Box<dyn ModelMetadataFactory>),
-        &req,
+        tags,
         HashMap::new(),
         guardrails_evaluator_service,
         Arc::new(rate_limiter_service),
         project_id,
         key_storage.into_inner(),
         None,
-    )?;
+    );
 
     let executor = RoutedExecutor::new(request.clone());
     executor
