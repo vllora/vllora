@@ -135,3 +135,28 @@ pub struct DeploymentResponse {
     pub deployment_id: String,
     pub inference_model_name: Option<String>,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "type", content = "config")]
+pub enum Evaluator {
+    LlmAsJudge(LlmAsJudgeConfig),
+    Js(JsConfig),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LlmAsJudgeConfig {
+    pub completion_params: CompletionModelParams,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CompletionModelParams {
+    pub model_name: String,
+    pub temperature: Option<f64>,
+    pub max_tokens: Option<u32>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct JsConfig {
+    pub script: String,
+    pub completion_params: CompletionModelParams,
+}

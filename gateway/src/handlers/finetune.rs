@@ -8,6 +8,7 @@ use vllora_core::metadata::models::finetune_job::DbNewFinetuneJob;
 use vllora_core::metadata::pool::DbPool;
 use vllora_core::metadata::services::finetune_job::FinetuneJobService;
 use vllora_core::GatewayApiError;
+use vllora_finetune::types::Evaluator;
 use vllora_finetune::ReinforcementTrainingConfig;
 use vllora_finetune::{
     CreateDeploymentRequest, CreateReinforcementFinetuningJobRequest, LangdbCloudFinetuneClient,
@@ -87,6 +88,7 @@ pub async fn upload_dataset(
     // Parse multipart form data to get JSONL file
     let mut jsonl_data: Option<Vec<u8>> = None;
     let mut topic_hierarchy: Option<String> = None;
+    let mut evaluator: Option<String> = None;
 
     while let Some(field) = payload.next().await {
         let mut field = field.map_err(|e| {
@@ -143,6 +145,39 @@ pub async fn upload_dataset(
                     }
                 }
             }
+            "evaluator" => {
+                // Read evaluator config (JSON string)
+                let mut bytes = Vec::new();
+                while let Some(chunk) = field.next().await {
+                    let chunk = chunk.map_err(|e| {
+                        actix_web::error::ErrorBadRequest(format!(
+                            "Failed to read evaluator field: {}",
+                            e
+                        ))
+                    })?;
+                    bytes.extend_from_slice(&chunk);
+                }
+
+                if !bytes.is_empty() {
+                    let s = String::from_utf8(bytes).map_err(|e| {
+                        actix_web::error::ErrorBadRequest(format!(
+                            "evaluator must be UTF-8 encoded JSON: {}",
+                            e
+                        ))
+                    })?;
+                    let trimmed = s.trim();
+                    if !trimmed.is_empty() {
+                        // Validate it's a valid Evaluator enum before forwarding
+                        serde_json::from_str::<Evaluator>(trimmed).map_err(|e| {
+                            actix_web::error::ErrorBadRequest(format!(
+                                "Invalid evaluator JSON: {}",
+                                e
+                            ))
+                        })?;
+                        evaluator = Some(trimmed.to_string());
+                    }
+                }
+            }
             _ => {
                 // Ignore unknown fields
                 continue;
@@ -168,7 +203,7 @@ pub async fn upload_dataset(
 
     // Upload dataset using client
     let response = client
-        .upload_dataset(jsonl_data, topic_hierarchy)
+        .upload_dataset(jsonl_data, topic_hierarchy, evaluator)
         .await
         .map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!("Failed to upload dataset: {}", e))
