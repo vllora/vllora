@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 
 // Response types
@@ -134,6 +135,63 @@ pub struct AutoscalingPolicy {
 pub struct DeploymentResponse {
     pub deployment_id: String,
     pub inference_model_name: Option<String>,
+}
+
+// === Evaluation types ===
+
+/// Model completion parameters for evaluation requests.
+/// This mirrors `langdb_cloud_core::types::eval_protocol::CompletionParams`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompletionParams {
+    #[serde(default)]
+    pub model: Option<String>,
+
+    #[serde(default)]
+    pub temperature: Option<f64>,
+
+    #[serde(flatten)]
+    pub extra: HashMap<String, JsonValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateEvaluationRequest {
+    pub dataset_id: uuid::Uuid,
+    pub model_params: CompletionParams,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateEvaluationResponse {
+    pub evaluation_run_id: uuid::Uuid,
+    pub status: String,
+    pub total_rows: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RowEvaluationResult {
+    pub dataset_row_id: uuid::Uuid,
+    pub row_index: i32,
+    pub status: String,
+    pub score: Option<f64>,
+    pub reason: Option<String>,
+    pub error_message: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EvaluationSummary {
+    pub average_score: Option<f64>,
+    pub passed_count: i32,
+    pub failed_count: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EvaluationResultResponse {
+    pub evaluation_run_id: uuid::Uuid,
+    pub status: String,
+    pub total_rows: i32,
+    pub completed_rows: i32,
+    pub failed_rows: i32,
+    pub results: Vec<RowEvaluationResult>,
+    pub summary: EvaluationSummary,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

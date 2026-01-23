@@ -180,7 +180,7 @@ pub struct DollarUsage {
 }
 
 #[async_trait::async_trait]
-pub trait LimitCheck {
+pub trait LimitCheck: Send + Sync {
     async fn can_execute_llm(&mut self) -> Result<bool, Box<dyn std::error::Error>>;
     async fn get_usage(&self) -> Result<DollarUsage, Box<dyn std::error::Error>>;
 }
