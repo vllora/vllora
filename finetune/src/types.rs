@@ -145,6 +145,8 @@ pub enum Evaluator {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LlmAsJudgeConfig {
+    pub prompt_template: String,
+    pub output_schema: String,
     pub completion_params: CompletionModelParams,
 }
 
