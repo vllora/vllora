@@ -1,5 +1,6 @@
 use crate::types::{
-    CreateDeploymentRequest, CreateReinforcementFinetuningJobRequest, DeploymentResponse,
+    CreateDeploymentRequest, CreateEvaluationRequest, CreateEvaluationResponse,
+    CreateReinforcementFinetuningJobRequest, DeploymentResponse, EvaluationResultResponse,
     FinetuningJobResponse, FinetuningJobResult, ReinforcementJobStatusResponse,
     UploadDatasetResponse,
 };
@@ -83,6 +84,34 @@ impl LangdbCloudFinetuneClient {
         }
 
         let body: UploadDatasetResponse = response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+        Ok(body)
+    }
+
+    /// Create an evaluation run for a dataset
+    pub async fn create_evaluation(
+        &self,
+        request: CreateEvaluationRequest,
+    ) -> Result<CreateEvaluationResponse, String> {
+        let url = format!("{}/finetune/datasets/evaluations", self.api_url);
+
+        let req = self.client.post(&url).json(&request);
+
+        let response = req
+            .send()
+            .await
+            .map_err(|e| format!("Failed to call cloud API: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!("API error {}: {}", status, body));
+        }
+
+        let body: CreateEvaluationResponse = response
             .json()
             .await
             .map_err(|e| format!("Failed to parse response: {}", e))?;
@@ -190,6 +219,37 @@ impl LangdbCloudFinetuneClient {
         }
 
         let body: Vec<FinetuningJobResponse> = response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+        Ok(body)
+    }
+
+    /// Get evaluation results for a given evaluation run
+    pub async fn get_evaluation_result(
+        &self,
+        evaluation_run_id: &str,
+    ) -> Result<EvaluationResultResponse, String> {
+        let url = format!(
+            "{}/finetune/datasets/evaluations/{}",
+            self.api_url, evaluation_run_id
+        );
+
+        let req = self.client.get(&url);
+
+        let response = req
+            .send()
+            .await
+            .map_err(|e| format!("Failed to call cloud API: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!("API error {}: {}", status, body));
+        }
+
+        let body: EvaluationResultResponse = response
             .json()
             .await
             .map_err(|e| format!("Failed to parse response: {}", e))?;

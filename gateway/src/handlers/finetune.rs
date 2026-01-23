@@ -8,7 +8,10 @@ use vllora_core::metadata::models::finetune_job::DbNewFinetuneJob;
 use vllora_core::metadata::pool::DbPool;
 use vllora_core::metadata::services::finetune_job::FinetuneJobService;
 use vllora_core::GatewayApiError;
-use vllora_finetune::types::Evaluator;
+use vllora_finetune::types::{
+    CompletionParams as EvalCompletionParams, CreateEvaluationRequest, EvaluationResultResponse,
+    Evaluator,
+};
 use vllora_finetune::ReinforcementTrainingConfig;
 use vllora_finetune::{
     CreateDeploymentRequest, CreateReinforcementFinetuningJobRequest, LangdbCloudFinetuneClient,
@@ -72,6 +75,72 @@ pub async fn get_langdb_api_key(
         std::env::var("LANGDB_API_KEY")
             .map_err(|e| GatewayApiError::CustomError(format!("LANGDB_API_KEY not set: {}", e)))
     }
+}
+
+// ============================================================================
+// Evaluation Handlers
+// ============================================================================
+
+#[derive(Debug, Deserialize)]
+pub struct CreateEvaluationBody {
+    pub dataset_id: uuid::Uuid,
+    pub model_params: EvalCompletionParams,
+}
+
+/// Start an evaluation run for a dataset (forwards to cloud API)
+pub async fn create_evaluation(
+    request: web::Json<CreateEvaluationBody>,
+    project: web::ReqData<vllora_core::types::metadata::project::Project>,
+    key_storage: web::Data<Box<dyn KeyStorage>>,
+) -> Result<HttpResponse> {
+    let request_body = request.into_inner();
+
+    // Get API key and create client
+    let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
+    let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
+    })?;
+
+    let cloud_request = CreateEvaluationRequest {
+        dataset_id: request_body.dataset_id,
+        model_params: request_body.model_params,
+    };
+
+    let response = client.create_evaluation(cloud_request).await.map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!(
+            "Failed to create evaluation run: {}",
+            e
+        ))
+    })?;
+
+    Ok(HttpResponse::Created().json(response))
+}
+
+/// Get evaluation results for a given evaluation run (forwards to cloud API)
+pub async fn get_evaluation_result(
+    evaluation_run_id: web::Path<uuid::Uuid>,
+    project: web::ReqData<vllora_core::types::metadata::project::Project>,
+    key_storage: web::Data<Box<dyn KeyStorage>>,
+) -> Result<HttpResponse> {
+    let run_id_str = evaluation_run_id.into_inner().to_string();
+
+    // Get API key and create client
+    let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
+    let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
+    })?;
+
+    let response: EvaluationResultResponse = client
+        .get_evaluation_result(&run_id_str)
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!(
+                "Failed to get evaluation result: {}",
+                e
+            ))
+        })?;
+
+    Ok(HttpResponse::Ok().json(response))
 }
 
 // ============================================================================
