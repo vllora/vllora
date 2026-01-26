@@ -83,6 +83,14 @@ impl TraceService for TraceServiceImpl {
             }
         }
 
+        // Apply exclude_operation_names filter (NOT IN)
+        if let Some(exclude_operation_names) = &query.exclude_operation_names {
+            if !exclude_operation_names.is_empty() {
+                db_query =
+                    db_query.filter(traces::operation_name.ne_all(exclude_operation_names.clone()));
+            }
+        }
+
         // Apply parent_span_ids filter
         if query.filter_null_parent {
             db_query = db_query.filter(traces::parent_span_id.is_null());
@@ -324,6 +332,14 @@ impl TraceService for TraceServiceImpl {
         } else if let Some(operation_names) = &query.operation_names {
             if !operation_names.is_empty() {
                 db_query = db_query.filter(traces::operation_name.eq_any(operation_names));
+            }
+        }
+
+        // Apply exclude_operation_names filter (NOT IN)
+        if let Some(exclude_operation_names) = &query.exclude_operation_names {
+            if !exclude_operation_names.is_empty() {
+                db_query =
+                    db_query.filter(traces::operation_name.ne_all(exclude_operation_names.clone()));
             }
         }
 

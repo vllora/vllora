@@ -17,6 +17,8 @@ pub struct ListSpansQueryParams {
     pub run_ids: Option<String>, // Comma-separated
     #[serde(alias = "operationNames")]
     pub operation_names: Option<String>, // Comma-separated
+    #[serde(alias = "excludeOperationNames")]
+    pub exclude_operation_names: Option<String>, // Comma-separated operation names to exclude
     #[serde(alias = "parentSpanIds")]
     pub parent_span_ids: Option<String>, // Comma-separated
     #[serde(alias = "startTime")]
@@ -27,6 +29,8 @@ pub struct ListSpansQueryParams {
     pub offset: Option<i64>,
     /// Filter by labels (comma-separated, e.g., "flight_search,budget_agent")
     pub labels: Option<String>,
+    /// Free-text search query (case-insensitive substring match on attribute JSON)
+    pub search: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -67,6 +71,7 @@ pub struct Pagination {
 /// - startTime (optional): Filter spans that started after this timestamp (microseconds)
 /// - endTime (optional): Filter spans that started before this timestamp (microseconds)
 /// - labels (optional): Filter by labels from attribute.label (comma-separated, e.g., "flight_search,budget_agent")
+/// - search (optional): Free-text search query (case-insensitive substring match on attribute JSON)
 /// - limit (optional): Number of results to return (default: 100)
 /// - offset (optional): Number of results to skip (default: 0)
 ///
@@ -147,6 +152,12 @@ pub async fn list_spans<T: TraceService + DatabaseServiceTrait>(
             .map(|s| s.split(',').map(|name| name.trim().to_string()).collect())
     };
 
+    // Exclude operation names filter (NOT IN)
+    let exclude_operation_names = query
+        .exclude_operation_names
+        .as_ref()
+        .map(|s| s.split(',').map(|name| name.trim().to_string()).collect());
+
     // Parent span IDs filter
     let filter_null_parent = query
         .parent_span_ids
@@ -186,6 +197,7 @@ pub async fn list_spans<T: TraceService + DatabaseServiceTrait>(
         run_ids,
         thread_ids,
         operation_names,
+        exclude_operation_names,
         parent_span_ids,
         // Null filters
         filter_null_thread,
@@ -201,7 +213,7 @@ pub async fn list_spans<T: TraceService + DatabaseServiceTrait>(
         start_time_max: query.end_time,
         limit: query.limit.unwrap_or(100),
         offset: query.offset.unwrap_or(0),
-        text_search: None,
+        text_search: query.search.clone(),
         sort_by: None,
         sort_order: None,
         labels,
