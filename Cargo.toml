@@ -28,7 +28,7 @@ serde_yaml = "0.9"
 regex = "1.12"
 lazy_static = "1.4"
 async-trait = "0.1"
-tokio = { version = "1.48.0", features = ["rt", "rt-multi-thread", "sync", "io-std"] }
+tokio = { version = "1.49.0", features = ["rt", "rt-multi-thread", "sync", "io-std"] }
 tokio-stream = { version = "0.1.17", features = ["io-util"] }
 chrono = { version = "0.4", features = ["serde"] }
 
