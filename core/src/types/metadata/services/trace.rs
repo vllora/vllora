@@ -42,6 +42,8 @@ pub struct ListTracesQuery {
     pub run_ids: Option<Vec<String>>,
     pub thread_ids: Option<Vec<String>>,
     pub operation_names: Option<Vec<String>>,
+    /// Exclude spans with these operation names (NOT IN filter)
+    pub exclude_operation_names: Option<Vec<String>>,
     pub parent_span_ids: Option<Vec<String>>,
     // Null filters (IS NULL)
     pub filter_null_thread: bool,
@@ -151,6 +153,7 @@ impl Default for ListTracesQuery {
             run_ids: None,
             thread_ids: None,
             operation_names: None,
+            exclude_operation_names: None,
             parent_span_ids: None,
             filter_null_thread: false,
             filter_null_run: false,
