@@ -40,7 +40,7 @@ aws-smithy-types = { version = "1.3.4", features = [
   "serde-serialize",
 ] }
 aws-credential-types = "1.2.10"
-aws-sdk-bedrock = "1.118.0"
+aws-sdk-bedrock = "1.128.0"
 aws-sdk-bedrockruntime = "1.111.0"
 aws-smithy-runtime-api = "1.9.3"
 aws-config = { version = "1.8.8", features = ["behavior-version-latest"] }
