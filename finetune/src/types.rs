@@ -157,6 +157,9 @@ pub struct CompletionParams {
 pub struct CreateEvaluationRequest {
     pub dataset_id: uuid::Uuid,
     pub model_params: CompletionParams,
+    // Pagination parameters for partial dataset run
+    pub offset: Option<i32>,
+    pub limit: Option<i32>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -196,16 +199,25 @@ pub struct EvaluationResultResponse {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "type", content = "config")]
-pub enum Evaluator {
-    LlmAsJudge(LlmAsJudgeConfig),
+#[serde(bound(deserialize = "T: serde::de::DeserializeOwned"))]
+pub enum Evaluator<T>
+where
+    T: serde::Serialize + serde::de::DeserializeOwned + std::fmt::Debug + Clone,
+{
+    LlmAsJudge(LlmAsJudgeConfig<T>),
     Js(JsConfig),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct LlmAsJudgeConfig {
-    pub prompt_template: String,
-    pub output_schema: String,
+#[serde(bound(deserialize = "T: serde::de::DeserializeOwned"))]
+pub struct LlmAsJudgeConfig<T>
+where
+    T: serde::Serialize + serde::de::DeserializeOwned + std::fmt::Debug + Clone,
+{
+    pub prompt_template: Vec<T>,
+    pub output_schema: serde_json::Value,
     pub completion_params: CompletionModelParams,
+    pub score_formula: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
