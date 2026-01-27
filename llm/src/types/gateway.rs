@@ -355,7 +355,7 @@ pub struct Thinking {
     pub budget_tokens: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Extra {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user: Option<RequestUser>,

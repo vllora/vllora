@@ -17,6 +17,7 @@ use vllora_finetune::{
     CreateDeploymentRequest, CreateReinforcementFinetuningJobRequest, LangdbCloudFinetuneClient,
 };
 use vllora_llm::types::credentials::Credentials;
+use vllora_llm::types::gateway::ChatCompletionMessage;
 
 #[derive(Debug, Deserialize)]
 pub struct ReinforcementJobQuery {
@@ -85,6 +86,8 @@ pub async fn get_langdb_api_key(
 pub struct CreateEvaluationBody {
     pub dataset_id: uuid::Uuid,
     pub model_params: EvalCompletionParams,
+    pub offset: Option<i32>,
+    pub limit: Option<i32>,
 }
 
 /// Start an evaluation run for a dataset (forwards to cloud API)
@@ -104,6 +107,8 @@ pub async fn create_evaluation(
     let cloud_request = CreateEvaluationRequest {
         dataset_id: request_body.dataset_id,
         model_params: request_body.model_params,
+        offset: request_body.offset,
+        limit: request_body.limit,
     };
 
     let response = client.create_evaluation(cloud_request).await.map_err(|e| {
@@ -237,7 +242,7 @@ pub async fn upload_dataset(
                     let trimmed = s.trim();
                     if !trimmed.is_empty() {
                         // Validate it's a valid Evaluator enum before forwarding
-                        serde_json::from_str::<Evaluator>(trimmed).map_err(|e| {
+                        serde_json::from_str::<Evaluator<ChatCompletionMessage>>(trimmed).map_err(|e| {
                             actix_web::error::ErrorBadRequest(format!(
                                 "Invalid evaluator JSON: {}",
                                 e
