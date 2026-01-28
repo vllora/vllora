@@ -91,6 +91,35 @@ impl LangdbCloudFinetuneClient {
         Ok(body)
     }
 
+    /// Update the evaluator config for an existing dataset
+    pub async fn update_dataset_evaluator(
+        &self,
+        dataset_id: &str,
+        evaluator: String,
+    ) -> Result<(), String> {
+        let url = format!("{}/finetune/datasets/{}/evaluator", self.api_url, dataset_id);
+
+        let body = serde_json::json!({
+            "evaluator": serde_json::from_str::<serde_json::Value>(&evaluator)
+                .map_err(|e| format!("Invalid evaluator JSON: {}", e))?
+        });
+
+        let req = self.client.patch(&url).json(&body);
+
+        let response = req
+            .send()
+            .await
+            .map_err(|e| format!("Failed to call cloud API: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!("API error {}: {}", status, body));
+        }
+
+        Ok(())
+    }
+
     /// Create an evaluation run for a dataset
     pub async fn create_evaluation(
         &self,

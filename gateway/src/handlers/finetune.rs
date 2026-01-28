@@ -149,6 +149,64 @@ pub async fn get_evaluation_result(
 }
 
 // ============================================================================
+// Dataset Evaluator Update Handler
+// ============================================================================
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateEvaluatorBody {
+    pub evaluator: serde_json::Value,
+}
+
+#[derive(Debug, Serialize)]
+pub struct UpdateEvaluatorResponse {
+    pub dataset_id: String,
+    pub updated: bool,
+}
+
+/// Update the evaluator config for an existing dataset
+/// This allows changing the grader without re-uploading the entire dataset
+pub async fn update_dataset_evaluator(
+    dataset_id: web::Path<String>,
+    request: web::Json<UpdateEvaluatorBody>,
+    project: web::ReqData<vllora_core::types::metadata::project::Project>,
+    key_storage: web::Data<Box<dyn KeyStorage>>,
+) -> Result<HttpResponse> {
+    let dataset_id_str = dataset_id.into_inner();
+    let request_body = request.into_inner();
+
+    // Validate the evaluator JSON is a valid Evaluator enum
+    let evaluator_str = serde_json::to_string(&request_body.evaluator).map_err(|e| {
+        actix_web::error::ErrorBadRequest(format!("Invalid evaluator JSON: {}", e))
+    })?;
+
+    serde_json::from_str::<Evaluator<ChatCompletionMessage>>(&evaluator_str).map_err(|e| {
+        actix_web::error::ErrorBadRequest(format!("Invalid evaluator format: {}", e))
+    })?;
+
+    // Get API key and create client
+    let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
+    let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
+    })?;
+
+    // Update evaluator using client
+    client
+        .update_dataset_evaluator(&dataset_id_str, evaluator_str)
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!(
+                "Failed to update evaluator: {}",
+                e
+            ))
+        })?;
+
+    Ok(HttpResponse::Ok().json(UpdateEvaluatorResponse {
+        dataset_id: dataset_id_str,
+        updated: true,
+    }))
+}
+
+// ============================================================================
 // Reinforcement Fine-Tuning Handlers
 // ============================================================================
 
