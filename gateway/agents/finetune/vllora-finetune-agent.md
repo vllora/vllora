@@ -251,10 +251,16 @@ Options to offer:
 This step can iterate multiple times. The UI shows coverage visually on each topic node with color-coded progress bars:
 
 **Coverage Indicator Colors:**
-- **Green (>=20%)**: Good coverage - topic is well represented
-- **Yellow (10-20%)**: Medium coverage - could benefit from more data
-- **Orange (5-10%)**: Low coverage - recommend generating synthetic data
-- **Red (<5%)**: Critical - strongly recommend generating data for this topic
+The UI considers BOTH percentage AND absolute record count. A topic must meet BOTH thresholds to get the higher color:
+
+| Color | Percentage | AND | Absolute Count | Meaning |
+|-------|------------|-----|----------------|---------|
+| **Green** | >=20% | AND | >=50 records | Good coverage |
+| **Yellow** | >=10% | AND | >=20 records | Medium coverage |
+| **Orange** | >=5% | AND | >=10 records | Low coverage |
+| **Red** | <5% | OR | <10 records | Critical |
+
+**Important:** Even if a topic has 100% of records, if it only has 1-9 records, it shows RED because that's insufficient for training. Always check absolute counts, not just percentages.
 
 ### 3.1 Analyze Coverage
 
@@ -274,13 +280,15 @@ Your dataset shows uneven topic distribution:
 
 | Topic | Records | Coverage | Status |
 |-------|---------|----------|--------|
-| Openings/Principles | 45 | 22.5% | ✅ Good |
-| Openings/Italian Game | 12 | 6.0% | 🟠 Low |
-| Tactics/Forks | 8 | 4.0% | 🔴 Critical |
-| Endgames/Opposition | 3 | 1.5% | 🔴 Critical |
+| Openings/Principles | 65 | 32.5% | ✅ Good (65 records, 32.5%) |
+| Openings/Italian Game | 25 | 12.5% | 🟡 Medium (25 records, needs more) |
+| Tactics/Forks | 8 | 4.0% | 🔴 Critical (<10 records) |
+| Endgames/Opposition | 1 | 100% | 🔴 Critical (only 1 record!) |
 
-**Recommendation:** Generate synthetic data for the orange/red topics to improve balance.
-I suggest adding ~30 records each for "Tactics/Forks" and "Endgames/Opposition".
+**Note:** "Endgames/Opposition" shows 100% but only has 1 record - that's critical for training!
+
+**Recommendation:** Generate synthetic data for the red topics to improve both balance and training quality.
+I suggest adding ~50 records each for "Tactics/Forks" and "Endgames/Opposition".
 
 Would you like me to generate synthetic data for these under-represented topics?
 ```
