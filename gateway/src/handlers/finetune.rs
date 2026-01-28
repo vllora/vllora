@@ -9,8 +9,8 @@ use vllora_core::metadata::pool::DbPool;
 use vllora_core::metadata::services::finetune_job::FinetuneJobService;
 use vllora_core::GatewayApiError;
 use vllora_finetune::types::{
-    CompletionParams as EvalCompletionParams, CreateEvaluationRequest, EvaluationResultResponse,
-    Evaluator,
+    CompletionParams as EvalCompletionParams, CreateEvaluationRequest, DatasetAnalyticsResponse,
+    EvaluationResultResponse, Evaluator,
 };
 use vllora_finetune::ReinforcementTrainingConfig;
 use vllora_finetune::{
@@ -121,6 +121,33 @@ pub async fn create_evaluation(
     Ok(HttpResponse::Created().json(response))
 }
 
+/// Get analytics for a given dataset (forwards to cloud API)
+pub async fn get_dataset_analytics(
+    dataset_id: web::Path<uuid::Uuid>,
+    project: web::ReqData<vllora_core::types::metadata::project::Project>,
+    key_storage: web::Data<Box<dyn KeyStorage>>,
+) -> Result<HttpResponse> {
+    let dataset_id_str = dataset_id.into_inner().to_string();
+
+    // Get API key and create client
+    let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
+    let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
+    })?;
+
+    let response: DatasetAnalyticsResponse = client
+        .get_dataset_analytics(&dataset_id_str)
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!(
+                "Failed to get dataset analytics: {}",
+                e
+            ))
+        })?;
+
+    Ok(HttpResponse::Ok().json(response))
+}
+
 /// Get evaluation results for a given evaluation run (forwards to cloud API)
 pub async fn get_evaluation_result(
     evaluation_run_id: web::Path<uuid::Uuid>,
@@ -175,9 +202,8 @@ pub async fn update_dataset_evaluator(
     let request_body = request.into_inner();
 
     // Validate the evaluator JSON is a valid Evaluator enum
-    let evaluator_str = serde_json::to_string(&request_body.evaluator).map_err(|e| {
-        actix_web::error::ErrorBadRequest(format!("Invalid evaluator JSON: {}", e))
-    })?;
+    let evaluator_str = serde_json::to_string(&request_body.evaluator)
+        .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid evaluator JSON: {}", e)))?;
 
     serde_json::from_str::<Evaluator<ChatCompletionMessage>>(&evaluator_str).map_err(|e| {
         actix_web::error::ErrorBadRequest(format!("Invalid evaluator format: {}", e))
@@ -194,10 +220,7 @@ pub async fn update_dataset_evaluator(
         .update_dataset_evaluator(&dataset_id_str, evaluator_str)
         .await
         .map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!(
-                "Failed to update evaluator: {}",
-                e
-            ))
+            actix_web::error::ErrorInternalServerError(format!("Failed to update evaluator: {}", e))
         })?;
 
     Ok(HttpResponse::Ok().json(UpdateEvaluatorResponse {
@@ -300,12 +323,14 @@ pub async fn upload_dataset(
                     let trimmed = s.trim();
                     if !trimmed.is_empty() {
                         // Validate it's a valid Evaluator enum before forwarding
-                        serde_json::from_str::<Evaluator<ChatCompletionMessage>>(trimmed).map_err(|e| {
-                            actix_web::error::ErrorBadRequest(format!(
-                                "Invalid evaluator JSON: {}",
-                                e
-                            ))
-                        })?;
+                        serde_json::from_str::<Evaluator<ChatCompletionMessage>>(trimmed).map_err(
+                            |e| {
+                                actix_web::error::ErrorBadRequest(format!(
+                                    "Invalid evaluator JSON: {}",
+                                    e
+                                ))
+                            },
+                        )?;
                         evaluator = Some(trimmed.to_string());
                     }
                 }
