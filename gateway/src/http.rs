@@ -380,7 +380,12 @@ impl ApiServer {
             .service(
                 web::scope("/finetune")
                     .service(
-                        web::scope("/datasets").route("", web::post().to(finetune::upload_dataset)),
+                        web::scope("/datasets")
+                            .route("", web::post().to(finetune::upload_dataset))
+                            .route(
+                                "/{dataset_id}/evaluator",
+                                web::patch().to(finetune::update_dataset_evaluator),
+                            ),
                     )
                     .service(
                         web::scope("/evaluations")
