@@ -248,29 +248,75 @@ Options to offer:
 
 ## Step 3: Coverage & Generation
 
-This step can iterate multiple times:
+This step can iterate multiple times. The UI shows coverage visually on each topic node with color-coded progress bars:
 
-1. **Analyze** - Call `analyze_coverage`
-   - Calculate balance score (0.0-1.0)
-   - Show topic distribution
-   - Identify under-represented topics
+**Coverage Indicator Colors:**
+- **Green (>=20%)**: Good coverage - topic is well represented
+- **Yellow (10-20%)**: Medium coverage - could benefit from more data
+- **Orange (5-10%)**: Low coverage - recommend generating synthetic data
+- **Red (<5%)**: Critical - strongly recommend generating data for this topic
 
-2. **Recommend** - Based on analysis:
-   - If balance < 0.5, recommend generating synthetic data
-   - Suggest which topics need more data
-   - Recommend generation strategy
+### 3.1 Analyze Coverage
 
-3. **Generate** (if needed) - Call `generate_synthetic_data`
-   - Support multiple strategies:
-     - **Message Variation** (recommended for multi-turn): Vary last user message
-     - **Few-Shot**: Generate similar from examples
-     - **Topic Description**: Generate from topic description
-     - **Scenario Expansion**: Expand specific scenarios
-     - **Tool Chain**: Generate tool usage patterns
+1. **Call `analyze_coverage`** to get detailed stats
+2. **Review the canvas** - point out topics with yellow/orange/red indicators
+3. **Summarize findings:**
+   - Overall balance score (0.0-1.0)
+   - Topics with good coverage (green)
+   - Topics needing attention (yellow/orange/red)
+   - Estimated records needed to improve balance
 
-4. **Iterate** - After generation, analyze again
-   - Repeat until coverage is satisfactory
-   - Target: Balance score > 0.5, all topics have min 100 samples
+Example response:
+```
+**Coverage Analysis:**
+
+Your dataset shows uneven topic distribution:
+
+| Topic | Records | Coverage | Status |
+|-------|---------|----------|--------|
+| Openings/Principles | 45 | 22.5% | ✅ Good |
+| Openings/Italian Game | 12 | 6.0% | 🟠 Low |
+| Tactics/Forks | 8 | 4.0% | 🔴 Critical |
+| Endgames/Opposition | 3 | 1.5% | 🔴 Critical |
+
+**Recommendation:** Generate synthetic data for the orange/red topics to improve balance.
+I suggest adding ~30 records each for "Tactics/Forks" and "Endgames/Opposition".
+
+Would you like me to generate synthetic data for these under-represented topics?
+```
+
+### 3.2 Recommend Generation Strategy
+
+Based on analysis, recommend specific actions:
+
+- **If balance < 0.3**: "Your coverage is critically unbalanced. I strongly recommend generating synthetic data for [specific topics]."
+- **If balance 0.3-0.5**: "Coverage could be improved. Consider generating data for topics showing orange/red indicators."
+- **If balance > 0.5 but some topics < 5%**: "Overall balance is okay, but [topics] are under-represented. Would you like to boost these?"
+- **If balance > 0.7**: "Coverage looks good! You can proceed to grader configuration, or generate more data if you want even better balance."
+
+### 3.3 Generate Synthetic Data
+
+**Only after user approval**, call `generate_synthetic_data`:
+
+- Support multiple strategies:
+  - **Message Variation** (recommended for multi-turn): Vary last user message
+  - **Few-Shot**: Generate similar from examples
+  - **Topic Description**: Generate from topic description
+  - **Scenario Expansion**: Expand specific scenarios
+  - **Tool Chain**: Generate tool usage patterns
+
+- Prioritize topics with lowest coverage first
+- Suggest reasonable quantities (aim for ~10-20% coverage per topic minimum)
+
+### 3.4 Iterate
+
+After generation:
+1. Call `analyze_coverage` again to see updated distribution
+2. Check if coverage indicators improved (bars should be longer/greener)
+3. Repeat until:
+   - Balance score > 0.5
+   - No topics show red indicators
+   - All topics have minimum ~50-100 samples (depending on dataset size)
 
 ## Step 4: Grader Configuration
 
