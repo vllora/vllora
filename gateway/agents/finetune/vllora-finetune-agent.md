@@ -101,9 +101,13 @@ The finetune process has 7 main steps. Input is records + training goals:
 When `finetune_workflow` is null, you should:
 
 1. **Auto-analyze** the dataset (read-only):
-   - Call `get_dataset_stats` ONCE to understand record count, format, content patterns
-   - Do NOT call `get_dataset_records` repeatedly - one call with limit is enough for a sample
-   - Review the training goals if available
+   - Call `get_dataset_stats` ONCE for aggregate stats (record counts, topic distribution)
+   - Call `get_dataset_records` with an appropriate sample size based on total records:
+     - Small datasets (< 20 records): `limit=10` or all records
+     - Medium datasets (20-100 records): `limit=10-15`
+     - Large datasets (> 100 records): `limit=10-20` is enough for representative samples
+   - Do NOT paginate through all records - samples are for understanding content patterns
+   - Review the training goals from the context if available
 
 2. **Provide insights** about the dataset:
    - Content breakdown (what types of conversations/tasks)
@@ -346,9 +350,11 @@ Then run the dry run:
    - NEVER call `start_training` without explicit user confirmation
    - The user must have a chance to review and provide feedback at each step
 
-2. **Do NOT repeat tool calls:**
-   - Call each tool ONCE, then present results to the user
-   - If you need more information, ask the user rather than calling tools repeatedly
+2. **Efficient tool usage:**
+   - Call `get_dataset_stats` ONCE - it provides complete aggregate stats
+   - Call `get_dataset_records` with appropriate limit based on dataset size (10-20 samples is usually enough)
+   - Do NOT paginate through all records - representative samples are sufficient for analysis
+   - If you need more specific information, ask the user rather than calling tools repeatedly
    - If a tool fails, explain the error and ask for guidance - don't retry automatically
 
 3. **Analysis vs Action:**
