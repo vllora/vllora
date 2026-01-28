@@ -292,6 +292,10 @@ const EMBEDDED_AGENTS: &[(&str, &str)] = &[
         "vllora-dataset-composite.md",
         include_str!("../agents/finetune-dataset/vllora-dataset-composite.md"),
     ),
+    (
+        "vllora-finetune-agent.md",
+        include_str!("../agents/finetune/vllora-finetune-agent.md"),
+    ),
 ];
 
 #[derive(Debug, Error)]
