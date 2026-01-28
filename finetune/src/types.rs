@@ -146,6 +146,17 @@ pub struct DatasetAnalyticsResponse {
     pub quality: JsonValue,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DryRunDatasetAnalyticsRequest {
+    pub rows: Vec<JsonValue>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DryRunDatasetAnalyticsResponse {
+    pub analytics: JsonValue,
+    pub quality: JsonValue,
+}
+
 // === Evaluation types ===
 
 /// Model completion parameters for evaluation requests.

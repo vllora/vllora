@@ -10,7 +10,8 @@ use vllora_core::metadata::services::finetune_job::FinetuneJobService;
 use vllora_core::GatewayApiError;
 use vllora_finetune::types::{
     CompletionParams as EvalCompletionParams, CreateEvaluationRequest, DatasetAnalyticsResponse,
-    EvaluationResultResponse, Evaluator,
+    DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse, EvaluationResultResponse,
+    Evaluator,
 };
 use vllora_finetune::ReinforcementTrainingConfig;
 use vllora_finetune::{
@@ -141,6 +142,33 @@ pub async fn get_dataset_analytics(
         .map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!(
                 "Failed to get dataset analytics: {}",
+                e
+            ))
+        })?;
+
+    Ok(HttpResponse::Ok().json(response))
+}
+
+/// Compute analytics for an in-memory dataset (forwards to cloud API).
+pub async fn dry_run_dataset_analytics(
+    body: web::Json<DryRunDatasetAnalyticsRequest>,
+    project: web::ReqData<vllora_core::types::metadata::project::Project>,
+    key_storage: web::Data<Box<dyn KeyStorage>>,
+) -> Result<HttpResponse> {
+    let request_body = body.into_inner();
+
+    // Get API key and create client
+    let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
+    let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
+    })?;
+
+    let response: DryRunDatasetAnalyticsResponse = client
+        .dry_run_dataset_analytics(request_body)
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!(
+                "Failed to compute dry-run dataset analytics: {}",
                 e
             ))
         })?;

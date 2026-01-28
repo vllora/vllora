@@ -1,8 +1,9 @@
 use crate::types::{
     CreateDeploymentRequest, CreateEvaluationRequest, CreateEvaluationResponse,
     CreateReinforcementFinetuningJobRequest, DatasetAnalyticsResponse, DeploymentResponse,
-    EvaluationResultResponse, FinetuningJobResponse, FinetuningJobResult,
-    ReinforcementJobStatusResponse, UploadDatasetResponse,
+    DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse, EvaluationResultResponse,
+    FinetuningJobResponse, FinetuningJobResult, ReinforcementJobStatusResponse,
+    UploadDatasetResponse,
 };
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 
@@ -313,6 +314,34 @@ impl LangdbCloudFinetuneClient {
         }
 
         let body: DatasetAnalyticsResponse = response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+        Ok(body)
+    }
+
+    /// Compute analytics for an in-memory dataset (not uploaded).
+    pub async fn dry_run_dataset_analytics(
+        &self,
+        request: DryRunDatasetAnalyticsRequest,
+    ) -> Result<DryRunDatasetAnalyticsResponse, String> {
+        let url = format!("{}/finetune/datasets/analytics/dry-run", self.api_url);
+
+        let req = self.client.post(&url).json(&request);
+
+        let response = req
+            .send()
+            .await
+            .map_err(|e| format!("Failed to call cloud API: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!("API error {}: {}", status, body));
+        }
+
+        let body: DryRunDatasetAnalyticsResponse = response
             .json()
             .await
             .map_err(|e| format!("Failed to parse response: {}", e))?;

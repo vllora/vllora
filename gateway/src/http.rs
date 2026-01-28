@@ -383,6 +383,10 @@ impl ApiServer {
                         web::scope("/datasets")
                             .route("", web::post().to(finetune::upload_dataset))
                             .route(
+                                "/analytics/dry-run",
+                                web::post().to(finetune::dry_run_dataset_analytics),
+                            )
+                            .route(
                                 "/{dataset_id}/analytics",
                                 web::get().to(finetune::get_dataset_analytics),
                             )
