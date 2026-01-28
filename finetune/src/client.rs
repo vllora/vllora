@@ -1,8 +1,8 @@
 use crate::types::{
     CreateDeploymentRequest, CreateEvaluationRequest, CreateEvaluationResponse,
-    CreateReinforcementFinetuningJobRequest, DeploymentResponse, EvaluationResultResponse,
-    FinetuningJobResponse, FinetuningJobResult, ReinforcementJobStatusResponse,
-    UploadDatasetResponse,
+    CreateReinforcementFinetuningJobRequest, DatasetAnalyticsResponse, DeploymentResponse,
+    EvaluationResultResponse, FinetuningJobResponse, FinetuningJobResult,
+    ReinforcementJobStatusResponse, UploadDatasetResponse,
 };
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 
@@ -97,7 +97,10 @@ impl LangdbCloudFinetuneClient {
         dataset_id: &str,
         evaluator: String,
     ) -> Result<(), String> {
-        let url = format!("{}/finetune/datasets/{}/evaluator", self.api_url, dataset_id);
+        let url = format!(
+            "{}/finetune/datasets/{}/evaluator",
+            self.api_url, dataset_id
+        );
 
         let body = serde_json::json!({
             "evaluator": serde_json::from_str::<serde_json::Value>(&evaluator)
@@ -279,6 +282,37 @@ impl LangdbCloudFinetuneClient {
         }
 
         let body: EvaluationResultResponse = response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+        Ok(body)
+    }
+
+    /// Get analytics for a given dataset (structure + quality)
+    pub async fn get_dataset_analytics(
+        &self,
+        dataset_id: &str,
+    ) -> Result<DatasetAnalyticsResponse, String> {
+        let url = format!(
+            "{}/finetune/datasets/{}/analytics",
+            self.api_url, dataset_id
+        );
+
+        let req = self.client.get(&url);
+
+        let response = req
+            .send()
+            .await
+            .map_err(|e| format!("Failed to call cloud API: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!("API error {}: {}", status, body));
+        }
+
+        let body: DatasetAnalyticsResponse = response
             .json()
             .await
             .map_err(|e| format!("Failed to parse response: {}", e))?;

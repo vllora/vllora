@@ -137,6 +137,15 @@ pub struct DeploymentResponse {
     pub inference_model_name: Option<String>,
 }
 
+// === Dataset analytics ===
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DatasetAnalyticsResponse {
+    pub dataset_id: uuid::Uuid,
+    pub analytics: JsonValue,
+    pub quality: JsonValue,
+}
+
 // === Evaluation types ===
 
 /// Model completion parameters for evaluation requests.
