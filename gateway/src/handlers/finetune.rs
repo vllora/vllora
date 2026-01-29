@@ -19,6 +19,19 @@ use vllora_finetune::{
 };
 use vllora_llm::types::credentials::Credentials;
 use vllora_llm::types::gateway::ChatCompletionMessage;
+use vllora_core::types::metadata::services::model::ModelService;
+use vllora_core::metadata::services::model::ModelServiceImpl;
+use vllora_core::types::metadata::project::Project;
+use vllora_core::credentials::GatewayCredentials;
+use vllora_llm::types::gateway::CostCalculator;
+use vllora_core::types::guardrails::service::GuardrailsEvaluator;
+use vllora_core::handler::CallbackHandlerFn;
+use vllora_core::executor::context::ExecutorContext;
+use std::sync::Arc;
+use vllora_core::model::DefaultModelMetadataFactory;
+use vllora_core::model::ModelMetadataFactory;
+use std::collections::HashMap;
+use vllora_core::routing::interceptor::rate_limiter::InMemoryRateLimiterService;
 
 #[derive(Debug, Deserialize)]
 pub struct ReinforcementJobQuery {
@@ -588,4 +601,53 @@ pub async fn delete_deployment(
         })?;
 
     Ok(HttpResponse::NoContent().finish())
+}
+
+// ============================================================================
+// Topic Hierarchy Generation Handler
+// ============================================================================
+
+/// Generate a topic hierarchy tree based on provided properties
+pub async fn generate_topic_hierarchy(
+    request: web::Json<vllora_core::finetune::GenerateTopicHierarchyProperties>,
+    db_pool: web::Data<DbPool>,
+    key_storage: web::Data<Box<dyn KeyStorage>>,
+    project: web::ReqData<Project>,
+    cost_calculator: web::Data<Box<dyn CostCalculator>>,
+    models_service: web::Data<Box<dyn ModelService>>,
+    evaluator_service: web::Data<Box<dyn GuardrailsEvaluator>>,
+) -> Result<HttpResponse> {
+    let properties = request.into_inner();
+    let db_pool = db_pool.get_ref().clone();
+
+    let cb = CallbackHandlerFn(None);
+    let cost_calculator = cost_calculator.into_inner();
+    let rate_limiter_service = InMemoryRateLimiterService::new();
+    let guardrails_evaluator_service = evaluator_service.clone().into_inner();
+
+    let executor_context = ExecutorContext::new(
+        cb,
+        cost_calculator,
+        Arc::new(Box::new(
+            DefaultModelMetadataFactory::new(models_service.into_inner()).with_db_pool(&db_pool),
+        ) as Box<dyn ModelMetadataFactory>),
+        HashMap::new(),
+        HashMap::new(),
+        guardrails_evaluator_service,
+        Arc::new(rate_limiter_service),
+        project.id,
+        key_storage.into_inner(),
+        None,
+    );
+
+    let result = vllora_core::finetune::generate_topic_hierarchy(properties, &executor_context, &project.slug).await;
+
+    if result.success {
+        Ok(HttpResponse::Ok().json(result))
+    } else {
+        let error_message = result.error.unwrap_or_else(|| "Unknown error".to_string());
+        Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "error": error_message
+        })))
+    }
 }

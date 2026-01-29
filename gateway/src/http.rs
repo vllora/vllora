@@ -356,9 +356,9 @@ impl ApiServer {
                 lucy_service
                     .app_data(Data::new(callback))
                     .app_data(Data::new(
-                        Box::new(cost_calculator) as Box<dyn CostCalculator>
+                        Box::new(cost_calculator.clone()) as Box<dyn CostCalculator>
                     ))
-                    .app_data(Data::from(guardrails_service))
+                    .app_data(Data::from(guardrails_service.clone()))
                     .wrap(CloudApiInvokeMiddleware)
                     .wrap(RunSpanMiddleware)
                     .wrap(TracingContext)
@@ -419,7 +419,15 @@ impl ApiServer {
                                 "/{deployment_id}",
                                 web::delete().to(finetune::delete_deployment),
                             ),
-                    ),
+                    )
+                    .service(web::scope("/topic-hierarchy").route(
+                        "/generate",
+                        web::post().to(finetune::generate_topic_hierarchy),
+                    ))
+                    .app_data(Data::from(guardrails_service.clone()))
+                    .app_data(Data::new(
+                        Box::new(cost_calculator.clone()) as Box<dyn CostCalculator>
+                    )),
             )
             .service(
                 web::scope("/providers")
