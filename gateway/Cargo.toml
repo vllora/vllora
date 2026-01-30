@@ -1,6 +1,6 @@
 [package]
 name = "vllora"
-version = "0.1.22"
+version = "0.1.23"
 authors = ["Vllora Team<api@vllora.dev>"]
 description = "AI gateway for managing and routing LLM requests - Govern, Secure, and Optimize your AI Traffic."
 license = "Elastic-2.0"
@@ -17,10 +17,10 @@ name = "vllora"
 path = "src/main.rs"
 
 [dependencies]
-vllora_core = { path = "../core", version = "0.1.22", features = ["sqlite"], default-features = false }
-vllora_llm = { path = "../llm", version = "0.1.22" }
-vllora_guardrails = { path = "../guardrails", version = "0.1.22" }
-vllora_telemetry = { path = "../telemetry", version = "0.1.22" }
+vllora_core = { path = "../core", version = "0.1.23", features = ["sqlite"], default-features = false }
+vllora_llm = { path = "../llm", version = "0.1.23" }
+vllora_guardrails = { path = "../guardrails", version = "0.1.23" }
+vllora_telemetry = { path = "../telemetry", version = "0.1.23" }
 
 tokio = { workspace = true }
 serde = { workspace = true }
