@@ -47,7 +47,7 @@ pub async fn execute(
     tokio::spawn(async move {
         while let Some(event) = rx.recv().await {
             if let Some(sender) = &cache_context.events_sender {
-                let _ =sender.send(event.clone()).await;
+                let _ = sender.send(event.clone()).await;
             }
             let _ = tx.send(event).await;
         }

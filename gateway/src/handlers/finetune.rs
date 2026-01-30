@@ -2,11 +2,21 @@ use actix_multipart::Multipart;
 use actix_web::{web, HttpResponse, Result};
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
 use vllora_core::credentials::KeyStorage;
 use vllora_core::credentials::ProviderCredentialsId;
+use vllora_core::executor::context::ExecutorContext;
+use vllora_core::handler::CallbackHandlerFn;
 use vllora_core::metadata::models::finetune_job::DbNewFinetuneJob;
 use vllora_core::metadata::pool::DbPool;
 use vllora_core::metadata::services::finetune_job::FinetuneJobService;
+use vllora_core::model::DefaultModelMetadataFactory;
+use vllora_core::model::ModelMetadataFactory;
+use vllora_core::routing::interceptor::rate_limiter::InMemoryRateLimiterService;
+use vllora_core::types::guardrails::service::GuardrailsEvaluator;
+use vllora_core::types::metadata::project::Project;
+use vllora_core::types::metadata::services::model::ModelService;
 use vllora_core::GatewayApiError;
 use vllora_finetune::types::{
     CompletionParams as EvalCompletionParams, CreateEvaluationRequest, DatasetAnalyticsResponse,
@@ -19,19 +29,7 @@ use vllora_finetune::{
 };
 use vllora_llm::types::credentials::Credentials;
 use vllora_llm::types::gateway::ChatCompletionMessage;
-use vllora_core::types::metadata::services::model::ModelService;
-use vllora_core::metadata::services::model::ModelServiceImpl;
-use vllora_core::types::metadata::project::Project;
-use vllora_core::credentials::GatewayCredentials;
 use vllora_llm::types::gateway::CostCalculator;
-use vllora_core::types::guardrails::service::GuardrailsEvaluator;
-use vllora_core::handler::CallbackHandlerFn;
-use vllora_core::executor::context::ExecutorContext;
-use std::sync::Arc;
-use vllora_core::model::DefaultModelMetadataFactory;
-use vllora_core::model::ModelMetadataFactory;
-use std::collections::HashMap;
-use vllora_core::routing::interceptor::rate_limiter::InMemoryRateLimiterService;
 
 #[derive(Debug, Deserialize)]
 pub struct ReinforcementJobQuery {
@@ -285,6 +283,7 @@ pub async fn upload_dataset(
     let mut jsonl_data: Option<Vec<u8>> = None;
     let mut topic_hierarchy: Option<String> = None;
     let mut evaluator: Option<String> = None;
+    let mut eval_script: Option<String> = None;
 
     while let Some(field) = payload.next().await {
         let mut field = field.map_err(|e| {
@@ -376,12 +375,71 @@ pub async fn upload_dataset(
                     }
                 }
             }
+            "eval_script" => {
+                // Read evaluator script from file (e.g. JavaScript for Js evaluator)
+                let mut bytes = Vec::new();
+                while let Some(chunk) = field.next().await {
+                    let chunk = chunk.map_err(|e| {
+                        actix_web::error::ErrorBadRequest(format!(
+                            "Failed to read eval_script field: {}",
+                            e
+                        ))
+                    })?;
+                    bytes.extend_from_slice(&chunk);
+                }
+                if !bytes.is_empty() {
+                    let s = String::from_utf8(bytes).map_err(|e| {
+                        actix_web::error::ErrorBadRequest(format!(
+                            "eval_script must be UTF-8 encoded: {}",
+                            e
+                        ))
+                    })?;
+                    let trimmed = s.trim();
+                    if !trimmed.is_empty() {
+                        eval_script = Some(format!("__inline_script:{trimmed}"));
+                    }
+                }
+            }
             _ => {
                 // Ignore unknown fields
                 continue;
             }
         }
     }
+
+    // If eval_script was provided as a file, merge it into the evaluator config (Js type)
+    evaluator = match (eval_script, evaluator) {
+        (Some(eval_script_content), Some(evaluator_str)) => {
+            let mut value: serde_json::Value =
+                serde_json::from_str(&evaluator_str).map_err(|e| {
+                    actix_web::error::ErrorBadRequest(format!("Invalid evaluator JSON: {}", e))
+                })?;
+            let merged_str = if let Some(obj) = value.as_object_mut() {
+                if obj.get("type").and_then(|t| t.as_str()) == Some("js") {
+                    if let Some(config) = obj.get_mut("config").and_then(|c| c.as_object_mut()) {
+                        config.insert(
+                            "script".to_string(),
+                            serde_json::Value::String(eval_script_content),
+                        );
+                        Some(serde_json::to_string(&value).map_err(|e| {
+                            actix_web::error::ErrorInternalServerError(format!(
+                                "Failed to serialize evaluator: {}",
+                                e
+                            ))
+                        })?)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            merged_str.or(Some(evaluator_str))
+        }
+        (_, ev) => ev,
+    };
 
     let jsonl_data = jsonl_data.ok_or_else(|| {
         actix_web::error::ErrorBadRequest("Missing required field: 'file'".to_string())
@@ -640,7 +698,12 @@ pub async fn generate_topic_hierarchy(
         None,
     );
 
-    let result = vllora_core::finetune::generate_topic_hierarchy(properties, &executor_context, &project.slug).await;
+    let result = vllora_core::finetune::generate_topic_hierarchy(
+        properties,
+        &executor_context,
+        &project.slug,
+    )
+    .await;
 
     if result.success {
         Ok(HttpResponse::Ok().json(result))
