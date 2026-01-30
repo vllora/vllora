@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use tracing::Span;
+use vllora_llm::types::gateway::OpenaiResponseFormat;
+use vllora_llm::types::ModelEvent;
 use vllora_llm::{
     client::message_mapper::MessageMapper,
     types::{
@@ -12,13 +14,13 @@ use vllora_llm::{
         tools::ModelTools,
     },
 };
-use vllora_llm::types::ModelEvent;
-use vllora_llm::types::gateway::OpenaiResponseFormat;
 
 use crate::{
     credentials::GatewayCredentials,
     executor::{
-        chat_completion::{basic_executor, basic_executor::BasicCacheContext, resolve_model_instance},
+        chat_completion::{
+            basic_executor, basic_executor::BasicCacheContext, resolve_model_instance,
+        },
         context::ExecutorContext,
     },
 };
@@ -166,11 +168,8 @@ pub async fn generate_topic_hierarchy(
     let trace_content = format_trace_for_prompt(&properties.records);
 
     // Extract root topics
-    let extraction_prompt = build_topic_extraction_prompt(
-        &trace_content,
-        &properties.goals,
-        properties.max_topics,
-    );
+    let extraction_prompt =
+        build_topic_extraction_prompt(&trace_content, &properties.goals, properties.max_topics);
 
     let root_topics = match call_llm_for_topics(
         &extraction_prompt,
@@ -198,13 +197,13 @@ pub async fn generate_topic_hierarchy(
 
     // Build hierarchy iteratively using a queue and node map
     use std::collections::HashMap;
-    
+
     // Map to store all nodes by ID: node_id -> (node, parent_id, depth)
     let mut node_map: HashMap<String, (TopicHierarchyNode, Option<String>, u32)> = HashMap::new();
-    
+
     // Queue of nodes to expand: (node_id, depth, parent_path)
     let mut expansion_queue: Vec<(String, u32, Vec<String>)> = Vec::new();
-    
+
     // Initialize queue with root topics
     let mut root_node_ids = Vec::new();
     for topic in root_topics.into_iter().take(properties.max_topics as usize) {
@@ -215,33 +214,33 @@ pub async fn generate_topic_hierarchy(
             children: None,
             selected: None,
         };
-        
+
         node_map.insert(node_id.clone(), (node, None, 1));
         root_node_ids.push(node_id.clone());
-        
+
         if properties.depth > 1 {
             expansion_queue.push((node_id, 1, vec![topic.clone()]));
         }
     }
-    
+
     // Process queue iteratively
     while !expansion_queue.is_empty() {
         let mut batch = Vec::new();
         std::mem::swap(&mut expansion_queue, &mut batch);
-        
+
         // Process all items in the batch
         for (node_id, current_depth, parent_path) in batch {
             if current_depth >= properties.depth {
                 continue;
             }
-            
+
             let prompt = build_subtopic_expansion_prompt(
                 &parent_path,
                 &trace_content,
                 &properties.goals,
                 properties.degree,
             );
-            
+
             match call_llm_for_subtopics(
                 &prompt,
                 executor_context,
@@ -252,31 +251,37 @@ pub async fn generate_topic_hierarchy(
             .await
             {
                 Ok(subtopics) => {
-                    let subtopics = subtopics.into_iter().take(properties.degree as usize).collect::<Vec<_>>();
-                    
+                    let subtopics = subtopics
+                        .into_iter()
+                        .take(properties.degree as usize)
+                        .collect::<Vec<_>>();
+
                     if !subtopics.is_empty() {
                         let mut child_ids = Vec::new();
                         for subtopic in subtopics {
                             let child_id = build_node_id(Some(&node_id), &subtopic);
                             let mut new_path = parent_path.clone();
                             new_path.push(subtopic.clone());
-                            
+
                             let child_node = TopicHierarchyNode {
                                 id: child_id.clone(),
                                 name: subtopic.clone(),
                                 children: None,
                                 selected: None,
                             };
-                            
+
                             child_ids.push(child_id.clone());
-                            node_map.insert(child_id.clone(), (child_node, Some(node_id.clone()), current_depth + 1));
-                            
+                            node_map.insert(
+                                child_id.clone(),
+                                (child_node, Some(node_id.clone()), current_depth + 1),
+                            );
+
                             // Add to queue if we haven't reached max depth
                             if current_depth + 1 < properties.depth {
                                 expansion_queue.push((child_id, current_depth + 1, new_path));
                             }
                         }
-                        
+
                         // Update parent node with children IDs (we'll build the tree structure later)
                         // The tree structure will be built at the end from the node map
                     }
@@ -287,7 +292,7 @@ pub async fn generate_topic_hierarchy(
             }
         }
     }
-    
+
     // Build the tree structure from the node map
     // We need to build from leaves to root
     let mut depth_levels: Vec<Vec<String>> = vec![Vec::new(); (properties.depth + 1) as usize];
@@ -297,7 +302,7 @@ pub async fn generate_topic_hierarchy(
             depth_levels[depth_usize].push(node_id.clone());
         }
     }
-    
+
     // Build tree from bottom up
     for depth in (1..=properties.depth).rev() {
         let depth_usize = depth as usize;
@@ -311,7 +316,7 @@ pub async fn generate_topic_hierarchy(
                 .filter(|(_, (_, p, d))| p.as_ref() == Some(node_id) && *d == depth + 1)
                 .map(|(_, (n, _, _))| n.clone())
                 .collect();
-            
+
             // Now update the node with children
             if let Some((node, _, _)) = node_map.get_mut(node_id) {
                 if !children.is_empty() {
@@ -320,7 +325,7 @@ pub async fn generate_topic_hierarchy(
             }
         }
     }
-    
+
     // Build final hierarchy from root nodes
     let hierarchy: Vec<TopicHierarchyNode> = root_node_ids
         .into_iter()
@@ -355,9 +360,20 @@ fn format_trace_for_prompt(records: &[DatasetRecord]) -> String {
 
                             // SYSTEM messages are STATIC - summarize briefly
                             if role == "system" {
-                                if let Some(content) = msg_obj.get("content").and_then(|v| v.as_str()) {
-                                    let first_line = content.lines().next().unwrap_or("").chars().take(200).collect::<String>();
-                                    lines.push(format!("[SYSTEM CONTEXT (static)]: {}...", first_line));
+                                if let Some(content) =
+                                    msg_obj.get("content").and_then(|v| v.as_str())
+                                {
+                                    let first_line = content
+                                        .lines()
+                                        .next()
+                                        .unwrap_or("")
+                                        .chars()
+                                        .take(200)
+                                        .collect::<String>();
+                                    lines.push(format!(
+                                        "[SYSTEM CONTEXT (static)]: {}...",
+                                        first_line
+                                    ));
                                 }
                                 continue;
                             }
@@ -369,10 +385,22 @@ fn format_trace_for_prompt(records: &[DatasetRecord]) -> String {
                                         for tc in arr {
                                             if let Some(tc_obj) = tc.as_object() {
                                                 let empty_map = serde_json::Map::new();
-                                                let func = tc_obj.get("function").and_then(|v| v.as_object()).unwrap_or(&empty_map);
-                                                let name = func.get("name").and_then(|v| v.as_str()).unwrap_or("unknown");
-                                                let args = func.get("arguments").and_then(|v| v.as_str()).unwrap_or("{}");
-                                                lines.push(format!("[TOOL CALL (variable)]: {}({})", name, args));
+                                                let func = tc_obj
+                                                    .get("function")
+                                                    .and_then(|v| v.as_object())
+                                                    .unwrap_or(&empty_map);
+                                                let name = func
+                                                    .get("name")
+                                                    .and_then(|v| v.as_str())
+                                                    .unwrap_or("unknown");
+                                                let args = func
+                                                    .get("arguments")
+                                                    .and_then(|v| v.as_str())
+                                                    .unwrap_or("{}");
+                                                lines.push(format!(
+                                                    "[TOOL CALL (variable)]: {}({})",
+                                                    name, args
+                                                ));
                                             }
                                         }
                                     }
@@ -382,7 +410,9 @@ fn format_trace_for_prompt(records: &[DatasetRecord]) -> String {
 
                             // Handle tool result messages - VARIABLE
                             if role == "tool" {
-                                if let Some(content) = msg_obj.get("content").and_then(|v| v.as_str()) {
+                                if let Some(content) =
+                                    msg_obj.get("content").and_then(|v| v.as_str())
+                                {
                                     let truncated = if content.len() > 500 {
                                         format!("{}...", &content[..500])
                                     } else {
@@ -395,7 +425,9 @@ fn format_trace_for_prompt(records: &[DatasetRecord]) -> String {
 
                             // USER messages are VARIABLE - emphasize these
                             if role == "user" {
-                                if let Some(content) = msg_obj.get("content").and_then(|v| v.as_str()) {
+                                if let Some(content) =
+                                    msg_obj.get("content").and_then(|v| v.as_str())
+                                {
                                     let truncated = if content.len() > 1500 {
                                         format!("{}...", &content[..1500])
                                     } else {
@@ -429,15 +461,22 @@ fn format_trace_for_prompt(records: &[DatasetRecord]) -> String {
                             let func_obj = t_obj.get("function").and_then(|v| v.as_object());
                             let empty_map = serde_json::Map::new();
                             let func = func_obj.unwrap_or(&empty_map);
-                            let name = func.get("name").and_then(|v| v.as_str()).unwrap_or("unknown");
-                            let desc = func.get("description").and_then(|v| v.as_str()).unwrap_or("").trim();
-                            
-                            let params = func.get("parameters").and_then(|v| v.as_object())
+                            let name = func
+                                .get("name")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("unknown");
+                            let desc = func
+                                .get("description")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .trim();
+
+                            let params = func
+                                .get("parameters")
+                                .and_then(|v| v.as_object())
                                 .and_then(|p| p.get("properties"))
                                 .and_then(|v| v.as_object())
-                                .map(|props| {
-                                    props.keys().cloned().collect::<Vec<_>>().join(", ")
-                                })
+                                .map(|props| props.keys().cloned().collect::<Vec<_>>().join(", "))
                                 .unwrap_or_default();
 
                             let mut tool_line = format!("- {}", name);
@@ -460,14 +499,21 @@ fn format_trace_for_prompt(records: &[DatasetRecord]) -> String {
                 if let Some(arr) = messages.as_array() {
                     for msg in arr {
                         if let Some(msg_obj) = msg.as_object() {
-                            let role = msg_obj.get("role").and_then(|v| v.as_str()).unwrap_or("unknown");
+                            let role = msg_obj
+                                .get("role")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("unknown");
                             if let Some(content) = msg_obj.get("content").and_then(|v| v.as_str()) {
                                 let truncated = if content.len() > 1000 {
                                     format!("{}...", &content[..1000])
                                 } else {
                                     content.to_string()
                                 };
-                                lines.push(format!("[{} OUTPUT]: {}", role.to_uppercase(), truncated));
+                                lines.push(format!(
+                                    "[{} OUTPUT]: {}",
+                                    role.to_uppercase(),
+                                    truncated
+                                ));
                             }
                         }
                     }
@@ -479,9 +525,18 @@ fn format_trace_for_prompt(records: &[DatasetRecord]) -> String {
                     for tc in arr {
                         if let Some(tc_obj) = tc.as_object() {
                             let empty_map = serde_json::Map::new();
-                            let func = tc_obj.get("function").and_then(|v| v.as_object()).unwrap_or(&empty_map);
-                            let name = func.get("name").and_then(|v| v.as_str()).unwrap_or("unknown");
-                            let args = func.get("arguments").and_then(|v| v.as_str()).unwrap_or("{}");
+                            let func = tc_obj
+                                .get("function")
+                                .and_then(|v| v.as_object())
+                                .unwrap_or(&empty_map);
+                            let name = func
+                                .get("name")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("unknown");
+                            let args = func
+                                .get("arguments")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("{}");
                             lines.push(format!("[TOOL CALL]: {}({})", name, args));
                         }
                     }
@@ -608,7 +663,9 @@ async fn call_llm_for_topics(
             messages: vec![
                 ChatCompletionMessage {
                     role: "system".to_string(),
-                    content: Some(ChatCompletionContent::Text(TOPIC_EXTRACTION_SYSTEM_PROMPT.to_string())),
+                    content: Some(ChatCompletionContent::Text(
+                        TOPIC_EXTRACTION_SYSTEM_PROMPT.to_string(),
+                    )),
                     ..Default::default()
                 },
                 ChatCompletionMessage {
@@ -617,7 +674,7 @@ async fn call_llm_for_topics(
                     ..Default::default()
                 },
             ],
-            response_format: Some(response_format.clone().unwrap().into()),
+            response_format: Some(response_format.clone().unwrap()),
             temperature: Some(temperature),
             ..Default::default()
         },
@@ -625,7 +682,7 @@ async fn call_llm_for_topics(
     };
 
     let response_content = execute_llm_request(request, executor_context, project_slug).await?;
-    
+
     // Parse response
     let response: TopicListResponse = serde_json::from_str(&response_content)
         .map_err(|e| format!("Failed to parse topic list response: {}", e))?;
@@ -671,7 +728,9 @@ async fn call_llm_for_subtopics(
             messages: vec![
                 ChatCompletionMessage {
                     role: "system".to_string(),
-                    content: Some(ChatCompletionContent::Text(SUBTOPIC_EXPANSION_SYSTEM_PROMPT.to_string())),
+                    content: Some(ChatCompletionContent::Text(
+                        SUBTOPIC_EXPANSION_SYSTEM_PROMPT.to_string(),
+                    )),
                     ..Default::default()
                 },
                 ChatCompletionMessage {
@@ -680,7 +739,7 @@ async fn call_llm_for_subtopics(
                     ..Default::default()
                 },
             ],
-            response_format: Some(response_format.clone().unwrap().into()),
+            response_format: Some(response_format.clone().unwrap()),
             temperature: Some(temperature),
             ..Default::default()
         },
@@ -688,7 +747,7 @@ async fn call_llm_for_subtopics(
     };
 
     let response_content = execute_llm_request(request, executor_context, project_slug).await?;
-    
+
     // Parse response
     let response: SubtopicListResponse = serde_json::from_str(&response_content)
         .map_err(|e| format!("Failed to parse subtopic list response: {}", e))?;
@@ -768,20 +827,17 @@ async fn execute_llm_request(
         Some(ChatCompletionContent::Text(text)) => Ok(text.clone()),
         Some(ChatCompletionContent::Content(parts)) => {
             // Extract text from array of content parts
-            let text_parts: Vec<String> = parts
-                .iter()
-                .filter_map(|part| part.text.clone())
-                .collect();
+            let text_parts: Vec<String> =
+                parts.iter().filter_map(|part| part.text.clone()).collect();
             Ok(text_parts.join(""))
         }
         None => Err("No content in LLM response".to_string()),
     }
 }
 
-
 /// Build a node ID from parent ID and name
 fn build_node_id(parent_id: Option<&str>, name: &str) -> String {
-    let safe_name = name.to_lowercase().replace(' ', "_").replace('/', "_");
+    let safe_name = name.to_lowercase().replace([' ', '/'], "_");
     if let Some(parent) = parent_id {
         format!("{}/{}", parent, safe_name)
     } else {
