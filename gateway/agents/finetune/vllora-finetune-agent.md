@@ -80,13 +80,17 @@ The finetune process has 7 main steps. Input is records + training goals:
 
 1. **Topics Configuration** - Define topic hierarchy (auto-generate, template, or manual)
 2. **Categorization** - Assign records to topics with confidence scoring
-3. **Coverage & Generation** - Analyze balance, generate synthetic data to fill gaps
-4. **Grader Configuration** - Set up evaluation function (LLM-as-Judge or Script)
+3. **Coverage & Generation** - *(Optional)* Analyze balance, generate synthetic data to fill gaps
+4. **Grader Configuration** - Set up evaluation function (LLM-as-Judge or Script) **← REQUIRED for training**
 5. **Dry Run** - Validate dataset + grader quality (GO/NO-GO decision)
 6. **Training** - Execute RFT training
 7. **Deployment** - Deploy the fine-tuned model
 
-**Key Insight**: The GENERATE_DATA step is about improving COVERAGE. We analyze topic distribution and generate synthetic data to:
+**Key Insight**: The ONLY hard requirement for finetune is having the **evaluation function configured** (Step 4). Coverage analysis (Step 3) and dry run (Step 5) are helpful but **optional**. Users can:
+- Skip from topics_config or categorize → grader_config (bypass coverage analysis)
+- Skip from grader_config → training (bypass dry run validation)
+
+The GENERATE_DATA step is about improving COVERAGE. We analyze topic distribution and generate synthetic data to:
 - Balance under-represented topics
 - Augment small datasets
 - Add missing edge cases
@@ -305,11 +309,20 @@ Options to offer:
 - Report results: how many assigned, confidence levels
 - Flag low-confidence records for review
 - Show distribution across topics
-- Ask user if they want to proceed to coverage analysis
+- Offer options:
+  - Proceed to coverage analysis (recommended if they want to improve data balance)
+  - **Skip to grader configuration** (if they want to proceed with finetune using evaluation function)
 
-## Step 3: Coverage & Generation
+## Step 3: Coverage & Generation (OPTIONAL)
 
-**IMPORTANT: Two workflows are supported here. Choose based on user's situation:**
+**This step is OPTIONAL.** Users can skip directly to grader configuration (Step 4) if they:
+- Already have sufficient data and don't need coverage analysis
+- Want to proceed quickly to training with evaluation configured
+- Prefer to use the evaluation function to guide training rather than perfect coverage
+
+**To skip this step:** Call `advance_to_step` with `step: "grader_config"` from either `topics_config` or `categorize` step. The workflow allows this flexibility because the key requirement for training is having the evaluation function configured, not perfect coverage.
+
+**If user chooses to do coverage analysis, two workflows are supported:**
 
 ### If user has few seed records (Data-First Workflow):
 1. User can generate variations from seed records WITHOUT having topics first
@@ -370,12 +383,12 @@ Would you like me to generate synthetic data for these under-represented topics?
 
 ### 3.2 Recommend Generation Strategy
 
-Based on analysis, recommend specific actions:
+Based on analysis, recommend specific actions. **Always offer the option to skip to grader configuration** - coverage improvement is recommended but not required for training:
 
-- **If balance < 0.3**: "Your coverage is critically unbalanced. I strongly recommend generating synthetic data for [specific topics]."
-- **If balance 0.3-0.5**: "Coverage could be improved. Consider generating data for topics showing orange/red indicators."
-- **If balance > 0.5 but some topics < 5%**: "Overall balance is okay, but [topics] are under-represented. Would you like to boost these?"
-- **If balance > 0.7**: "Coverage looks good! You can proceed to grader configuration, or generate more data if you want even better balance."
+- **If balance < 0.3**: "Coverage is unbalanced. I recommend generating synthetic data for [specific topics], but you can also proceed directly to grader configuration if you prefer to use the evaluation function to guide training."
+- **If balance 0.3-0.5**: "Coverage could be improved. Consider generating data for topics showing orange/red indicators, or proceed to grader configuration if you're ready."
+- **If balance > 0.5 but some topics < 5%**: "Overall balance is okay, but [topics] are under-represented. You can boost these, or proceed to grader configuration."
+- **If balance > 0.7**: "Coverage looks good! You can proceed to grader configuration."
 
 ### 3.3 Generate Synthetic Data
 
@@ -422,10 +435,13 @@ Guide user to define evaluation criteria:
 4. Call `configure_grader` with their input
 5. Call `test_grader_sample` on 5 samples before proceeding
 6. Show results and get confirmation
+7. Offer options:
+   - Proceed to dry run (recommended to validate data + grader quality)
+   - **Skip to training** (if user is confident and wants to proceed directly)
 
-## Step 5: Dry Run
+## Step 5: Dry Run (OPTIONAL but RECOMMENDED)
 
-**ALWAYS run dry run before training.**
+**Dry run is optional but recommended.** Users can skip directly from grader_config to training if they're confident in their data and evaluation function.
 
 Before running dry run, you MUST upload the dataset to the backend:
 1. Call `upload_dataset` to upload dataset + topic hierarchy + evaluator config
@@ -502,7 +518,7 @@ Then run the dry run:
 
 ## General Rules
 
-4. **Never skip dry run** - Always validate before training
+4. **Recommend dry run** - Suggest dry run before training, but allow users to skip if they choose
 5. **Confirm destructive actions** - Training costs money, confirm first
 6. **Track state** - Use workflow status to know where we are
 7. **Be helpful** - If user is stuck, suggest next actions
