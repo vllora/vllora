@@ -1310,12 +1310,9 @@ impl From<&async_openai::types::chat::CompletionUsage> for GatewayModelUsage {
     fn from(val: &async_openai::types::chat::CompletionUsage) -> Self {
         GatewayModelUsage {
             input_tokens: val.prompt_tokens,
-            output_tokens: val.completion_tokens
-                + val
-                    .completion_tokens_details
-                    .as_ref()
-                    .and_then(|c| c.reasoning_tokens)
-                    .unwrap_or(0),
+            // Note: completion_tokens already includes reasoning_tokens per OpenAI's API spec.
+            // The reasoning_tokens field in completion_tokens_details is a breakdown, not additional.
+            output_tokens: val.completion_tokens,
             total_tokens: val.total_tokens,
             prompt_tokens_details: val.prompt_tokens_details.as_ref().map(|p| {
                 crate::types::gateway::PromptTokensDetails::new(
