@@ -197,6 +197,7 @@ pub struct RowEvaluationResult {
     pub score: Option<f64>,
     pub reason: Option<String>,
     pub error_message: Option<String>,
+    pub logs: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
