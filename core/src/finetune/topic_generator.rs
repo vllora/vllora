@@ -57,6 +57,9 @@ pub struct GenerateTopicHierarchyProperties {
     /// Temperature (default: 0.7)
     #[serde(default = "default_temperature")]
     pub temperature: f32,
+    /// Optional focus areas for topic generation (e.g., "error handling", "edge cases")
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub focus: Option<String>,
 }
 
 fn default_max_topics() -> u32 {
@@ -155,6 +158,15 @@ pub async fn generate_topic_hierarchy(
     executor_context: &ExecutorContext,
     project_slug: &str,
 ) -> GenerateHierarchyResult {
+    tracing::info!(
+        depth = properties.depth,
+        degree = properties.degree,
+        max_topics = properties.max_topics,
+        focus = ?properties.focus,
+        records_count = properties.records.len(),
+        "Starting topic hierarchy generation"
+    );
+
     // Validate depth
     if properties.depth < 1 || properties.depth > 5 {
         return GenerateHierarchyResult {
@@ -168,8 +180,12 @@ pub async fn generate_topic_hierarchy(
     let trace_content = format_trace_for_prompt(&properties.records);
 
     // Extract root topics
-    let extraction_prompt =
-        build_topic_extraction_prompt(&trace_content, &properties.goals, properties.max_topics);
+    let extraction_prompt = build_topic_extraction_prompt(
+        &trace_content,
+        &properties.goals,
+        properties.max_topics,
+        properties.focus.as_deref(),
+    );
 
     let root_topics = match call_llm_for_topics(
         &extraction_prompt,
@@ -239,6 +255,7 @@ pub async fn generate_topic_hierarchy(
                 &trace_content,
                 &properties.goals,
                 properties.degree,
+                properties.focus.as_deref(),
             );
 
             match call_llm_for_subtopics(
@@ -549,13 +566,31 @@ fn format_trace_for_prompt(records: &[DatasetRecord]) -> String {
 }
 
 /// Build prompt for topic extraction
-fn build_topic_extraction_prompt(trace_content: &str, objective: &str, max_topics: u32) -> String {
+fn build_topic_extraction_prompt(
+    trace_content: &str,
+    objective: &str,
+    max_topics: u32,
+    focus: Option<&str>,
+) -> String {
+    let focus_section = match focus {
+        Some(f) if !f.trim().is_empty() => format!(
+            r#"
+
+USER GUIDANCE:
+When generating topics, consider the following direction from the user:
+{}
+"#,
+            f
+        ),
+        _ => String::new(),
+    };
+
     format!(
         r#"TASK:
 Identify up to {} DIMENSIONS OF VARIATION for synthetic data generation.
 
-OBJECTIVE:
-{}
+DATASET GOAL:
+{}{}
 
 TRACE EVIDENCE:
 {}
@@ -578,7 +613,7 @@ AVOID:
 
 OUTPUT:
 Return ONLY a JSON object with a "topics" array of topic names (lowercase_with_underscores)."#,
-        max_topics, objective, trace_content
+        max_topics, objective, focus_section, trace_content
     )
 }
 
@@ -588,15 +623,29 @@ fn build_subtopic_expansion_prompt(
     trace_content: &str,
     objective: &str,
     degree: u32,
+    focus: Option<&str>,
 ) -> String {
     let path_str = parent_path.join(" -> ");
+
+    let focus_section = match focus {
+        Some(f) if !f.trim().is_empty() => format!(
+            r#"
+
+USER GUIDANCE:
+When expanding sub-topics, consider the following direction from the user:
+{}
+"#,
+            f
+        ),
+        _ => String::new(),
+    };
 
     format!(
         r#"TASK:
 Expand the variation dimension "{}" into up to {} more specific sub-dimensions.
 
-OBJECTIVE:
-{}
+DATASET GOAL:
+{}{}
 
 CURRENT VARIATION PATH:
 {}
@@ -620,6 +669,7 @@ Return ONLY a JSON object with a "subtopics" array of subtopic names (lowercase_
         parent_path.last().unwrap_or(&String::new()),
         degree,
         objective,
+        focus_section,
         path_str,
         trace_content
     )
