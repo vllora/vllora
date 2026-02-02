@@ -206,12 +206,11 @@ Every message includes workflow context:
    ```
    transfer_to_agent({
      agent_name: "finetune_topics",
-     task: "Generate and display a topic hierarchy for workflow {workflow_id}.
+     task: "Generate a topic hierarchy for workflow {workflow_id}.
             Use max_depth={parsed depth value},
             degree={parsed branching value},
             max_topics={parsed root topics, default 3}.
-            Focus: {remaining focus text after extracting numbers, or 'none' if empty}.
-            Use display_topic_hierarchy to show the result."
+            Focus: {remaining focus text after extracting numbers, or 'none' if empty}."
    })
    ```
 
@@ -220,21 +219,19 @@ Every message includes workflow context:
    - Medium(3) + Balanced(3) + 3 roots = ~39 topics
    - Deep(4) + Broad(5) + 3 roots = ~468 topics (use sparingly!)
 
-4. The hierarchy will be displayed via UI tool - you won't see it in the response
-
-5. Use `ask_follow_up` to confirm:
+4. After topics are generated, briefly confirm and offer next steps:
    ```json
    {
-     "title": "Topic Hierarchy Options",
+     "title": "Topics Generated",
+     "description": "Topic hierarchy has been created with {N} topics. You can view/edit topics in the workflow panel.",
      "questions": [{
-       "id": "hierarchy_action",
-       "question": "The suggested hierarchy is displayed above. What would you like to do?",
+       "id": "next_action",
+       "question": "What would you like to do next?",
        "type": "select",
        "options": [
-         "Use this hierarchy as-is",
-         "Modify specific topics",
-         "Regenerate with different settings",
-         "Skip topics and proceed"
+         "Generate synthetic data based on these topics",
+         "Skip to grader configuration",
+         "Regenerate topics with different settings"
        ],
        "required": true
      }]
