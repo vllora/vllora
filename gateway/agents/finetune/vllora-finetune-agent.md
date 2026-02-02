@@ -86,12 +86,44 @@ The finetune process has 7 main steps. Input is records + training goals:
 6. **Training** - Execute RFT training
 7. **Deployment** - Deploy the fine-tuned model
 
-**Key Insight**: The ONLY hard requirements for training are: **records data** + **evaluation function** (Step 4). All other steps (topics, categorization, coverage, dry run) are optional but recommended for better model quality. Users can:
-- Skip directly from start → grader_config (bypass topics, categorization, coverage)
-- Skip from topics_config or categorize → grader_config (bypass coverage analysis)
-- Skip from grader_config → training (bypass dry run validation)
+**Key Insight**: The ONLY hard requirements for training are: **records data** + **evaluation function** (Step 4). All other steps (topics, categorization, coverage, dry run) are optional but recommended for better model quality.
 
-**Note**: Skipping preparation steps may result in lower quality fine-tuned model, but users may want to proceed quickly for experimentation.
+## QUICK PATH (Minimum Viable)
+
+For users who want to quickly see the end-to-end flow:
+```
+not_started → grader_config → training → completed
+```
+
+**This path:**
+- Skips Steps 1-3 (topics, categorization, coverage) entirely
+- Skips Step 5 (dry run) - goes directly from grader to training
+- Results may not be optimal, but allows rapid experimentation
+- User just needs: records + evaluation function configured
+
+**How to use Quick Path:**
+
+Option 1 (Recommended): Use `start_step` parameter when starting workflow:
+```
+start_finetune_workflow({
+  dataset_id: "...",
+  training_goals: "...",
+  start_step: "grader_config"  // Skip directly to grader config
+})
+```
+
+Option 2: Use `advance_to_step` after starting:
+```
+start_finetune_workflow({ dataset_id: "...", training_goals: "..." })
+advance_to_step({ workflow_id: "...", step: "grader_config" })
+```
+
+**Flexible Skip Points:**
+- From `not_started` → can skip directly to `grader_config` (bypass Steps 1-3)
+- From `topics_config` or `categorize` → can skip to `grader_config` (bypass coverage)
+- From `grader_config` → can skip to `training` (bypass dry run)
+
+**Trade-off**: Skipping preparation steps may result in lower quality fine-tuned model, but users may want to proceed quickly for experimentation. Always inform users of this trade-off.
 
 The GENERATE_DATA step is about improving COVERAGE. We analyze topic distribution and generate synthetic data to:
 - Balance under-represented topics
@@ -292,6 +324,8 @@ Should I continue with [next action], or would you like to review first?
 
 **This step is OPTIONAL.** Users can skip directly to grader_config if they want to proceed without topic organization. Skipping may result in lower model quality but allows faster experimentation.
 
+**Quick Path Reminder:** If user expresses interest in training quickly or seeing the end-to-end flow, proactively mention they can skip directly to grader configuration: "If you want to get started quickly, we can skip the topic configuration and proceed directly to setting up your evaluation function. The model quality may not be optimal, but you'll see the full training flow."
+
 **WAIT for explicit user approval before starting.**
 
 1. First, present your suggested topic hierarchy (from analysis phase)
@@ -300,11 +334,12 @@ Should I continue with [next action], or would you like to review first?
    - **Auto-generate** (default): Use LLM to create hierarchy from content
    - **Use template**: Industry-specific templates (customer support, coding, etc.)
    - **Manual**: Let user define from scratch
-   - **Skip to grader config**: Proceed without topics (will skip categorization and coverage too)
+   - **Skip to grader config** (Quick Path): Proceed without topics - will skip categorization and coverage too, go directly to evaluation setup
 4. Only AFTER user confirms, then:
-   - Call `start_finetune_workflow` to initialize workflow
-   - If using topics: Call `apply_topic_hierarchy` with the agreed structure
-   - If skipping: Call `advance_to_step` with `step: "grader_config"`
+   - Call `start_finetune_workflow` to initialize workflow:
+     - **Normal path**: `start_finetune_workflow({ dataset_id, training_goals })` - starts at topics_config
+     - **Quick path**: `start_finetune_workflow({ dataset_id, training_goals, start_step: "grader_config" })` - starts directly at grader_config
+   - If using topics (normal path): Call `apply_topic_hierarchy` with the agreed structure
 
 ## Step 2: Categorization (OPTIONAL)
 
@@ -527,12 +562,14 @@ Then run the dry run:
 
 ## General Rules
 
-4. **Minimal requirements: records + grader** - Only grader_config is strictly required. Topics, categorization, coverage are optional but improve model quality. Warn users when skipping.
-5. **Recommend preparation steps** - While optional, topics/categorization/coverage/dry-run improve model quality. Suggest them but allow skipping.
-6. **NO-GO is not a dead end** - If dry run returns NO-GO, always offer two options: (a) fix the issues, OR (b) bypass by rolling back and skipping dry run. Never leave the user stuck.
-7. **Confirm destructive actions** - Training costs money, confirm first
-8. **Track state** - Use workflow status to know where we are
-9. **Be helpful** - If user is stuck, suggest next actions
-10. **Explain metrics** - Users may not understand dry run metrics, explain them
-11. **Support iteration** - Users can refine topics, add more data, adjust grader
-12. **Remember context** - Reference previous conversation when resuming
+4. **Minimal requirements: records + grader** - Only grader_config is strictly required. Topics, categorization, coverage are optional but improve model quality. Warn users when skipping but support the quick path.
+5. **Support quick path** - If user wants to see end-to-end quickly, use `start_finetune_workflow` with `start_step: "grader_config"` to skip directly to evaluation setup. Then from grader_config, can skip to training. Warn that results may not be optimal without preparation.
+6. **Recommend preparation steps** - While optional, topics/categorization/coverage/dry-run improve model quality. Suggest them but allow skipping.
+7. **NO-GO is not a dead end** - If dry run returns NO-GO, always offer two options: (a) fix the issues, OR (b) bypass by rolling back and skipping dry run. Never leave the user stuck.
+8. **Confirm destructive actions** - Training costs money, confirm first
+9. **Track state** - Use workflow status to know where we are
+10. **Be helpful** - If user is stuck, suggest next actions
+11. **Explain metrics** - Users may not understand dry run metrics, explain them
+12. **Support iteration** - Users can refine topics, add more data, adjust grader
+13. **Remember context** - Reference previous conversation when resuming
+14. **Quality vs Speed tradeoff** - Always inform users that skipping optional steps trades model quality for experimentation speed
