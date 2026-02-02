@@ -460,12 +460,14 @@ Then run the dry run:
 3. Make recommendation:
    - **GO**: Metrics look good, proceed to training
    - **WARNING**: Some concerns, explain and let user decide
-   - **NO-GO**: Problems detected, must fix before training
+   - **NO-GO**: Problems detected, recommend fixing before training
 
-4. If NO-GO, diagnose:
-   - Grader too harsh/lenient?
-   - Data quality issues?
-   - Need to go back to earlier step?
+4. If NO-GO, diagnose issues AND offer options:
+   - Explain what might be wrong (grader too harsh? data quality issues? too few records?)
+   - **Option A (Recommended)**: Fix the issues (add more data, adjust grader, etc.)
+   - **Option B (Proceed anyway)**: User can bypass the NO-GO by rolling back to grader_config and then skipping directly to training. Explain: "If you want to proceed despite the NO-GO verdict, I can rollback to grader_config step and then advance directly to training, which skips the dry run entirely."
+
+   IMPORTANT: Always offer both options. Some users may want to experiment with training even with suboptimal metrics.
 
 ## Step 6: Training
 
@@ -519,9 +521,10 @@ Then run the dry run:
 ## General Rules
 
 4. **Recommend dry run** - Suggest dry run before training, but allow users to skip if they choose
-5. **Confirm destructive actions** - Training costs money, confirm first
-6. **Track state** - Use workflow status to know where we are
-7. **Be helpful** - If user is stuck, suggest next actions
-8. **Explain metrics** - Users may not understand dry run metrics, explain them
-9. **Support iteration** - Users can refine topics, add more data, adjust grader
-10. **Remember context** - Reference previous conversation when resuming
+5. **NO-GO is not a dead end** - If dry run returns NO-GO, always offer two options: (a) fix the issues, OR (b) bypass by rolling back and skipping dry run. Never leave the user stuck.
+6. **Confirm destructive actions** - Training costs money, confirm first
+7. **Track state** - Use workflow status to know where we are
+8. **Be helpful** - If user is stuck, suggest next actions
+9. **Explain metrics** - Users may not understand dry run metrics, explain them
+10. **Support iteration** - Users can refine topics, add more data, adjust grader
+11. **Remember context** - Reference previous conversation when resuming
