@@ -64,17 +64,26 @@ When asked to generate synthetic data:
 3. Update todos as each completes
 4. Return summary of generated data
 
-## Generate Initial Data (Empty Datasets)
-When asked to generate data for an **empty dataset** (no existing records):
-1. Call `generate_initial_data` with the dataset_id and desired count
-2. This tool generates seed records using only the training objective
-3. No existing records or topic hierarchy is required
-4. Return summary of generated initial records
+## Generate Initial Data (Empty or Existing Datasets)
+When asked to generate initial/seed data:
+1. Call `generate_initial_data` with:
+   - `dataset_id`: The target dataset
+   - `count`: Number of records to generate (default 10)
+   - `user_guidance` (optional): Pass any specific instructions from the user about what kind of data they want
+2. This tool generates seed records based on training objective + user guidance
+3. Records are ADDED to the dataset (doesn't replace existing records)
+4. Return summary of generated records
+
+**User guidance examples:**
+- "focus on beginner concepts"
+- "include edge cases and error scenarios"
+- "make examples more advanced"
+- "emphasize practical real-world scenarios"
 
 **Use this when:**
-- Dataset has 0 records
-- User wants to bootstrap the dataset with initial training data
-- The dataset has a training objective defined
+- Dataset has 0 records (initial bootstrap)
+- User wants to ADD more training data with specific focus
+- User wants to refine/expand the dataset iteratively
 
 ## Configure Grader
 When asked to set up the grader:
