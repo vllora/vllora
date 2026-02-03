@@ -98,7 +98,7 @@ pub async fn get_langdb_api_key(
 #[derive(Debug, Deserialize)]
 pub struct CreateEvaluationBody {
     pub dataset_id: uuid::Uuid,
-    pub model_params: EvalCompletionParams,
+    pub rollout_model_params: EvalCompletionParams,
     pub offset: Option<i32>,
     pub limit: Option<i32>,
 }
@@ -119,7 +119,7 @@ pub async fn create_evaluation(
 
     let cloud_request = CreateEvaluationRequest {
         dataset_id: request_body.dataset_id,
-        model_params: request_body.model_params,
+        rollout_model_params: request_body.rollout_model_params,
         offset: request_body.offset,
         limit: request_body.limit,
     };
