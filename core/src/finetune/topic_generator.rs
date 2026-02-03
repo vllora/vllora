@@ -95,6 +95,40 @@ pub struct GenerateHierarchyResult {
     pub hierarchy: Option<Vec<TopicHierarchyNode>>,
 }
 
+/// Properties for adjusting an existing topic hierarchy
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdjustTopicHierarchyProperties {
+    /// The current hierarchy to modify
+    pub current_hierarchy: Vec<TopicHierarchyNode>,
+    /// Natural language instruction describing the modification
+    /// Examples: "add Error Handling under Testing", "rename Basics to Fundamentals", "remove Deprecated"
+    pub user_instruction: String,
+    /// User's description of dataset goals (used as context for LLM)
+    pub goals: String,
+    /// Model to use (default: "gpt-4o-mini")
+    #[serde(default = "default_model")]
+    pub model: String,
+    /// Temperature (default: 0.3 - lower for more deterministic modifications)
+    #[serde(default = "default_adjust_temperature")]
+    pub temperature: f32,
+}
+
+fn default_adjust_temperature() -> f32 {
+    0.3
+}
+
+/// Result of topic hierarchy adjustment
+#[derive(Debug, Serialize)]
+pub struct AdjustHierarchyResult {
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hierarchy: Option<Vec<TopicHierarchyNode>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub changes_made: Option<Vec<String>>,
+}
+
 /// Response schema for topic list extraction
 #[derive(Debug, Deserialize)]
 struct TopicListResponse {
@@ -131,6 +165,35 @@ Rules:
 
 You do NOT explain your reasoning.
 You ONLY return structured output matching the schema."#;
+
+/// System prompt for topic hierarchy adjustment
+const TOPIC_ADJUSTMENT_SYSTEM_PROMPT: &str = r#"You are a topic hierarchy modification engine.
+
+Your job is to modify an existing topic hierarchy based on user instructions.
+
+SUPPORTED OPERATIONS:
+1. ADD: Add a new topic (at root level or as a child of an existing topic)
+2. RENAME: Change the name of an existing topic
+3. REMOVE: Delete a topic (and optionally its children)
+4. MOVE: Move a topic to a different parent
+5. MERGE: Combine multiple topics into one
+
+RULES:
+- Preserve the existing structure as much as possible
+- Only make changes explicitly requested by the user
+- Use lowercase_with_underscores for all topic names
+- Generate appropriate IDs for new topics (parent_id/topic_name format)
+- When removing a parent topic, decide based on context whether to remove or promote children
+- Return the complete modified hierarchy
+
+You ONLY return structured output matching the schema."#;
+
+/// Response schema for hierarchy adjustment
+#[derive(Debug, Deserialize)]
+struct AdjustHierarchyResponse {
+    hierarchy: Vec<TopicHierarchyNode>,
+    changes_made: Vec<String>,
+}
 
 /// System prompt for subtopic expansion
 const SUBTOPIC_EXPANSION_SYSTEM_PROMPT: &str = r#"You are a hierarchical topic expansion engine.
@@ -893,6 +956,184 @@ fn build_node_id(parent_id: Option<&str>, name: &str) -> String {
     } else {
         safe_name
     }
+}
+
+/// Adjust an existing topic hierarchy based on natural language instructions
+pub async fn adjust_topic_hierarchy(
+    properties: AdjustTopicHierarchyProperties,
+    executor_context: &ExecutorContext,
+    project_slug: &str,
+) -> AdjustHierarchyResult {
+    tracing::info!(
+        instruction = %properties.user_instruction,
+        current_topic_count = count_topics(&properties.current_hierarchy),
+        "Starting topic hierarchy adjustment"
+    );
+
+    // Format the current hierarchy as a readable tree
+    let hierarchy_tree = format_hierarchy_as_tree(&properties.current_hierarchy, 0);
+
+    // Build the adjustment prompt
+    let prompt = build_adjustment_prompt(
+        &hierarchy_tree,
+        &properties.user_instruction,
+        &properties.goals,
+    );
+
+    // Create JSON schema for the response
+    let json_schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "hierarchy": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/$defs/topic_node"
+                }
+            },
+            "changes_made": {
+                "type": "array",
+                "items": {
+                    "type": "string"
+                },
+                "description": "List of changes made to the hierarchy"
+            }
+        },
+        "$defs": {
+            "topic_node": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "string" },
+                    "name": { "type": "string" },
+                    "children": {
+                        "type": "array",
+                        "items": { "$ref": "#/$defs/topic_node" }
+                    }
+                },
+                "required": ["id", "name"]
+            }
+        },
+        "required": ["hierarchy", "changes_made"],
+        "additionalProperties": false
+    });
+
+    let response_format = Some(OpenaiResponseFormat::JsonSchema {
+        json_schema: vllora_llm::types::gateway::ResponseFormatJsonSchema {
+            name: "adjust_hierarchy_response".to_string(),
+            schema: Some(json_schema),
+            strict: Some(true),
+            description: None,
+        },
+    });
+
+    let request: ChatCompletionRequestWithTools<()> = ChatCompletionRequestWithTools {
+        request: ChatCompletionRequest {
+            model: properties.model.clone(),
+            messages: vec![
+                ChatCompletionMessage {
+                    role: "system".to_string(),
+                    content: Some(ChatCompletionContent::Text(
+                        TOPIC_ADJUSTMENT_SYSTEM_PROMPT.to_string(),
+                    )),
+                    ..Default::default()
+                },
+                ChatCompletionMessage {
+                    role: "user".to_string(),
+                    content: Some(ChatCompletionContent::Text(prompt)),
+                    ..Default::default()
+                },
+            ],
+            response_format: Some(response_format.clone().unwrap()),
+            temperature: Some(properties.temperature),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    match execute_llm_request(request, executor_context, project_slug).await {
+        Ok(response_content) => {
+            match serde_json::from_str::<AdjustHierarchyResponse>(&response_content) {
+                Ok(response) => {
+                    tracing::info!(
+                        changes = ?response.changes_made,
+                        new_topic_count = count_topics(&response.hierarchy),
+                        "Topic hierarchy adjusted successfully"
+                    );
+                    AdjustHierarchyResult {
+                        success: true,
+                        error: None,
+                        hierarchy: Some(response.hierarchy),
+                        changes_made: Some(response.changes_made),
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to parse adjustment response: {}", e);
+                    AdjustHierarchyResult {
+                        success: false,
+                        error: Some(format!("Failed to parse LLM response: {}", e)),
+                        hierarchy: None,
+                        changes_made: None,
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            tracing::warn!("Failed to execute adjustment request: {}", e);
+            AdjustHierarchyResult {
+                success: false,
+                error: Some(e),
+                hierarchy: None,
+                changes_made: None,
+            }
+        }
+    }
+}
+
+/// Build prompt for topic hierarchy adjustment
+fn build_adjustment_prompt(hierarchy_tree: &str, instruction: &str, goals: &str) -> String {
+    format!(
+        r#"TASK:
+Modify the topic hierarchy based on the user's instruction.
+
+DATASET GOAL:
+{}
+
+CURRENT HIERARCHY:
+{}
+
+USER INSTRUCTION:
+{}
+
+OUTPUT:
+Return a JSON object with:
+1. "hierarchy": The complete modified hierarchy (same structure as input)
+2. "changes_made": Array of strings describing each change made
+
+If the instruction is unclear or cannot be performed, return the original hierarchy unchanged with an explanation in changes_made."#,
+        goals, hierarchy_tree, instruction
+    )
+}
+
+/// Format hierarchy as a readable tree string
+fn format_hierarchy_as_tree(nodes: &[TopicHierarchyNode], depth: usize) -> String {
+    let mut lines = Vec::new();
+    let indent = "  ".repeat(depth);
+
+    for node in nodes {
+        lines.push(format!("{}- {} (id: {})", indent, node.name, node.id));
+        if let Some(children) = &node.children {
+            lines.push(format_hierarchy_as_tree(children, depth + 1));
+        }
+    }
+
+    lines.join("\n")
+}
+
+/// Count total topics in hierarchy
+fn count_topics(nodes: &[TopicHierarchyNode]) -> usize {
+    nodes
+        .iter()
+        .map(|node| 1 + node.children.as_ref().map(|c| count_topics(c)).unwrap_or(0))
+        .sum()
 }
 
 #[cfg(test)]

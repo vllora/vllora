@@ -428,10 +428,17 @@ impl ApiServer {
                                 web::delete().to(finetune::delete_deployment),
                             ),
                     )
-                    .service(web::scope("/topic-hierarchy").route(
-                        "/generate",
-                        web::post().to(finetune::generate_topic_hierarchy),
-                    ))
+                    .service(
+                        web::scope("/topic-hierarchy")
+                            .route(
+                                "/generate",
+                                web::post().to(finetune::generate_topic_hierarchy),
+                            )
+                            .route(
+                                "/adjust",
+                                web::post().to(finetune::adjust_topic_hierarchy),
+                            ),
+                    )
                     .app_data(Data::from(guardrails_service.clone()))
                     .app_data(Data::new(
                         Box::new(cost_calculator.clone()) as Box<dyn CostCalculator>
