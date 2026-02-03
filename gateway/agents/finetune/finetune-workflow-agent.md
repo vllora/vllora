@@ -18,6 +18,7 @@ external = [
   "categorize_records",
   "analyze_coverage",
   "generate_synthetic_data",
+  "generate_initial_data",
   "update_record",
 
   # Grader operations
@@ -62,6 +63,18 @@ When asked to generate synthetic data:
 2. Call `generate_synthetic_data` for each request
 3. Update todos as each completes
 4. Return summary of generated data
+
+## Generate Initial Data (Empty Datasets)
+When asked to generate data for an **empty dataset** (no existing records):
+1. Call `generate_initial_data` with the dataset_id and desired count
+2. This tool generates seed records using only the training objective
+3. No existing records or topic hierarchy is required
+4. Return summary of generated initial records
+
+**Use this when:**
+- Dataset has 0 records
+- User wants to bootstrap the dataset with initial training data
+- The dataset has a training objective defined
 
 ## Configure Grader
 When asked to set up the grader:
