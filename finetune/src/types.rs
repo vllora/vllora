@@ -176,7 +176,8 @@ pub struct CompletionParams {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateEvaluationRequest {
     pub dataset_id: uuid::Uuid,
-    pub model_params: CompletionParams,
+    #[serde(alias = "model_params")]
+    pub rollout_model_params: CompletionParams,
     // Pagination parameters for partial dataset run
     pub offset: Option<i32>,
     pub limit: Option<i32>,

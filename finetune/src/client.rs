@@ -219,6 +219,38 @@ impl LangdbCloudFinetuneClient {
         Ok(body)
     }
 
+    pub async fn cancel_reinforcement_job(&self, job_id: &str) -> Result<(), String> {
+        let url = format!(
+            "{}/finetune/reinforcement-jobs/{}/cancel",
+            self.api_url, job_id
+        );
+
+        let req = self.client.post(&url);
+
+        let _response = req
+            .send()
+            .await
+            .map_err(|e| format!("Failed to call cloud API: {}", e))?;
+
+        Ok(())
+    }
+
+    pub async fn resume_reinforcement_job(&self, job_id: &str) -> Result<(), String> {
+        let url = format!(
+            "{}/finetune/reinforcement-jobs/{}/resume",
+            self.api_url, job_id
+        );
+
+        let req = self.client.post(&url);
+
+        let _response = req
+            .send()
+            .await
+            .map_err(|e| format!("Failed to call cloud API: {}", e))?;
+
+        Ok(())
+    }
+
     /// List reinforcement fine-tuning jobs
     pub async fn list_reinforcement_jobs(
         &self,
