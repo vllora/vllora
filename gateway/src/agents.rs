@@ -273,28 +273,21 @@ const EMBEDDED_AGENTS: &[(&str, &str)] = &[
         include_str!("../agents/vllora-ui-agent.md"),
     ),
     (
-        "vllora-dataset-orchestrator.md",
-        include_str!("../agents/finetune-dataset/vllora-dataset-orchestrator.md"),
-    ),
-    (
-        "vllora-dataset-ui.md",
-        include_str!("../agents/finetune-dataset/vllora-dataset-ui.md"),
-    ),
-    (
-        "vllora-dataset-data.md",
-        include_str!("../agents/finetune-dataset/vllora-dataset-data.md"),
-    ),
-    (
-        "vllora-dataset-analysis.md",
-        include_str!("../agents/finetune-dataset/vllora-dataset-analysis.md"),
-    ),
-    (
-        "vllora-dataset-composite.md",
-        include_str!("../agents/finetune-dataset/vllora-dataset-composite.md"),
-    ),
-    (
         "vllora-finetune-agent.md",
         include_str!("../agents/finetune/vllora-finetune-agent.md"),
+    ),
+    // Finetune sub-agents
+    (
+        "finetune-analysis-agent.md",
+        include_str!("../agents/finetune/finetune-analysis-agent.md"),
+    ),
+    (
+        "finetune-topics-agent.md",
+        include_str!("../agents/finetune/finetune-topics-agent.md"),
+    ),
+    (
+        "finetune-workflow-agent.md",
+        include_str!("../agents/finetune/finetune-workflow-agent.md"),
     ),
 ];
 
