@@ -606,6 +606,88 @@ pub async fn list_reinforcement_jobs(
     Ok(HttpResponse::Ok().json(response))
 }
 
+/// Cancel a reinforcement fine-tuning job
+/// Forwards to cloud API and updates local metadata state when possible
+pub async fn cancel_reinforcement_job(
+    job_id: web::Path<String>,
+    project: web::ReqData<vllora_core::types::metadata::project::Project>,
+    key_storage: web::Data<Box<dyn KeyStorage>>,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let job_id_str = job_id.into_inner();
+
+    // Best-effort: update local metadata state to cancelled
+    let finetune_job_service = FinetuneJobService::new(db_pool.get_ref().clone());
+    if let Ok(Some(db_job)) =
+        finetune_job_service.get_by_provider_job_id(&job_id_str, &project.id.to_string())
+    {
+        let _ = finetune_job_service.update_state(
+            &db_job.id,
+            &project.id.to_string(),
+            vllora_core::metadata::models::finetune_job::FinetuneJobState::Cancelled,
+        );
+    }
+
+    // Forward cancel request to cloud API
+    let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
+    let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
+    })?;
+
+    client
+        .cancel_reinforcement_job(&job_id_str)
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!(
+                "Failed to cancel reinforcement job: {}",
+                e
+            ))
+        })?;
+
+    Ok(HttpResponse::NoContent().finish())
+}
+
+/// Resume a reinforcement fine-tuning job
+/// Forwards to cloud API and updates local metadata state when possible
+pub async fn resume_reinforcement_job(
+    job_id: web::Path<String>,
+    project: web::ReqData<vllora_core::types::metadata::project::Project>,
+    key_storage: web::Data<Box<dyn KeyStorage>>,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let job_id_str = job_id.into_inner();
+
+    // Best-effort: update local metadata state back to pending
+    let finetune_job_service = FinetuneJobService::new(db_pool.get_ref().clone());
+    if let Ok(Some(db_job)) =
+        finetune_job_service.get_by_provider_job_id(&job_id_str, &project.id.to_string())
+    {
+        let _ = finetune_job_service.update_state(
+            &db_job.id,
+            &project.id.to_string(),
+            vllora_core::metadata::models::finetune_job::FinetuneJobState::Pending,
+        );
+    }
+
+    // Forward resume request to cloud API
+    let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
+    let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
+    })?;
+
+    client
+        .resume_reinforcement_job(&job_id_str)
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!(
+                "Failed to resume reinforcement job: {}",
+                e
+            ))
+        })?;
+
+    Ok(HttpResponse::NoContent().finish())
+}
+
 // ============================================================================
 // Deployment Handlers
 // ============================================================================

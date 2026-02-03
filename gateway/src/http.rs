@@ -410,6 +410,14 @@ impl ApiServer {
                             .route(
                                 "/{job_id}/status",
                                 web::get().to(finetune::get_reinforcement_job_status),
+                            )
+                            .route(
+                                "/{job_id}/cancel",
+                                web::post().to(finetune::cancel_reinforcement_job),
+                            )
+                            .route(
+                                "/{job_id}/resume",
+                                web::post().to(finetune::resume_reinforcement_job),
                             ),
                     )
                     .service(
