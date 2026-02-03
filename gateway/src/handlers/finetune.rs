@@ -50,6 +50,7 @@ pub struct ReinforcementJobStatusResponse {
 pub struct FinetuningJobResponse {
     pub id: String,
     pub provider_job_id: String,
+    pub dataset_id: String,
     pub status: String,
     pub base_model: String,
     pub fine_tuned_model: Option<String>,
@@ -584,6 +585,7 @@ pub async fn list_reinforcement_jobs(
         .map(|job| FinetuningJobResponse {
             id: job.id,
             provider_job_id: job.provider_job_id,
+            dataset_id: job.dataset_id,
             status: job.state,
             base_model: job.base_model,
             fine_tuned_model: job.fine_tuned_model,

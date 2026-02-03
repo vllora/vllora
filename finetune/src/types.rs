@@ -67,6 +67,7 @@ pub struct FinetuningJobResponse {
     pub id: uuid::Uuid,
     pub status: String,
     pub base_model: String,
+    pub dataset_id: uuid::Uuid,
     pub fine_tuned_model: Option<String>,
     #[serde(default = "default_provider")]
     pub provider: String,
