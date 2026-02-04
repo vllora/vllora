@@ -464,15 +464,97 @@ Users may want to modify the topic hierarchy conversationally:
 
 ## When user wants to train
 
-1. Delegate to `finetune_workflow`:
+Training requires minimal configuration. By default, only the base model is required.
+
+1. **Ask for base model selection:**
+   ```json
+   {
+     "title": "Start Training",
+     "description": "Select the base model to fine-tune. All other parameters have sensible defaults.",
+     "questions": [{
+       "id": "base_model",
+       "question": "Which base model would you like to fine-tune?",
+       "type": "select",
+       "options": [
+         "llama-v3-8b-instruct (Recommended - balanced performance)",
+         "llama-v3-70b-instruct (Larger - better quality, slower)",
+         "gemma-2-9b-it (Alternative - good for general tasks)"
+       ],
+       "required": true
+     }]
+   }
+   ```
+
+2. **After base model selection, ask about advanced config:**
+   ```json
+   {
+     "title": "Training Configuration",
+     "description": "Default parameters work well for most cases.",
+     "questions": [{
+       "id": "advanced_config",
+       "question": "Would you like to configure advanced training parameters?",
+       "type": "select",
+       "options": [
+         "No, start training with defaults (Recommended)",
+         "Yes, I want to customize parameters"
+       ],
+       "required": true
+     }]
+   }
+   ```
+
+3. **If user selects defaults**, delegate immediately:
    ```
    transfer_to_agent({
      agent_name: "finetune_workflow",
-     task: "Start training for workflow {workflow_id}. {training parameters}"
+     task: "Start training for workflow {workflow_id} with base_model={selected model}. Use default parameters."
    })
    ```
 
-2. Report training job status
+4. **If user wants advanced config**, show all options:
+   ```json
+   {
+     "title": "Advanced Training Parameters",
+     "description": "Configure training hyperparameters and inference settings.",
+     "questions": [
+       {
+         "id": "learning_rate",
+         "question": "Learning rate (default: 0.0001)",
+         "type": "text",
+         "required": false
+       },
+       {
+         "id": "epochs",
+         "question": "Number of epochs (default: 2.0)",
+         "type": "text",
+         "required": false
+       },
+       {
+         "id": "lora_rank",
+         "question": "LoRA rank (default: 16)",
+         "type": "text",
+         "required": false
+       },
+       {
+         "id": "node_count",
+         "question": "Number of training nodes (default: 1, increase for distributed training)",
+         "type": "text",
+         "required": false
+       }
+     ]
+   }
+   ```
+
+   Then delegate with custom parameters:
+   ```
+   transfer_to_agent({
+     agent_name: "finetune_workflow",
+     task: "Start training for workflow {workflow_id} with base_model={model}, learning_rate={lr}, epochs={epochs}, lora_rank={rank}, node_count={nodes}. Only include parameters that user specified."
+   })
+   ```
+
+5. Report training job status:
+   Text: "Training job started! The model is now fine-tuning. You can monitor progress in the Jobs tab."
 
 # ask_follow_up SCHEMA
 

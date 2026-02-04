@@ -86,8 +86,92 @@ When asked to generate initial/seed data:
 - User wants to refine/expand the dataset iteratively
 
 ## Configure Grader
-When asked to set up the grader:
-1. Call `configure_grader` with the configuration
+When asked to set up the grader, use the DEFAULT_SCRIPT template below and customize the evaluation criteria based on the training objective.
+
+**DEFAULT_SCRIPT TEMPLATE:**
+```javascript
+/**
+ * Evaluate the quality of an AI response using LLM-as-a-Judge.
+ *
+ * Available globals:
+ * - __langdb_call_llm_as_judge_obj(prompt): Calls the configured LLM model
+ *   and returns a parsed object with { score, reasoning }
+ *
+ * @param {Object} input - The input object containing messages
+ * @param {Array} input.messages - The conversation messages
+ * @param {Object} output - The output object containing the response
+ * @param {Object|Array} output.messages - The assistant's response
+ * @returns {Object} - Evaluation result with score and reasoning
+ */
+function evaluate(input, output) {
+  // Extract the user query from input messages
+  const userMessages = input.messages?.filter(m => m.role === 'user') || [];
+  const query = userMessages[userMessages.length - 1]?.content || '';
+
+  // Extract the assistant's response
+  const response = Array.isArray(output.messages)
+    ? output.messages.map(m => m.content).join('\\n')
+    : output.messages?.content || '';
+
+  // Build the evaluation prompt for the LLM judge
+  const prompt = `You are an expert evaluator assessing the quality of an AI assistant's response.
+
+User Query:
+${query}
+
+Assistant Response:
+${response}
+
+Evaluate the response on the following criteria:
+1. Relevance: Does it directly address the user's question?
+2. Accuracy: Is the information correct and reliable?
+3. Completeness: Does it fully answer the question?
+4. Clarity: Is it well-structured and easy to understand?
+
+Provide your evaluation as JSON with:
+- score: A number from 1-5 (1=poor, 5=excellent)
+- reasoning: A brief explanation of your score`;
+
+  // Call the LLM judge and get structured result
+  const result = __langdb_call_llm_as_judge_obj(prompt);
+
+  return {
+    score: result.score,
+    reasoning: result.reasoning,
+  };
+}
+```
+
+**HOW TO CUSTOMIZE:**
+1. Keep the `evaluate(input, output)` function signature
+2. Keep the input/output extraction logic (it handles the data format correctly)
+3. **Customize the evaluation prompt** based on the training objective:
+   - For a "chess tutor" → evaluate chess knowledge accuracy, teaching clarity
+   - For a "code assistant" → evaluate code correctness, explanation quality
+   - For a "customer support" → evaluate helpfulness, tone, resolution
+
+**Example customization for a Chess Tutor:**
+```javascript
+const prompt = `You are an expert chess instructor evaluating teaching responses.
+
+Student Question:
+${query}
+
+Tutor Response:
+${response}
+
+Evaluate on:
+1. Chess Accuracy: Is the chess advice correct?
+2. Teaching Quality: Is it explained clearly for learning?
+3. Appropriate Level: Is it suitable for the student's implied level?
+
+Provide JSON with score (1-5) and reasoning.`;
+```
+
+**Steps:**
+1. Call `configure_grader` with:
+   - `workflow_id`: The workflow ID
+   - `script`: The customized JavaScript evaluation script
 2. Optionally call `test_grader_sample` to validate
 3. Return configuration status
 
@@ -101,7 +185,55 @@ When asked to run dry run:
 ## Start Training
 When asked to start training:
 1. Verify prerequisites (grader configured, data uploaded)
-2. Call `start_training` with parameters
+2. Call `start_training` with the workflow_id and any specified parameters
+
+**Required parameter:**
+- `workflow_id`: The workflow ID
+
+**Optional parameters (passed in training_params object):**
+- `base_model`: Base model to fine-tune (default: "llama-v3-8b-instruct")
+
+**Training config (all optional with sensible defaults):**
+- `learning_rate`: Learning rate (default: 0.0001)
+- `epochs`: Number of epochs (default: 2.0)
+- `batch_size`: Batch size in tokens (default: 65536)
+- `lora_rank`: LoRA rank (default: 16)
+- `max_context_length`: Max context length for training
+- `gradient_accumulation_steps`: Gradient accumulation steps
+- `learning_rate_warmup_steps`: Learning rate warmup steps
+
+**Inference config (for training rollouts):**
+- `max_output_tokens`: Max output tokens (default: 2048)
+- `temperature`: Temperature for rollouts (default: 0.7)
+- `top_p`: Top-p sampling (default: 0.9)
+- `response_candidates_count`: Number of response candidates per prompt
+
+**Distributed training:**
+- `chunk_size`: Chunk size for data processing
+- `node_count`: Number of training nodes (increase for faster training)
+
+**Example call with defaults:**
+```
+start_training({
+  workflow_id: "wf-123",
+  base_model: "llama-v3-8b-instruct"
+})
+```
+
+**Example call with custom parameters:**
+```
+start_training({
+  workflow_id: "wf-123",
+  base_model: "llama-v3-70b-instruct",
+  training_params: {
+    learning_rate: 0.00005,
+    epochs: 3,
+    lora_rank: 32,
+    node_count: 2
+  }
+})
+```
+
 3. Return training job status
 
 # PROGRESS TRACKING
