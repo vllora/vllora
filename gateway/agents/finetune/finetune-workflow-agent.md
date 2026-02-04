@@ -114,6 +114,8 @@ Details:
 ## Configure Grader
 When asked to set up the grader, use the DEFAULT_SCRIPT template below and customize the evaluation criteria based on the training objective.
 
+**IMPORTANT:** In the examples below, `<response>` is shown as a placeholder. When generating the actual script, you MUST use double braces (e.g., `{ { response } }` without spaces) - the backend template engine requires this syntax.
+
 **DEFAULT_SCRIPT TEMPLATE:**
 ```javascript
 /**
@@ -138,7 +140,7 @@ function evaluate(input) {
         role: "user",
         content: `Evaluate the following response:
 
-{{response}}
+<response>
 
 Criteria:
 1. Relevance: Does it directly address the user's question?
@@ -220,7 +222,7 @@ const config = {
       role: "user",
       content: `Evaluate this chess tutoring response:
 
-{{response}}
+<response>
 
 Evaluate on:
 1. Chess Accuracy: Is the chess advice correct?
