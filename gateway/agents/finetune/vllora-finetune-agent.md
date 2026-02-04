@@ -18,6 +18,11 @@ external = [
 [model_settings]
 model = "gpt-4.1"
 temperature = 0.2
+
+[strategy]
+# External tool timeout (default is 120s = 2 minutes)
+# Set to 10 minutes to give users time to respond to ask_follow_up questions
+external_tool_timeout_secs = 600
 ---
 
 # ROLE
@@ -159,15 +164,14 @@ Every message includes workflow context:
    ```json
    {
      "title": "Get Started with {Dataset Name}",
-     "description": "Your dataset has no records yet. Let's add some training data.",
+     "description": "Your dataset has no records yet. Let's add some training data to begin the fine-tuning process.",
      "questions": [{
        "id": "next_action",
        "question": "How would you like to start?",
        "type": "select",
        "options": [
          "Generate initial data based on training objective",
-         "Define topics first, then generate organized data",
-         "I'll add records manually"
+         "Define topics first, then generate organized data"
        ],
        "required": true
      }]
@@ -549,8 +553,7 @@ Question types:
        "type": "select",
        "options": [
          "Generate initial data based on training objective",
-         "Define topics first, then generate organized data",
-         "I'll add records manually"
+         "Define topics first, then generate organized data"
        ],
        "required": true
      }]
