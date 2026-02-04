@@ -120,78 +120,131 @@ When asked to set up the grader, use the DEFAULT_SCRIPT template below and custo
  * Evaluate the quality of an AI response using LLM-as-a-Judge.
  *
  * Available globals:
- * - __langdb_call_llm_as_judge_obj(prompt): Calls the configured LLM model
- *   and returns a parsed object with { score, reasoning }
+ * - __langdb_call_llm_as_judge_obj(config, input): Calls the LLM judge with config and input row
+ *   Returns { score, reason } or { error } on failure
  *
- * @param {Object} input - The input object containing messages
- * @param {Array} input.messages - The conversation messages
- * @param {Object} output - The output object containing the response
- * @param {Object|Array} output.messages - The assistant's response
- * @returns {Object} - Evaluation result with score and reasoning
+ * @param {Object} input - The input row containing the data to evaluate
+ * @returns {Object} - Evaluation result with score (0-1) and reason
  */
-function evaluate(input, output) {
-  // Extract the user query from input messages
-  const userMessages = input.messages?.filter(m => m.role === 'user') || [];
-  const query = userMessages[userMessages.length - 1]?.content || '';
+function evaluate(input) {
+  // Define the LLM-as-judge configuration
+  const config = {
+    prompt_template: [
+      {
+        role: "system",
+        content: "You are an expert evaluator assessing the quality of an AI assistant's response."
+      },
+      {
+        role: "user",
+        content: `Evaluate the following response:
 
-  // Extract the assistant's response
-  const response = Array.isArray(output.messages)
-    ? output.messages.map(m => m.content).join('\\n')
-    : output.messages?.content || '';
+{{response}}
 
-  // Build the evaluation prompt for the LLM judge
-  const prompt = `You are an expert evaluator assessing the quality of an AI assistant's response.
-
-User Query:
-${query}
-
-Assistant Response:
-${response}
-
-Evaluate the response on the following criteria:
+Criteria:
 1. Relevance: Does it directly address the user's question?
 2. Accuracy: Is the information correct and reliable?
 3. Completeness: Does it fully answer the question?
 4. Clarity: Is it well-structured and easy to understand?
 
-Provide your evaluation as JSON with:
-- score: A number from 1-5 (1=poor, 5=excellent)
-- reasoning: A brief explanation of your score`;
-
-  // Call the LLM judge and get structured result
-  const result = __langdb_call_llm_as_judge_obj(prompt);
-
-  return {
-    score: result.score,
-    reasoning: result.reasoning,
+Provide a score from 0 to 1 and reasoning.`
+      }
+    ],
+    output_schema: {
+      type: "object",
+      properties: {
+        score: {
+          type: "number",
+          minimum: 0,
+          maximum: 1,
+          description: "Quality score from 0 to 1"
+        },
+        reasoning: {
+          type: "string",
+          description: "Explanation of the score"
+        }
+      },
+      required: ["score", "reasoning"],
+      additionalProperties: false
+    },
+    completion_params: {
+      model_name: "gpt-4o-mini",
+      temperature: 0.0,
+      max_tokens: 300
+    }
   };
+
+  // Call LLM-as-judge with the config and input row
+  try {
+    const result = __langdb_call_llm_as_judge_obj(config, input);
+
+    // Check for errors
+    if (result.error) {
+      return {
+        score: 0,
+        reason: `LLM-as-judge error: ${result.error}`
+      };
+    }
+
+    // Return the evaluation result
+    return {
+      score: result.score || 0,
+      reason: result.reason || result.reasoning || "Evaluation completed"
+    };
+  } catch (error) {
+    return {
+      score: 0,
+      reason: `Error: ${error.message}`
+    };
+  }
 }
 ```
 
 **HOW TO CUSTOMIZE:**
-1. Keep the `evaluate(input, output)` function signature
-2. Keep the input/output extraction logic (it handles the data format correctly)
-3. **Customize the evaluation prompt** based on the training objective:
+1. Keep the `evaluate(input)` function signature
+2. Customize the `prompt_template` messages based on the training objective:
    - For a "chess tutor" → evaluate chess knowledge accuracy, teaching clarity
    - For a "code assistant" → evaluate code correctness, explanation quality
    - For a "customer support" → evaluate helpfulness, tone, resolution
+3. Adjust `output_schema` if you need different output fields
+4. Tune `completion_params` (model, temperature) as needed
 
 **Example customization for a Chess Tutor:**
 ```javascript
-const prompt = `You are an expert chess instructor evaluating teaching responses.
+const config = {
+  prompt_template: [
+    {
+      role: "system",
+      content: "You are an expert chess instructor evaluating teaching responses."
+    },
+    {
+      role: "user",
+      content: `Evaluate this chess tutoring response:
 
-Student Question:
-${query}
-
-Tutor Response:
-${response}
+{{response}}
 
 Evaluate on:
 1. Chess Accuracy: Is the chess advice correct?
 2. Teaching Quality: Is it explained clearly for learning?
 3. Appropriate Level: Is it suitable for the student's implied level?
 
-Provide JSON with score (1-5) and reasoning.`;
+Provide a score from 0 to 1 and reasoning.`
+    }
+  ],
+  output_schema: {
+    type: "object",
+    properties: {
+      score: { type: "number", minimum: 0, maximum: 1 },
+      reasoning: { type: "string" }
+    },
+    required: ["score", "reasoning"],
+    additionalProperties: false
+  },
+  completion_params: {
+    model_name: "gpt-4o-mini",
+    temperature: 0.0,
+    max_tokens: 300
+  }
+};
 ```
 
 **Steps:**
