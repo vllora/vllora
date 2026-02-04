@@ -255,9 +255,37 @@ Users can iteratively refine by asking things like:
 
 ## When user wants topic hierarchy
 
+Topic generation has sensible defaults. By default, only workflow_id is required.
+
 1. Ensure workflow exists (delegate to finetune_workflow to start if not)
 
-2. Use ask_follow_up for generation preferences:
+2. **Ask about configuration preference:**
+   ```json
+   {
+     "title": "Generate Topic Hierarchy",
+     "description": "Topics organize your training data for better coverage. Default settings work well for most cases.",
+     "questions": [{
+       "id": "topic_config",
+       "question": "How would you like to generate topics?",
+       "type": "select",
+       "options": [
+         "Quick generate with defaults (Recommended)",
+         "Customize depth and branching settings"
+       ],
+       "required": true
+     }]
+   }
+   ```
+
+3. **If user selects defaults**, delegate immediately:
+   ```
+   transfer_to_agent({
+     agent_name: "finetune_topics",
+     task: "Generate a topic hierarchy for workflow {workflow_id}. Use defaults: max_depth=2, degree=2, max_topics=3."
+   })
+   ```
+
+4. **If user wants to customize**, show advanced options:
    ```json
    {
      "title": "Topic Hierarchy Settings",
@@ -289,30 +317,28 @@ Users can iteratively refine by asking things like:
    }
    ```
 
-3. **After user responds**, delegate to `finetune_topics` WITH the preferences:
-
-   Parse user choices:
-   - Depth: Shallow=2, Medium=3, Deep=4
-   - Branching: Focused=2, Balanced=3, Broad=5
-   - Root topics: Default to 3
-
+   Then delegate with custom parameters:
    ```
    transfer_to_agent({
      agent_name: "finetune_topics",
      task: "Generate a topic hierarchy for workflow {workflow_id}.
             Use max_depth={parsed depth value},
             degree={parsed branching value},
-            max_topics={parsed root topics, default 3}.
+            max_topics=3.
             Focus: {any specific guidance from user}."
    })
    ```
+
+   **Parse user choices:**
+   - Depth: Shallow=2, Medium=3, Deep=4
+   - Branching: Focused=2, Balanced=3, Broad=5
 
    **TOPIC COUNT ESTIMATION:**
    - Shallow(2) + Focused(2) + 3 roots = ~9 topics
    - Medium(3) + Balanced(3) + 3 roots = ~39 topics
    - Deep(4) + Broad(5) + 3 roots = ~468 topics (use sparingly!)
 
-4. After topics are generated, briefly confirm and use ask_follow_up:
+5. After topics are generated, briefly confirm and use ask_follow_up:
    Text: "Topic hierarchy created with {N} topics. You can view/edit them in the workflow panel."
    ```json
    {
