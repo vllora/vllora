@@ -21,7 +21,7 @@ use vllora_core::GatewayApiError;
 use vllora_finetune::types::{
     CompletionParams as EvalCompletionParams, CreateEvaluationRequest, DatasetAnalyticsResponse,
     DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse, EvaluationResultResponse,
-    Evaluator,
+    Evaluator, FinetuneEvalResultsResponse,
 };
 use vllora_finetune::ReinforcementTrainingConfig;
 use vllora_finetune::{
@@ -208,6 +208,39 @@ pub async fn get_evaluation_result(
         .map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!(
                 "Failed to get evaluation result: {}",
+                e
+            ))
+        })?;
+
+    Ok(HttpResponse::Ok().json(response))
+}
+
+/// Get finetune evaluation traces grouped by row and epoch (forwards to cloud API)
+pub async fn get_finetune_evaluations(
+    dataset_id: web::Path<uuid::Uuid>,
+    query: web::Query<HashMap<String, String>>,
+    project: web::ReqData<vllora_core::types::metadata::project::Project>,
+    key_storage: web::Data<Box<dyn KeyStorage>>,
+) -> Result<HttpResponse> {
+    let dataset_id_str = dataset_id.into_inner().to_string();
+
+    // Extract optional filters from query
+    let row_index = query.get("row_index").and_then(|s| s.parse::<i32>().ok());
+    let epoch = query.get("epoch").and_then(|s| s.parse::<i32>().ok());
+    let finetune_job_id = query.get("finetune_job_id").cloned();
+
+    // Get API key and create client
+    let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
+    let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
+    })?;
+
+    let response: FinetuneEvalResultsResponse = client
+        .get_finetune_evaluations(&dataset_id_str, row_index, epoch, finetune_job_id)
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!(
+                "Failed to get finetune evaluations: {}",
                 e
             ))
         })?;

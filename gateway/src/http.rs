@@ -391,6 +391,10 @@ impl ApiServer {
                                 web::get().to(finetune::get_dataset_analytics),
                             )
                             .route(
+                                "/{dataset_id}/finetune-evaluations",
+                                web::get().to(finetune::get_finetune_evaluations),
+                            )
+                            .route(
                                 "/{dataset_id}/evaluator",
                                 web::patch().to(finetune::update_dataset_evaluator),
                             ),
@@ -434,10 +438,7 @@ impl ApiServer {
                                 "/generate",
                                 web::post().to(finetune::generate_topic_hierarchy),
                             )
-                            .route(
-                                "/adjust",
-                                web::post().to(finetune::adjust_topic_hierarchy),
-                            ),
+                            .route("/adjust", web::post().to(finetune::adjust_topic_hierarchy)),
                     )
                     .app_data(Data::from(guardrails_service.clone()))
                     .app_data(Data::new(

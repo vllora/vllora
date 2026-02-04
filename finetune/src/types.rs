@@ -220,6 +220,20 @@ pub struct EvaluationResultResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct RowEpochResults {
+    pub row_index: i32,
+    pub row: JsonValue,
+    /// epoch -> array of evaluation results (as JSON)
+    pub epochs: HashMap<i32, Vec<JsonValue>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FinetuneEvalResultsResponse {
+    /// One entry per dataset row, keyed by its index.
+    pub results: Vec<RowEpochResults>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "type", content = "config")]
 #[serde(bound(deserialize = "T: serde::de::DeserializeOwned"))]
 pub enum Evaluator<T>

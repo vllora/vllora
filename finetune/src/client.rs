@@ -2,8 +2,8 @@ use crate::types::{
     CreateDeploymentRequest, CreateEvaluationRequest, CreateEvaluationResponse,
     CreateReinforcementFinetuningJobRequest, DatasetAnalyticsResponse, DeploymentResponse,
     DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse, EvaluationResultResponse,
-    FinetuningJobResponse, FinetuningJobResult, ReinforcementJobStatusResponse,
-    UploadDatasetResponse,
+    FinetuneEvalResultsResponse, FinetuningJobResponse, FinetuningJobResult,
+    ReinforcementJobStatusResponse, UploadDatasetResponse,
 };
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 
@@ -145,6 +145,55 @@ impl LangdbCloudFinetuneClient {
         }
 
         let body: CreateEvaluationResponse = response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+        Ok(body)
+    }
+
+    /// Fetch finetune evaluation results grouped by row and epoch
+    pub async fn get_finetune_evaluations(
+        &self,
+        dataset_id: &str,
+        row_index: Option<i32>,
+        epoch: Option<i32>,
+        finetune_job_id: Option<String>,
+    ) -> Result<FinetuneEvalResultsResponse, String> {
+        let url = format!(
+            "{}/finetune/datasets/{}/finetune-evaluations",
+            self.api_url, dataset_id
+        );
+
+        let mut query_params: Vec<(&str, String)> = Vec::new();
+        if let Some(ri) = row_index {
+            query_params.push(("row_index", ri.to_string()));
+        }
+        if let Some(e) = epoch {
+            query_params.push(("epoch", e.to_string()));
+        }
+        if let Some(job_id) = finetune_job_id {
+            query_params.push(("finetune_job_id", job_id));
+        }
+
+        let req = if query_params.is_empty() {
+            self.client.get(&url)
+        } else {
+            self.client.get(&url).query(&query_params)
+        };
+
+        let response = req
+            .send()
+            .await
+            .map_err(|e| format!("Failed to call cloud API: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!("API error {}: {}", status, body));
+        }
+
+        let body: FinetuneEvalResultsResponse = response
             .json()
             .await
             .map_err(|e| format!("Failed to parse response: {}", e))?;
