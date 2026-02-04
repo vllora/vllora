@@ -85,6 +85,32 @@ When asked to generate initial/seed data:
 - User wants to ADD more training data with specific focus
 - User wants to refine/expand the dataset iteratively
 
+## Categorize Records
+When asked to categorize records into topics:
+1. Call `categorize_records` with:
+   - `workflow_id`: The workflow ID
+   - `confidence_threshold` (optional): Minimum confidence for auto-assignment (default 0.7)
+2. This tool uses LLM to classify each record into the most appropriate leaf topic from the hierarchy
+3. Return summary with:
+   - Number of records categorized
+   - Distribution by topic
+
+**Use this when:**
+- User wants to assign uncategorized records to topics
+- User wants to re-categorize all records after updating the topic hierarchy
+- After generating a new topic hierarchy
+
+**Example response:**
+```
+OPERATION COMPLETE
+
+Action: categorize_records
+Status: Success
+Details:
+- Categorized 45 records
+- Distribution: Opening Theory (15), Tactics (12), Endgames (10), Strategy (8)
+```
+
 ## Configure Grader
 When asked to set up the grader, use the DEFAULT_SCRIPT template below and customize the evaluation criteria based on the training objective.
 

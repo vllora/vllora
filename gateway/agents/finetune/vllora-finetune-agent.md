@@ -338,8 +338,38 @@ Topic generation has sensible defaults. By default, only workflow_id is required
    - Medium(3) + Balanced(3) + 3 roots = ~39 topics
    - Deep(4) + Broad(5) + 3 roots = ~468 topics (use sparingly!)
 
-5. After topics are generated, briefly confirm and use ask_follow_up:
-   Text: "Topic hierarchy created with {N} topics. You can view/edit them in the workflow panel."
+5. After topics are generated, the response includes `uncategorized_count` and `total_records`. Use this to guide next steps:
+
+   **If there are uncategorized records** (uncategorized_count > 0):
+   Text: "Topic hierarchy created with {topic_count} topics. You have {uncategorized_count} of {total_records} records that aren't assigned to any topic yet."
+   ```json
+   {
+     "title": "Categorize Records?",
+     "description": "Your records can be automatically assigned to the new topics using AI classification.",
+     "questions": [{
+       "id": "after_topics",
+       "question": "Would you like to categorize your existing records?",
+       "type": "select",
+       "options": [
+         "Yes, categorize all records to these topics (Recommended)",
+         "No, skip categorization for now",
+         "Adjust topics first (add, rename, or remove)"
+       ],
+       "required": true
+     }]
+   }
+   ```
+
+   **If user selects "Yes, categorize"**, delegate to finetune_workflow:
+   ```
+   transfer_to_agent({
+     agent_name: "finetune_workflow",
+     task: "Categorize all records for workflow {workflow_id} using the topic hierarchy."
+   })
+   ```
+
+   **If all records are already categorized** (uncategorized_count = 0):
+   Text: "Topic hierarchy created with {topic_count} topics. All {total_records} records are already categorized."
    ```json
    {
      "title": "Next Steps",
@@ -348,14 +378,22 @@ Topic generation has sensible defaults. By default, only workflow_id is required
        "question": "What would you like to do next?",
        "type": "select",
        "options": [
-         "Generate data based on these topics",
+         "Generate more data based on these topics",
          "Configure grader and move toward training",
          "Adjust topics (add, rename, or remove)",
-         "Regenerate with different settings"
+         "Re-categorize all records with new hierarchy"
        ],
        "required": true
      }]
    }
+   ```
+
+   **If user selects "Re-categorize all records"**, delegate to finetune_workflow:
+   ```
+   transfer_to_agent({
+     agent_name: "finetune_workflow",
+     task: "Categorize all records for workflow {workflow_id} using the topic hierarchy."
+   })
    ```
 
 ## When user wants to adjust topics
