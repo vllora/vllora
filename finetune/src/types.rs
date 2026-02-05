@@ -234,14 +234,19 @@ pub struct FinetuneEvalResultsResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", tag = "type", content = "config")]
+#[serde(rename_all = "snake_case", tag = "type")]
 #[serde(bound(deserialize = "T: serde::de::DeserializeOwned"))]
 pub enum Evaluator<T>
 where
     T: serde::Serialize + serde::de::DeserializeOwned + std::fmt::Debug + Clone,
 {
-    LlmAsJudge(LlmAsJudgeConfig<T>),
-    Js(JsConfig),
+    LlmAsJudge {
+        config: LlmAsJudgeConfig<T>,
+    },
+    Js {
+        #[serde(default)]
+        config: JsConfig,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -263,8 +268,7 @@ pub struct CompletionModelParams {
     pub max_tokens: Option<u32>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct JsConfig {
-    pub script: String,
-    pub completion_params: CompletionModelParams,
+    pub script: Option<String>,
 }
