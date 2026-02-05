@@ -194,6 +194,7 @@ pub struct CreateEvaluationResponse {
 pub struct RowEvaluationResult {
     pub dataset_row_id: uuid::Uuid,
     pub row_index: i32,
+    pub row: Option<serde_json::Value>,
     pub status: String,
     pub score: Option<f64>,
     pub reason: Option<String>,
