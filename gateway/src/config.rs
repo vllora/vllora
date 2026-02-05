@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 use thiserror::Error;
+use tracing::debug;
 use vllora_core::executor::ProvidersConfig;
 use vllora_core::types::guardrails::Guard;
 
@@ -72,8 +73,24 @@ pub struct OTelConfig {
 impl Default for OTelConfig {
     fn default() -> Self {
         Self {
-            host: "[::]".to_string(),
+            host: Self::default_host(),
             port: 4317,
+        }
+    }
+}
+
+impl OTelConfig {
+    /// Detect if IPv6 is supported and return appropriate default host
+    fn default_host() -> String {
+        // Try to bind to IPv6 loopback to check support
+        let ipv6_supported = std::net::TcpListener::bind("[::1]:0").is_ok();
+
+        if ipv6_supported {
+            debug!("IPv6 supported, using [::] for OTEL host");
+            "[::]".to_string()
+        } else {
+            debug!("IPv6 not supported, using 0.0.0.0 for OTEL host");
+            "0.0.0.0".to_string()
         }
     }
 }

@@ -1,5 +1,6 @@
 use crate::config::Config;
 use crate::CliError;
+use tracing::debug;
 
 #[derive(Debug)]
 pub enum Service {
@@ -59,8 +60,17 @@ pub async fn resolve_ports(config: &Config) -> Result<Vec<ServicePort>, CliError
         .iter()
         .map(|service| service.initial_port)
         .collect::<Vec<u16>>();
+
+    let ipv6_supported = is_ipv6_supported().await;
+    debug!("IPv6 support detected: {}", ipv6_supported);
+
     for service in &mut services {
-        if !is_port_available(service.host.clone(), service.initial_port).await {
+        let port_check = is_port_available_detailed(service.host.clone(), service.initial_port, ipv6_supported).await;
+        if !port_check.is_available {
+            debug!(
+                "{} service: port {} is in use - {}",
+                service.service, service.initial_port, port_check.reason
+            );
             let new_port = find_next_available_port(
                 service.host.clone(),
                 service.initial_port,
@@ -68,6 +78,10 @@ pub async fn resolve_ports(config: &Config) -> Result<Vec<ServicePort>, CliError
             )
             .await;
             if let Some(new_port) = new_port {
+                debug!(
+                    "{} service: next available port found -> {}",
+                    service.service, new_port
+                );
                 service.suggested_port = Some(new_port);
                 excluded_ports.push(new_port);
             } else {
@@ -76,14 +90,64 @@ pub async fn resolve_ports(config: &Config) -> Result<Vec<ServicePort>, CliError
                     service.service
                 ))));
             }
+        } else {
+            debug!(
+                "{} service: port {} is available",
+                service.service, service.initial_port
+            );
         }
     }
 
     Ok(services)
 }
 
+struct PortCheckResult {
+    is_available: bool,
+    reason: String,
+}
+
+/// Check if IPv6 is supported on this system
+async fn is_ipv6_supported() -> bool {
+    tokio::net::TcpListener::bind("[::1]:0").await.is_ok()
+}
+
 async fn is_port_available(host: String, port: u16) -> bool {
-    (tokio::net::TcpListener::bind(format!("{host}:{port}")).await).is_ok()
+    let ipv6_supported = is_ipv6_supported().await;
+    is_port_available_detailed(host, port, ipv6_supported).await.is_available
+}
+
+async fn is_port_available_detailed(host: String, port: u16, ipv6_supported: bool) -> PortCheckResult {
+    match tokio::net::TcpListener::bind(format!("{host}:{port}")).await {
+        Ok(_) => PortCheckResult {
+            is_available: true,
+            reason: "available".to_string(),
+        },
+        Err(e) if !ipv6_supported && (e.raw_os_error() == Some(97) || e.kind() == std::io::ErrorKind::Unsupported) => {
+            // IPv6 not supported (error 97), try IPv4 fallback
+            let ipv4_host = if host == "[::]" {
+                "0.0.0.0"
+            } else {
+                &host
+            };
+
+            debug!("IPv6 not supported, trying IPv4 fallback for {}:{}", ipv4_host, port);
+
+            match tokio::net::TcpListener::bind(format!("{ipv4_host}:{port}")).await {
+                Ok(_) => PortCheckResult {
+                    is_available: true,
+                    reason: "available (IPv4 fallback)".to_string(),
+                },
+                Err(e2) => PortCheckResult {
+                    is_available: false,
+                    reason: format!("IPv6 failed: {}, IPv4 failed: {} (kind: {:?})", e, e2, e2.kind()),
+                },
+            }
+        }
+        Err(e) => PortCheckResult {
+            is_available: false,
+            reason: format!("{} (kind: {:?})", e, e.kind()),
+        },
+    }
 }
 
 async fn find_next_available_port(
