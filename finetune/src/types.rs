@@ -194,6 +194,7 @@ pub struct CreateEvaluationResponse {
 pub struct RowEvaluationResult {
     pub dataset_row_id: uuid::Uuid,
     pub row_index: i32,
+    pub row: Option<serde_json::Value>,
     pub status: String,
     pub score: Option<f64>,
     pub reason: Option<String>,
@@ -234,14 +235,19 @@ pub struct FinetuneEvalResultsResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", tag = "type", content = "config")]
+#[serde(rename_all = "snake_case", tag = "type")]
 #[serde(bound(deserialize = "T: serde::de::DeserializeOwned"))]
 pub enum Evaluator<T>
 where
     T: serde::Serialize + serde::de::DeserializeOwned + std::fmt::Debug + Clone,
 {
-    LlmAsJudge(LlmAsJudgeConfig<T>),
-    Js(JsConfig),
+    LlmAsJudge {
+        config: LlmAsJudgeConfig<T>,
+    },
+    Js {
+        #[serde(default)]
+        config: JsConfig,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -263,8 +269,7 @@ pub struct CompletionModelParams {
     pub max_tokens: Option<u32>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct JsConfig {
-    pub script: String,
-    pub completion_params: CompletionModelParams,
+    pub script: Option<String>,
 }

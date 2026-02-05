@@ -450,20 +450,22 @@ pub async fn upload_dataset(
                 })?;
             let merged_str = if let Some(obj) = value.as_object_mut() {
                 if obj.get("type").and_then(|t| t.as_str()) == Some("js") {
+                    // Create config object if it doesn't exist
+                    if !obj.contains_key("config") {
+                        obj.insert("config".to_string(), serde_json::json!({}));
+                    }
                     if let Some(config) = obj.get_mut("config").and_then(|c| c.as_object_mut()) {
                         config.insert(
                             "script".to_string(),
                             serde_json::Value::String(eval_script_content),
                         );
-                        Some(serde_json::to_string(&value).map_err(|e| {
-                            actix_web::error::ErrorInternalServerError(format!(
-                                "Failed to serialize evaluator: {}",
-                                e
-                            ))
-                        })?)
-                    } else {
-                        None
                     }
+                    Some(serde_json::to_string(&value).map_err(|e| {
+                        actix_web::error::ErrorInternalServerError(format!(
+                            "Failed to serialize evaluator: {}",
+                            e
+                        ))
+                    })?)
                 } else {
                     None
                 }
