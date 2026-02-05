@@ -83,7 +83,7 @@ impl OTelConfig {
     /// Detect if IPv6 is supported and return appropriate default host
     fn default_host() -> String {
         // Try to bind to IPv6 loopback to check support
-        let ipv6_supported = std::net::TcpListener::bind("[::1]:0").is_ok();
+        let ipv6_supported = tokio::net::TcpListener::bind("[::1]:0").is_ok();
 
         if ipv6_supported {
             debug!("IPv6 supported, using [::] for OTEL host");
