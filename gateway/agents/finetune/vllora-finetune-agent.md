@@ -526,6 +526,64 @@ Users may want to modify the topic hierarchy conversationally:
    }
    ```
 
+## When user wants to run dry run
+
+Dry run validates the dataset and grader before training by generating responses and scoring them.
+
+1. **Ask for rollout model:**
+   ```json
+   {
+     "title": "Dry Run Configuration",
+     "description": "Select the model to generate responses for evaluation.",
+     "questions": [{
+       "id": "rollout_model",
+       "question": "Which model should generate the responses?",
+       "type": "select",
+       "options": [
+         "gpt-4o-mini (Recommended - fast and cost-effective)",
+         "gpt-4o (Higher quality responses)",
+         "gpt-4.1 (Latest model)",
+         "gpt-4.1-mini (Latest mini model)"
+       ],
+       "required": true
+     }]
+   }
+   ```
+
+2. **Parse the selection** to get the model ID:
+   - "gpt-4o-mini (Recommended..." → `gpt-4o-mini`
+   - "gpt-4o (Higher quality..." → `gpt-4o`
+   - "gpt-4.1 (Latest model)" → `gpt-4.1`
+   - "gpt-4.1-mini (Latest mini..." → `gpt-4.1-mini`
+
+3. **Delegate to finetune_workflow:**
+   ```
+   transfer_to_agent({
+     agent_name: "finetune_workflow",
+     task: "Run dry run for workflow {workflow_id}. Use rollout_model={parsed model}."
+   })
+   ```
+
+4. **Report results and offer next steps:**
+   Text: "Dry run complete. Verdict: {verdict}. Mean score: {mean}."
+   ```json
+   {
+     "title": "Dry Run Results",
+     "questions": [{
+       "id": "after_dry_run",
+       "question": "How would you like to proceed?",
+       "type": "select",
+       "options": [
+         "Start training - begin RFT training",
+         "Run dry run again with different model",
+         "Review detailed results",
+         "Adjust grader configuration"
+       ],
+       "required": true
+     }]
+   }
+   ```
+
 ## When user wants to train
 
 Training requires minimal configuration. By default, only the base model is required.

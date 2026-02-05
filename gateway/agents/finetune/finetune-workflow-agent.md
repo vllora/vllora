@@ -114,7 +114,7 @@ Details:
 ## Configure Grader
 When asked to set up the grader, use the DEFAULT_SCRIPT template below and customize the evaluation criteria based on the training objective.
 
-**IMPORTANT:** In the examples below, `<response>` is shown as a placeholder. When generating the actual script, you MUST use double braces (e.g., `{ { response } }` without spaces) - the backend template engine requires this syntax.
+**IMPORTANT TEMPLATE SYNTAX:** In the examples below, `[[response]]` is used as a placeholder. When generating the ACTUAL script, you MUST convert `[[response]]` to double curly braces syntax (open brace, open brace, response, close brace, close brace). The backend template engine requires this syntax to inject the model's response.
 
 **DEFAULT_SCRIPT TEMPLATE:**
 ```javascript
@@ -140,7 +140,7 @@ function evaluate(input) {
         role: "user",
         content: `Evaluate the following response:
 
-<response>
+[[response]]
 
 Criteria:
 1. Relevance: Does it directly address the user's question?
@@ -190,7 +190,7 @@ Provide a score from 0 to 1 and reasoning.`
     // Return the evaluation result
     return {
       score: result.score || 0,
-      reason: result.reason || result.reasoning || "Evaluation completed"
+      reason: result.reason || result.reasoning || ""
     };
   } catch (error) {
     return {
@@ -222,7 +222,7 @@ const config = {
       role: "user",
       content: `Evaluate this chess tutoring response:
 
-<response>
+[[response]]
 
 Evaluate on:
 1. Chess Accuracy: Is the chess advice correct?
@@ -260,7 +260,10 @@ Provide a score from 0 to 1 and reasoning.`
 When asked to run dry run:
 1. Call `upload_dataset` first if needed
 2. Call `sync_evaluator` to sync grader
-3. Call `run_dry_run`
+3. Call `run_dry_run` with:
+   - `workflow_id`: The workflow ID
+   - `sample_percentage`: Percentage of records to test (default 10)
+   - `rollout_model`: Model for generating responses (use what orchestrator specified, default: gpt-4o-mini)
 4. Return the verdict and metrics
 
 ## Start Training
