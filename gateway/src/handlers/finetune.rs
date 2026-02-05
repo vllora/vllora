@@ -493,7 +493,6 @@ pub async fn upload_dataset(
         actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
     })?;
 
-    tracing::warn!("Uploading dataset with evaluator: {:#?}", evaluator);
     // Upload dataset using client
     let response = client
         .upload_dataset(jsonl_data, topic_hierarchy, evaluator)
