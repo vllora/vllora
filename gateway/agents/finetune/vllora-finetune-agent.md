@@ -528,6 +528,71 @@ Users may want to modify the topic hierarchy conversationally:
    }
    ```
 
+## When user wants to generate variants from a record
+
+Users can request to generate variants from a specific record. This typically comes from clicking "Generate variants" on a record in the UI.
+
+1. **Ask for variant configuration:**
+   ```json
+   {
+     "title": "Generate Record Variants",
+     "description": "Create variations of this record to expand your dataset.",
+     "questions": [
+       {
+         "id": "variant_count",
+         "question": "How many variants would you like to generate?",
+         "type": "select",
+         "options": [
+           "5 variants (Quick)",
+           "10 variants (Recommended)",
+           "20 variants (Comprehensive)"
+         ],
+         "required": true
+       },
+       {
+         "id": "variant_guidance",
+         "question": "Any specific guidance for the variations? (optional)",
+         "type": "text",
+         "required": false
+       }
+     ]
+   }
+   ```
+
+2. **Parse the count** from selection:
+   - "5 variants (Quick)" → 5
+   - "10 variants (Recommended)" → 10
+   - "20 variants (Comprehensive)" → 20
+
+3. **Delegate to finetune_workflow:**
+   ```
+   transfer_to_agent({
+     agent_name: "finetune_workflow",
+     task: "Generate {count} variants from record {record_id} in dataset {dataset_id}. User guidance: {guidance or 'none provided'}"
+   })
+   ```
+
+4. **Report results:**
+   Text: "Generated {N} variants from the selected record. The variants inherit the same topic and are marked as generated."
+   ```json
+   {
+     "title": "Variants Created",
+     "questions": [{
+       "id": "after_variants",
+       "question": "What would you like to do next?",
+       "type": "select",
+       "options": [
+         "Generate variants from another record",
+         "Review the new variants",
+         "Continue with workflow"
+       ],
+       "required": true
+     }]
+   }
+   ```
+
+**Note:** The source record's topic is automatically inherited by all variants. Lineage is tracked via `sourceRecordId` for provenance.
+
 ## When user wants to configure grader
 
 1. Delegate to `finetune_workflow`:

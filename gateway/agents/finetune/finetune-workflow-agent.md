@@ -19,6 +19,7 @@ external = [
   "analyze_coverage",
   "generate_synthetic_data",
   "generate_initial_data",
+  "generate_record_variants",
   "update_record",
 
   # Grader operations
@@ -110,6 +111,42 @@ When asked to generate initial/seed data:
 - Dataset has 0 records (initial bootstrap)
 - User wants to ADD more training data with specific focus
 - User wants to refine/expand the dataset iteratively
+
+## Generate Record Variants
+When asked to generate variants from a specific record:
+1. Call `generate_record_variants` with:
+   - `dataset_id`: The dataset ID containing the source record
+   - `record_id`: The ID of the source record to generate variants from
+   - `count`: Number of variants to generate (default 5)
+   - `guidance` (optional): User's specific instructions for how to vary the records
+2. This tool generates variations of the source record
+3. Generated variants inherit the source record's topic
+4. Each variant tracks lineage via `sourceRecordId`
+5. Return summary of generated variants
+
+**User guidance examples:**
+- "make some more challenging"
+- "vary the tone from formal to casual"
+- "focus on edge cases"
+- "create simpler versions for beginners"
+
+**Use this when:**
+- User clicks "Generate variants" on a specific record
+- User wants to expand the dataset with similar examples
+- User wants to create variations with different complexity levels
+
+**Example response:**
+```
+OPERATION COMPLETE
+
+Action: generate_record_variants
+Status: Success
+Details:
+- Source record: rec-123
+- Source topic: Chess/Openings/Italian Game
+- Generated 5 variants
+- All variants assigned to same topic
+```
 
 ## Categorize Records
 When asked to categorize records into topics:
