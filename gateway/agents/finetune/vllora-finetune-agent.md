@@ -226,7 +226,8 @@ Every message includes workflow context:
        "type": "select",
        "options": [
          "Generate initial data based on training objective",
-         "Define topics first, then generate organized data"
+         "Define topics first, then generate organized data",
+         "Upload reference docs for grounded data"
        ],
        "required": true
      }]
@@ -234,6 +235,27 @@ Every message includes workflow context:
    ```
 
    **IMPORTANT:** Do NOT automatically generate data for empty datasets. Always use ask_follow_up and wait for user selection.
+
+## When user selects "Upload reference docs for grounded data"
+
+If user selects the upload option, guide them to upload:
+
+1. Respond with instructions:
+   ```
+   Great choice! You can upload reference documents (PDFs, images, or text files) by:
+   - Dragging and dropping files onto the chat input
+   - Clicking the attachment (paperclip) button
+
+   Once uploaded, I'll extract the content and use it to generate training data that's grounded in your source material.
+   ```
+
+2. When user uploads a file, delegate to `data_generation`:
+   ```
+   transfer_to_agent({
+     agent_name: "data_generation",
+     task: "User uploaded '{filename}'. Process this knowledge source for dataset {dataset_id} and help generate grounded training data."
+   })
+   ```
 
 ## When user wants to generate data for an empty dataset
 
