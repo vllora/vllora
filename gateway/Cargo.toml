@@ -56,7 +56,7 @@ uuid = { workspace = true }
 
 tokio-stream = "0.1"
 
-static-serve = "0.4"
+static-serve = "0.5"
 static-serve-macro = "0.4"
 axum = "0.8"
 diesel = { version = "2.3.5", features = ["sqlite", "chrono"] }

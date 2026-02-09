@@ -2431,9 +2431,9 @@ dependencies = [
 
 [[package]]
 name = "langdb_clust"
-version = "0.9.11"
+version = "0.9.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75d1919e97cfb9aeee41e272918eb984b1cfd4473ee0c6a1e31a08bd32f0c811"
+checksum = "9a2401948c5d698b2ce54694c0a9f7ae2c22f9cf09aceaa245c50c8ed2568858"
 dependencies = [
  "bytes",
  "futures-core",
@@ -3218,6 +3218,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "range-requests"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "76d40f24ec21fd59728e2178ff5e5ed402e1d211631ff6d3fcfc533b6a2d4cdb"
+dependencies = [
+ "axum-core",
+ "bytes",
+ "http 1.2.0",
+ "thiserror 2.0.17",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3919,13 +3931,14 @@ checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
 
 [[package]]
 name = "static-serve"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2310fa9e35181665ae73f0ddf37564ad3c27b45514db4d1de08b06acdb8cc71a"
+checksum = "e392fad247f461bb19542601d699c630a0a05a19065f4788b40169f31ec64a13"
 dependencies = [
  "axum",
  "bytes",
- "static-serve-macro",
+ "range-requests",
+ "static-serve-macro 0.5.0",
 ]
 
 [[package]]
@@ -3933,6 +3946,24 @@ name = "static-serve-macro"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8e41a4144385a75db7bc3792fdea6bcaa9bf9a6ce7ad74cba9d6b4f8c7ba0623"
+dependencies = [
+ "display_full_error",
+ "flate2",
+ "glob",
+ "mime_guess",
+ "proc-macro2",
+ "quote",
+ "sha1",
+ "syn",
+ "thiserror 2.0.17",
+ "zstd",
+]
+
+[[package]]
+name = "static-serve-macro"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "723cacaf6e816b679f011bfa1a00f08f45621928fe83fae89f9c8a44fbda5b3e"
 dependencies = [
  "display_full_error",
  "flate2",
@@ -4622,7 +4653,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "static-serve",
- "static-serve-macro",
+ "static-serve-macro 0.4.0",
  "thiserror 2.0.17",
  "tokio",
  "tokio-stream",
