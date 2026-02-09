@@ -21,6 +21,7 @@ external = [
   "generate_initial_data",
   "generate_record_variants",
   "update_record",
+  "regenerate_readme",
 
   # Grader operations
   "configure_grader",
@@ -119,10 +120,11 @@ When asked to generate variants from a specific record:
    - `record_id`: The ID of the source record to generate variants from
    - `count`: Number of variants to generate (default 5)
    - `guidance` (optional): User's specific instructions for how to vary the records
-2. This tool generates variations of the source record
-3. Generated variants inherit the source record's topic
-4. Each variant tracks lineage via `sourceRecordId`
-5. Return summary of generated variants
+2. This tool generates variations of the source record's FINAL user message only
+3. For multi-turn conversations, ALL previous messages (system prompt, prior turns) are preserved unchanged
+4. Generated variants inherit the source record's topic
+5. Each variant tracks lineage via `sourceRecordId`
+6. Return summary of generated variants
 
 **User guidance examples:**
 - "make some more challenging"
