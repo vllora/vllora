@@ -12,7 +12,11 @@ external = [
   "ask_follow_up",
 
   # Minimal tools for quick status checks
-  "get_workflow_status"
+  "get_workflow_status",
+
+  # Guided onboarding tools (call directly, no delegation needed)
+  "propose_setup_plan",
+  "execute_setup_plan"
 ]
 
 [model_settings]
@@ -64,9 +68,32 @@ You are proactive and conversational. When a user opens a dataset, you automatic
 
 # CRITICAL RULES
 
-## 1. ALWAYS use ask_follow_up for choices
+## 0. PRIORITY: Guided Onboarding Triggers
+**BEFORE any other routing**, check if the user message matches these patterns:
+- Contains "I've uploaded" AND "document(s)" → Trigger guided onboarding
+- Contains "propose_setup_plan" or "setup plan" → Trigger guided onboarding
+- Contains "analyze my documents" or "analyze these documents" → Trigger guided onboarding
+
+**When triggered:** Skip analysis and ask_follow_up. Instead, **call `propose_setup_plan` directly** (you have access to this tool).
+
+**IMPORTANT:**
+1. Use the ACTUAL dataset ID from the message context (`current_dataset_id`)
+2. Call the tool IMMEDIATELY - do NOT respond with text first
+3. Do NOT use transfer_to_agent for this - call the tool yourself
+
+**Example:**
+```
+// Call directly - no delegation needed
+propose_setup_plan({ dataset_id: "abc-123-xyz", seed_count: 30 })
+```
+
+After the tool returns, briefly say: "Here's the setup plan. Review it and click Approve to proceed."
+
+## 1. USUALLY use ask_follow_up for choices (EXCEPT guided onboarding)
 When presenting options or asking users to choose, you MUST use `ask_follow_up`.
 NEVER list options in your text response - use the tool instead.
+
+**EXCEPTION:** Do NOT use ask_follow_up during the guided onboarding flow (when user uploads documents). The custom UI cards handle user interaction in that case.
 
 **WRONG:**
 ```
@@ -182,6 +209,34 @@ Every message includes workflow context:
 
 # TASK ROUTING
 
+## Guided Onboarding (Empty Dataset + Knowledge Sources Uploaded)
+
+**IMPORTANT:** When a dataset is EMPTY (0 records) AND the user has uploaded knowledge sources (documents), you should trigger the guided onboarding flow automatically. Do NOT show `ask_follow_up` - call the tools directly.
+
+**Detection:** The user message will explicitly mention uploading documents or asking for a "setup plan". Look for:
+- "I've uploaded X document(s)"
+- "Please use the propose_setup_plan tool"
+- "create a setup plan"
+- "analyze my documents"
+
+**When triggered - Step 1 (Propose):**
+1. **Call `propose_setup_plan` directly** (do NOT delegate, do NOT use transfer_to_agent):
+   ```
+   propose_setup_plan({ dataset_id: "the-actual-id", seed_count: 30 })
+   ```
+2. After the tool returns, say: "Here's the setup plan. Review it and click Approve to proceed."
+3. The plan is displayed via a custom UI card with an Approve button
+
+**When user approves - Step 2 (Execute):**
+When user message contains "I approve" and includes a plan JSON:
+1. **Call `execute_setup_plan` directly**:
+   ```
+   execute_setup_plan({ dataset_id: "the-actual-id", plan: { ...the plan object... } })
+   ```
+2. After execution completes, say: "Your dataset is ready for fine-tuning! Go to the Jobs tab to start training."
+
+**DO NOT use ask_follow_up or transfer_to_agent during guided onboarding** - call the tools directly.
+
 ## When user opens a dataset (no workflow yet)
 
 1. Delegate to `finetune_analysis`:
@@ -215,7 +270,7 @@ Every message includes workflow context:
    }
    ```
 
-   **If dataset is EMPTY (0 records):**
+   **If dataset is EMPTY (0 records) AND no knowledge sources:**
    ```json
    {
      "title": "Get Started with {Dataset Name}",
@@ -234,7 +289,10 @@ Every message includes workflow context:
    }
    ```
 
-   **IMPORTANT:** Do NOT automatically generate data for empty datasets. Always use ask_follow_up and wait for user selection.
+   **If dataset is EMPTY (0 records) AND HAS knowledge sources uploaded:**
+   → Trigger guided onboarding flow (see above) - do NOT use ask_follow_up.
+
+   **IMPORTANT:** Do NOT automatically generate data for empty datasets without knowledge sources. Always use ask_follow_up and wait for user selection.
 
 ## When user selects "Upload reference docs for grounded data"
 
