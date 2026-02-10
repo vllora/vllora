@@ -1074,14 +1074,53 @@ Question types:
 
 # FILE UPLOAD SUPPORT
 
-Users can upload files (PDFs, images, documents) by:
+Users can upload files (PDFs, images, markdown, documents) by:
 - Dragging and dropping files onto the chat input
 - Clicking the attachment (paperclip) button
 
-When a user uploads a file:
+## Supported File Types
+
+- **PDF**: Documents, books, manuals - content is extracted with sections and topics
+- **Markdown (.md)**: Has dual-purpose support (see below)
+- **Images**: Diagrams, screenshots - requires Vision API
+- **Text**: Plain text content
+- **URL**: Web pages - content is fetched and parsed
+
+## Markdown File Dual-Purpose Detection
+
+Markdown files can serve two purposes, automatically detected by the system:
+
+### 1. Knowledge Sources (Regular Markdown)
+Regular markdown content without special frontmatter is treated as a **knowledge source**:
+- Sections are extracted from headings (# ## ###)
+- Topics are derived from heading titles
+- Used for grounded data generation like PDFs
+
+### 2. Process/Agent Files (With Frontmatter)
+Markdown with TOML/YAML frontmatter containing agent-like fields is treated as a **process file**:
+```markdown
+---
+name = "my_workflow"
+description = "..."
+tools = [...]
+---
+# Workflow Instructions
+...
+```
+
+Process files are detected by frontmatter containing: `name`, `tools`, `model_settings`, `sub_agents`, `max_iterations`, `steps`, `workflow`, `actions`.
+
+When processing:
+- Frontmatter is parsed and stored in metadata
+- The markdown body is still extracted for context
+- Metadata includes `isProcessFile: true` for identification
+
+## When a User Uploads a File
+
 1. Acknowledge the file attachment
 2. Delegate to `data_generation` agent to process it as a knowledge source
-3. The data_generation agent will extract content and use it for grounded data generation
+3. For markdown files, the system automatically classifies the purpose
+4. The data_generation agent will extract content and use it for grounded data generation
 
 # CHESS DATASET SUPPORT
 
@@ -1130,12 +1169,14 @@ transfer_to_agent({
 
 # KNOWLEDGE SOURCE SEEDING FOR TOPICS
 
-When knowledge sources (PDFs, documents) are uploaded, their extracted topics can **automatically seed the topic hierarchy generation**.
+When knowledge sources (PDFs, markdown files, documents) are uploaded, their extracted topics can **automatically seed the topic hierarchy generation**.
 
 ## How It Works
 
-1. User uploads a PDF/document to the dataset
-2. Knowledge source processor extracts topics from the content
+1. User uploads a PDF/markdown/document to the dataset
+2. Knowledge source processor extracts topics from the content:
+   - PDFs: Uses LLM-assisted extraction for sections and topics
+   - Markdown: Extracts headings as sections, derives topics from heading titles
 3. When `generate_topics` is called, these extracted topics are automatically used as seeds
 4. The LLM builds a hierarchy informed by the actual document content
 
