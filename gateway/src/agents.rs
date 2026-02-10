@@ -289,6 +289,10 @@ const EMBEDDED_AGENTS: &[(&str, &str)] = &[
         "finetune-workflow-agent.md",
         include_str!("../agents/finetune/finetune-workflow-agent.md"),
     ),
+    (
+        "data-generation-agent.md",
+        include_str!("../agents/finetune/data-generation-agent.md"),
+    ),
 ];
 
 #[derive(Debug, Error)]
