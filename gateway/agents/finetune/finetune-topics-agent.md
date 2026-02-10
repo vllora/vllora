@@ -37,6 +37,7 @@ When asked to generate a topic hierarchy, the orchestrator will provide paramete
 - `degree`: How many branches per level (default 2)
 - `max_topics`: How many root topics to generate (default 3)
 - `focus`: Optional user guidance (e.g., "focus on error handling", "organize by difficulty level")
+- `seed_topics`: Optional array of topic strings to seed the hierarchy (auto-fetched from knowledge sources if not provided)
 
 **Extract these parameters from the task description and use them:**
 
@@ -47,10 +48,14 @@ When asked to generate a topic hierarchy, the orchestrator will provide paramete
      max_depth: {from task, default 2},
      degree: {from task, default 2},
      max_topics: {from task, default 3},
-     focus: "{from task, if provided}"
+     focus: "{from task, if provided}",
+     seed_topics: ["{from task, if provided}"]
    })
    ```
 2. Call `final()` with the result summary (topic count, settings used)
+
+**Knowledge Source Integration:**
+If the dataset has uploaded knowledge sources (PDFs, documents) with extracted topics, the tool will automatically use those as seed topics unless explicit `seed_topics` are provided. This ensures the generated hierarchy reflects the actual content.
 
 Example flow:
 ```
@@ -60,6 +65,16 @@ Task: "Generate topics with max_depth=2, degree=2, max_topics=3, focus='error ha
    → Returns { success: true, hierarchy: [...], topic_count: 9 }
 
 2. final("Generated topic hierarchy with 9 topics (depth=2, branching=2, 3 root topics).")
+```
+
+Example with explicit seed topics:
+```
+Task: "Generate topics seeded with 'opening_theory', 'tactical_patterns', 'endgame' for workflow wf-123"
+
+1. generate_topics({ workflow_id: "wf-123", seed_topics: ["opening_theory", "tactical_patterns", "endgame"] })
+   → Returns { success: true, hierarchy: [...], topic_count: 12 }
+
+2. final("Generated topic hierarchy with 12 topics based on seed topics.")
 ```
 
 **TOPIC COUNT CALCULATION:**
