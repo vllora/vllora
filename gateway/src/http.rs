@@ -422,6 +422,10 @@ impl ApiServer {
                             .route(
                                 "/{job_id}/resume",
                                 web::post().to(finetune::resume_reinforcement_job),
+                            )
+                            .route(
+                                "/{job_id}/weights/url",
+                                web::get().to(finetune::get_weights_download_url),
                             ),
                     )
                     .service(

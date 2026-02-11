@@ -137,6 +137,12 @@ pub struct DeploymentResponse {
     pub inference_model_name: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WeightsDownloadUrlResponse {
+    pub download_url: String,
+    pub expires_at: Option<String>,
+}
+
 // === Dataset analytics ===
 
 #[derive(Debug, Serialize, Deserialize)]

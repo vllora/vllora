@@ -6,4 +6,5 @@ pub use types::{
     AutoscalingPolicy, CreateDeploymentRequest, CreateReinforcementFinetuningJobRequest,
     DeploymentResponse, FinetuningJobResponse, ReinforcementInferenceParameters,
     ReinforcementJobStatusResponse, ReinforcementTrainingConfig, UploadDatasetResponse,
+    WeightsDownloadUrlResponse,
 };

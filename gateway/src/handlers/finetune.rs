@@ -724,6 +724,38 @@ pub async fn resume_reinforcement_job(
 }
 
 // ============================================================================
+// Weights Download Handler
+// ============================================================================
+
+/// Get a signed URL to download trained weights for a completed reinforcement fine-tuning job
+/// Forwards to cloud API
+pub async fn get_weights_download_url(
+    job_id: web::Path<String>,
+    project: web::ReqData<vllora_core::types::metadata::project::Project>,
+    key_storage: web::Data<Box<dyn KeyStorage>>,
+) -> Result<HttpResponse> {
+    let job_id_str = job_id.into_inner();
+
+    // Get API key and create client
+    let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
+    let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
+    })?;
+
+    let response = client
+        .get_weights_download_url(&job_id_str)
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!(
+                "Failed to get weights download URL: {}",
+                e
+            ))
+        })?;
+
+    Ok(HttpResponse::Ok().json(response))
+}
+
+// ============================================================================
 // Deployment Handlers
 // ============================================================================
 

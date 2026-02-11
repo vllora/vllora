@@ -3,7 +3,7 @@ use crate::types::{
     CreateReinforcementFinetuningJobRequest, DatasetAnalyticsResponse, DeploymentResponse,
     DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse, EvaluationResultResponse,
     FinetuneEvalResultsResponse, FinetuningJobResponse, FinetuningJobResult,
-    ReinforcementJobStatusResponse, UploadDatasetResponse,
+    ReinforcementJobStatusResponse, UploadDatasetResponse, WeightsDownloadUrlResponse,
 };
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 
@@ -476,5 +476,36 @@ impl LangdbCloudFinetuneClient {
         }
 
         Ok(())
+    }
+
+    /// Get a signed URL to download trained weights for a completed reinforcement fine-tuning job
+    pub async fn get_weights_download_url(
+        &self,
+        job_id: &str,
+    ) -> Result<WeightsDownloadUrlResponse, String> {
+        let url = format!(
+            "{}/finetune/reinforcement-jobs/{}/weights/url",
+            self.api_url, job_id
+        );
+
+        let req = self.client.get(&url);
+
+        let response = req
+            .send()
+            .await
+            .map_err(|e| format!("Failed to call cloud API: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!("API error {}: {}", status, body));
+        }
+
+        let body: WeightsDownloadUrlResponse = response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+        Ok(body)
     }
 }
