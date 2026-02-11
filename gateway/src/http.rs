@@ -322,7 +322,7 @@ impl ApiServer {
                 &database_service,
             );
 
-        let json_config = JsonConfig::default().limit(8 * 1024 * 1024); // 8MB in bytes
+        let json_config = JsonConfig::default().limit(50 * 1024 * 1024); // 50MB — supports base64-encoded file content blocks in chat completions
 
         app.wrap(TraceLogger)
             .wrap(ThreadId)

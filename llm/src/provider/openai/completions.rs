@@ -47,7 +47,8 @@ use async_openai::types::chat::{
     FinishReason, FunctionCall, FunctionCallStream,
 };
 use async_openai::types::chat::{
-    ChatCompletionRequestMessageContentPartImage, CreateChatCompletionStreamResponse, ImageUrl,
+    ChatCompletionRequestMessageContentPartFile, ChatCompletionRequestMessageContentPartImage,
+    CreateChatCompletionStreamResponse, FileObject, ImageUrl,
 };
 use async_openai::Client;
 use async_trait::async_trait;
@@ -1226,7 +1227,16 @@ fn construct_user_message(
                         todo!()
                     }
                     MessageContentType::File => {
-                        todo!()
+                        let file_obj = m.file.as_ref().map(|f| FileObject {
+                            file_data: f.data.clone(),
+                            file_id: f.id.clone(),
+                            filename: f.filename.clone(),
+                        }).unwrap_or_default();
+                        ChatCompletionRequestUserMessageContentPart::File(
+                            ChatCompletionRequestMessageContentPartFile {
+                                file: file_obj,
+                            },
+                        )
                     }
                 };
                 messages.push(msg)

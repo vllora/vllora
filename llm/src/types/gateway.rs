@@ -574,7 +574,9 @@ pub struct InputAudio {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
 pub struct File {
+    #[serde(alias = "file_data")]
     pub data: Option<String>,
+    #[serde(alias = "file_id")]
     pub id: Option<String>,
     pub filename: Option<String>,
 }
