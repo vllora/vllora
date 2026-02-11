@@ -191,41 +191,41 @@ pub struct CreateEvaluationResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct RowEvaluationResult {
-    pub dataset_row_id: uuid::Uuid,
-    pub row_index: i32,
-    pub row: Option<serde_json::Value>,
-    pub status: String,
-    pub score: Option<f64>,
-    pub reason: Option<String>,
-    pub error_message: Option<String>,
-    pub logs: Option<Vec<String>>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 pub struct EvaluationSummary {
     pub average_score: Option<f64>,
+    #[serde(default)]
     pub passed_count: i32,
+    #[serde(default)]
     pub failed_count: i32,
 }
 
+/// Evaluation result response matching the cloud API shape (epoch-based).
+/// Passed through to the frontend as-is; flattening happens on the FE side.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EvaluationResultResponse {
     pub evaluation_run_id: uuid::Uuid,
     pub status: String,
+    #[serde(default)]
     pub total_rows: i32,
+    #[serde(default)]
     pub completed_rows: i32,
+    #[serde(default)]
     pub failed_rows: i32,
-    pub results: Vec<RowEvaluationResult>,
-    pub summary: EvaluationSummary,
+    #[serde(default)]
+    pub results: Vec<RowEpochResults>,
+    pub summary: Option<EvaluationSummary>,
 }
 
+/// Row-level evaluation results grouped by epoch.
+/// Used by both dry-run evaluations and finetune evaluations.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RowEpochResults {
     pub row_index: i32,
-    pub row: JsonValue,
-    /// epoch -> array of evaluation results (as JSON)
-    pub epochs: HashMap<i32, Vec<JsonValue>>,
+    #[serde(default)]
+    pub row: Option<JsonValue>,
+    /// epoch key -> array of evaluation results
+    #[serde(default)]
+    pub epochs: HashMap<String, Vec<JsonValue>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
