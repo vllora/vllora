@@ -318,6 +318,7 @@ pub async fn upload_dataset(
     let mut topic_hierarchy: Option<String> = None;
     let mut evaluator: Option<String> = None;
     let mut eval_script: Option<String> = None;
+    let mut dataset_id: Option<uuid::Uuid> = None;
 
     while let Some(field) = payload.next().await {
         let mut field = field.map_err(|e| {
@@ -434,6 +435,30 @@ pub async fn upload_dataset(
                     }
                 }
             }
+            "dataset_id" => {
+                // Read dataset ID
+                let mut bytes = Vec::new();
+                while let Some(chunk) = field.next().await {
+                    let chunk = chunk.map_err(|e| {
+                        actix_web::error::ErrorBadRequest(format!(
+                            "Failed to read dataset_id field: {}",
+                            e
+                        ))
+                    })?;
+                    bytes.extend_from_slice(&chunk);
+                }
+                dataset_id = Some(
+                    uuid::Uuid::parse_str(&String::from_utf8(bytes).map_err(|e| {
+                        actix_web::error::ErrorBadRequest(format!(
+                            "dataset_id must be a valid UUID: {}",
+                            e
+                        ))
+                    })?)
+                    .map_err(|e| {
+                        actix_web::error::ErrorBadRequest(format!("Invalid dataset_id: {}", e))
+                    })?,
+                );
+            }
             _ => {
                 // Ignore unknown fields
                 continue;
@@ -495,7 +520,7 @@ pub async fn upload_dataset(
 
     // Upload dataset using client
     let response = client
-        .upload_dataset(jsonl_data, topic_hierarchy, evaluator)
+        .upload_dataset(jsonl_data, topic_hierarchy, evaluator, dataset_id)
         .await
         .map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!("Failed to upload dataset: {}", e))
