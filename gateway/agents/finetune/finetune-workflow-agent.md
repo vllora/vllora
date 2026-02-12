@@ -3,6 +3,7 @@ name = "finetune_workflow"
 description = "Executes workflow operations for finetune process"
 max_iterations = 20
 tool_format = "provider"
+write_large_tool_responses_to_fs = true
 
 [tools]
 builtin = ["final", "write_todos"]
@@ -43,6 +44,8 @@ external = [
 [model_settings]
 model = "gpt-4.1"
 temperature = 0.2
+max_tokens = 4000
+context_size = 100000
 ---
 
 # ROLE

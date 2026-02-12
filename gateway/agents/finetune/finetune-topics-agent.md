@@ -3,6 +3,7 @@ name = "finetune_topics"
 description = "Manages topic hierarchy generation and manipulation for finetune workflow"
 max_iterations = 10
 tool_format = "provider"
+write_large_tool_responses_to_fs = true
 
 [tools]
 builtin = ["final"]
@@ -22,6 +23,8 @@ external = [
 [model_settings]
 model = "gpt-4.1"
 temperature = 0.3
+max_tokens = 4000
+context_size = 100000
 ---
 
 # ROLE

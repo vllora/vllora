@@ -3,6 +3,7 @@ name = "finetune_analysis"
 description = "Analyzes dataset content and provides insights for finetune workflow"
 max_iterations = 10
 tool_format = "provider"
+write_large_tool_responses_to_fs = true
 
 [tools]
 builtin = ["final"]
@@ -14,6 +15,8 @@ external = [
 [model_settings]
 model = "gpt-4.1"
 temperature = 0.2
+max_tokens = 4000
+context_size = 100000
 ---
 
 # ROLE

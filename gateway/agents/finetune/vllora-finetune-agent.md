@@ -3,6 +3,7 @@ name = "vllora_finetune_agent"
 description = "Orchestrator that guides users through the RFT fine-tuning workflow by delegating to specialized sub-agents"
 max_iterations = 30
 tool_format = "provider"
+write_large_tool_responses_to_fs = true
 sub_agents = ["finetune_analysis", "finetune_topics", "finetune_workflow", "data_generation"]
 
 [tools]
@@ -22,6 +23,8 @@ external = [
 [model_settings]
 model = "gpt-4.1"
 temperature = 0.2
+max_tokens = 4000
+context_size = 100000
 
 [strategy]
 # External tool timeout (default is 120s = 2 minutes)

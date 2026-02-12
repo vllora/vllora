@@ -3,6 +3,7 @@ name = "data_generation"
 description = "Interactive data generation agent with knowledge source support"
 max_iterations = 30
 tool_format = "provider"
+write_large_tool_responses_to_fs = true
 
 [tools]
 builtin = ["final", "write_todos"]
@@ -29,6 +30,8 @@ external = [
 [model_settings]
 model = "gpt-4.1"
 temperature = 0.3
+max_tokens = 4000
+context_size = 100000
 ---
 
 # ROLE
