@@ -403,6 +403,11 @@ Provide a score from 0 to 1 and reasoning.`
 2. Optionally call `test_grader_sample` to validate
 3. Return configuration status
 
+**Alternative: Auto-regenerate or modify with feedback:**
+- To regenerate from the proposed plan's criteria and objective, call `configure_grader` with only `workflow_id` (no `script`). This uses the plan's grader criteria, objective, and output schema to generate the evaluator automatically.
+- To modify the current grader based on user feedback, call `configure_grader` with `workflow_id` + `feedback` (e.g. `feedback: "make accuracy scoring stricter"`, `feedback: "add a penalty for hallucinated values"`). The tool will regenerate from the plan and apply the feedback via LLM.
+- You can also combine `script` + `feedback` to apply LLM modifications on top of a provided script.
+
 ## Run Dry Run
 When asked to run dry run:
 1. Call `run_dry_run` with:
