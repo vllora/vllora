@@ -21,7 +21,7 @@ external = [
   "generate_record_variants",
 
   # Dataset tools
-  "get_dataset_stats",
+  "get_dataset_state",
   "get_dataset_records",
   "analyze_coverage",
   "regenerate_readme"

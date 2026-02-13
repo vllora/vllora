@@ -278,10 +278,6 @@ const EMBEDDED_AGENTS: &[(&str, &str)] = &[
     ),
     // Finetune sub-agents
     (
-        "finetune-analysis-agent.md",
-        include_str!("../agents/finetune/finetune-analysis-agent.md"),
-    ),
-    (
         "finetune-topics-agent.md",
         include_str!("../agents/finetune/finetune-topics-agent.md"),
     ),
