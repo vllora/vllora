@@ -103,6 +103,7 @@ pub struct ReinforcementJobStatusResponse {
     pub status: String,
     pub fine_tuned_model: Option<String>,
     pub error_message: Option<String>,
+    pub request: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
