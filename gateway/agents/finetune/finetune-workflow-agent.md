@@ -97,18 +97,18 @@ When you receive a task:
 
 When a user has an EMPTY dataset (0 records) with knowledge sources uploaded, use the guided onboarding flow:
 
-**Step 1: Propose Setup Plan**
+**Step 1: Propose Flow**
 When task contains "propose_setup_plan" or "EXECUTE TOOL: propose_setup_plan":
 1. **IMMEDIATELY invoke the `propose_setup_plan` function** - NO text response first
 2. Extract parameters from the task:
    - `dataset_id`: The dataset ID mentioned in the task
    - `seed_count`: 30 (default)
 3. The tool returns a plan object - this is displayed to the user via custom UI
-4. After the tool returns, say: "Setup plan generated. Please review and click Approve to proceed."
+4. After the tool returns, say: "Flow generated. Please review and click Approve to proceed."
 
 **WRONG (never do this):**
 ```text
-"I'll now generate a comprehensive setup plan..."
+"I'll now generate a comprehensive flow..."
 "Your reference documents have been uploaded. I'll now generate..."
 ```
 
@@ -120,7 +120,7 @@ propose_setup_plan({ dataset_id: "xyz-123", seed_count: 30 })
 // Only AFTER tool returns, respond with brief acknowledgment
 ```
 
-**Step 2: Execute Setup Plan (After User Approval)**
+**Step 2: Execute Flow (After User Approval)**
 When the user approves the plan (says "approve", "yes", "let's do it", etc.):
 1. Call `execute_setup_plan` with:
    - `dataset_id`: The dataset ID
