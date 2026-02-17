@@ -1,3 +1,4 @@
+pub mod provider_detector;
 mod storage;
 
 use async_trait::async_trait;

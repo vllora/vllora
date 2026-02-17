@@ -35,9 +35,12 @@ use tracing::Span;
 use tracing_futures::Instrument;
 use vllora_llm::types::gateway::{ChatCompletionDelta, CostCalculator};
 
+use crate::credentials::provider_detector::{detect_provider_from_key, extract_bearer_token};
 use crate::credentials::KeyStorage;
+use crate::credentials::ProviderCredentialsId;
 use crate::executor::chat_completion::breakpoint::BreakpointManager;
 use crate::executor::chat_completion::routed_executor::RoutedExecutor;
+use vllora_llm::types::credentials::{ApiKeyCredentials, Credentials};
 
 pub type SSOChatEvent = (
     Option<ChatCompletionDelta>,
@@ -189,6 +192,58 @@ pub async fn create_chat_completion(
     } else {
         (project.id, project.slug.clone())
     };
+
+    // Auto-detect provider API key from Authorization header and save as credentials
+    if let Some(auth_header) = req.headers().get("Authorization") {
+        if let Ok(auth_str) = auth_header.to_str() {
+            if let Some(api_key) = extract_bearer_token(auth_str) {
+                if let Some(provider_name) = detect_provider_from_key(api_key) {
+                    let credential_json =
+                        serde_json::to_string(&Credentials::ApiKey(ApiKeyCredentials {
+                            api_key: api_key.to_string(),
+                        }))
+                        .unwrap_or_default();
+
+                    let project_id_str = project_id.to_string();
+                    let cred_id = ProviderCredentialsId::new(
+                        "vllora".to_string(),
+                        provider_name.to_string(),
+                        Some(project_id_str.clone()),
+                    );
+
+                    let existing = key_storage.get_ref().get_key(cred_id.clone()).await;
+                    let result = match existing {
+                        Ok(Some(_)) => {
+                            key_storage
+                                .get_ref()
+                                .update_key(cred_id, Some(credential_json))
+                                .await
+                        }
+                        _ => {
+                            key_storage
+                                .get_ref()
+                                .insert_key(cred_id, Some(credential_json))
+                                .await
+                        }
+                    };
+
+                    if let Err(e) = result {
+                        tracing::warn!(
+                            "Failed to save auto-detected provider credential for {}: {}",
+                            provider_name,
+                            e
+                        );
+                    } else {
+                        tracing::info!(
+                            "Auto-detected and saved {} API key for project {}",
+                            provider_name,
+                            project_id_str
+                        );
+                    }
+                }
+            }
+        }
+    }
 
     let db_pool = db_pool.into_inner();
     let tags = extract_tags(&req)?;

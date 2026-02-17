@@ -1227,15 +1227,17 @@ fn construct_user_message(
                         todo!()
                     }
                     MessageContentType::File => {
-                        let file_obj = m.file.as_ref().map(|f| FileObject {
-                            file_data: f.data.clone(),
-                            file_id: f.id.clone(),
-                            filename: f.filename.clone(),
-                        }).unwrap_or_default();
+                        let file_obj = m
+                            .file
+                            .as_ref()
+                            .map(|f| FileObject {
+                                file_data: f.data.clone(),
+                                file_id: f.id.clone(),
+                                filename: f.filename.clone(),
+                            })
+                            .unwrap_or_default();
                         ChatCompletionRequestUserMessageContentPart::File(
-                            ChatCompletionRequestMessageContentPartFile {
-                                file: file_obj,
-                            },
+                            ChatCompletionRequestMessageContentPartFile { file: file_obj },
                         )
                     }
                 };
