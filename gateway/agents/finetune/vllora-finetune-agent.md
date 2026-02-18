@@ -27,6 +27,7 @@ external = [
   "generate_topics",
   "generate_grader",
   "propose_setup_plan",
+  "adjust_setup_plan",
   "execute_setup_plan"
 ]
 
@@ -344,6 +345,28 @@ Assemble the plan using:
     "estimated_duration": "~3-5 minutes"
   }
 }
+```
+
+### Adjusting a Proposed Plan (before execution)
+
+Use this when the user asks to change the plan (e.g., add a topic, tweak counts, update eval criteria) even if they give no numbers.
+
+**Rules:**
+- Do NOT regenerate a new plan or call `generate_topics` / `generate_grader` unless the user explicitly asks to rebuild from scratch.
+- Call `adjust_setup_plan` with the latest plan + user feedback. This should apply a minimal diff.
+- Keep existing topics, structure, and grader criteria unless the user explicitly requests changes.
+
+**If the current plan is not in context:**
+1. Call `get_dataset_state({ dataset_id })` and use the stored plan if present.
+2. If no plan exists, create one using the Plan-First flow, then call `adjust_setup_plan` with the user feedback.
+
+**Example:**
+```
+adjust_setup_plan({
+  dataset_id: "...",
+  current_plan: { ...latest_plan... },
+  user_feedback: "Add a topic on endgame fortresses and add a rule-fidelity eval criterion."
+})
 ```
 
 **CRITICAL: Plan field reference (all `proposed_topics` entries MUST have these fields):**
