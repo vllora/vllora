@@ -47,11 +47,17 @@ pub fn extract_bearer_token(authorization_header: &str) -> Option<&str> {
 mod tests {
     use super::*;
 
+    fn random_string_key(prefix: &str) -> String {
+        let mut rng = rand::thread_rng();
+        let key = rng.gen_range(1000000..9999999);
+        let key_part = key.to_string().chars().map(|c| c as u8).collect::<Vec<u8>>().to_vec();
+        format!("{prefix}-{key_part}")
+    }
     #[test]
     fn test_detect_anthropic() {
         assert_eq!(
             detect_provider_from_key(
-                "sk-ant-api03-Id7ePbUmmkIgL9asM7l0y5KQMFsSMx6z-gV12feZ7FTdlb5l"
+                &random_string_key("sk-ant-api03")
             ),
             Some("anthropic")
         );
@@ -61,7 +67,7 @@ mod tests {
     fn test_detect_openrouter() {
         assert_eq!(
             detect_provider_from_key(
-                "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"
+                &random_string_key("sk-or-v1")
             ),
             Some("openrouter")
         );
@@ -70,7 +76,7 @@ mod tests {
     #[test]
     fn test_detect_gemini() {
         assert_eq!(
-            detect_provider_from_key("AIzaSyBZS0Y31w804sgugJ9pn_5TAHUPvwnLf4k"),
+            detect_provider_from_key("AIzaSyBZadsadasPvwnLf4k"),
             Some("gemini")
         );
     }
@@ -79,7 +85,7 @@ mod tests {
     fn test_detect_xai() {
         assert_eq!(
             detect_provider_from_key(
-                "xai-78iZ2RnRlrIUFWO9DwZakR83bb6CfOxMTg7RWuO82Yjv0s1VJDgN8N6jBNE9l8wv"
+                &random_string_key("xai")
             ),
             Some("xai")
         );
@@ -88,7 +94,7 @@ mod tests {
     #[test]
     fn test_detect_fireworksai() {
         assert_eq!(
-            detect_provider_from_key("fw_3ZW5XsSViPpVEXtkaPxbcPE8"),
+            detect_provider_from_key(&random_string_key("fw")),
             Some("fireworksai")
         );
     }
@@ -96,7 +102,7 @@ mod tests {
     #[test]
     fn test_detect_parasail() {
         assert_eq!(
-            detect_provider_from_key("psk-langRJj7X2Ng-e3uxHHY5GPRlYaVCxgGd"),
+            detect_provider_from_key(&random_string_key("psk-lang")),
             Some("parasail")
         );
     }
@@ -104,7 +110,7 @@ mod tests {
     #[test]
     fn test_detect_openai_generic_sk() {
         assert_eq!(
-            detect_provider_from_key("sk-svcacct-WoAqV9CJGQNm4OYN9e26xVjSjI_HV8jx1MH7uDk"),
+            detect_provider_from_key(&random_string_key("sk-svcacct")),
             Some("openai")
         );
     }
@@ -112,7 +118,7 @@ mod tests {
     #[test]
     fn test_detect_openai_simple_sk() {
         assert_eq!(
-            detect_provider_from_key("sk-proj-abc123def456"),
+            detect_provider_from_key(&random_string_key("sk-proj")),
             Some("openai")
         );
     }
