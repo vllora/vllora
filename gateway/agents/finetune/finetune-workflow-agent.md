@@ -22,6 +22,7 @@ external = [
   "generate_initial_data",
   "generate_record_variants",
   "update_record",
+  "update_objective",
   "regenerate_readme",
 
   # Grader operations
@@ -257,6 +258,14 @@ Details:
 - Categorized 45 records
 - Distribution: Opening Theory (15), Tactics (12), Endgames (10), Strategy (8)
 ```
+
+## Update Objective
+When asked to update the training objective:
+1. Call `update_objective` with:
+   - `dataset_id`: The dataset ID
+   - `objective`: The new training objective text
+2. This updates both the dataset's `datasetObjective` and the workflow's `trainingGoals`
+3. Return confirmation with the previous and new objective
 
 ## Configure Grader
 When asked to set up the grader, use the DEFAULT_SCRIPT template below and customize the evaluation criteria based on the training objective.

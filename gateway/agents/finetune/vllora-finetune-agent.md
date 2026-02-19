@@ -18,6 +18,7 @@ external = [
   # Dataset tools (call directly)
   "get_dataset_state",
   "get_dataset_records",
+  "update_objective",
 
   # Knowledge tools (call directly)
   "analyze_knowledge_sources",
@@ -602,7 +603,7 @@ execute_setup_plan({
 
 - **Empty dataset with knowledge sources uploaded** → Same as above (flow-first). Both `generate_topics` and `generate_grader` automatically use knowledge source content.
 
-- **Empty dataset without objective** → Ask the user to define one via `ask_follow_up`.
+- **Empty dataset without objective** → Ask the user to define one via `ask_follow_up`. Once the user provides an objective, call `update_objective({ dataset_id, objective })` to save it, then proceed with the plan-first flow.
 
 - **Has a failed/executing plan** (`plan.exists && plan.status in ['failed', 'executing']`) → Resume the existing plan (see "Handling Step Failures" and "Smart Resume" sections above). Do NOT create a new plan.
 
@@ -1484,6 +1485,38 @@ transfer_to_agent({
   agent_name: "data_generation",
   task: "Generate chess training data for dataset {dataset_id}. Use Stockfish analysis to ensure position evaluations are accurate."
 })
+```
+
+# UPDATING THE TRAINING OBJECTIVE
+
+Use `update_objective` when:
+- The user wants to change or refine the training objective
+- The user provides an objective for a dataset that doesn't have one yet
+- The user says something like "change the goal to...", "update the objective", "I want to train for..."
+
+```
+update_objective({ dataset_id: "...", objective: "Train an assistant that..." })
+```
+
+This updates both the dataset's `datasetObjective` and the workflow's `trainingGoals` (if a workflow exists). After updating, downstream tools (`generate_topics`, `generate_grader`, `generate_initial_data`, etc.) will automatically use the new objective.
+
+**After updating the objective on a dataset that already has data/topics/grader:**
+Use `ask_follow_up` to offer regeneration options since the existing topics and grader may no longer align with the new objective:
+```json
+{
+  "title": "Objective Updated",
+  "questions": [{
+    "id": "after_objective_change",
+    "question": "The objective has changed. Would you like to regenerate dependent configuration?",
+    "type": "select",
+    "options": [
+      "Regenerate topics and grader for new objective",
+      "Keep current setup, just update the objective",
+      "Create a new plan from scratch"
+    ],
+    "required": true
+  }]
+}
 ```
 
 # KNOWLEDGE SOURCE TOOLS
