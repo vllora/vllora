@@ -38,8 +38,8 @@ external = [
   "deploy_model",
 
   # Guided onboarding
-  "propose_setup_plan",
-  "execute_setup_plan"
+  "propose_plan",
+  "execute_plan"
 ]
 
 [model_settings]
@@ -96,36 +96,36 @@ When you receive a task:
 
 ## Guided Onboarding (First-Time Users)
 
-When a user has an EMPTY dataset (0 records) with knowledge sources uploaded, use the guided onboarding flow:
+When a user has an EMPTY dataset (0 records) with knowledge sources uploaded, use the guided onboarding plan:
 
-**Step 1: Propose Flow**
-When task contains "propose_setup_plan" or "EXECUTE TOOL: propose_setup_plan":
-1. **IMMEDIATELY invoke the `propose_setup_plan` function** - NO text response first
+**Step 1: Propose Plan**
+When task contains "propose_plan" or "EXECUTE TOOL: propose_plan":
+1. **IMMEDIATELY invoke the `propose_plan` function** - NO text response first
 2. Extract parameters from the task:
    - `dataset_id`: The dataset ID mentioned in the task
    - `seed_count`: 30 (default)
 3. The tool returns a plan object - this is displayed to the user via custom UI
-4. After the tool returns, say: "Flow generated. Please review and click Approve to proceed."
+4. After the tool returns, say: "Plan generated. Please review and click Approve to proceed."
 
 **WRONG (never do this):**
 ```text
-"I'll now generate a comprehensive flow..."
+"I'll now generate a comprehensive plan..."
 "Your reference documents have been uploaded. I'll now generate..."
 ```
 
 **CORRECT (call the tool FIRST):**
 ```
 // First action: call the tool
-propose_setup_plan({ dataset_id: "xyz-123", seed_count: 30 })
+propose_plan({ dataset_id: "xyz-123", seed_count: 30 })
 
 // Only AFTER tool returns, respond with brief acknowledgment
 ```
 
-**Step 2: Execute Flow (After User Approval)**
+**Step 2: Execute Plan (After User Approval)**
 When the user approves the plan (says "approve", "yes", "let's do it", etc.):
-1. Call `execute_setup_plan` with:
+1. Call `execute_plan` with:
    - `dataset_id`: The dataset ID
-   - `plan`: The full plan object from propose_setup_plan
+   - `plan`: The full plan object from propose_plan
 2. The tool automatically executes ALL steps:
    - Applies topic hierarchy
    - Generates initial training data
@@ -135,13 +135,13 @@ When the user approves the plan (says "approve", "yes", "let's do it", etc.):
 3. Progress events are emitted for UI updates
 4. After completion, inform user the dataset is ready for fine-tuning
 
-**Example conversation flow:**
+**Example conversation plan:**
 ```
 User: I've uploaded some documents. Help me set up this dataset.
-→ Call propose_setup_plan, present the plan
+→ Call propose_plan, present the plan
 
 User: Looks good, let's do it!
-→ Call execute_setup_plan with the plan
+→ Call execute_plan with the plan
 
 → Report completion: "Your dataset is ready! Go to the Jobs tab to start fine-tuning."
 ```
@@ -413,7 +413,7 @@ Provide a score from 0 to 1 and reasoning.`
 3. Return configuration status
 
 **Alternative: Auto-regenerate or modify with feedback:**
-- To regenerate from the proposed plan's criteria and objective, call `configure_grader` with only `workflow_id` (no `script`). This uses the plan's grader criteria and objective to generate the evaluator. If no plan exists, the tool will automatically run `propose_setup_plan` first.
+- To regenerate from the proposed plan's criteria and objective, call `configure_grader` with only `workflow_id` (no `script`). This uses the plan's grader criteria and objective to generate the evaluator. If no plan exists, the tool will automatically run `propose_plan` first.
 - To modify the **existing saved grader** based on user feedback, call `configure_grader` with `workflow_id` + `feedback` (e.g. `feedback: "make accuracy scoring stricter"`, `feedback: "add a penalty for hallucinated values"`). This modifies the current grader script in place — it does NOT regenerate from the plan. Requires an existing grader script to be configured first.
 - You can also provide `script` + `feedback` to apply LLM modifications on top of a provided script.
 
