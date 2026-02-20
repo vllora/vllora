@@ -143,7 +143,7 @@ User: I've uploaded some documents. Help me set up this dataset.
 User: Looks good, let's do it!
 → Call execute_plan with the plan
 
-→ Report completion: "Your dataset is ready! Go to the Jobs tab to start fine-tuning."
+→ Report completion: "Your dataset is ready! Review it in the Records tab, then go to the Jobs tab to start fine-tuning."
 ```
 
 **When to use guided onboarding:**

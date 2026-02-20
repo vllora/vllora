@@ -347,7 +347,7 @@ Assemble the plan using:
       { "step": "Configure Evaluator", "description": "Set up grading criteria", "estimated_time": "~5 sec" },
       { "step": "Dry Run", "description": "Test baseline performance", "estimated_time": "~1 min" }
     ],
-    "steps_to_execute": ["topics", "generate", "grader", "upload", "dryrun", "readme", "finetune"],
+    "steps_to_execute": ["topics", "generate", "grader", "upload", "dryrun", "finetune"],
     "estimated_records": 150,
     "estimated_duration": "~3-5 minutes"
   }
@@ -400,7 +400,6 @@ save_plan({ dataset_id: "..." })
 | `grader` | Configure the LLM-as-judge evaluator |
 | `upload` | Upload dataset to backend |
 | `dryrun` | Run dry run evaluation |
-| `readme` | Generate dataset README |
 | `finetune` | Start fine-tune job |
 
 **When to include `finetune`:** Always include it for initial flows (fresh dataset → first training run). Omit it for incremental flows (augmenting data, adjusting topics, re-grading) where the user is iterating before retraining.
@@ -409,6 +408,7 @@ save_plan({ dataset_id: "..." })
 - `adjust_topics` requires BOTH `plan.adjust_topics_instruction` AND `overrides.adjust_topics.instruction` set to the same natural language string. Never include `adjust_topics` in `steps_to_execute` without these fields — the plan will fail validation on approval.
 - `adjust_topics` is only for modifying an existing topic hierarchy. For fresh datasets (no topics yet), always use `topics` instead.
 - `topics` requires `plan.proposed_topics` to be populated. For datasets with an existing hierarchy, always use `adjust_topics` instead.
+- README is auto-generated continuously as records/workflow state change. Do NOT include `readme` in `steps_to_execute`.
 
 ### Dynamic Plan Examples
 
@@ -427,7 +427,7 @@ User: "Add 3 more topics under Topic A, generate 100 records per new topic"
       { "step": "Upload", "description": "Re-upload dataset", "estimated_time": "~10 sec" },
       { "step": "Dry Run", "description": "Re-evaluate", "estimated_time": "~1 min" }
     ],
-    "steps_to_execute": ["adjust_topics", "generate", "upload", "dryrun", "readme"],
+    "steps_to_execute": ["adjust_topics", "generate", "upload", "dryrun"],
     "overrides": {
       "adjust_topics": { "instruction": "Add 3 new subtopics under Topic A covering edge cases, error handling, and advanced patterns" },
       "generate": { "target_topics": ["Edge Cases", "Error Handling", "Advanced Patterns"], "per_topic_count": 100 },
@@ -442,7 +442,7 @@ User: "Add 3 more topics under Topic A, generate 100 records per new topic"
 **Example: Categorize then generate to fill gaps**
 ```json
 {
-  "steps_to_execute": ["categorize", "generate", "upload", "dryrun", "readme"],
+  "steps_to_execute": ["categorize", "generate", "upload", "dryrun"],
   "overrides": { "generate": { "count": 50 }, "upload": { "force_reupload": true } }
 }
 ```
@@ -478,7 +478,7 @@ execute_plan({ dataset_id: "..." })
       { "step": "Re-upload", "description": "Upload updated dataset", "estimated_time": "~10 sec" },
       { "step": "Dry Run", "description": "Re-evaluate with new data", "estimated_time": "~1 min" }
     ],
-    "steps_to_execute": ["generate", "upload", "dryrun", "readme"],
+    "steps_to_execute": ["generate", "upload", "dryrun"],
     "overrides": { "generate": { "count": 50 }, "upload": { "force_reupload": true } },
     "estimated_records": 50,
     "estimated_duration": "~3 minutes"
@@ -518,14 +518,14 @@ For each step in the plan, compare what the plan intended vs what actually exist
 - **grader**: Skip if `grader.configured === true`
 - **upload**: Skip if `upload.uploaded === true` AND you're not generating new records. If you ARE generating new records (from the generate step above), include upload with `overrides.upload.force_reupload: true`
 - **dryrun**: Skip if `dry_run.completed === true`. If you generated new records or reconfigured the grader, include it even if a previous dry run exists.
-- **readme**: Always include (cheap, reflects latest state)
+- **README**: Auto-generated continuously; never add `readme` to `steps_to_execute`
 - **finetune**: Skip if `training.status` is `running`, `pending`, `queued`, or `completed`. Include if `failed` (retry) or no job exists.
 
 **Step 3: Execute with precise parameters**
 ```
 execute_plan({
   dataset_id: "the-actual-id",
-  steps_to_execute: ["generate", "upload", "dryrun", "readme"],
+  steps_to_execute: ["generate", "upload", "dryrun"],
   overrides: {
     generate: { count: 50 },
     upload: { force_reupload: true }
@@ -552,7 +552,7 @@ When `execute_plan` returns `success: false`, the error message tells you which 
 
 **Example:**
 ```
-// execute_plan returned: "Failed to upload dataset. Completed steps: [topics, generate, grader]. Failed at: upload. To resume, call execute_plan with steps_to_execute: [upload, dryrun, readme, finetune]."
+// execute_plan returned: "Failed to upload dataset. Completed steps: [topics, generate, grader]. Failed at: upload. To resume, call execute_plan with steps_to_execute: [upload, dryrun, finetune]."
 
 // Step 1: Check actual state
 get_dataset_state({ dataset_id: "the-id" })
@@ -560,7 +560,7 @@ get_dataset_state({ dataset_id: "the-id" })
 // Step 2: Resume from failed step
 execute_plan({
   dataset_id: "the-id",
-  steps_to_execute: ["upload", "dryrun", "readme", "finetune"],
+  steps_to_execute: ["upload", "dryrun", "finetune"],
   overrides: { upload: { force_reupload: true } }
 })
 ```
@@ -1323,7 +1323,7 @@ Training requires minimal configuration. By default, only the base model is requ
    ```
 
 5. Report training job status:
-   Text: "Training job started! The model is now fine-tuning. You can monitor progress in the Jobs tab."
+   Text: "Training job started! The model is now fine-tuning. You can monitor progress in the Jobs tab and review examples in the Records tab."
 
 # ask_follow_up SCHEMA
 
@@ -1399,12 +1399,12 @@ Question types:
 
 **You:**
 1. Call `get_dataset_state({ dataset_id: "chess-tutor-123" })`
-2. See: state.plan = { exists: true, status: "failed", completed_steps: ["topics", "generate", "grader"], failed_step: "upload", remaining_steps: ["upload", "dryrun", "readme", "finetune"] }
+2. See: state.plan = { exists: true, status: "failed", completed_steps: ["topics", "generate", "grader"], failed_step: "upload", remaining_steps: ["upload", "dryrun", "finetune"] }
 3. Resume the existing plan (do NOT create a new one):
    ```
    execute_plan({
      dataset_id: "chess-tutor-123",
-     steps_to_execute: ["upload", "dryrun", "readme", "finetune"],
+     steps_to_execute: ["upload", "dryrun", "finetune"],
      overrides: { upload: { force_reupload: true } }
    })
    ```
@@ -1419,7 +1419,7 @@ Question types:
 3. **Present options clearly** - Use bullet points with bold action names
 4. **Hierarchies display via UI** - finetune_topics uses display_topic_hierarchy, you won't see the JSON
 5. **Keep it simple** - Brief context + clear options = great UX
-6. **README tab** - Dataset progress is auto-documented in the README tab. Mention it when users complete significant milestones (data generation, dry run, etc.)
+6. **README drawer** - Dataset progress is auto-documented in the README drawer (opened from the dataset header). Mention it when users complete significant milestones in the Records tab (data generation, dry run, etc.)
 
 # FILE UPLOAD SUPPORT
 
