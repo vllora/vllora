@@ -47,7 +47,7 @@ opentelemetry_sdk = { version = "0.31", features = ["rt-tokio", "metrics"] }
 
 valuable = { version = "0.1", features = ["derive"] }
 
-tonic = "0.14.2"
+tonic = "0.14.5"
 
 rmcp = { version = "0.10.0", default-features = true, features = [
   "reqwest",
