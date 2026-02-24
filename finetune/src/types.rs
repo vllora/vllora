@@ -288,13 +288,8 @@ pub enum Evaluator<T>
 where
     T: serde::Serialize + serde::de::DeserializeOwned + std::fmt::Debug + Clone,
 {
-    LlmAsJudge {
-        config: LlmAsJudgeConfig<T>,
-    },
-    Js {
-        #[serde(default)]
-        config: JsConfig,
-    },
+    LlmAsJudge { config: LlmAsJudgeConfig<T> },
+    Js { config: JsConfig },
 }
 
 #[derive(Debug, Serialize, Deserialize)]

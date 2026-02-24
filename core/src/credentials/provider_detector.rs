@@ -50,15 +50,18 @@ mod tests {
     fn random_string_key(prefix: &str) -> String {
         let mut rng = rand::thread_rng();
         let key = rng.gen_range(1000000..9999999);
-        let key_part = key.to_string().chars().map(|c| c as u8).collect::<Vec<u8>>().to_vec();
+        let key_part = key
+            .to_string()
+            .chars()
+            .map(|c| c as u8)
+            .collect::<Vec<u8>>()
+            .to_vec();
         format!("{prefix}-{key_part}")
     }
     #[test]
     fn test_detect_anthropic() {
         assert_eq!(
-            detect_provider_from_key(
-                &random_string_key("sk-ant-api03")
-            ),
+            detect_provider_from_key(&random_string_key("sk-ant-api03")),
             Some("anthropic")
         );
     }
@@ -66,9 +69,7 @@ mod tests {
     #[test]
     fn test_detect_openrouter() {
         assert_eq!(
-            detect_provider_from_key(
-                &random_string_key("sk-or-v1")
-            ),
+            detect_provider_from_key(&random_string_key("sk-or-v1")),
             Some("openrouter")
         );
     }
@@ -84,9 +85,7 @@ mod tests {
     #[test]
     fn test_detect_xai() {
         assert_eq!(
-            detect_provider_from_key(
-                &random_string_key("xai")
-            ),
+            detect_provider_from_key(&random_string_key("xai")),
             Some("xai")
         );
     }

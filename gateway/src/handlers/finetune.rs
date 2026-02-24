@@ -19,12 +19,10 @@ use vllora_core::types::metadata::project::Project;
 use vllora_core::types::metadata::services::model::ModelService;
 use vllora_core::GatewayApiError;
 use vllora_finetune::types::{
-    CreateEvaluationRequest, CreateEvaluationResponse, DatasetAnalyticsResponse,
-    DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse, EvaluationResultResponse,
-    Evaluator, FinetuneEvalResultsResponse, ReinforcementJobQuery,
-    ReinforcementJobStatusResponse as SharedReinforcementJobStatusResponse,
-    ReinforcementTrainingConfig, UpdateEvaluatorBody, UpdateEvaluatorResponse,
-    UploadDatasetResponse, WeightsDownloadUrlResponse,
+    CreateEvaluationRequest, DatasetAnalyticsResponse, DryRunDatasetAnalyticsRequest,
+    DryRunDatasetAnalyticsResponse, EvaluationResultResponse, Evaluator,
+    FinetuneEvalResultsResponse, ReinforcementJobQuery, ReinforcementTrainingConfig,
+    UpdateEvaluatorBody, UpdateEvaluatorResponse,
 };
 use vllora_finetune::{
     CreateDeploymentRequest, CreateReinforcementFinetuningJobRequest, LangdbCloudFinetuneClient,
@@ -536,12 +534,14 @@ pub async fn get_reinforcement_job_status(
     if let Ok(Some(db_job)) =
         finetune_job_service.get_by_provider_job_id(&job_id_str, &project.id.to_string())
     {
-        return Ok(HttpResponse::Ok().json(LocalReinforcementJobStatusResponse {
-            provider_job_id: db_job.provider_job_id,
-            status: db_job.state,
-            fine_tuned_model: db_job.fine_tuned_model,
-            error_message: db_job.error_message,
-        }));
+        return Ok(
+            HttpResponse::Ok().json(LocalReinforcementJobStatusResponse {
+                provider_job_id: db_job.provider_job_id,
+                status: db_job.state,
+                fine_tuned_model: db_job.fine_tuned_model,
+                error_message: db_job.error_message,
+            }),
+        );
     }
 
     let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
