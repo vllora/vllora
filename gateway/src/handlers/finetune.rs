@@ -1,7 +1,7 @@
 use actix_multipart::Multipart;
 use actix_web::{web, HttpResponse, Result};
 use futures::StreamExt;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 use vllora_core::credentials::KeyStorage;
@@ -19,11 +19,13 @@ use vllora_core::types::metadata::project::Project;
 use vllora_core::types::metadata::services::model::ModelService;
 use vllora_core::GatewayApiError;
 use vllora_finetune::types::{
-    CompletionParams as EvalCompletionParams, CreateEvaluationRequest, DatasetAnalyticsResponse,
+    CreateEvaluationRequest, CreateEvaluationResponse, DatasetAnalyticsResponse,
     DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse, EvaluationResultResponse,
-    Evaluator, FinetuneEvalResultsResponse,
+    Evaluator, FinetuneEvalResultsResponse, ReinforcementJobQuery,
+    ReinforcementJobStatusResponse as SharedReinforcementJobStatusResponse,
+    ReinforcementTrainingConfig, UpdateEvaluatorBody, UpdateEvaluatorResponse,
+    UploadDatasetResponse, WeightsDownloadUrlResponse,
 };
-use vllora_finetune::ReinforcementTrainingConfig;
 use vllora_finetune::{
     CreateDeploymentRequest, CreateReinforcementFinetuningJobRequest, LangdbCloudFinetuneClient,
 };
@@ -31,23 +33,10 @@ use vllora_llm::types::credentials::Credentials;
 use vllora_llm::types::gateway::ChatCompletionMessage;
 use vllora_llm::types::gateway::CostCalculator;
 
-#[derive(Debug, Deserialize)]
-pub struct ReinforcementJobQuery {
-    pub limit: Option<u32>,
-    pub after: Option<String>,
-    pub dataset_id: Option<String>,
-}
-
+/// Response type for list_reinforcement_jobs which reads from local SQLite DB.
+/// Uses String types to match the SQLite model without conversion overhead.
 #[derive(Debug, Serialize)]
-pub struct ReinforcementJobStatusResponse {
-    pub provider_job_id: String,
-    pub status: String,
-    pub fine_tuned_model: Option<String>,
-    pub error_message: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct FinetuningJobResponse {
+pub struct LocalFinetuningJobResponse {
     pub id: String,
     pub provider_job_id: String,
     pub dataset_id: String,
@@ -63,6 +52,15 @@ pub struct FinetuningJobResponse {
     pub created_at: String,
     pub updated_at: String,
     pub completed_at: Option<String>,
+}
+
+/// Response type for get_reinforcement_job_status from local SQLite DB.
+#[derive(Debug, Serialize)]
+pub struct LocalReinforcementJobStatusResponse {
+    pub provider_job_id: String,
+    pub status: String,
+    pub fine_tuned_model: Option<String>,
+    pub error_message: Option<String>,
 }
 
 pub async fn get_langdb_api_key(
@@ -95,23 +93,13 @@ pub async fn get_langdb_api_key(
 // Evaluation Handlers
 // ============================================================================
 
-#[derive(Debug, Deserialize)]
-pub struct CreateEvaluationBody {
-    pub dataset_id: uuid::Uuid,
-    pub rollout_model_params: EvalCompletionParams,
-    pub offset: Option<i32>,
-    pub limit: Option<i32>,
-}
-
-/// Start an evaluation run for a dataset (forwards to cloud API)
 pub async fn create_evaluation(
-    request: web::Json<CreateEvaluationBody>,
+    request: web::Json<CreateEvaluationRequest>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
 ) -> Result<HttpResponse> {
     let request_body = request.into_inner();
 
-    // Get API key and create client
     let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
     let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
@@ -134,7 +122,6 @@ pub async fn create_evaluation(
     Ok(HttpResponse::Created().json(response))
 }
 
-/// Get analytics for a given dataset (forwards to cloud API)
 pub async fn get_dataset_analytics(
     dataset_id: web::Path<uuid::Uuid>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
@@ -142,7 +129,6 @@ pub async fn get_dataset_analytics(
 ) -> Result<HttpResponse> {
     let dataset_id_str = dataset_id.into_inner().to_string();
 
-    // Get API key and create client
     let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
     let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
@@ -161,7 +147,6 @@ pub async fn get_dataset_analytics(
     Ok(HttpResponse::Ok().json(response))
 }
 
-/// Compute analytics for an in-memory dataset (forwards to cloud API).
 pub async fn dry_run_dataset_analytics(
     body: web::Json<DryRunDatasetAnalyticsRequest>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
@@ -169,7 +154,6 @@ pub async fn dry_run_dataset_analytics(
 ) -> Result<HttpResponse> {
     let request_body = body.into_inner();
 
-    // Get API key and create client
     let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
     let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
@@ -188,7 +172,6 @@ pub async fn dry_run_dataset_analytics(
     Ok(HttpResponse::Ok().json(response))
 }
 
-/// Get evaluation results for a given evaluation run (forwards to cloud API)
 pub async fn get_evaluation_result(
     evaluation_run_id: web::Path<uuid::Uuid>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
@@ -196,7 +179,6 @@ pub async fn get_evaluation_result(
 ) -> Result<HttpResponse> {
     let run_id_str = evaluation_run_id.into_inner().to_string();
 
-    // Get API key and create client
     let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
     let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
@@ -215,7 +197,6 @@ pub async fn get_evaluation_result(
     Ok(HttpResponse::Ok().json(response))
 }
 
-/// Get finetune evaluation traces grouped by row and epoch (forwards to cloud API)
 pub async fn get_finetune_evaluations(
     dataset_id: web::Path<uuid::Uuid>,
     query: web::Query<HashMap<String, String>>,
@@ -224,12 +205,10 @@ pub async fn get_finetune_evaluations(
 ) -> Result<HttpResponse> {
     let dataset_id_str = dataset_id.into_inner().to_string();
 
-    // Extract optional filters from query
     let row_index = query.get("row_index").and_then(|s| s.parse::<i32>().ok());
     let epoch = query.get("epoch").and_then(|s| s.parse::<i32>().ok());
     let finetune_job_id = query.get("finetune_job_id").cloned();
 
-    // Get API key and create client
     let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
     let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
@@ -252,19 +231,6 @@ pub async fn get_finetune_evaluations(
 // Dataset Evaluator Update Handler
 // ============================================================================
 
-#[derive(Debug, Deserialize)]
-pub struct UpdateEvaluatorBody {
-    pub evaluator: serde_json::Value,
-}
-
-#[derive(Debug, Serialize)]
-pub struct UpdateEvaluatorResponse {
-    pub dataset_id: String,
-    pub updated: bool,
-}
-
-/// Update the evaluator config for an existing dataset
-/// This allows changing the grader without re-uploading the entire dataset
 pub async fn update_dataset_evaluator(
     dataset_id: web::Path<String>,
     request: web::Json<UpdateEvaluatorBody>,
@@ -274,7 +240,6 @@ pub async fn update_dataset_evaluator(
     let dataset_id_str = dataset_id.into_inner();
     let request_body = request.into_inner();
 
-    // Validate the evaluator JSON is a valid Evaluator enum
     let evaluator_str = serde_json::to_string(&request_body.evaluator)
         .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid evaluator JSON: {}", e)))?;
 
@@ -282,13 +247,11 @@ pub async fn update_dataset_evaluator(
         actix_web::error::ErrorBadRequest(format!("Invalid evaluator format: {}", e))
     })?;
 
-    // Get API key and create client
     let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
     let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
     })?;
 
-    // Update evaluator using client
     client
         .update_dataset_evaluator(&dataset_id_str, evaluator_str)
         .await
@@ -296,8 +259,12 @@ pub async fn update_dataset_evaluator(
             actix_web::error::ErrorInternalServerError(format!("Failed to update evaluator: {}", e))
         })?;
 
+    let dataset_id_uuid = uuid::Uuid::parse_str(&dataset_id_str).map_err(|e| {
+        actix_web::error::ErrorBadRequest(format!("Invalid dataset_id UUID: {}", e))
+    })?;
+
     Ok(HttpResponse::Ok().json(UpdateEvaluatorResponse {
-        dataset_id: dataset_id_str,
+        dataset_id: dataset_id_uuid,
         updated: true,
     }))
 }
@@ -306,14 +273,11 @@ pub async fn update_dataset_evaluator(
 // Reinforcement Fine-Tuning Handlers
 // ============================================================================
 
-/// Upload a dataset file (JSONL format) to the provider
-/// This forwards the multipart request to the cloud API
 pub async fn upload_dataset(
     mut payload: Multipart,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
 ) -> Result<HttpResponse> {
-    // Parse multipart form data to get JSONL file
     let mut jsonl_data: Option<Vec<u8>> = None;
     let mut topic_hierarchy: Option<String> = None;
     let mut evaluator: Option<String> = None;
@@ -329,7 +293,6 @@ pub async fn upload_dataset(
 
         match field_name {
             "file" => {
-                // Read JSONL file
                 let mut bytes = Vec::new();
                 while let Some(chunk) = field.next().await {
                     let chunk = chunk.map_err(|e| {
@@ -343,7 +306,6 @@ pub async fn upload_dataset(
                 jsonl_data = Some(bytes);
             }
             "topicHierarchy" | "topic_hierarchy" => {
-                // Read topic hierarchy config (JSON string)
                 let mut bytes = Vec::new();
                 while let Some(chunk) = field.next().await {
                     let chunk = chunk.map_err(|e| {
@@ -364,7 +326,6 @@ pub async fn upload_dataset(
                     })?;
                     let trimmed = s.trim();
                     if !trimmed.is_empty() {
-                        // Validate it's JSON before forwarding
                         serde_json::from_str::<serde_json::Value>(trimmed).map_err(|e| {
                             actix_web::error::ErrorBadRequest(format!(
                                 "Invalid topicHierarchy JSON: {}",
@@ -376,7 +337,6 @@ pub async fn upload_dataset(
                 }
             }
             "evaluator" => {
-                // Read evaluator config (JSON string)
                 let mut bytes = Vec::new();
                 while let Some(chunk) = field.next().await {
                     let chunk = chunk.map_err(|e| {
@@ -397,7 +357,6 @@ pub async fn upload_dataset(
                     })?;
                     let trimmed = s.trim();
                     if !trimmed.is_empty() {
-                        // Validate it's a valid Evaluator enum before forwarding
                         serde_json::from_str::<Evaluator<ChatCompletionMessage>>(trimmed).map_err(
                             |e| {
                                 actix_web::error::ErrorBadRequest(format!(
@@ -411,7 +370,6 @@ pub async fn upload_dataset(
                 }
             }
             "eval_script" => {
-                // Read evaluator script from file (e.g. JavaScript for Js evaluator)
                 let mut bytes = Vec::new();
                 while let Some(chunk) = field.next().await {
                     let chunk = chunk.map_err(|e| {
@@ -436,7 +394,6 @@ pub async fn upload_dataset(
                 }
             }
             "dataset_id" => {
-                // Read dataset ID
                 let mut bytes = Vec::new();
                 while let Some(chunk) = field.next().await {
                     let chunk = chunk.map_err(|e| {
@@ -460,13 +417,11 @@ pub async fn upload_dataset(
                 );
             }
             _ => {
-                // Ignore unknown fields
                 continue;
             }
         }
     }
 
-    // If eval_script was provided as a file, merge it into the evaluator config (Js type)
     evaluator = match (eval_script, evaluator) {
         (Some(eval_script_content), Some(evaluator_str)) => {
             let mut value: serde_json::Value =
@@ -475,7 +430,6 @@ pub async fn upload_dataset(
                 })?;
             let merged_str = if let Some(obj) = value.as_object_mut() {
                 if obj.get("type").and_then(|t| t.as_str()) == Some("js") {
-                    // Create config object if it doesn't exist
                     if !obj.contains_key("config") {
                         obj.insert("config".to_string(), serde_json::json!({}));
                     }
@@ -512,13 +466,11 @@ pub async fn upload_dataset(
         ));
     }
 
-    // Get API key and create client
     let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
     let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
     })?;
 
-    // Upload dataset using client
     let response = client
         .upload_dataset(jsonl_data, topic_hierarchy, evaluator, dataset_id)
         .await
@@ -529,24 +481,19 @@ pub async fn upload_dataset(
     Ok(HttpResponse::Created().json(response))
 }
 
-/// Create a reinforcement fine-tuning job
-/// This forwards the request to the cloud API and saves to local database
 pub async fn create_reinforcement_job(
     request: web::Json<CreateReinforcementFinetuningJobRequest>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
-    // Extract owned request body once so we can reuse it
     let request_body = request.into_inner();
 
-    // Get API key and create client
     let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
     let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
     })?;
 
-    // Create job using client (forwards to cloud API)
     let cloud_response = client
         .create_reinforcement_job(request_body.clone())
         .await
@@ -554,22 +501,20 @@ pub async fn create_reinforcement_job(
             actix_web::error::ErrorInternalServerError(format!("Failed to create job: {}", e))
         })?;
 
-    // Save job to local database
     let finetune_job_service = FinetuneJobService::new(db_pool.get_ref().clone());
 
     let new_job = DbNewFinetuneJob::new(
         project.id.to_string(),
-        request_body.dataset.clone(),
+        request_body.dataset_id.to_string(),
         "langdb".to_string(),
         cloud_response.id.to_string(),
         request_body.base_model.clone(),
     )
     .with_fine_tuned_model(cloud_response.fine_tuned_model.clone())
-    .with_training_file_id(Some(request_body.dataset.clone()))
+    .with_training_file_id(Some(request_body.dataset_id.to_string()))
     .with_validation_file_id(request_body.evaluation_dataset.clone())
     .with_training_config(request_body.training_config.clone());
 
-    // Save to database (ignore errors - job is already created in cloud)
     if let Err(e) = finetune_job_service.create(new_job) {
         tracing::warn!("Failed to save finetune job to local database: {}", e);
     }
@@ -577,8 +522,6 @@ pub async fn create_reinforcement_job(
     Ok(HttpResponse::Created().json(cloud_response))
 }
 
-/// Get reinforcement fine-tuning job status
-/// Queries local database first, falls back to cloud API if not found
 pub async fn get_reinforcement_job_status(
     job_id: web::Path<String>,
     _query: web::Query<ReinforcementJobQuery>,
@@ -588,13 +531,12 @@ pub async fn get_reinforcement_job_status(
 ) -> Result<HttpResponse> {
     let job_id_str = job_id.into_inner();
 
-    // Try to find job in local database
     let finetune_job_service = FinetuneJobService::new(db_pool.get_ref().clone());
 
     if let Ok(Some(db_job)) =
         finetune_job_service.get_by_provider_job_id(&job_id_str, &project.id.to_string())
     {
-        return Ok(HttpResponse::Ok().json(ReinforcementJobStatusResponse {
+        return Ok(HttpResponse::Ok().json(LocalReinforcementJobStatusResponse {
             provider_job_id: db_job.provider_job_id,
             status: db_job.state,
             fine_tuned_model: db_job.fine_tuned_model,
@@ -602,13 +544,11 @@ pub async fn get_reinforcement_job_status(
         }));
     }
 
-    // If not found in database, query cloud API (backward compatibility)
     let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
     let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
     })?;
 
-    // Get job status using client
     let response = client
         .get_reinforcement_job_status(&job_id_str)
         .await
@@ -619,14 +559,11 @@ pub async fn get_reinforcement_job_status(
     Ok(HttpResponse::Ok().json(response))
 }
 
-/// List reinforcement fine-tuning jobs
-/// Queries local database
 pub async fn list_reinforcement_jobs(
     query: web::Query<ReinforcementJobQuery>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
-    // Query local database
     let finetune_job_service = FinetuneJobService::new(db_pool.get_ref().clone());
 
     let db_jobs = finetune_job_service
@@ -640,9 +577,9 @@ pub async fn list_reinforcement_jobs(
             actix_web::error::ErrorInternalServerError(format!("Failed to list jobs: {}", e))
         })?;
 
-    let response: Vec<FinetuningJobResponse> = db_jobs
+    let response: Vec<LocalFinetuningJobResponse> = db_jobs
         .into_iter()
-        .map(|job| FinetuningJobResponse {
+        .map(|job| LocalFinetuningJobResponse {
             id: job.id,
             provider_job_id: job.provider_job_id,
             dataset_id: job.dataset_id,
@@ -666,8 +603,6 @@ pub async fn list_reinforcement_jobs(
     Ok(HttpResponse::Ok().json(response))
 }
 
-/// Cancel a reinforcement fine-tuning job
-/// Forwards to cloud API and updates local metadata state when possible
 pub async fn cancel_reinforcement_job(
     job_id: web::Path<String>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
@@ -676,7 +611,6 @@ pub async fn cancel_reinforcement_job(
 ) -> Result<HttpResponse> {
     let job_id_str = job_id.into_inner();
 
-    // Best-effort: update local metadata state to cancelled
     let finetune_job_service = FinetuneJobService::new(db_pool.get_ref().clone());
     if let Ok(Some(db_job)) =
         finetune_job_service.get_by_provider_job_id(&job_id_str, &project.id.to_string())
@@ -688,7 +622,6 @@ pub async fn cancel_reinforcement_job(
         );
     }
 
-    // Forward cancel request to cloud API
     let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
     let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
@@ -707,8 +640,6 @@ pub async fn cancel_reinforcement_job(
     Ok(HttpResponse::NoContent().finish())
 }
 
-/// Resume a reinforcement fine-tuning job
-/// Forwards to cloud API and updates local metadata state when possible
 pub async fn resume_reinforcement_job(
     job_id: web::Path<String>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
@@ -717,7 +648,6 @@ pub async fn resume_reinforcement_job(
 ) -> Result<HttpResponse> {
     let job_id_str = job_id.into_inner();
 
-    // Best-effort: update local metadata state back to pending
     let finetune_job_service = FinetuneJobService::new(db_pool.get_ref().clone());
     if let Ok(Some(db_job)) =
         finetune_job_service.get_by_provider_job_id(&job_id_str, &project.id.to_string())
@@ -729,7 +659,6 @@ pub async fn resume_reinforcement_job(
         );
     }
 
-    // Forward resume request to cloud API
     let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
     let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
@@ -752,8 +681,6 @@ pub async fn resume_reinforcement_job(
 // Weights Download Handler
 // ============================================================================
 
-/// Get a signed URL to download trained weights for a completed reinforcement fine-tuning job
-/// Forwards to cloud API
 pub async fn get_weights_download_url(
     job_id: web::Path<String>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
@@ -761,7 +688,6 @@ pub async fn get_weights_download_url(
 ) -> Result<HttpResponse> {
     let job_id_str = job_id.into_inner();
 
-    // Get API key and create client
     let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
     let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
@@ -784,20 +710,16 @@ pub async fn get_weights_download_url(
 // Deployment Handlers
 // ============================================================================
 
-/// Deploy a fine-tuned model
-/// This forwards the request to the cloud API
 pub async fn deploy_model(
     request: web::Json<CreateDeploymentRequest>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
 ) -> Result<HttpResponse> {
-    // Get API key and create client
     let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
     let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
     })?;
 
-    // Deploy model using client
     let response = client
         .deploy_model(request.into_inner())
         .await
@@ -808,8 +730,6 @@ pub async fn deploy_model(
     Ok(HttpResponse::Created().json(response))
 }
 
-/// Delete a deployment
-/// This forwards the request to the cloud API
 pub async fn delete_deployment(
     deployment_id: web::Path<String>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
@@ -817,13 +737,11 @@ pub async fn delete_deployment(
 ) -> Result<HttpResponse> {
     let deployment_id_str = deployment_id.into_inner();
 
-    // Get API key and create client
     let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
     let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
     })?;
 
-    // Delete deployment using client
     client
         .delete_deployment(&deployment_id_str)
         .await
@@ -841,7 +759,6 @@ pub async fn delete_deployment(
 // Topic Hierarchy Generation Handler
 // ============================================================================
 
-/// Generate a topic hierarchy tree based on provided properties
 pub async fn generate_topic_hierarchy(
     request: web::Json<vllora_core::finetune::GenerateTopicHierarchyProperties>,
     db_pool: web::Data<DbPool>,
@@ -891,7 +808,6 @@ pub async fn generate_topic_hierarchy(
     }
 }
 
-/// Adjust an existing topic hierarchy based on natural language instructions
 pub async fn adjust_topic_hierarchy(
     request: web::Json<vllora_core::finetune::AdjustTopicHierarchyProperties>,
     db_pool: web::Data<DbPool>,

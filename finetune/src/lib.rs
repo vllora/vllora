@@ -3,8 +3,12 @@ pub mod types;
 
 pub use client::LangdbCloudFinetuneClient;
 pub use types::{
-    AutoscalingPolicy, CreateDeploymentRequest, CreateReinforcementFinetuningJobRequest,
-    DeploymentResponse, FinetuningJobResponse, ReinforcementInferenceParameters,
-    ReinforcementJobStatusResponse, ReinforcementTrainingConfig, UploadDatasetResponse,
+    AutoscalingPolicy, CompletionParams, CreateDeploymentRequest, CreateEvaluationRequest,
+    CreateEvaluationResponse, CreateReinforcementFinetuningJobRequest, DatasetAnalyticsResponse,
+    DeploymentResponse, DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse,
+    EvaluationResultResponse, EvaluationSummary, FinetuneEvalQuery, FinetuneEvalResultsResponse,
+    FinetuningJobResponse, ReinforcementInferenceParameters, ReinforcementJobQuery,
+    ReinforcementJobStatusResponse, ReinforcementTrainingConfig, RowEpochResults,
+    UpdateEvaluatorBody, UpdateEvaluatorResponse, UploadDatasetResponse,
     WeightsDownloadUrlResponse,
 };

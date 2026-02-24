@@ -2,15 +2,52 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 
-// Response types
+// =============================================================================
+// Dataset
+// =============================================================================
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UploadDatasetResponse {
-    pub dataset_id: String,
+    pub dataset_id: uuid::Uuid,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DatasetAnalyticsResponse {
+    pub dataset_id: uuid::Uuid,
+    pub analytics: JsonValue,
+    pub quality: JsonValue,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DryRunDatasetAnalyticsRequest {
+    pub rows: Vec<JsonValue>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DryRunDatasetAnalyticsResponse {
+    pub analytics: JsonValue,
+    pub quality: JsonValue,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateEvaluatorBody {
+    pub evaluator: serde_json::Value,
+}
+
+#[derive(Debug, Serialize)]
+pub struct UpdateEvaluatorResponse {
+    pub dataset_id: uuid::Uuid,
+    pub updated: bool,
+}
+
+// =============================================================================
+// Reinforcement Fine-Tuning Jobs
+// =============================================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateReinforcementFinetuningJobRequest {
-    pub dataset: String,
+    #[serde(alias = "dataset")]
+    pub dataset_id: uuid::Uuid,
     pub base_model: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output_model: Option<String>,
@@ -67,21 +104,23 @@ pub struct FinetuningJobResponse {
     pub id: uuid::Uuid,
     pub status: String,
     pub base_model: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub fine_tuned_model: Option<String>,
-    #[serde(default = "default_provider")]
-    pub provider: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub training_config: Option<ReinforcementTrainingConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub suffix: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub error_message: Option<String>,
-    pub training_file_id: String,
+    pub training_file_id: uuid::Uuid,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub validation_file_id: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
-}
-
-fn default_provider() -> String {
-    "langdb".to_string()
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -99,12 +138,26 @@ pub enum FinetuningJobResult {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ReinforcementJobStatusResponse {
-    pub provider_job_id: String,
+    pub provider_job_id: uuid::Uuid,
     pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub fine_tuned_model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub error_message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub request: Option<serde_json::Value>,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct ReinforcementJobQuery {
+    pub limit: Option<u32>,
+    pub after: Option<String>,
+    pub dataset_id: Option<String>,
+}
+
+// =============================================================================
+// Deployments
+// =============================================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateDeploymentRequest {
@@ -135,39 +188,21 @@ pub struct AutoscalingPolicy {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DeploymentResponse {
     pub deployment_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub inference_model_name: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WeightsDownloadUrlResponse {
     pub download_url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub expires_at: Option<String>,
 }
 
-// === Dataset analytics ===
+// =============================================================================
+// Evaluations
+// =============================================================================
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct DatasetAnalyticsResponse {
-    pub dataset_id: uuid::Uuid,
-    pub analytics: JsonValue,
-    pub quality: JsonValue,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct DryRunDatasetAnalyticsRequest {
-    pub rows: Vec<JsonValue>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct DryRunDatasetAnalyticsResponse {
-    pub analytics: JsonValue,
-    pub quality: JsonValue,
-}
-
-// === Evaluation types ===
-
-/// Model completion parameters for evaluation requests.
-/// This mirrors `langdb_cloud_core::types::eval_protocol::CompletionParams`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompletionParams {
     #[serde(default)]
@@ -185,7 +220,6 @@ pub struct CreateEvaluationRequest {
     pub dataset_id: uuid::Uuid,
     #[serde(alias = "model_params")]
     pub rollout_model_params: CompletionParams,
-    // Pagination parameters for partial dataset run
     pub offset: Option<i32>,
     pub limit: Option<i32>,
 }
@@ -206,8 +240,6 @@ pub struct EvaluationSummary {
     pub failed_count: i32,
 }
 
-/// Evaluation result response matching the cloud API shape (epoch-based).
-/// Passed through to the frontend as-is; flattening happens on the FE side.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EvaluationResultResponse {
     pub evaluation_run_id: uuid::Uuid,
@@ -220,26 +252,34 @@ pub struct EvaluationResultResponse {
     pub failed_rows: i32,
     #[serde(default)]
     pub results: Vec<RowEpochResults>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<EvaluationSummary>,
 }
 
-/// Row-level evaluation results grouped by epoch.
-/// Used by both dry-run evaluations and finetune evaluations.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RowEpochResults {
     pub row_index: i32,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub row: Option<JsonValue>,
-    /// epoch key -> array of evaluation results
     #[serde(default)]
     pub epochs: HashMap<String, Vec<JsonValue>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FinetuneEvalResultsResponse {
-    /// One entry per dataset row, keyed by its index.
     pub results: Vec<RowEpochResults>,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct FinetuneEvalQuery {
+    pub row_index: Option<i32>,
+    pub epoch: Option<i32>,
+    pub finetune_job_id: Option<uuid::Uuid>,
+}
+
+// =============================================================================
+// Evaluator Configuration
+// =============================================================================
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "type")]
