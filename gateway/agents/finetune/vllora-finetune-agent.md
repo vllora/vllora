@@ -297,7 +297,7 @@ Returns `{ criteria, script, suggest_only: true }`. Pass the leaf topic names fr
 
 **Step 5: Construct, propose, and save the plan**
 Assemble the plan using:
-- `proposed_topics` from `generate_topics` result `hierarchy`
+- `proposed_topics` — copy directly from `generate_topics` result `proposed_topics` field (already formatted with `source_chunk_refs`)
 - `grader_config.criteria` from `generate_grader` result `criteria`
 - Do NOT include `grader_config.template_preview` — it is generated fresh at execution time
 ```json
@@ -314,7 +314,7 @@ Assemble the plan using:
         "description": "Common openings and principles",
         "target_count": 0,
         "subtopics": [
-          { "name": "Italian Game", "description": "1.e4 e5 2.Nf3 Nc6 3.Bc4 lines", "target_count": 30 },
+          { "name": "Italian Game", "description": "1.e4 e5 2.Nf3 Nc6 3.Bc4 lines", "target_count": 30, "source_chunk_refs": ["src1:chunk3", "src1:chunk7"] },
           { "name": "Sicilian Defense", "description": "1.e4 c5 variations", "target_count": 30 },
           { "name": "Queen's Gambit", "description": "1.d4 d5 2.c4 lines", "target_count": 30 }
         ]
@@ -384,6 +384,7 @@ save_plan({ dataset_id: "..." })
 - `description` (string) — what this topic covers
 - `target_count` (number) — 0 for parent categories, 30 for leaf topics
 - `subtopics` (array, optional) — child topics with same structure
+- `source_chunk_refs` (string[], optional) — knowledge source chunk references from `generate_topics`; copy as-is, do not fabricate
 
 **`grader_config` fields:**
 - `criteria` — array of `{ "name": "...", "description": "..." }` objects
