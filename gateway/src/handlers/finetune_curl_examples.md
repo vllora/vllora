@@ -224,9 +224,9 @@ curl -X POST "${BASE_URL}/finetune/reinforcement-jobs" \
     "output_model": "my-custom-model-v1",
     "display_name": "Customer Support Fine-Tuned Model",
     "training_config": {
-      "learning_rate": 0.0001,
+      "learning_rate": 0.00001,
       "max_context_length": 32768,
-      "lora_rank": 16,
+      "lora_rank": 8,
       "epochs": 2.0,
       "batch_size": 65536,
       "gradient_accumulation_steps": 4,
@@ -317,8 +317,8 @@ JOB_RESPONSE=$(curl -s -X POST "${BASE_URL}/finetune/reinforcement-jobs" \
     \"output_model\": \"my-custom-model-v1\",
     \"display_name\": \"Customer Support Model\",
     \"training_config\": {
-      \"learning_rate\": 0.0001,
-      \"lora_rank\": 16,
+      \"learning_rate\": 0.00001,
+      \"lora_rank\": 8,
       \"epochs\": 2.0
     }
   }")
