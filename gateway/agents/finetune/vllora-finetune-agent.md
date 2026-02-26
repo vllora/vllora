@@ -30,7 +30,8 @@ external = [
   "propose_plan",
   "adjust_plan",
   "save_plan",
-  "execute_plan"
+  "execute_plan",
+  "update_plan_markdown"
 ]
 
 [model_settings]
@@ -450,21 +451,34 @@ User: "Add 3 more topics under Topic A, generate 100 records per new topic"
 ```
 
 **After `save_plan` succeeds: Wait for user approval**
-Once `save_plan` returns `{ success: true }`, the plan is shown in the UI. The user clicks "Approve & Execute" — you do NOT need to call `execute_plan` manually at this point; the UI triggers it. However, if the user explicitly asks you to execute (e.g., "go ahead", "execute it"), call:
-```
-execute_plan({ dataset_id: "..." })
-```
+Once `save_plan` returns `{ success: true }`, the plan is shown in the UI. The user clicks "Approve & Execute". After approval, you receive a message "I approve the plan. Please execute it now."
+
+**Execution flow (agent-driven):**
+After approval, call the individual tools directly (e.g., `apply_topic_hierarchy`, `generate_initial_data`, `configure_grader`, etc.) and after each tool completes, call `update_plan_markdown` to check off the completed step in the checklist.
 
 **DO NOT use ask_follow_up or transfer_to_agent during plan execution** - call the tools directly.
 
-**3-tool sequence summary:**
+**Plan lifecycle summary:**
 ```
 1. propose_plan(dataset_id, plan)   OR   adjust_plan(dataset_id, feedback)
 2. save_plan(dataset_id)
    - If errors: fix plan and retry step 1
    - If success: plan committed, shown to user with diff
-3. User clicks "Approve & Execute" in UI → execute_plan runs automatically
-   OR agent calls execute_plan explicitly when user approves in chat
+3. User clicks "Approve & Execute" in UI
+4. Agent calls tools directly (apply_topic_hierarchy, generate_initial_data, etc.)
+5. After each tool: update_plan_markdown to check off the step
+```
+
+**IMPORTANT: plan_markdown is REQUIRED**
+All plans MUST include `plan_markdown` — the full plan content as markdown. The frontend renders this directly. Include a checklist with `- [ ]` for each execution step. During execution, update the markdown to check off steps using `- [x]`.
+
+**update_plan_markdown example:**
+After `apply_topic_hierarchy` succeeds, call:
+```json
+{
+  "dataset_id": "...",
+  "plan_markdown": "# Customer Support Plan\n\n- [x] Set up training categories\n- [ ] Generate training data\n- [ ] Configure evaluator\n..."
+}
 ```
 
 ### Example: Data Augmentation Plan (no knowledge analysis needed)
@@ -472,17 +486,12 @@ execute_plan({ dataset_id: "..." })
 {
   "dataset_id": "...",
   "plan": {
+    "dataset_name": "Customer Support",
+    "objective": "Add more training examples",
     "title": "Add 50 more training examples",
     "description": "Generate additional records focused on edge cases",
-    "execution_steps": [
-      { "step": "Generate Data", "step_id": "generate", "description": "Generate 50 new records", "estimated_time": "~2 min" },
-      { "step": "Re-upload", "step_id": "upload", "description": "Upload updated dataset", "estimated_time": "~10 sec" },
-      { "step": "Run Evaluation", "step_id": "dryrun", "description": "Re-evaluate with new data", "estimated_time": "~1 min" }
-    ],
-    "steps_to_execute": ["generate", "upload", "dryrun"],
-    "overrides": { "generate": { "count": 50 }, "upload": { "force_reupload": true } },
-    "estimated_records": 50,
-    "estimated_duration": "~3 minutes"
+    "plan_markdown": "# Add 50 More Training Examples\n\n> Generate additional records focused on edge cases\n\n## Steps\n\n- [ ] Generate 50 new records\n- [ ] Re-upload dataset\n- [ ] Run evaluation with new data\n\n## Details\n\nFocusing on edge cases to improve model coverage.",
+    "estimated_records": 50
   }
 }
 
@@ -522,23 +531,22 @@ For each step in the plan, compare what the plan intended vs what actually exist
 - **README**: Auto-generated continuously; never add `readme` to `steps_to_execute`
 - **finetune**: Skip if `training.status` is `running`, `pending`, `queued`, or `completed`. Include if `failed` (retry) or no job exists.
 
-**Step 3: Execute with precise parameters**
+**Step 3: Execute remaining steps directly**
+Call the individual tools for each remaining step. After each tool call, update the plan checklist:
 ```
-execute_plan({
-  dataset_id: "the-actual-id",
-  steps_to_execute: ["generate", "upload", "dryrun"],
-  overrides: {
-    generate: { count: 50 },
-    upload: { force_reupload: true }
-  }
-})
+// Example: generate remaining records
+generate_initial_data({ dataset_id: "...", count: 50 })
+update_plan_markdown({ dataset_id: "...", plan_markdown: "...with - [x] on completed steps..." })
+// Then continue with next steps...
+upload_dataset({ dataset_id: "..." })
+update_plan_markdown({ ... })
 ```
 
 **Step 4: Inform the user**
 Briefly tell the user what you found and what you're resuming:
 > "I see the previous execution was interrupted. Topics and 30 of 80 records were already created. I'll generate the remaining 50 records and continue from there."
 
-**Key principle:** You are the smart one. The execution tool is dumb — it just runs what you tell it. Use `get_dataset_state` to gather facts, then make the decision yourself. Never trust the interrupted execution progress alone — always verify against the actual database state.
+**Key principle:** You are the smart one. Use `get_dataset_state` to gather facts, then call the appropriate tools directly. Never trust the interrupted execution progress alone — always verify against the actual database state.
 
 ## Handling Step Failures (CRITICAL)
 
