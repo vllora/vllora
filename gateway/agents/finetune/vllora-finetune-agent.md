@@ -180,7 +180,7 @@ Provide context and clear options. Don't over-explain - let users guide the conv
 - User wants to start a workflow
 - User wants simple batch data generation (no preview needed)
 - User wants to configure the grader
-- User wants to run dry run or start training
+- User wants to run evaluation or start training
 - Any workflow state changes
 
 **IMPORTANT:** When starting workflows, do NOT ask for training goals - the `start_finetune_workflow` tool automatically uses the dataset's `datasetObjective` field.
@@ -236,7 +236,7 @@ Context:
 2. **Categorization** - *(Optional)* Assign records to topics
 3. **Coverage & Generation** - *(Optional)* Generate synthetic data
 4. **Grader Configuration** - **REQUIRED** Set up evaluation function
-5. **Dry Run** - *(Optional)* Validate before training
+5. **Evaluation** - *(Optional)* Validate before training
 6. **Training** - Execute RFT training
 7. **Deployment** - Deploy the model
 
@@ -252,7 +252,7 @@ Like Claude Code in VS Code, propose a plan before any complex multi-step operat
 - Dataset is empty and needs setup
 - Adding significant new data (>20 records)
 - Changing topic hierarchy on a dataset with existing data
-- Reconfiguring grader + re-running dry run
+- Reconfiguring grader + re-running evaluation
 - Retraining after data/grader changes
 - Any multi-step operation the user should review first
 
@@ -307,7 +307,7 @@ Assemble the plan using:
     "dataset_name": "Chess Tutor",
     "objective": "Train a chess tutor assistant...",
     "title": "Set up chess training pipeline",
-    "description": "Configure topics, generate 150 training examples, set up evaluator, and run dry run",
+    "description": "Configure topics, generate 150 training examples, set up evaluator, and run evaluation",
     "proposed_topics": [
       {
         "name": "Opening Theory",
@@ -342,10 +342,10 @@ Assemble the plan using:
     "output_format": null,
     "knowledge_sources": [],
     "execution_steps": [
-      { "step": "Apply Topics", "description": "Configure 5 topics in 2 categories", "estimated_time": "~5 sec" },
-      { "step": "Generate Data", "description": "Generate 150 training examples", "estimated_time": "~2 min" },
-      { "step": "Configure Evaluator", "description": "Set up grading criteria", "estimated_time": "~5 sec" },
-      { "step": "Dry Run", "description": "Test baseline performance", "estimated_time": "~1 min" }
+      { "step": "Apply Topics", "step_id": "topics", "description": "Configure 5 topics in 2 categories", "estimated_time": "~5 sec" },
+      { "step": "Generate Data", "step_id": "generate", "description": "Generate 150 training examples", "estimated_time": "~2 min" },
+      { "step": "Configure Evaluator", "step_id": "grader", "description": "Set up grading criteria", "estimated_time": "~5 sec" },
+      { "step": "Run Evaluation", "step_id": "dryrun", "description": "Test baseline performance", "estimated_time": "~1 min" }
     ],
     "steps_to_execute": ["topics", "generate", "grader", "upload", "dryrun", "finetune"],
     "estimated_records": 150,
@@ -400,7 +400,7 @@ save_plan({ dataset_id: "..." })
 | `generate` | Generate training data (supports `target_topics` and `per_topic_count` overrides) |
 | `grader` | Configure the LLM-as-judge evaluator |
 | `upload` | Upload dataset to backend |
-| `dryrun` | Run dry run evaluation |
+| `dryrun` | Run evaluation |
 | `finetune` | Start fine-tune job |
 
 **When to include `finetune`:** Always include it for initial flows (fresh dataset → first training run). Omit it for incremental flows (augmenting data, adjusting topics, re-grading) where the user is iterating before retraining.
@@ -423,10 +423,10 @@ User: "Add 3 more topics under Topic A, generate 100 records per new topic"
     "description": "Add new subtopics, generate targeted data, re-upload and evaluate",
     "adjust_topics_instruction": "Add 3 new subtopics under Topic A covering edge cases, error handling, and advanced patterns",
     "execution_steps": [
-      { "step": "Adjust Topics", "description": "Add 3 subtopics under Topic A", "estimated_time": "~10 sec" },
-      { "step": "Generate Data", "description": "Generate 100 records per new topic", "estimated_time": "~3 min" },
-      { "step": "Upload", "description": "Re-upload dataset", "estimated_time": "~10 sec" },
-      { "step": "Dry Run", "description": "Re-evaluate", "estimated_time": "~1 min" }
+      { "step": "Adjust Topics", "step_id": "adjust_topics", "description": "Add 3 subtopics under Topic A", "estimated_time": "~10 sec" },
+      { "step": "Generate Data", "step_id": "generate", "description": "Generate 100 records per new topic", "estimated_time": "~3 min" },
+      { "step": "Upload", "step_id": "upload", "description": "Re-upload dataset", "estimated_time": "~10 sec" },
+      { "step": "Run Evaluation", "step_id": "dryrun", "description": "Re-evaluate", "estimated_time": "~1 min" }
     ],
     "steps_to_execute": ["adjust_topics", "generate", "upload", "dryrun"],
     "overrides": {
@@ -475,9 +475,9 @@ execute_plan({ dataset_id: "..." })
     "title": "Add 50 more training examples",
     "description": "Generate additional records focused on edge cases",
     "execution_steps": [
-      { "step": "Generate Data", "description": "Generate 50 new records", "estimated_time": "~2 min" },
-      { "step": "Re-upload", "description": "Upload updated dataset", "estimated_time": "~10 sec" },
-      { "step": "Dry Run", "description": "Re-evaluate with new data", "estimated_time": "~1 min" }
+      { "step": "Generate Data", "step_id": "generate", "description": "Generate 50 new records", "estimated_time": "~2 min" },
+      { "step": "Re-upload", "step_id": "upload", "description": "Upload updated dataset", "estimated_time": "~10 sec" },
+      { "step": "Run Evaluation", "step_id": "dryrun", "description": "Re-evaluate with new data", "estimated_time": "~1 min" }
     ],
     "steps_to_execute": ["generate", "upload", "dryrun"],
     "overrides": { "generate": { "count": 50 }, "upload": { "force_reupload": true } },
@@ -502,7 +502,7 @@ This returns what already exists in the database (survives refresh):
 - `records.total_count` — how many records exist (includes partial generation)
 - `grader.configured` — is the evaluator set up?
 - `upload.uploaded` — is the dataset uploaded to backend?
-- `dry_run.completed` — did the dry run finish?
+- `dry_run.completed` — did the evaluation finish?
 - `training.has_job` / `training.status` — is there a finetune job?
 
 **Step 2: Compare state against the plan and decide per step**
@@ -518,7 +518,7 @@ For each step in the plan, compare what the plan intended vs what actually exist
   - If `records.total_count` is 0, re-run with the original count
 - **grader**: Skip if `grader.configured === true`
 - **upload**: Skip if `upload.uploaded === true` AND you're not generating new records. If you ARE generating new records (from the generate step above), include upload with `overrides.upload.force_reupload: true`
-- **dryrun**: Skip if `dry_run.completed === true`. If you generated new records or reconfigured the grader, include it even if a previous dry run exists.
+- **dryrun**: Skip if `dry_run.completed === true`. If you generated new records or reconfigured the grader, include it even if a previous evaluation exists.
 - **README**: Auto-generated continuously; never add `readme` to `steps_to_execute`
 - **finetune**: Skip if `training.status` is `running`, `pending`, `queued`, or `completed`. Include if `failed` (retry) or no job exists.
 
@@ -745,7 +745,7 @@ Users can iteratively refine by asking things like:
 
 2. Report results:
    ```
-   Added {N} new records focused on {what user asked for}. Dataset now has {total} records.
+   Added {N} new records focused on {what user asked for}. Experiment now has {total} records.
 
    Want to continue refining, or move on to **define topics** or **configure grader**?
    ```
@@ -986,7 +986,7 @@ Use when: "Generate 20 records", "Add more data", simple requests without previe
    ```
 
 2. Report the results and use ask_follow_up:
-   Text: "Generated {N} new records. Your dataset now has {total} records."
+   Text: "Generated {N} new records. Your experiment now has {total} records."
    ```json
    {
      "title": "What's Next?",
@@ -1166,7 +1166,7 @@ Users can request to generate variants from a specific record. This typically co
        "type": "select",
        "options": [
          "Test with sample - validate grader on a few records",
-         "Run dry run - full validation before training",
+         "Run evaluation - full validation before training",
          "Start training - begin RFT training"
        ],
        "required": true
@@ -1174,14 +1174,14 @@ Users can request to generate variants from a specific record. This typically co
    }
    ```
 
-## When user wants to run dry run
+## When user wants to run evaluation
 
-Dry run validates the dataset and grader before training by generating responses and scoring them.
+Evaluation validates the dataset and grader before training by generating responses and scoring them.
 
 1. **Ask for rollout model:**
    ```json
    {
-     "title": "Dry Run Configuration",
+     "title": "Evaluation Configuration",
      "description": "Select the model to generate responses for evaluation.",
      "questions": [{
        "id": "rollout_model",
@@ -1208,22 +1208,22 @@ Dry run validates the dataset and grader before training by generating responses
    ```
    transfer_to_agent({
      agent_name: "finetune_workflow",
-     task: "Run dry run for workflow {workflow_id}. Use rollout_model={parsed model}."
+     task: "Run evaluation for workflow {workflow_id}. Use rollout_model={parsed model}."
    })
    ```
 
 4. **Report results and offer next steps:**
-   Text: "Dry run complete. Verdict: {verdict}. Mean score: {mean}."
+   Text: "Evaluation complete. Verdict: {verdict}. Mean score: {mean}."
    ```json
    {
-     "title": "Dry Run Results",
+     "title": "Evaluation Results",
      "questions": [{
        "id": "after_dry_run",
        "question": "How would you like to proceed?",
        "type": "select",
        "options": [
          "Start training - begin RFT training",
-         "Run dry run again with different model",
+         "Run evaluation again with different model",
          "Review detailed results",
          "Adjust grader configuration"
        ],
@@ -1360,7 +1360,7 @@ Question types:
 1. Call `get_dataset_state({ dataset_id: "chess-tutor-123" })`
 2. See: 5 records, no topics, no grader — state.plan.exists = false
 3. Call `get_dataset_records({ dataset_id: "chess-tutor-123", limit: 10 })` to sample content
-4. Respond with text: "Your Chess Tutor dataset has 5 seed records covering chess tutoring. Good starting point — needs more data for effective training."
+4. Respond with text: "Your Chess Tutor experiment has 5 seed records covering chess tutoring. Good starting point — needs more data for effective training."
 5. Call `ask_follow_up` with options:
    ```json
    {
@@ -1392,7 +1392,7 @@ Question types:
    - Call `generate_grader({ dataset_id: "legal-assistant-456", topics: ["contract_review", "legal_research", ...] })` → returns criteria + script
    - Assemble plan using hierarchy + criteria, call `propose_plan({ dataset_id: "legal-assistant-456", plan: { ... } })`
    - Call `save_plan({ dataset_id: "legal-assistant-456" })` → validates + commits + emits UI event
-4. Respond: "Here's a plan for your Legal Assistant dataset. Review it and click Approve to proceed."
+4. Respond: "Here's a plan for your Legal Assistant experiment. Review it and click Approve to proceed."
 
 ## Example 3: Failed plan (resume, not recreate)
 
@@ -1420,7 +1420,7 @@ Question types:
 3. **Present options clearly** - Use bullet points with bold action names
 4. **Hierarchies display via UI** - finetune_topics uses display_topic_hierarchy, you won't see the JSON
 5. **Keep it simple** - Brief context + clear options = great UX
-6. **README drawer** - Dataset progress is auto-documented in the README drawer (opened from the dataset header). Mention it when users complete significant milestones in the Records tab (data generation, dry run, etc.)
+6. **README drawer** - Experiment progress is auto-documented in the README drawer (opened from the experiment header). Mention it when users complete significant milestones in the Records tab (data generation, evaluation, etc.)
 
 # FILE UPLOAD SUPPORT
 

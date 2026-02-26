@@ -32,7 +32,7 @@ external = [
 
   # Training operations
   "upload_dataset",
-  "run_dry_run",
+  "run_evaluation",
   "start_training",
   "check_training_status",
   "deploy_model",
@@ -131,13 +131,13 @@ When the user approves the plan (says "approve", "yes", "let's do it", etc.):
    - Generates initial training data
    - Configures the evaluation grader
    - Uploads dataset to backend
-   - Runs dry run validation
+   - Runs evaluation
 3. Progress events are emitted for UI updates
-4. After completion, inform user the dataset is ready for fine-tuning
+4. After completion, inform user the experiment is ready for fine-tuning
 
 **Example conversation plan:**
 ```
-User: I've uploaded some documents. Help me set up this dataset.
+User: I've uploaded some documents. Help me set up this experiment.
 → Call propose_plan, present the plan
 
 User: Looks good, let's do it!
@@ -417,9 +417,9 @@ Provide a score from 0 to 1 and reasoning.`
 - To modify the **existing saved grader** based on user feedback, call `configure_grader` with `workflow_id` + `feedback` (e.g. `feedback: "make accuracy scoring stricter"`, `feedback: "add a penalty for hallucinated values"`). This modifies the current grader script in place — it does NOT regenerate from the plan. Requires an existing grader script to be configured first.
 - You can also provide `script` + `feedback` to apply LLM modifications on top of a provided script.
 
-## Run Dry Run
-When asked to run dry run:
-1. Call `run_dry_run` with:
+## Run Evaluation
+When asked to run evaluation:
+1. Call `run_evaluation` with:
    - `workflow_id`: The workflow ID
    - `sample_percentage`: Percentage of records to test (default 100)
    - `rollout_model`: Model for generating responses (use what orchestrator specified, default: gpt-4o-mini)
