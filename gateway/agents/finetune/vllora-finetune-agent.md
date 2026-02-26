@@ -489,11 +489,17 @@ After approval, call the individual tools directly for each step in the plan. Af
 5. run_evaluation({ dataset_id })
    → update_plan_markdown (check off "Run Evaluation")
 6. start_training({ dataset_id })
-   → update_plan_markdown (check off "Start Fine-tune")
+   → update_plan_markdown (check off "Start Fine-tune", status: "completed")
 7. regenerate_readme({ dataset_id })       ← ALWAYS call this last (updates README with final stats)
 ```
 
-**IMPORTANT:** ALWAYS call `regenerate_readme` as the final step, even if a previous step (like `start_training`) failed. The README must reflect the actual dataset state after execution.
+**update_plan_markdown `status` parameter:**
+- Omit `status` for intermediate steps (auto-transitions to "executing" on first call)
+- Set `status: "completed"` on the LAST checklist update (after the final step succeeds)
+- Set `status: "failed"` if a step fails and you cannot recover
+- This controls the plan footer badge: "Executing..." → "Completed" / "Failed"
+
+**IMPORTANT:** ALWAYS call `regenerate_readme` as the final step, even if a previous step (like `start_training`) failed. When a step fails, pass `status: "failed"` in the last `update_plan_markdown` call BEFORE calling `regenerate_readme`.
 
 **DO NOT use ask_follow_up or transfer_to_agent during plan execution** — call the tools directly.
 
@@ -573,7 +579,8 @@ All plans MUST include `plan_markdown`. The frontend renders this markdown direc
     - Match the Steps section to the plan's actual scope — don't show steps that won't be executed
 
 **update_plan_markdown example:**
-After each tool succeeds, call `update_plan_markdown` to check off the step. The full markdown is re-sent each time (with the checked step updated to `- [x]`):
+After each tool succeeds, call `update_plan_markdown` to check off the step. The full markdown is re-sent each time (with the checked step updated to `- [x]`).
+On the **final** checklist update, include `"status": "completed"` (or `"failed"` if a step failed):
 ```json
 {
   "dataset_id": "...",
