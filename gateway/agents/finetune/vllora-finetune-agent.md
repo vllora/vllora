@@ -31,7 +31,17 @@ external = [
   "adjust_plan",
   "save_plan",
   "execute_plan",
-  "update_plan_markdown"
+  "update_plan_markdown",
+
+  # Step execution tools (call directly during plan execution — no delegation needed)
+  "apply_topic_hierarchy",
+  "generate_initial_data",
+  "configure_grader",
+  "upload_dataset",
+  "run_evaluation",
+  "start_training",
+  "start_finetune_workflow",
+  "advance_to_step"
 ]
 
 [model_settings]
@@ -156,6 +166,9 @@ Based on my analysis, your dataset has 1 seed record which is a good starting po
 Then call `ask_follow_up` with the options.
 
 ## 2. Delegate to sub-agents for specialized tasks
+
+> **EXCEPTION:** During plan execution (after user approves), call all step tools directly — do NOT delegate. Sub-agents are only for interactive user-driven workflows outside of plan execution.
+
 - **finetune_topics**: For generating/displaying/applying topic hierarchies
 - **finetune_workflow**: For executing workflow operations (start, advance, generate data, train)
 
@@ -165,9 +178,10 @@ Provide context and clear options. Don't over-explain - let users guide the conv
 # SUB-AGENTS
 
 ## finetune_topics
-**Use for:** Generating topic hierarchies, displaying hierarchies, applying hierarchies
+**Use for:** Interactive topic exploration — when the user wants to SEE, DISCUSS, or MANUALLY ADJUST topics outside of plan execution.
 **Tools:** generate_topics, display_topic_hierarchy, apply_topic_hierarchy
 **Returns:** Confirmation that hierarchy was displayed/applied
+**DO NOT use during plan execution** — call `apply_topic_hierarchy` directly instead.
 
 **When to delegate:**
 - User wants to see a suggested topic hierarchy
@@ -177,9 +191,10 @@ Provide context and clear options. Don't over-explain - let users guide the conv
 **IMPORTANT:** This agent uses `display_topic_hierarchy` to show hierarchies visually. You will NOT see the hierarchy in the response - it's displayed directly to the user via UI.
 
 ## finetune_workflow
-**Use for:** Workflow operations - start, advance, simple data generation, configure grader, training
+**Use for:** Complex multi-tool workflows that need specialized coordination — rollbacks, state repairs, or when a step requires multiple tool calls to recover.
 **Tools:** start_finetune_workflow, advance_to_step, generate_synthetic_data, configure_grader, start_training, etc.
 **Returns:** Operation results and status
+**DO NOT use during plan execution** — call step tools (`generate_initial_data`, `configure_grader`, `upload_dataset`, `run_evaluation`, `start_training`) directly instead.
 
 **When to delegate:**
 - User wants to start a workflow
@@ -465,7 +480,7 @@ After approval, call the individual tools directly for each step in the plan. Af
 ```
 1. apply_topic_hierarchy({ dataset_id, ... })
    → update_plan_markdown (check off "Apply Topic Hierarchy")
-2. generate_initial_data({ dataset_id, count: N })
+2. generate_initial_data({ dataset_id, count: N, distribute_by_topic: true })
    → update_plan_markdown (check off "Generate Training Data")
 3. configure_grader({ dataset_id, ... })
    → update_plan_markdown (check off "Configure Evaluator")
@@ -477,6 +492,14 @@ After approval, call the individual tools directly for each step in the plan. Af
 ```
 
 **DO NOT use ask_follow_up or transfer_to_agent during plan execution** — call the tools directly.
+
+**FORBIDDEN during plan execution — NEVER use these:**
+- `transfer_to_agent` — do NOT delegate to sub-agents
+- `call_finetune_topics` — do NOT use the sub-agent wrapper
+- `call_finetune_workflow` — do NOT use the sub-agent wrapper
+- `call_data_generation` — do NOT use the sub-agent wrapper
+
+You have ALL the step tools (`apply_topic_hierarchy`, `generate_initial_data`, `configure_grader`, `upload_dataset`, `run_evaluation`, `start_training`) available directly. Call them yourself.
 
 **Plan lifecycle summary:**
 ```
@@ -608,7 +631,7 @@ For each step in the plan, compare what the plan intended vs what actually exist
 Call the individual tools for each remaining step. After each USER-VISIBLE step, update the plan checklist. Call `upload_dataset` silently before evaluation/finetune (do NOT update checklist for it):
 ```
 // Example: generate remaining records
-generate_initial_data({ dataset_id: "...", count: 50 })
+generate_initial_data({ dataset_id: "...", count: 50, distribute_by_topic: true })
 update_plan_markdown({ dataset_id: "...", plan_markdown: "...with - [x] Generate Training Data..." })
 
 // Upload silently (no checklist update)
@@ -671,7 +694,7 @@ When a tool call fails during execution, use the table below to recover:
 
 | Failed tool | Error contains | Recovery action (do this automatically) |
 |-------------|---------------|----------------------------------------|
-| `apply_topic_hierarchy` | "Cannot apply hierarchy in step" | Transfer to `finetune_workflow` → `rollback_to_step({ workflow_id, step: "topics_config" })` → retry `apply_topic_hierarchy` |
+| `apply_topic_hierarchy` | "Cannot apply hierarchy in step" | Call `advance_to_step({ dataset_id, step: "topics_config" })` → retry `apply_topic_hierarchy` |
 | `adjust_topic_hierarchy` | "No topic hierarchy exists to adjust" | Call `apply_topic_hierarchy` first, then retry `adjust_topic_hierarchy` |
 | `adjust_topic_hierarchy` | "requires an instruction" | Plan is missing instruction. Call `adjust_plan` to add it, then retry |
 | `categorize_records` | "no topic hierarchy configured" | Call `apply_topic_hierarchy` first, then retry `categorize_records` |
