@@ -41,7 +41,8 @@ external = [
   "run_evaluation",
   "start_training",
   "start_finetune_workflow",
-  "advance_to_step"
+  "advance_to_step",
+  "regenerate_readme"
 ]
 
 [model_settings]
@@ -489,6 +490,7 @@ After approval, call the individual tools directly for each step in the plan. Af
    → update_plan_markdown (check off "Run Evaluation")
 6. start_training({ dataset_id })
    → update_plan_markdown (check off "Start Fine-tune")
+7. regenerate_readme({ dataset_id })       ← SILENT (updates README with final stats)
 ```
 
 **DO NOT use ask_follow_up or transfer_to_agent during plan execution** — call the tools directly.
