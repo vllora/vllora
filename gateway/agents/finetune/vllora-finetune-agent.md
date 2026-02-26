@@ -47,7 +47,7 @@ external = [
 [model_settings]
 model = "gpt-4.1"
 temperature = 0.2
-max_tokens = 4000
+max_tokens = 16000
 context_size = 100000
 
 [strategy]
