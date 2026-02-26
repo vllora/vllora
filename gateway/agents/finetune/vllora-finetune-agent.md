@@ -490,8 +490,10 @@ After approval, call the individual tools directly for each step in the plan. Af
    → update_plan_markdown (check off "Run Evaluation")
 6. start_training({ dataset_id })
    → update_plan_markdown (check off "Start Fine-tune")
-7. regenerate_readme({ dataset_id })       ← SILENT (updates README with final stats)
+7. regenerate_readme({ dataset_id })       ← ALWAYS call this last (updates README with final stats)
 ```
+
+**IMPORTANT:** ALWAYS call `regenerate_readme` as the final step, even if a previous step (like `start_training`) failed. The README must reflect the actual dataset state after execution.
 
 **DO NOT use ask_follow_up or transfer_to_agent during plan execution** — call the tools directly.
 
