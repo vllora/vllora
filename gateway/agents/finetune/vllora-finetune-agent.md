@@ -493,13 +493,14 @@ After approval, call the individual tools directly for each step in the plan. Af
 7. regenerate_readme({ dataset_id })       ← ALWAYS call this last (updates README with final stats)
 ```
 
-**update_plan_markdown `status` parameter:**
+**update_plan_markdown `status` and `error_message` parameters:**
 - Omit `status` for intermediate steps (auto-transitions to "executing" on first call)
 - Set `status: "completed"` on the LAST checklist update (after the final step succeeds)
 - Set `status: "failed"` if a step fails and you cannot recover
-- This controls the plan footer badge: "Executing..." → "Completed" / "Failed"
+- When setting `status: "failed"`, ALWAYS include `error_message` with a short explanation (e.g., `"Training failed: maximum finetune jobs reached"`)
+- This controls the plan footer badge: "Executing..." → "Completed" / "Failed: <error_message>"
 
-**IMPORTANT:** ALWAYS call `regenerate_readme` as the final step, even if a previous step (like `start_training`) failed. When a step fails, pass `status: "failed"` in the last `update_plan_markdown` call BEFORE calling `regenerate_readme`.
+**IMPORTANT:** ALWAYS call `regenerate_readme` as the final step, even if a previous step (like `start_training`) failed. When a step fails, pass `status: "failed"` and `error_message` in the last `update_plan_markdown` call BEFORE calling `regenerate_readme`.
 
 **DO NOT use ask_follow_up or transfer_to_agent during plan execution** — call the tools directly.
 
