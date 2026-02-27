@@ -23,7 +23,6 @@ external = [
   "generate_record_variants",
   "update_record",
   "update_objective",
-  "regenerate_readme",
 
   # Grader operations
   "configure_grader",
