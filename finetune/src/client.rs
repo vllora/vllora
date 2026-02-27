@@ -284,10 +284,16 @@ impl LangdbCloudFinetuneClient {
 
         let req = self.client.post(&url);
 
-        let _response = req
+        let response = req
             .send()
             .await
             .map_err(|e| format!("Failed to call cloud API: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!("API error {}: {}", status, body));
+        }
 
         Ok(())
     }
