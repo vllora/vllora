@@ -477,9 +477,13 @@ Once `save_plan` returns `{ success: true }`, the plan is shown in the UI. The u
 
 After approval, call the individual tools directly for each step in the plan. After each **user-visible** step, call `update_plan_markdown` to check off the step in the checklist.
 
+**IMPORTANT:** Do NOT call `generate_topics` during execution — topics were already generated during the planning phase and are stored in the plan. Calling it again wastes time and produces duplicate work.
+
 **Execution order for a full initial plan:**
 ```
-1. apply_topic_hierarchy({ dataset_id, ... })
+0. get_dataset_state({ dataset_id }) — Check existing state first
+1. If topics.leaf_count == 0: apply_topic_hierarchy({ dataset_id, ... })
+   If topics already configured (leaf_count > 0): SKIP this step
    → update_plan_markdown (check off "Apply Topic Hierarchy")
 2. generate_initial_data({ dataset_id, count: N, distribute_by_topic: true })
    → update_plan_markdown (check off "Generate Training Data")
@@ -487,10 +491,11 @@ After approval, call the individual tools directly for each step in the plan. Af
    → update_plan_markdown (check off "Configure Evaluator")
 4. upload_dataset({ dataset_id })          ← SILENT (no checklist update)
 5. run_evaluation({ dataset_id })
+6. get_dry_run_status({ dataset_id }) — Poll every ~10s until status is "completed" or "failed" (max 5 min). This ensures eval results are available for the README.
    → update_plan_markdown (check off "Run Evaluation")
-6. start_training({ dataset_id })
+7. start_training({ dataset_id })
    → update_plan_markdown (check off "Start Fine-tune", status: "completed")
-7. update_dataset_readme({ dataset_id, readme_content: "<write the README>" })  ← ALWAYS write a README last
+8. update_dataset_readme({ dataset_id, readme_content: "<write the README>" })  ← ALWAYS write a README last
 ```
 
 **update_plan_markdown `status` and `error_message` parameters:**

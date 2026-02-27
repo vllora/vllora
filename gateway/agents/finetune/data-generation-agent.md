@@ -23,8 +23,7 @@ external = [
   # Dataset tools
   "get_dataset_state",
   "get_dataset_records",
-  "analyze_coverage",
-  "regenerate_readme"
+  "analyze_coverage"
 ]
 
 [model_settings]
