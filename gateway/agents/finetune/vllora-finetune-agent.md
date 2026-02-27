@@ -42,7 +42,7 @@ external = [
   "start_training",
   "start_finetune_workflow",
   "advance_to_step",
-  "regenerate_readme"
+  "update_dataset_readme"
 ]
 
 [model_settings]
@@ -430,7 +430,7 @@ save_plan({ dataset_id: "..." })
 - `adjust_topics` requires BOTH `plan.adjust_topics_instruction` AND `overrides.adjust_topics.instruction` set to the same natural language string. Never include `adjust_topics` in `steps_to_execute` without these fields — the plan will fail validation on approval.
 - `adjust_topics` is only for modifying an existing topic hierarchy. For fresh datasets (no topics yet), always use `topics` instead.
 - `topics` requires `plan.proposed_topics` to be populated. For datasets with an existing hierarchy, always use `adjust_topics` instead.
-- README is auto-generated continuously as records/workflow state change. Do NOT include `readme` in `steps_to_execute`.
+- README is written by the agent via `update_dataset_readme` at the end of execution. Do NOT include `readme` in `steps_to_execute`.
 
 ### Dynamic Plan Examples
 
@@ -490,7 +490,7 @@ After approval, call the individual tools directly for each step in the plan. Af
    → update_plan_markdown (check off "Run Evaluation")
 6. start_training({ dataset_id })
    → update_plan_markdown (check off "Start Fine-tune", status: "completed")
-7. regenerate_readme({ dataset_id })       ← ALWAYS call this last (updates README with final stats)
+7. update_dataset_readme({ dataset_id, readme_content: "<write the README>" })  ← ALWAYS write a README last
 ```
 
 **update_plan_markdown `status` and `error_message` parameters:**
@@ -500,7 +500,33 @@ After approval, call the individual tools directly for each step in the plan. Af
 - When setting `status: "failed"`, ALWAYS include `error_message` with a short explanation (e.g., `"Training failed: maximum finetune jobs reached"`)
 - This controls the plan footer badge: "Executing..." → "Completed" / "Failed: <error_message>"
 
-**IMPORTANT:** ALWAYS call `regenerate_readme` as the final step, even if a previous step (like `start_training`) failed. When a step fails, pass `status: "failed"` and `error_message` in the last `update_plan_markdown` call BEFORE calling `regenerate_readme`.
+**IMPORTANT:** ALWAYS call `update_dataset_readme` as the final step, even if a previous step (like `start_training`) failed. When a step fails, pass `status: "failed"` and `error_message` in the last `update_plan_markdown` call BEFORE writing the README.
+
+### README Generation (ALWAYS the last step)
+
+After completing execution, write a dataset README and save via `update_dataset_readme`.
+You already have context from the tools you called. If asked to update the README outside
+of execution, call `get_dataset_state` first.
+
+**Write a narrative README** — not a data dump. Cover:
+1. Title + what this model will do (objective)
+2. Summary paragraph: approach, methodology, dataset composition
+3. Topic coverage: what each category/topic trains, how many records per topic
+4. Quality insights: interpret eval scores in context (don't just list numbers)
+5. Data provenance: knowledge sources used, generation strategy
+6. Current status and any recommendations
+
+Use markdown formatting (headers, tables where appropriate, blockquotes).
+Frame numbers in context: "92% pass rate (avg score 0.85) indicates strong baseline quality"
+rather than just "pass rate: 92%, avg score: 0.85".
+
+**Example call:**
+```
+update_dataset_readme({
+  dataset_id: "...",
+  readme_content: "# Personal Finance Advisor Dataset\n\n> Training data for a personal finance advisor that helps users create budgets...\n\n## Overview\n\nThis dataset contains 120 conversation examples..."
+})
+```
 
 **DO NOT use ask_follow_up or transfer_to_agent during plan execution** — call the tools directly.
 
@@ -636,7 +662,7 @@ For each step in the plan, compare what the plan intended vs what actually exist
 - **grader**: Skip if `grader.configured === true`
 - **upload**: Skip if `upload.uploaded === true` AND you're not generating new records. If you ARE generating new records (from the generate step above), include upload with `overrides.upload.force_reupload: true`
 - **dryrun**: Skip if `dry_run.completed === true`. If you generated new records or reconfigured the grader, include it even if a previous evaluation exists.
-- **README**: Auto-generated continuously; never add `readme` to `steps_to_execute`
+- **README**: Written by the agent via `update_dataset_readme` at the end of execution; never add `readme` to `steps_to_execute`
 - **finetune**: Skip if `training.status` is `running`, `pending`, `queued`, or `completed`. Include if `failed` (retry) or no job exists.
 
 **Step 3: Execute remaining steps directly**
