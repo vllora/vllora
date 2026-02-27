@@ -750,12 +750,28 @@ impl From<ChatCompletionMessageWithFinishReason>
 }
 
 impl ChatCompletionMessage {
+    pub fn empty(role: String) -> Self {
+        Self {
+            role,
+            content: None,
+            tool_calls: None,
+            refusal: None,
+            tool_call_id: None,
+            cache_control: None,
+        }
+    }
+
     pub fn new_text(role: String, content: String) -> Self {
         Self {
             role,
             content: Some(ChatCompletionContent::Text(content)),
             ..Default::default()
         }
+    }
+
+    pub fn with_tool_calls(mut self, tool_calls: Vec<ToolCall>) -> Self {
+        self.tool_calls = Some(tool_calls);
+        self
     }
 }
 

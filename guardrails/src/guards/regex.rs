@@ -38,6 +38,7 @@ impl Evaluator for RegexEvaluator {
 
             let compiled_patterns = compiled_patterns?;
 
+            let text = text.ok_or("No text in message")?;
             // Check pattern matches based on match_type
             let (passed, result_text) = match match_type {
                 "all" => {
