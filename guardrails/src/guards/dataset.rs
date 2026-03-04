@@ -20,6 +20,7 @@ impl Evaluator for DatasetEvaluator {
         } = &guard
         {
             let text = self.messages_to_text(messages)?;
+            let text = text.ok_or("No text in message")?;
             match dataset {
                 vllora_core::types::guardrails::DatasetSource::Examples { examples } => {
                     // Simple similarity check (in a real implementation, this would use embeddings)

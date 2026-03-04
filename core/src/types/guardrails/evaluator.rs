@@ -11,15 +11,16 @@ pub trait Evaluator: Send + Sync {
         guard: &Guard,
     ) -> Result<GuardResult, String>;
 
-    fn messages_to_text(&self, messages: &[ChatCompletionMessage]) -> Result<String, String> {
+    fn messages_to_text(
+        &self,
+        messages: &[ChatCompletionMessage],
+    ) -> Result<Option<String>, String> {
         let text = messages
             .last()
             .ok_or("No message in request")?
             .content
             .as_ref()
-            .ok_or("No content in message")?
-            .as_string()
-            .ok_or("No text in content")?;
+            .and_then(|c| c.as_string());
 
         Ok(text)
     }

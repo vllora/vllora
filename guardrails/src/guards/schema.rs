@@ -18,6 +18,7 @@ impl Evaluator for SchemaEvaluator {
             ..
         } = &guard
         {
+            let text = text.ok_or("No text in message")?;
             // Try to parse the text as JSON
             let json_result = serde_json::from_str::<Value>(&text);
 

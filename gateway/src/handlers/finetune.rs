@@ -238,7 +238,28 @@ pub async fn update_dataset_evaluator(
     let dataset_id_str = dataset_id.into_inner();
     let request_body = request.into_inner();
 
-    let evaluator_str = serde_json::to_string(&request_body.evaluator)
+    // Add __inline_script: prefix if missing (matching the upload path behavior)
+    let mut evaluator_value = serde_json::to_value(&request_body.evaluator)
+        .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid evaluator JSON: {}", e)))?;
+
+    if let Some(obj) = evaluator_value.as_object_mut() {
+        if obj.get("type").and_then(|t| t.as_str()) == Some("js") {
+            if let Some(config) = obj.get_mut("config").and_then(|c| c.as_object_mut()) {
+                if let Some(script_val) = config.get_mut("script") {
+                    if let Some(script_str) = script_val.as_str() {
+                        if !script_str.starts_with("__inline_script:") {
+                            *script_val = serde_json::Value::String(format!(
+                                "__inline_script:{}",
+                                script_str
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let evaluator_str = serde_json::to_string(&evaluator_value)
         .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid evaluator JSON: {}", e)))?;
 
     serde_json::from_str::<Evaluator<ChatCompletionMessage>>(&evaluator_str).map_err(|e| {
