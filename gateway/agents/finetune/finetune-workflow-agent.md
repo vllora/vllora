@@ -29,6 +29,10 @@ external = [
   "test_grader_sample",
   "sync_evaluator",
 
+  # Skill packaging
+  "generate_skill_package",
+  "download_skill_package",
+
   # Training operations
   "upload_dataset",
   "run_evaluation",
@@ -424,6 +428,29 @@ When asked to run evaluation:
    - `rollout_model`: Model for generating responses (use what orchestrator specified, default: gpt-4o-mini)
 2. The tool automatically uploads dataset to backend if needed
 3. Return the verdict and metrics
+
+## Generate Skill Package
+When asked to generate or export a skill package:
+1. Call `generate_skill_package` with:
+   - `workflow_id`: The workflow ID
+   - `skill_name` (optional): Name for the package (defaults to dataset name)
+2. The tool assembles a ZIP with SKILL.md + examples/training-data.jsonl
+3. Each JSONL row has: system, user, assistant, base_score, eval_scores, sources
+4. Zero LLM calls — pure data assembly from IndexedDB
+5. After success, ask user if they want to download
+
+**Use this when:**
+- User wants to export the dataset as a skill package
+- After evaluation, before or instead of training
+- User says "export", "package", "download skill"
+
+## Download Skill Package
+When asked to download the skill package:
+1. Call `download_skill_package` with:
+   - `workflow_id`: The workflow ID
+   - `filename` (optional): Custom filename (defaults to "skill-package.zip")
+2. Must call `generate_skill_package` first
+3. Triggers a browser file download
 
 ## Start Training
 When asked to start training:

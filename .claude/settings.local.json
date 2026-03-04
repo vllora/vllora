@@ -2,7 +2,28 @@
   "permissions": {
     "allow": [
       "Bash(npx tsc:*)",
-      "Bash(cargo check:*)"
+      "Bash(cargo check:*)",
+      "Bash(cargo build:*)",
+      "Bash(./scripts/sync-distrijs.sh:*)",
+      "Bash(wc:*)",
+      "Bash(npm run build:*)",
+      "Bash(ls:*)",
+      "Bash(npm run type-check:*)",
+      "Bash(pnpm exec tsc:*)",
+      "Bash(git show:*)",
+      "Bash(find:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(python3:*)",
+      "WebFetch(domain:platform.openai.com)",
+      "WebFetch(domain:cookbook.openai.com)",
+      "Bash(xargs sed -i:*)",
+      "Bash(echo:*)",
+      "Bash(pnpm add:*)",
+      "Bash(yarn add:*)",
+      "Bash(pnpm run check:*)",
+      "Bash(pnpm run build:*)",
+      "Bash(git diff:*)",
+      "Bash(pnpm run type-check:*)"
     ]
   }
 }
