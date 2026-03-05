@@ -1,0 +1,20 @@
+{
+  // Limit rust-analyzer memory usage
+  "rust-analyzer.cargo.buildScripts.enable": false,
+  "rust-analyzer.procMacro.enable": false,
+
+  // Only check the default member (gateway) instead of the entire workspace
+  "rust-analyzer.check.command": "clippy",
+  "rust-analyzer.check.extraArgs": ["-p", "gateway"],
+
+  // Reduce indexing overhead
+  "rust-analyzer.cachePriming.enable": false,
+  "rust-analyzer.highlightRelated.references.enable": false,
+  "rust-analyzer.numThreads": 2,
+
+  // Limit memory for the server
+  "rust-analyzer.server.extraEnv": {
+    "CHALK_OVERFLOW_DEPTH": "3",
+    "CHALK_SOLVER_MAX_SIZE": "5"
+  }
+}

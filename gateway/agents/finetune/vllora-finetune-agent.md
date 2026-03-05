@@ -423,7 +423,7 @@ Assemble the plan using:
     "objective": "Train a chess tutor assistant...",
     "title": "Set up chess training pipeline",
     "description": "Configure topics, generate 150 training examples, set up evaluator, and run evaluation",
-    "plan_markdown": "# Set Up Chess Training Pipeline\n\n> Configure topics, generate 150 training examples, set up evaluator, and run evaluation.\n\n| | |\n|---|---|\n| **Topics** | 5 topics across 2 categories |\n| **Records** | 150 training examples |\n| **Evaluation** | 2 quality criteria |\n| **Est. Time** | ~3-5 minutes |\n\n## Steps\n\n- [ ] **Apply Topic Hierarchy** — Configure 5 topics in 2 categories (~5 sec)\n- [ ] **Generate Training Data** — Generate 150 training examples (~2 min)\n- [ ] **Configure Evaluator** — Set up 2 quality scoring criteria (~5 sec)\n- [ ] **Run Evaluation** — Test baseline performance (~1 min)\n- [ ] **Start Fine-tune** — Begin model training (~3-5 min)\n\n## Topics\n\n| Category | Topic | Records | Focus |\n|----------|-------|---------|-------|\n| **Opening Theory** | Italian Game | 30 | 1.e4 e5 2.Nf3 Nc6 3.Bc4 lines |\n| | Sicilian Defense | 30 | 1.e4 c5 variations |\n| | Queen's Gambit | 30 | 1.d4 d5 2.c4 lines |\n| **Tactics** | Pins & Forks | 30 | Double attack patterns |\n| | Discovered Attacks | 30 | Revealed attack tactics |\n\n## Evaluation Criteria\n\n- **Chess Accuracy** — Moves and analysis are correct per engine evaluation\n- **Teaching Quality** — Explanations are clear and instructive for the target skill level",
+    "plan_markdown": "# Set Up Chess Training Pipeline\n\n> Configure topics, generate 150 training examples, set up evaluator, and run evaluation.\n\n| | |\n|---|---|\n| **Topics** | 5 topics across 2 categories |\n| **Records** | 150 training examples |\n| **Evaluation** | 2 quality criteria |\n| **Est. Time** | ~8-15 minutes |\n\n## Steps\n\n- [ ] **Apply Topic Hierarchy** — Configure 5 topics in 2 categories (~5 sec)\n- [ ] **Generate Training Data** — Generate 150 training examples (~6-12 min)\n- [ ] **Configure Evaluator** — Set up 2 quality scoring criteria (~5 sec)\n- [ ] **Run Evaluation** — Test baseline performance (~1-3 min)\n- [ ] **Start Fine-tune** — Begin model training (~3-5 min)\n\n## Topics\n\n| Category | Topic | Records | Focus |\n|----------|-------|---------|-------|\n| **Opening Theory** | Italian Game | 30 | 1.e4 e5 2.Nf3 Nc6 3.Bc4 lines |\n| | Sicilian Defense | 30 | 1.e4 c5 variations |\n| | Queen's Gambit | 30 | 1.d4 d5 2.c4 lines |\n| **Tactics** | Pins & Forks | 30 | Double attack patterns |\n| | Discovered Attacks | 30 | Revealed attack tactics |\n\n## Evaluation Criteria\n\n- **Chess Accuracy** — Moves and analysis are correct per engine evaluation\n- **Teaching Quality** — Explanations are clear and instructive for the target skill level",
     "proposed_topics": [
       {
         "name": "Opening Theory",
@@ -459,7 +459,7 @@ Assemble the plan using:
     "knowledge_sources": [],
     "steps_to_execute": ["topics", "generate", "grader", "upload", "dryrun", "finetune"],
     "estimated_records": 150,
-    "estimated_duration": "~3-5 minutes"
+    "estimated_duration": "~8-15 minutes"
   }
 }
 ```
@@ -578,7 +578,7 @@ User: "Add 3 more topics under Topic A, generate 100 records per new topic"
       "upload": { "force_reupload": true }
     },
     "estimated_records": 300,
-    "estimated_duration": "~4 minutes"
+    "estimated_duration": "~6-10 minutes"
   }
 }
 ```
@@ -630,6 +630,13 @@ After approval, call the individual tools directly for each step in the plan. Af
 - Set `status: "failed"` if a step fails and you cannot recover
 - When setting `status: "failed"`, ALWAYS include `error_message` with a short explanation (e.g., `"Training failed: maximum finetune jobs reached"`)
 - This controls the plan footer badge: "Executing..." → "Completed" / "Failed: <error_message>"
+
+**CRITICAL — Handling Step Failures:**
+When a step fails during execution:
+1. **NEVER call `propose_plan` or `save_plan` to report failures** — this overwrites the entire plan and the user loses the original topics, steps, and criteria
+2. Instead, call `update_plan_markdown` to mark the failed step with `[!]` prefix and append a `## Status` section at the bottom with failure details
+3. Keep ALL existing plan content intact (topics table, evaluation criteria, other steps)
+4. Example: If "Generate Training Data" fails, update the markdown to change `- [ ] **Generate Training Data**` to `- [!] **Generate Training Data** — Failed: timeout after 10 minutes` and append status details at the bottom
 
 **IMPORTANT:** ALWAYS call `update_dataset_readme` as the final step, even if a previous step (like `start_training`) failed. When a step fails, pass `status: "failed"` and `error_message` in the last `update_plan_markdown` call BEFORE writing the README.
 
@@ -699,9 +706,9 @@ All plans MUST include `plan_markdown`. The frontend renders this markdown direc
 ## Steps
 
 - [ ] **Apply Topic Hierarchy** — Configure {N} topics in {M} categories (~5 sec)
-- [ ] **Generate Training Data** — Generate {N} training examples (~2 min)
+- [ ] **Generate Training Data** — Generate {N} training examples (~1-2 min per 25 records)
 - [ ] **Configure Evaluator** — Set up {N} quality scoring criteria (~5 sec)
-- [ ] **Run Evaluation** — Test baseline performance (~1 min)
+- [ ] **Run Evaluation** — Test baseline performance (~1-3 min)
 - [ ] **Generate Skill Package** — Package training data for Claude Code (~5 sec)
 - [ ] **Start Fine-tune** — Begin model training (~3-5 min)
 
@@ -743,7 +750,7 @@ On the **final** checklist update, include `"status": "completed"` (or `"failed"
 ```json
 {
   "dataset_id": "...",
-  "plan_markdown": "# Chess Training Pipeline\n\n> Configure topics, generate 150 examples, evaluate, and fine-tune.\n\n| | |\n|---|---|\n| **Topics** | 5 topics across 2 categories |\n| **Records** | 150 training examples |\n| **Evaluation** | 2 quality criteria |\n| **Est. Time** | ~3-5 minutes |\n\n## Steps\n\n- [x] **Apply Topic Hierarchy** — Configured 5 topics in 2 categories ✓\n- [ ] **Generate Training Data** — Generate 150 training examples (~2 min)\n- [ ] **Configure Evaluator** — Set up 2 quality scoring criteria (~5 sec)\n- [ ] **Run Evaluation** — Test baseline performance (~1 min)\n- [ ] **Start Fine-tune** — Begin model training (~3-5 min)\n\n## Topics\n\n| Category | Topic | Records | Focus |\n|----------|-------|---------|-------|\n| **Opening Theory** | Italian Game | 30 | 1.e4 e5 2.Nf3 Nc6 3.Bc4 lines |\n| | Sicilian Defense | 30 | 1.e4 c5 variations |\n| | Queen's Gambit | 30 | 1.d4 d5 2.c4 lines |\n| **Tactics** | Pins & Forks | 30 | Double attack patterns |\n| | Discovered Attacks | 30 | Revealed attack tactics |\n\n## Evaluation Criteria\n\n- **Chess Accuracy** — Moves and analysis are correct per engine evaluation\n- **Teaching Quality** — Explanations are clear and instructive for the target skill level"
+  "plan_markdown": "# Chess Training Pipeline\n\n> Configure topics, generate 150 examples, evaluate, and fine-tune.\n\n| | |\n|---|---|\n| **Topics** | 5 topics across 2 categories |\n| **Records** | 150 training examples |\n| **Evaluation** | 2 quality criteria |\n| **Est. Time** | ~8-15 minutes |\n\n## Steps\n\n- [x] **Apply Topic Hierarchy** — Configured 5 topics in 2 categories ✓\n- [ ] **Generate Training Data** — Generate 150 training examples (~6-12 min)\n- [ ] **Configure Evaluator** — Set up 2 quality scoring criteria (~5 sec)\n- [ ] **Run Evaluation** — Test baseline performance (~1 min)\n- [ ] **Start Fine-tune** — Begin model training (~3-5 min)\n\n## Topics\n\n| Category | Topic | Records | Focus |\n|----------|-------|---------|-------|\n| **Opening Theory** | Italian Game | 30 | 1.e4 e5 2.Nf3 Nc6 3.Bc4 lines |\n| | Sicilian Defense | 30 | 1.e4 c5 variations |\n| | Queen's Gambit | 30 | 1.d4 d5 2.c4 lines |\n| **Tactics** | Pins & Forks | 30 | Double attack patterns |\n| | Discovered Attacks | 30 | Revealed attack tactics |\n\n## Evaluation Criteria\n\n- **Chess Accuracy** — Moves and analysis are correct per engine evaluation\n- **Teaching Quality** — Explanations are clear and instructive for the target skill level"
 }
 ```
 
@@ -756,7 +763,7 @@ On the **final** checklist update, include `"status": "completed"` (or `"failed"
     "objective": "Add more training examples",
     "title": "Add 50 more training examples",
     "description": "Generate additional records focused on edge cases",
-    "plan_markdown": "# Add 50 More Training Examples\n\n> Generate additional records focused on edge cases to improve coverage.\n\n| | |\n|---|---|\n| **Records** | 50 new training examples |\n| **Est. Time** | ~2-3 minutes |\n\n## Steps\n\n- [ ] **Generate Training Data** — Generate 50 new records targeting edge cases (~2 min)\n- [ ] **Run Evaluation** — Re-evaluate with new data (~1 min)",
+    "plan_markdown": "# Add 50 More Training Examples\n\n> Generate additional records focused on edge cases to improve coverage.\n\n| | |\n|---|---|\n| **Records** | 50 new training examples |\n| **Est. Time** | ~3-6 minutes |\n\n## Steps\n\n- [ ] **Generate Training Data** — Generate 50 new records targeting edge cases (~2-4 min)\n- [ ] **Run Evaluation** — Re-evaluate with new data (~1-2 min)",
     "estimated_records": 50
   }
 }
