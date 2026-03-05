@@ -23,7 +23,7 @@ async-openai = { package = "async-openai-compat", version = "0.30.6", features =
   "finetuning-types",
   "_api"
 ] }
-clust = { version = "0.9.11", package = "langdb_clust" }
+clust = { version = "0.9.12", package = "langdb_clust" }
 
 thiserror = "2.0.17"
 serde_json = "1.0"
@@ -74,4 +74,4 @@ uuid = { version = "1.19.0", features = ["serde", "v4"] }
 dashmap = "6.1.0"
 bytemuck = { version = "1.24", features = ["derive"] }
 futures = "0.3.30"
-schemars = "1.0.4"
+schemars = "1.2.1"
