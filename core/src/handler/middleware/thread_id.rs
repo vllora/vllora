@@ -56,14 +56,12 @@ where
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
         if req.path().contains("chat/completion") || req.path().contains("responses") {
-            let thread_id = match req.headers().get("X-Thread-Id") {
-                Some(value) => match value.to_str() {
-                    Ok(v) => match uuid::Uuid::parse_str(v) {
-                        Ok(v) => v.to_string(),
-                        Err(_) => Uuid::new_v4().to_string(),
-                    },
-                    Err(_) => Uuid::new_v4().to_string(),
-                },
+            let thread_id = match req
+                .headers()
+                .get("X-Thread-Id")
+                .and_then(|v| v.to_str().ok())
+            {
+                Some(value) => value.to_string(),
                 None => Uuid::new_v4().to_string(),
             };
 
