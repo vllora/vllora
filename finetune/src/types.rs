@@ -46,6 +46,8 @@ pub struct EvaluatorVersionResponse {
     pub dataset_id: uuid::Uuid,
     pub version: i32,
     pub config: JsonValue,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diff: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
