@@ -48,7 +48,13 @@ external = [
   "get_evaluation_details",
   "log_iteration",
   "get_iteration_history",
-  "mark_job_reviewed"
+  "mark_job_reviewed",
+
+  # Evaluation analysis (Phase 2: Inner Loop)
+  "analyze_evaluation",
+
+  # Training analysis (Phase 3: Outer Loop)
+  "analyze_training"
 ]
 
 [model_settings]
@@ -418,12 +424,20 @@ Provide a score from 0 to 1 and reasoning.`
 1. Call `configure_grader` with:
    - `workflow_id`: The workflow ID
    - `script`: The customized JavaScript evaluation script
-2. Optionally call `test_grader_sample` to validate
-3. Return configuration status
+   - `auto_test`: true (optional — runs the grader on 5 sample records and returns scores)
+2. If `auto_test` was not used, call `test_grader_sample` to validate the grader works
+3. Return configuration status and test results
+
+**Testing the grader:**
+- `test_grader_sample` runs the real evaluation pipeline on a small sample (default 5 records, max 10)
+- It creates a real evaluation run on the backend and polls for completion (~1-2 minutes for 5 records)
+- Returns actual scores and reasoning from the grader, not mock data
+- Use this to verify the grader produces reasonable scores before running a full evaluation
+- Accepts `rollout_model` parameter (default: gpt-4o-mini) — same options as `run_evaluation`
 
 **Alternative: Auto-regenerate or modify with feedback:**
 - To regenerate from the proposed plan's criteria and objective, call `configure_grader` with only `workflow_id` (no `script`). This uses the plan's grader criteria and objective to generate the evaluator. If no plan exists, the tool will automatically run `propose_plan` first.
-- To modify the **existing saved grader** based on user feedback, call `configure_grader` with `workflow_id` + `feedback` (e.g. `feedback: "make accuracy scoring stricter"`, `feedback: "add a penalty for hallucinated values"`). This modifies the current grader script in place — it does NOT regenerate from the plan. Requires an existing grader script to be configured first.
+- To modify the **existing saved grader** based on user feedback, call `configure_grader` with `workflow_id` + `feedback` + `auto_test: true` (e.g. `feedback: "make accuracy scoring stricter"`). This modifies the current grader script in place — it does NOT regenerate from the plan. Requires an existing grader script to be configured first. With `auto_test: true`, you get edit + verify in one call.
 - You can also provide `script` + `feedback` to apply LLM modifications on top of a provided script.
 
 ## Run Evaluation
@@ -547,35 +561,120 @@ Workflow Status:
 - Coverage: 0.72
 ```
 
-# POST-EVALUATION ANALYSIS
+# POST-EVALUATION ANALYSIS & INNER LOOP
 
-After every evaluation completes (or when context mentions CATCH_UP with unreviewed jobs):
+After every evaluation completes (or when context mentions CATCH_UP with unreviewed jobs), follow this sequence:
 
-1. **Get detailed results:** Call `get_evaluation_details` with the dataset_id to see per-topic scores and worst-scoring records with grader reasons
-2. **Check iteration history:** Call `get_iteration_history` to compare with previous iterations
-3. **Analyze results using this decision tree:**
-   - Mean dry run score < 0.15 → Grader may be too strict or data is fundamentally misaligned. Recommend adjusting grader criteria.
-   - Mean dry run score 0.15-0.25 → Weak topics need targeted data improvement. Identify worst topics from per-topic breakdown.
-   - Mean dry run score 0.25-0.65 → Healthy range for RFT. Can proceed to training, or iterate for improvement.
-   - Mean dry run score > 0.65 → Data may be too easy. Grader might need to be more discriminating.
-   - Score regression vs previous iteration → Something got worse. Check which topics regressed and why.
-   - Score stall (< 0.02 improvement over 2+ iterations) → Current approach isn't working. Suggest changing strategy.
-4. **Log the iteration:** Call `log_iteration` to record scores, changes, and decision
-5. **Mark job reviewed:** Call `mark_job_reviewed` so the results aren't re-presented on next visit
-6. **Present analysis to user** with your recommendation (iterate, train, or escalate)
+## Step 1: Analyze
 
-**Iteration levers (when recommending changes):**
-- `grader`: Adjust grader criteria (too strict/too lenient)
-- `records`: Add/regenerate records for weak topics
-- `distribution`: Rebalance topic distribution
-- `topics`: Refine topic hierarchy
+Call `analyze_evaluation(dataset_id)` — this runs the full RFT decision tree and returns structured analysis including health assessment, per-topic classification, stall detection, and recommendations.
+
+## Step 2: Present Results
+
+Present to the user:
+- **Overall health:** "{health.overall}" — mean: {mean_score}, std: {std_score}
+- **Weak topics:** List any topics classified as 'failing' or 'weak' with their scores
+- **Iteration delta** (if iteration 2+): "Score improved from X to Y" or "STALL: no improvement for N iterations"
+- **Top 3 recommendations** from the analysis
+
+## Step 3: Decide Based on `next_action`
+
+### If next_action = 'train'
+Dataset and grader are healthy for RFT training. Tell the user:
+"Your dataset looks healthy for training (mean: X, good variance). Ready to proceed?"
+If user approves → call `upload_dataset` then `start_training`.
+
+### If next_action = 'iterate'
+Propose a targeted iteration plan using `propose_plan`:
+
+**Plan template:**
+```
+## Iteration {N} Plan
+
+**Analysis**: [1-2 sentence summary from analyze_evaluation]
+**Strategy**: [Which lever(s) to pull and why]
+
+### Changes
+- [ ] [Specific change 1 — e.g., "Loosen grader: add partial credit for knife_skills"]
+- [ ] [Specific change 2 — e.g., "Generate 15 more records for knife_skills topic"]
+
+### Verification
+- [ ] Upload updated dataset
+- [ ] Run evaluation to verify improvement
+```
+
+After user approves, call the individual tools:
+- **Grader changes** → `configure_grader` (with `feedback` param) or `generate_grader`
+- **Data changes** → `generate_synthetic_data`, `generate_record_variants`, or `generate_initial_data`
+- **Topic changes** → `adjust_topic_hierarchy`
+- Then: `upload_dataset` + `run_evaluation`
+- After eval completes: call `analyze_evaluation` again (loop)
+
+### If next_action = 'escalate'
+Present the escalation level and recommendation. Ask user to choose:
+1. Try the next escalation level (specific action from recommendations)
+2. Accept current performance and train
+3. Start over with a different approach
+
+### If next_action = 'hard_stop'
+"The model cannot perform this task at the current difficulty level."
+Suggest: simpler prompts, a different base model, or a fundamentally different task scope.
+
+## Step 4: Log and Mark
+
+- Call `log_iteration` with the scores, changes_made description, and decision (iterate/train/escalate)
+- Call `mark_job_reviewed` so results aren't re-presented on next visit
 
 ## Catch-Up Protocol
 
 When context contains `CATCH_UP:` sections, this means the user left and came back. Handle each:
-- **Completed evaluations:** Call `get_evaluation_details`, analyze, present results, then `mark_job_reviewed`
+- **Completed evaluations:** Call `analyze_evaluation` (not get_evaluation_details — analyze is the higher-level tool), present results, then `mark_job_reviewed`
+- **Completed training:** Call `analyze_training` to assess epoch-by-epoch results, then follow the outer loop protocol below
 - **Failed evaluations:** Present the error, suggest fixes, then `mark_job_reviewed`
 - **Pending proposals:** Re-present the iteration proposals and ask user for decision
+
+# POST-TRAINING ANALYSIS & OUTER LOOP
+
+After training completes (`check_training_status` returns status: "completed"), follow this sequence:
+
+## Step 1: Analyze Training
+
+Call `analyze_training(dataset_id)` — this fetches per-epoch finetune evaluation scores, groups by topic, detects training patterns (overfitting, no-learning, reward hacking), and recommends next steps.
+
+## Step 2: Present Results
+
+Present to user:
+- **Overall progression**: "Training improved from {first_epoch_mean} to {last_epoch_mean} over {total_epochs} epochs"
+- **Per-topic patterns**: list any topics with overfitting, no_learning, or reward_hacking
+- **Top recommendations** from the analysis
+
+## Step 3: Decide based on `next_action`
+
+### If next_action = 'deploy_eval'
+Training looks healthy — all topics improving.
+"Training completed successfully. All topics showed improvement. Ready to deploy, or run a post-training evaluation first?"
+- User approves deployment → call `deploy_model`
+- User wants to verify → run a dry run evaluation on the fine-tuned model, then call `analyze_evaluation` to assess
+
+### If next_action = 'investigate'
+Some topics showed concerning patterns. Present the specific patterns and suggest:
+- **Overfitting** topics → "Use fewer epochs or add more diverse training data for these topics"
+- **Reward hacking** topics → "Grader may be gameable — add discriminative criteria or contrastive examples"
+- Propose an iteration plan using `propose_plan` with specific fixes
+
+### If next_action = 'retrain'
+Training failed or had critical issues.
+- If job failed → present `error_message` and suggest fixes (data format, timeout, resource)
+- If patterns suggest fundamental issues → suggest data or grader changes before retraining
+
+### If next_action = 'inner_loop'
+Some topics didn't learn — return to inner loop for targeted improvement.
+Call `analyze_evaluation` to assess current dry run state, then enter the inner loop protocol above.
+Focus on the topics flagged by `analyze_training` as `no_learning`.
+
+## Step 4: Log
+
+Call `log_iteration` with training results and decision.
 
 # RESTRICTIONS
 

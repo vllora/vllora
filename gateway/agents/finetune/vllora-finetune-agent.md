@@ -45,7 +45,11 @@ external = [
   "start_training",
   "start_finetune_workflow",
   "advance_to_step",
-  "update_dataset_readme"
+  "update_dataset_readme",
+
+  # Analysis tools (call directly — no delegation needed)
+  "analyze_evaluation",
+  "analyze_training"
 ]
 
 [model_settings]
@@ -599,7 +603,7 @@ Once `save_plan` returns `{ success: true }`, the plan is shown in the UI. The u
 
 After approval, call the individual tools directly for each step in the plan. After each **user-visible** step, call `update_plan_markdown` to check off the step in the checklist.
 
-**IMPORTANT:** Do NOT call `generate_topics` during execution — topics were already generated during the planning phase and are stored in the plan. Calling it again wastes time and produces duplicate work.
+**CRITICAL:** NEVER call `generate_topics` or `generate_grader` during execution — these are PLANNING-ONLY tools. Topics and grader criteria were already generated during the planning phase and are stored in the plan. Calling them again wastes 10-15 seconds and produces duplicate work. Use `apply_topic_hierarchy` (not `generate_topics`) to apply topics during execution.
 
 **Execution order for a full initial plan:**
 ```
@@ -613,16 +617,22 @@ After approval, call the individual tools directly for each step in the plan. Af
    → update_plan_markdown (check off "Configure Evaluator")
 4. upload_dataset({ dataset_id })          ← SILENT (no checklist update)
 5. run_evaluation({ dataset_id })
-6. get_dry_run_status({ dataset_id }) — Poll every ~10s until status is "completed" or "failed" (max 5 min). This ensures eval results are available for the README.
    → update_plan_markdown (check off "Run Evaluation")
-7. generate_skill_package({ workflow_id })  ← Assembles ZIP in memory (no LLM calls, ~1 sec)
+   NOTE: Do NOT poll/wait for eval to complete — it runs in the background. Continue immediately.
+6. generate_skill_package({ workflow_id })  ← Assembles ZIP in memory (no LLM calls, ~1 sec)
    download_skill_package({ workflow_id })  ← Triggers browser download
    → update_plan_markdown (check off "Generate Skill Package")
    NOTE: Non-fatal — if it fails, continue to training
-8. start_training({ dataset_id })
+7. start_training({ dataset_id })
    → update_plan_markdown (check off "Start Fine-tune", status: "completed")
-9. update_dataset_readme({ dataset_id, readme_content: "<write the README>" })  ← ALWAYS write a README last
+8. update_dataset_readme({ dataset_id, readme_content: "<write the README>" })  ← ALWAYS write a README last
 ```
+
+**Post-execution analysis (REACTIVE, not during plan execution):**
+After plan execution completes, evaluation and training run in the background. When the user returns or starts a new conversation, call `get_dataset_state` to check for completed jobs, then:
+- **Completed evaluation:** Call `analyze_evaluation({ dataset_id })` to present health assessment, per-topic scores, and recommendations
+- **Completed training:** Call `analyze_training({ dataset_id })` to present epoch-by-epoch results and recommendations
+These are catch-up tools — NEVER block plan execution waiting for eval/training to finish.
 
 **update_plan_markdown `status` and `error_message` parameters:**
 - Omit `status` for intermediate steps (auto-transitions to "executing" on first call)
@@ -669,12 +679,14 @@ update_dataset_readme({
 **DO NOT use ask_follow_up or transfer_to_agent during plan execution** — call the tools directly.
 
 **FORBIDDEN during plan execution — NEVER use these:**
+- `generate_topics` — topics were ALREADY generated during planning, use `apply_topic_hierarchy` instead
+- `generate_grader` — grader criteria were ALREADY generated during planning, use `configure_grader` instead
 - `transfer_to_agent` — do NOT delegate to sub-agents
 - `call_finetune_topics` — do NOT use the sub-agent wrapper
 - `call_finetune_workflow` — do NOT use the sub-agent wrapper
 - `call_data_generation` — do NOT use the sub-agent wrapper
 
-You have ALL the step tools (`apply_topic_hierarchy`, `generate_initial_data`, `configure_grader`, `upload_dataset`, `run_evaluation`, `generate_skill_package`, `download_skill_package`, `start_training`) available directly. Call them yourself.
+You have ALL the step tools (`apply_topic_hierarchy`, `generate_initial_data`, `configure_grader`, `upload_dataset`, `run_evaluation`, `analyze_evaluation`, `generate_skill_package`, `download_skill_package`, `start_training`, `analyze_training`) available directly. Call them yourself.
 
 **Plan lifecycle summary:**
 ```
@@ -814,7 +826,7 @@ update_plan_markdown({ dataset_id: "...", plan_markdown: "...with - [x] Generate
 // Upload silently (no checklist update)
 upload_dataset({ dataset_id: "..." })
 
-// Then evaluation
+// Then evaluation (fire-and-forget — don't wait for completion)
 run_evaluation({ dataset_id: "..." })
 update_plan_markdown({ dataset_id: "...", plan_markdown: "...with - [x] Run Evaluation..." })
 
@@ -1516,25 +1528,15 @@ Evaluation validates the dataset and grader before training by generating respon
    })
    ```
 
-4. **Report results and offer next steps:**
-   Text: "Evaluation complete. Verdict: {verdict}. Mean score: {mean}."
-   ```json
-   {
-     "title": "Evaluation Results",
-     "questions": [{
-       "id": "after_dry_run",
-       "question": "How would you like to proceed?",
-       "type": "select",
-       "options": [
-         "Start training - begin RFT training",
-         "Run evaluation again with different model",
-         "Review detailed results",
-         "Adjust grader configuration"
-       ],
-       "required": true
-     }]
-   }
+4. **After evaluation completes, delegate to finetune_workflow for analysis:**
+   The workflow agent handles the full inner loop (analyze → recommend → iterate/train).
    ```
+   transfer_to_agent({
+     agent_name: "finetune_workflow",
+     task: "Evaluation completed for dataset {dataset_id}. Analyze results using analyze_evaluation and present recommendations to the user."
+   })
+   ```
+   The workflow agent will call `analyze_evaluation`, present the health assessment to the user, and recommend whether to iterate (with a targeted plan), train, or escalate.
 
 ## When user wants to train
 
@@ -1629,6 +1631,16 @@ Training requires minimal configuration. By default, only the base model is requ
 
 5. Report training job status:
    Text: "Training job started! The model is now fine-tuning. You can monitor progress in the Jobs tab and review examples in the Records tab."
+
+6. **After training completes, delegate to finetune_workflow for analysis:**
+   The workflow agent handles the full outer loop (analyze training → detect patterns → recommend deploy/investigate/retrain).
+   ```
+   transfer_to_agent({
+     agent_name: "finetune_workflow",
+     task: "Training completed for dataset {dataset_id}. Call analyze_training to assess epoch-by-epoch results and present recommendations to the user."
+   })
+   ```
+   The workflow agent will call `analyze_training`, present per-topic progression patterns, and recommend whether to deploy, investigate (overfitting/reward hacking), retrain, or return to the inner loop.
 
 # ask_follow_up SCHEMA
 
