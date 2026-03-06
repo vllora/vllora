@@ -294,6 +294,25 @@ where
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(bound(deserialize = "T: serde::de::DeserializeOwned"))]
+pub struct EvaluatorWithVersion<T>
+where
+    T: serde::Serialize + serde::de::DeserializeOwned + std::fmt::Debug + Clone,
+{
+    pub evaluator: Evaluator<T>,
+    pub version: i32,
+}
+
+impl<T> EvaluatorWithVersion<T>
+where
+    T: serde::Serialize + serde::de::DeserializeOwned + std::fmt::Debug + Clone,
+{
+    pub fn new(evaluator: Evaluator<T>, version: i32) -> Self {
+        Self { evaluator, version }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(bound(deserialize = "T: serde::de::DeserializeOwned"))]
 pub struct LlmAsJudgeConfig<T>
 where
     T: serde::Serialize + serde::de::DeserializeOwned + std::fmt::Debug + Clone,
