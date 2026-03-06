@@ -395,6 +395,10 @@ impl ApiServer {
                                 web::get().to(finetune::get_finetune_evaluations),
                             )
                             .route(
+                                "/{dataset_id}/evaluator/versions",
+                                web::get().to(finetune::get_dataset_evaluator_versions),
+                            )
+                            .route(
                                 "/{dataset_id}/evaluator",
                                 web::patch().to(finetune::update_dataset_evaluator),
                             ),

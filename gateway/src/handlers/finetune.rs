@@ -226,8 +226,33 @@ pub async fn get_finetune_evaluations(
 }
 
 // ============================================================================
-// Dataset Evaluator Update Handler
+// Dataset Evaluator Handlers
 // ============================================================================
+
+pub async fn get_dataset_evaluator_versions(
+    dataset_id: web::Path<String>,
+    project: web::ReqData<vllora_core::types::metadata::project::Project>,
+    key_storage: web::Data<Box<dyn KeyStorage>>,
+) -> Result<HttpResponse> {
+    let dataset_id_str = dataset_id.into_inner();
+
+    let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
+    let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
+    })?;
+
+    let response = client
+        .get_dataset_evaluator_versions(&dataset_id_str)
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!(
+                "Failed to get evaluator versions: {}",
+                e
+            ))
+        })?;
+
+    Ok(HttpResponse::Ok().json(response))
+}
 
 pub async fn update_dataset_evaluator(
     dataset_id: web::Path<String>,

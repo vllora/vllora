@@ -40,6 +40,15 @@ pub struct UpdateEvaluatorResponse {
     pub updated: bool,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EvaluatorVersionResponse {
+    pub id: uuid::Uuid,
+    pub dataset_id: uuid::Uuid,
+    pub version: i32,
+    pub config: JsonValue,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
 // =============================================================================
 // Reinforcement Fine-Tuning Jobs
 // =============================================================================
@@ -290,6 +299,25 @@ where
 {
     LlmAsJudge { config: LlmAsJudgeConfig<T> },
     Js { config: JsConfig },
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(bound(deserialize = "T: serde::de::DeserializeOwned"))]
+pub struct EvaluatorWithVersion<T>
+where
+    T: serde::Serialize + serde::de::DeserializeOwned + std::fmt::Debug + Clone,
+{
+    pub evaluator: Evaluator<T>,
+    pub version: i32,
+}
+
+impl<T> EvaluatorWithVersion<T>
+where
+    T: serde::Serialize + serde::de::DeserializeOwned + std::fmt::Debug + Clone,
+{
+    pub fn new(evaluator: Evaluator<T>, version: i32) -> Self {
+        Self { evaluator, version }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
