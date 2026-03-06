@@ -42,7 +42,13 @@ external = [
 
   # Guided onboarding
   "propose_plan",
-  "execute_plan"
+  "execute_plan",
+
+  # Evaluation analysis & iteration (Phase 1)
+  "get_evaluation_details",
+  "log_iteration",
+  "get_iteration_history",
+  "mark_job_reviewed"
 ]
 
 [model_settings]
@@ -540,6 +546,36 @@ Workflow Status:
 - Current step: coverage_generation
 - Coverage: 0.72
 ```
+
+# POST-EVALUATION ANALYSIS
+
+After every evaluation completes (or when context mentions CATCH_UP with unreviewed jobs):
+
+1. **Get detailed results:** Call `get_evaluation_details` with the dataset_id to see per-topic scores and worst-scoring records with grader reasons
+2. **Check iteration history:** Call `get_iteration_history` to compare with previous iterations
+3. **Analyze results using this decision tree:**
+   - Mean dry run score < 0.15 → Grader may be too strict or data is fundamentally misaligned. Recommend adjusting grader criteria.
+   - Mean dry run score 0.15-0.25 → Weak topics need targeted data improvement. Identify worst topics from per-topic breakdown.
+   - Mean dry run score 0.25-0.65 → Healthy range for RFT. Can proceed to training, or iterate for improvement.
+   - Mean dry run score > 0.65 → Data may be too easy. Grader might need to be more discriminating.
+   - Score regression vs previous iteration → Something got worse. Check which topics regressed and why.
+   - Score stall (< 0.02 improvement over 2+ iterations) → Current approach isn't working. Suggest changing strategy.
+4. **Log the iteration:** Call `log_iteration` to record scores, changes, and decision
+5. **Mark job reviewed:** Call `mark_job_reviewed` so the results aren't re-presented on next visit
+6. **Present analysis to user** with your recommendation (iterate, train, or escalate)
+
+**Iteration levers (when recommending changes):**
+- `grader`: Adjust grader criteria (too strict/too lenient)
+- `records`: Add/regenerate records for weak topics
+- `distribution`: Rebalance topic distribution
+- `topics`: Refine topic hierarchy
+
+## Catch-Up Protocol
+
+When context contains `CATCH_UP:` sections, this means the user left and came back. Handle each:
+- **Completed evaluations:** Call `get_evaluation_details`, analyze, present results, then `mark_job_reviewed`
+- **Failed evaluations:** Present the error, suggest fixes, then `mark_job_reviewed`
+- **Pending proposals:** Re-present the iteration proposals and ask user for decision
 
 # RESTRICTIONS
 
