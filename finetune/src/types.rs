@@ -40,6 +40,15 @@ pub struct UpdateEvaluatorResponse {
     pub updated: bool,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EvaluatorVersionResponse {
+    pub id: uuid::Uuid,
+    pub dataset_id: uuid::Uuid,
+    pub version: i32,
+    pub config: JsonValue,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
 // =============================================================================
 // Reinforcement Fine-Tuning Jobs
 // =============================================================================

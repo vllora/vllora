@@ -2,8 +2,9 @@ use crate::types::{
     CreateDeploymentRequest, CreateEvaluationRequest, CreateEvaluationResponse,
     CreateReinforcementFinetuningJobRequest, DatasetAnalyticsResponse, DeploymentResponse,
     DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse, EvaluationResultResponse,
-    FinetuneEvalResultsResponse, FinetuningJobResponse, FinetuningJobResult,
-    ReinforcementJobStatusResponse, UploadDatasetResponse, WeightsDownloadUrlResponse,
+    EvaluatorVersionResponse, FinetuneEvalResultsResponse, FinetuningJobResponse,
+    FinetuningJobResult, ReinforcementJobStatusResponse, UploadDatasetResponse,
+    WeightsDownloadUrlResponse,
 };
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 
@@ -93,6 +94,37 @@ impl LangdbCloudFinetuneClient {
         }
 
         let body: UploadDatasetResponse = response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+        Ok(body)
+    }
+
+    /// List all evaluator versions for a dataset (newest to oldest)
+    pub async fn get_dataset_evaluator_versions(
+        &self,
+        dataset_id: &str,
+    ) -> Result<Vec<EvaluatorVersionResponse>, String> {
+        let url = format!(
+            "{}/finetune/datasets/{}/evaluator/versions",
+            self.api_url, dataset_id
+        );
+
+        let req = self.client.get(&url);
+
+        let response = req
+            .send()
+            .await
+            .map_err(|e| format!("Failed to call cloud API: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!("API error {}: {}", status, body));
+        }
+
+        let body: Vec<EvaluatorVersionResponse> = response
             .json()
             .await
             .map_err(|e| format!("Failed to parse response: {}", e))?;
