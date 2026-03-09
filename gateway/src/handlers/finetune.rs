@@ -21,8 +21,8 @@ use vllora_core::GatewayApiError;
 use vllora_finetune::types::{
     CreateEvaluationRequest, DatasetAnalyticsResponse, DryRunDatasetAnalyticsRequest,
     DryRunDatasetAnalyticsResponse, EvaluationResultResponse, Evaluator,
-    FinetuneEvalResultsResponse, ReinforcementJobQuery, ReinforcementTrainingConfig,
-    UpdateEvaluatorBody, UpdateEvaluatorResponse,
+    FinetuneEvalResultsResponse, ReinforcementJobMetricsResponse, ReinforcementJobQuery,
+    ReinforcementTrainingConfig, UpdateEvaluatorBody, UpdateEvaluatorResponse,
 };
 use vllora_finetune::{
     CreateDeploymentRequest, CreateReinforcementFinetuningJobRequest, LangdbCloudFinetuneClient,
@@ -602,6 +602,31 @@ pub async fn get_reinforcement_job_status(
         .await
         .map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!("Failed to get job status: {}", e))
+        })?;
+
+    Ok(HttpResponse::Ok().json(response))
+}
+
+pub async fn get_reinforcement_job_metrics(
+    job_id: web::Path<String>,
+    project: web::ReqData<vllora_core::types::metadata::project::Project>,
+    key_storage: web::Data<Box<dyn KeyStorage>>,
+) -> Result<HttpResponse> {
+    let job_id_str = job_id.into_inner();
+
+    let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
+    let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
+    })?;
+
+    let response: ReinforcementJobMetricsResponse = client
+        .get_reinforcement_job_metrics(&job_id_str)
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!(
+                "Failed to get reinforcement job metrics: {}",
+                e
+            ))
         })?;
 
     Ok(HttpResponse::Ok().json(response))
