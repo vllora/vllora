@@ -46,6 +46,8 @@ pub struct EvaluatorVersionResponse {
     pub dataset_id: uuid::Uuid,
     pub version: i32,
     pub config: JsonValue,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diff: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -57,6 +59,8 @@ pub struct EvaluatorVersionResponse {
 pub struct CreateReinforcementFinetuningJobRequest {
     #[serde(alias = "dataset")]
     pub dataset_id: uuid::Uuid,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evaluator_version: Option<i32>,
     pub base_model: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output_model: Option<String>,

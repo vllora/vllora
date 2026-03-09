@@ -38,6 +38,7 @@ pub struct LocalFinetuningJobResponse {
     pub id: String,
     pub provider_job_id: String,
     pub dataset_id: String,
+    pub evaluator_version: Option<i32>,
     pub status: String,
     pub base_model: String,
     pub fine_tuned_model: Option<String>,
@@ -554,6 +555,7 @@ pub async fn create_reinforcement_job(
         cloud_response.id.to_string(),
         request_body.base_model.clone(),
     )
+    .with_evaluator_version(request_body.evaluator_version)
     .with_fine_tuned_model(cloud_response.fine_tuned_model.clone())
     .with_training_file_id(Some(request_body.dataset_id.to_string()))
     .with_validation_file_id(request_body.evaluation_dataset.clone())
@@ -629,6 +631,7 @@ pub async fn list_reinforcement_jobs(
             id: job.id,
             provider_job_id: job.provider_job_id,
             dataset_id: job.dataset_id,
+            evaluator_version: job.evaluator_version,
             status: job.state,
             base_model: job.base_model,
             fine_tuned_model: job.fine_tuned_model,
