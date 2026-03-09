@@ -149,6 +149,7 @@ diesel::table! {
         id -> Text,
         project_id -> Text,
         dataset_id -> Text,
+        evaluator_version -> Nullable<Integer>,
         state -> Text,
         provider -> Text,
         provider_job_id -> Text,

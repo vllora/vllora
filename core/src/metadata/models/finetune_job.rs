@@ -50,6 +50,7 @@ pub struct DbFinetuneJob {
     pub id: String,
     pub project_id: String,
     pub dataset_id: String,
+    pub evaluator_version: Option<i32>,
     pub state: String, // Stored as lowercase string: "pending", "running", etc.
     pub provider: String,
     pub provider_job_id: String,
@@ -82,6 +83,7 @@ pub struct DbNewFinetuneJob {
     pub id: Option<String>,
     pub project_id: String,
     pub dataset_id: String,
+    pub evaluator_version: Option<i32>,
     pub state: String,
     pub provider: String,
     pub provider_job_id: String,
@@ -105,6 +107,7 @@ impl DbNewFinetuneJob {
             id: None, // Will use default UUID generation
             project_id,
             dataset_id,
+            evaluator_version: None,
             state: "pending".to_string(),
             provider,
             provider_job_id,
@@ -142,6 +145,11 @@ impl DbNewFinetuneJob {
 
     pub fn with_validation_file_id(mut self, validation_file_id: Option<String>) -> Self {
         self.validation_file_id = validation_file_id;
+        self
+    }
+
+    pub fn with_evaluator_version(mut self, evaluator_version: Option<i32>) -> Self {
+        self.evaluator_version = evaluator_version;
         self
     }
 }
