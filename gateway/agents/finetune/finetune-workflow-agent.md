@@ -27,6 +27,7 @@ external = [
   # Grader operations
   "configure_grader",
   "test_grader_sample",
+  "check_viability",
   "sync_evaluator",
 
   # Skill packaging
@@ -434,6 +435,13 @@ Provide a score from 0 to 1 and reasoning.`
 - Returns actual scores and reasoning from the grader, not mock data
 - Use this to verify the grader produces reasonable scores before running a full evaluation
 - Accepts `rollout_model` parameter (default: gpt-4o-mini) — same options as `run_evaluation`
+
+**Viability pre-check:**
+- After configuring the grader, consider calling `check_viability` to test whether the base model can produce ANY meaningful output
+- This catches fundamentally impossible tasks early (e.g., task too hard for the model, grader too strict)
+- Returns a verdict: `viable` (proceed), `marginal` (consider changes), or `not_viable` (task too hard)
+- Uses the same evaluation pipeline as `test_grader_sample` (takes ~1-2 minutes)
+- If verdict is `not_viable`, suggest the user: simplify prompts, use a stronger base model, or relax grader criteria
 
 **Alternative: Auto-regenerate or modify with feedback:**
 - To regenerate from the proposed plan's criteria and objective, call `configure_grader` with only `workflow_id` (no `script`). This uses the plan's grader criteria and objective to generate the evaluator. If no plan exists, the tool will automatically run `propose_plan` first.
