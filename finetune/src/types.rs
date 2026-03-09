@@ -158,7 +158,26 @@ pub struct ReinforcementJobStatusResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_message: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub metrics: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub request: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReinforcementJobMetricPoint {
+    pub metrics: serde_json::Value,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReinforcementJobMetricsResponse {
+    pub provider_job_id: uuid::Uuid,
+    pub metrics: Vec<ReinforcementJobMetricPoint>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReportReinforcementJobMetricsRequest {
+    pub metrics: serde_json::Value,
 }
 
 #[derive(Debug, Deserialize)]

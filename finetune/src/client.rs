@@ -3,8 +3,8 @@ use crate::types::{
     CreateReinforcementFinetuningJobRequest, DatasetAnalyticsResponse, DeploymentResponse,
     DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse, EvaluationResultResponse,
     EvaluatorVersionResponse, FinetuneEvalResultsResponse, FinetuningJobResponse,
-    FinetuningJobResult, ReinforcementJobStatusResponse, UploadDatasetResponse,
-    WeightsDownloadUrlResponse,
+    FinetuningJobResult, ReinforcementJobMetricsResponse, ReinforcementJobStatusResponse,
+    UploadDatasetResponse, WeightsDownloadUrlResponse,
 };
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 
@@ -344,6 +344,37 @@ impl LangdbCloudFinetuneClient {
             .map_err(|e| format!("Failed to call cloud API: {}", e))?;
 
         Ok(())
+    }
+
+    /// Get reinforcement fine-tuning metrics for a job
+    pub async fn get_reinforcement_job_metrics(
+        &self,
+        job_id: &str,
+    ) -> Result<ReinforcementJobMetricsResponse, String> {
+        let url = format!(
+            "{}/finetune/reinforcement-jobs/{}/metrics",
+            self.api_url, job_id
+        );
+
+        let req = self.client.get(&url);
+
+        let response = req
+            .send()
+            .await
+            .map_err(|e| format!("Failed to call cloud API: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!("API error {}: {}", status, body));
+        }
+
+        let body: ReinforcementJobMetricsResponse = response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+        Ok(body)
     }
 
     /// List reinforcement fine-tuning jobs
