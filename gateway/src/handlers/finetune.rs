@@ -56,6 +56,7 @@ pub struct LocalFinetuningJobResponse {
 /// Response type for get_reinforcement_job_status from local SQLite DB.
 #[derive(Debug, Serialize)]
 pub struct LocalReinforcementJobStatusResponse {
+    pub job_id: uuid::Uuid,
     pub provider_job_id: String,
     pub status: String,
     pub fine_tuned_model: Option<String>,
@@ -64,8 +65,8 @@ pub struct LocalReinforcementJobStatusResponse {
 
 #[derive(Debug, Deserialize)]
 pub struct JobRequestPath {
-    pub workflow_id: String,
-    pub job_id: String,
+    pub workflow_id: uuid::Uuid,
+    pub job_id: uuid::Uuid,
 }
 
 pub async fn get_langdb_api_key(
@@ -573,7 +574,6 @@ pub async fn create_reinforcement_job(
 
 pub async fn get_reinforcement_job_status(
     path: web::Path<JobRequestPath>,
-    _query: web::Query<ReinforcementJobQuery>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
     db_pool: web::Data<DbPool>,
@@ -583,10 +583,11 @@ pub async fn get_reinforcement_job_status(
     let finetune_job_service = FinetuneJobService::new(db_pool.get_ref().clone());
 
     if let Ok(Some(db_job)) =
-        finetune_job_service.get_by_provider_job_id(&path.job_id, &project.id.to_string())
+        finetune_job_service.get_by_id(&path.job_id.to_string(), &project.id.to_string())
     {
         return Ok(
             HttpResponse::Ok().json(LocalReinforcementJobStatusResponse {
+                job_id: path.job_id,
                 provider_job_id: db_job.provider_job_id,
                 status: db_job.state,
                 fine_tuned_model: db_job.fine_tuned_model,
@@ -601,7 +602,7 @@ pub async fn get_reinforcement_job_status(
     })?;
 
     let response = client
-        .get_reinforcement_job_status(&path.job_id)
+        .get_reinforcement_job_status(&path.job_id.to_string())
         .await
         .map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!("Failed to get job status: {}", e))
