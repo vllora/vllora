@@ -165,6 +165,17 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    workflows (id) {
+        id -> Text,
+        name -> Text,
+        objective -> Text,
+        created_at -> Text,
+        updated_at -> Text,
+        deleted_at -> Nullable<Text>,
+    }
+}
+
 diesel::joinable!(provider_credentials -> projects (project_id));
 diesel::joinable!(finetune_jobs -> projects (project_id));
 
@@ -177,4 +188,5 @@ diesel::allow_tables_to_appear_in_same_query!(
     providers,
     sessions,
     traces,
+    workflows,
 );

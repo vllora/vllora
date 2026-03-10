@@ -8,3 +8,4 @@ pub mod provider_credential;
 pub mod run;
 pub mod session;
 pub mod trace;
+pub mod workflow;

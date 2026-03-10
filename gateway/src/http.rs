@@ -3,7 +3,7 @@ use crate::config::Config;
 use crate::cost::GatewayCostCalculator;
 use crate::finetune_state_tracker::FinetuneJobStateTracker;
 use crate::guardrails::GuardrailsService;
-use crate::handlers::{agents, debug, finetune, models, projects, session, threads};
+use crate::handlers::{agents, debug, finetune, models, projects, session, threads, workflows};
 use crate::metrics_writer::SqliteMetricsWriterAdapter;
 use crate::middleware::lucy_project::LucyProjectMiddleware;
 use crate::middleware::project::ProjectMiddleware;
@@ -379,6 +379,13 @@ impl ApiServer {
             )
             .service(
                 web::scope("/finetune")
+                    .service(
+                        web::scope("/workflows")
+                            .route("", web::get().to(workflows::list_workflows))
+                            .route("", web::post().to(workflows::create_workflow))
+                            .route("/{id}", web::put().to(workflows::update_workflow))
+                            .route("/{id}", web::delete().to(workflows::soft_delete_workflow)),
+                    )
                     .service(
                         web::scope("/datasets")
                             .route("", web::post().to(finetune::upload_dataset))
