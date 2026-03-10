@@ -77,3 +77,124 @@ pub async fn soft_delete_workflow(
         "deleted": true
     })))
 }
+
+fn placeholder(endpoint: &str, method: &str, workspace_id: &str) -> HttpResponse {
+    HttpResponse::NotImplemented().json(serde_json::json!({
+        "message": "Placeholder endpoint not implemented yet",
+        "endpoint": endpoint,
+        "method": method,
+        "workspace_id": workspace_id
+    }))
+}
+
+pub async fn create_workflow_knowledge(workspace_id: web::Path<String>) -> Result<HttpResponse> {
+    Ok(placeholder(
+        "/finetune/workflows/{workspace_id}/knowledge",
+        "POST",
+        &workspace_id.into_inner(),
+    ))
+}
+
+pub async fn chunk_workflow_knowledge(workspace_id: web::Path<String>) -> Result<HttpResponse> {
+    Ok(placeholder(
+        "/finetune/workflows/{workspace_id}/knowledge/chunk",
+        "POST",
+        &workspace_id.into_inner(),
+    ))
+}
+
+pub async fn delete_workflow_knowledge_chunk(
+    path: web::Path<(String, String)>,
+) -> Result<HttpResponse> {
+    let (workspace_id, chunk_id) = path.into_inner();
+    Ok(HttpResponse::NotImplemented().json(serde_json::json!({
+        "message": "Placeholder endpoint not implemented yet",
+        "endpoint": "/finetune/workflows/{workspace_id}/knowledge/chunk/{chunk_id}",
+        "method": "DELETE",
+        "workspace_id": workspace_id,
+        "chunk_id": chunk_id
+    })))
+}
+
+pub async fn create_workflow_knowledge_trace(
+    workspace_id: web::Path<String>,
+) -> Result<HttpResponse> {
+    Ok(placeholder(
+        "/finetune/workflows/{workspace_id}/knowledge/trace",
+        "POST",
+        &workspace_id.into_inner(),
+    ))
+}
+
+pub async fn delete_workflow_knowledge_trace(
+    path: web::Path<(String, String)>,
+) -> Result<HttpResponse> {
+    let (workspace_id, trace_id) = path.into_inner();
+    Ok(HttpResponse::NotImplemented().json(serde_json::json!({
+        "message": "Placeholder endpoint not implemented yet",
+        "endpoint": "/finetune/workflows/{workspace_id}/knowledge/trace/{trace_id}",
+        "method": "DELETE",
+        "workspace_id": workspace_id,
+        "trace_id": trace_id
+    })))
+}
+
+pub async fn create_workflow_topics(workspace_id: web::Path<String>) -> Result<HttpResponse> {
+    Ok(placeholder(
+        "/finetune/workflows/{workspace_id}/topics",
+        "POST",
+        &workspace_id.into_inner(),
+    ))
+}
+
+pub async fn delete_workflow_topics(workspace_id: web::Path<String>) -> Result<HttpResponse> {
+    Ok(placeholder(
+        "/finetune/workflows/{workspace_id}/topics",
+        "DELETE",
+        &workspace_id.into_inner(),
+    ))
+}
+
+pub async fn generate_workflow_topics(workspace_id: web::Path<String>) -> Result<HttpResponse> {
+    Ok(placeholder(
+        "/finetune/workflows/{workspace_id}/topics/generate",
+        "POST",
+        &workspace_id.into_inner(),
+    ))
+}
+
+pub async fn generate_workflow_dataset(workspace_id: web::Path<String>) -> Result<HttpResponse> {
+    Ok(placeholder(
+        "/finetune/workflows/{workspace_id}/dataset/generate",
+        "POST",
+        &workspace_id.into_inner(),
+    ))
+}
+
+pub async fn get_workflow_dataset_generate_status(
+    workspace_id: web::Path<String>,
+) -> Result<HttpResponse> {
+    Ok(placeholder(
+        "/finetune/workflows/{workspace_id}/dataset/generate/status",
+        "POST",
+        &workspace_id.into_inner(),
+    ))
+}
+
+pub async fn run_workflow_evaluator(workspace_id: web::Path<String>) -> Result<HttpResponse> {
+    Ok(placeholder(
+        "/finetune/workflows/{workspace_id}/evaluator/run",
+        "POST",
+        &workspace_id.into_inner(),
+    ))
+}
+
+pub async fn get_workflow_evaluator_run_status(
+    workspace_id: web::Path<String>,
+) -> Result<HttpResponse> {
+    Ok(placeholder(
+        "/finetune/workflows/{workspace_id}/evaluator/run/status",
+        "GET",
+        &workspace_id.into_inner(),
+    ))
+}

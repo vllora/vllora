@@ -387,6 +387,55 @@ impl ApiServer {
                                 web::scope("/{workflow_id}")
                                     .route("", web::put().to(workflows::update_workflow))
                                     .route("", web::delete().to(workflows::soft_delete_workflow))
+                                    .route(
+                                        "/knowledge",
+                                        web::post().to(workflows::create_workflow_knowledge),
+                                    )
+                                    .route(
+                                        "/knowledge/chunk",
+                                        web::post().to(workflows::chunk_workflow_knowledge),
+                                    )
+                                    .route(
+                                        "//knowledge/chunk",
+                                        web::post().to(workflows::chunk_workflow_knowledge),
+                                    )
+                                    .route(
+                                        "/knowledge/chunk/{chunk_id}",
+                                        web::delete()
+                                            .to(workflows::delete_workflow_knowledge_chunk),
+                                    )
+                                    .route(
+                                        "/knowledge/trace",
+                                        web::post().to(workflows::create_workflow_knowledge_trace),
+                                    )
+                                    .route(
+                                        "/knowledge/trace/{trace_id}",
+                                        web::delete()
+                                            .to(workflows::delete_workflow_knowledge_trace),
+                                    )
+                                    .route("/topics", web::post().to(workflows::create_workflow_topics))
+                                    .route("/topics", web::delete().to(workflows::delete_workflow_topics))
+                                    .route(
+                                        "/topics/generate",
+                                        web::post().to(workflows::generate_workflow_topics),
+                                    )
+                                    .route(
+                                        "/dataset/generate",
+                                        web::post().to(workflows::generate_workflow_dataset),
+                                    )
+                                    .route(
+                                        "/dataset/generate/status",
+                                        web::post()
+                                            .to(workflows::get_workflow_dataset_generate_status),
+                                    )
+                                    .route(
+                                        "/evaluator/run",
+                                        web::post().to(workflows::run_workflow_evaluator),
+                                    )
+                                    .route(
+                                        "/evaluator/run/status",
+                                        web::get().to(workflows::get_workflow_evaluator_run_status),
+                                    )
                                     .service(
                                         web::scope("/evaluator")
                                             .route(
