@@ -36,7 +36,7 @@ pub struct UpdateEvaluatorBody {
 
 #[derive(Debug, Serialize)]
 pub struct UpdateEvaluatorResponse {
-    pub dataset_id: uuid::Uuid,
+    pub workflow_id: uuid::Uuid,
     pub updated: bool,
 }
 

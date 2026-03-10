@@ -383,8 +383,24 @@ impl ApiServer {
                         web::scope("/workflows")
                             .route("", web::get().to(workflows::list_workflows))
                             .route("", web::post().to(workflows::create_workflow))
-                            .route("/{id}", web::put().to(workflows::update_workflow))
-                            .route("/{id}", web::delete().to(workflows::soft_delete_workflow)),
+                            .service(
+                                web::scope("/{id}")
+                                    .route("", web::put().to(workflows::update_workflow))
+                                    .route("", web::delete().to(workflows::soft_delete_workflow))
+                                    .service(
+                                        web::scope("/evaluator")
+                                            .route(
+                                                "",
+                                                web::patch()
+                                                    .to(finetune::update_workflow_evaluator),
+                                            )
+                                            .route(
+                                                "/versions",
+                                                web::get()
+                                                    .to(finetune::get_workflow_evaluator_versions),
+                                            ),
+                                    ),
+                            ),
                     )
                     .service(
                         web::scope("/datasets")
@@ -400,14 +416,6 @@ impl ApiServer {
                             .route(
                                 "/{dataset_id}/finetune-evaluations",
                                 web::get().to(finetune::get_finetune_evaluations),
-                            )
-                            .route(
-                                "/{dataset_id}/evaluator/versions",
-                                web::get().to(finetune::get_dataset_evaluator_versions),
-                            )
-                            .route(
-                                "/{dataset_id}/evaluator",
-                                web::patch().to(finetune::update_dataset_evaluator),
                             ),
                     )
                     .service(

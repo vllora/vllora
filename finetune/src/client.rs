@@ -102,7 +102,7 @@ impl LangdbCloudFinetuneClient {
     }
 
     /// List all evaluator versions for a dataset (newest to oldest)
-    pub async fn get_dataset_evaluator_versions(
+    pub async fn get_workflow_evaluator_versions(
         &self,
         dataset_id: &str,
     ) -> Result<Vec<EvaluatorVersionResponse>, String> {
@@ -133,14 +133,14 @@ impl LangdbCloudFinetuneClient {
     }
 
     /// Update the evaluator config for an existing dataset
-    pub async fn update_dataset_evaluator(
+    pub async fn update_workflow_evaluator(
         &self,
-        dataset_id: &str,
+        workflow_id: &str,
         evaluator: String,
     ) -> Result<(), String> {
         let url = format!(
             "{}/finetune/datasets/{}/evaluator",
-            self.api_url, dataset_id
+            self.api_url, workflow_id
         );
 
         let body = serde_json::json!({

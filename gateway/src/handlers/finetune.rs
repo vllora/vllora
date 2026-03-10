@@ -230,12 +230,12 @@ pub async fn get_finetune_evaluations(
 // Dataset Evaluator Handlers
 // ============================================================================
 
-pub async fn get_dataset_evaluator_versions(
-    dataset_id: web::Path<String>,
+pub async fn get_workflow_evaluator_versions(
+    workflow_id: web::Path<uuid::Uuid>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
 ) -> Result<HttpResponse> {
-    let dataset_id_str = dataset_id.into_inner();
+    let workflow_id = workflow_id.into_inner();
 
     let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
     let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
@@ -243,7 +243,7 @@ pub async fn get_dataset_evaluator_versions(
     })?;
 
     let response = client
-        .get_dataset_evaluator_versions(&dataset_id_str)
+        .get_workflow_evaluator_versions(&workflow_id.to_string())
         .await
         .map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!(
@@ -255,13 +255,13 @@ pub async fn get_dataset_evaluator_versions(
     Ok(HttpResponse::Ok().json(response))
 }
 
-pub async fn update_dataset_evaluator(
-    dataset_id: web::Path<String>,
+pub async fn update_workflow_evaluator(
+    workflow_id: web::Path<uuid::Uuid>,
     request: web::Json<UpdateEvaluatorBody>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
 ) -> Result<HttpResponse> {
-    let dataset_id_str = dataset_id.into_inner();
+    let workflow_id = workflow_id.into_inner();
     let request_body = request.into_inner();
 
     // Add __inline_script: prefix if missing (matching the upload path behavior)
@@ -298,18 +298,14 @@ pub async fn update_dataset_evaluator(
     })?;
 
     client
-        .update_dataset_evaluator(&dataset_id_str, evaluator_str)
+        .update_workflow_evaluator(&workflow_id.to_string(), evaluator_str)
         .await
         .map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!("Failed to update evaluator: {}", e))
         })?;
 
-    let dataset_id_uuid = uuid::Uuid::parse_str(&dataset_id_str).map_err(|e| {
-        actix_web::error::ErrorBadRequest(format!("Invalid dataset_id UUID: {}", e))
-    })?;
-
     Ok(HttpResponse::Ok().json(UpdateEvaluatorResponse {
-        dataset_id: dataset_id_uuid,
+        workflow_id,
         updated: true,
     }))
 }
