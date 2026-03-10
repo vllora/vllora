@@ -197,14 +197,18 @@ save_plan({ dataset_id: "..." })
 
 After `save_plan` succeeds, say: "Here's the plan for your requested changes. Review it in the workspace — you can edit, then approve when ready."
 
-**Initial plan sequence (5-step — for EMPTY datasets only, not dynamic plans):**
-1. Call `analyze_knowledge_sources({ dataset_id })` — check for uploaded documents (pure data access, instant)
+**Initial plan sequence (for EMPTY datasets only, not dynamic plans):**
+
+`get_dataset_state` already returns `knowledge_sources.total_count`, `knowledge_sources.ready_count`, and `knowledge_sources.processing_count`. Use these to decide whether to call `analyze_knowledge_sources`:
+
+1. Check `get_dataset_state` result (you already called it). Look at `knowledge_sources`:
+   - If `knowledge_sources.processing_count > 0` → documents are still being extracted. **STOP immediately.** Tell the user: "Your documents are still being processed. I'll create the plan once they're ready — this usually takes 30-60 seconds per document." Then STOP and wait. The frontend will notify you when processing is complete.
+   - If `knowledge_sources.ready_count > 0` → call `analyze_knowledge_sources({ dataset_id })` to get document details (chunk headings, summaries, etc.)
+   - If `knowledge_sources.total_count === 0` → **skip** `analyze_knowledge_sources` entirely. No documents uploaded.
 2. Call `generate_topics({ dataset_id, max_topics: 3, max_depth: 2 })` — get topic suggestions. Returns `{ hierarchy, topic_count, suggest_only: true }`.
 3. Call `generate_grader({ dataset_id, topics: [leaf topic names from step 2] })` — get evaluation criteria + script. Returns `{ criteria, script, suggest_only: true }`.
 4. Assemble the plan using the returned `hierarchy` as `proposed_topics` and `criteria` as `grader_config.criteria`. Call `propose_plan({ dataset_id, plan })`.
 5. Call `save_plan({ dataset_id })` — validates draft, commits, and shows plan to user with diff. If it returns errors, fix the plan and retry from step 4.
-
-**If step 1 returns `sources_processing: true`:** Documents are still being extracted. **STOP immediately.** Do NOT call analyze_knowledge_sources again. Tell the user: "Your documents are still being processed. I'll create the plan once they're ready — this usually takes 30-60 seconds per document." Then STOP and wait for the next user message. The frontend will notify you when processing is complete.
 
 **IMPORTANT (applies to BOTH initial and dynamic plan paths):**
 1. Use the EXACT dataset ID from `DATASET_ID:` at the top of the message - copy it character by character
@@ -213,22 +217,22 @@ After `save_plan` succeeds, say: "Here's the plan for your requested changes. Re
 4. For **initial plans** (path A): ALWAYS call `generate_topics` for topics and `generate_grader` for criteria — never construct them yourself. For **dynamic plans** (path B): you MAY construct the plan directly from the user's request without calling `generate_topics`/`generate_grader` — the user has told you exactly what they want.
 5. NEVER retry `analyze_knowledge_sources` in a loop — if documents are processing, tell the user and wait
 
-**Example:**
+**Example (no knowledge sources):**
 ```
 // If message starts with: DATASET_ID: 01712b80-5508-4a32-83dd-80768c9c9c51
-// Step 1: Check knowledge sources
-analyze_knowledge_sources({ dataset_id: "01712b80-5508-4a32-83dd-80768c9c9c51" })
-// Step 2: Generate topic suggestions (no side effects)
+// get_dataset_state already returned knowledge_sources.total_count === 0
+// → Skip analyze_knowledge_sources entirely
+// Step 1: Generate topic suggestions (no side effects)
 generate_topics({ dataset_id: "01712b80-5508-4a32-83dd-80768c9c9c51", max_topics: 3, max_depth: 2 })
-// Step 3: Generate grader criteria + script (no side effects)
+// Step 2: Generate grader criteria + script (no side effects)
 generate_grader({ dataset_id: "01712b80-5508-4a32-83dd-80768c9c9c51", topics: ["italian_game", "sicilian_defense", "pins_and_forks"] })
-// Step 4: Assemble plan using returned data:
+// Step 3: Assemble plan using returned data:
 // - proposed_topics = generate_topics result.proposed_topics (COPY DIRECTLY)
 // - grader_config.criteria = generate_grader result.criteria (COPY DIRECTLY)
 // - plan_markdown Topics table = same topic names/counts from generate_topics
 // - plan_markdown Criteria section = same criterion names from generate_grader
 propose_plan({ dataset_id: "01712b80-5508-4a32-83dd-80768c9c9c51", plan: { ...plan... } })
-// Step 5: Validate + commit + show to user:
+// Step 4: Validate + commit + show to user:
 save_plan({ dataset_id: "01712b80-5508-4a32-83dd-80768c9c9c51" })
 ```
 
@@ -381,11 +385,18 @@ get_dataset_state({ dataset_id: "..." })
 ```
 This tells you what exists: records, topics, grader, knowledge sources, etc.
 
-**Step 2: Analyze knowledge sources**
+**Step 2: Analyze knowledge sources (ONLY if sources exist)**
+
+Check `get_dataset_state` result from step 1:
+- If `knowledge_sources.total_count === 0` → **SKIP this step**. No documents uploaded.
+- If `knowledge_sources.processing_count > 0` → STOP and wait for processing to complete.
+- If `knowledge_sources.ready_count > 0` → call `analyze_knowledge_sources({ dataset_id })` to get document details.
+
 ```
+// Only call if knowledge_sources.ready_count > 0:
 analyze_knowledge_sources({ dataset_id: "..." })
 ```
-Returns a lightweight overview: document names, summaries, chunk headings with page ranges, and extracted topics. This is a quick data-access call (no LLM). Call it ONCE. If no knowledge sources exist, proceed. If sources are still processing, tell the user and STOP — do NOT retry.
+Returns a lightweight overview: document names, summaries, chunk headings with page ranges, and extracted topics. This is a quick data-access call (no LLM). Call it ONCE. If sources are still processing, tell the user and STOP — do NOT retry.
 
 **Step 3: Generate topic suggestions (ALWAYS call this)**
 ```
@@ -923,7 +934,7 @@ When a tool call fails during execution, use the table below to recover:
   4. If user selects "Adjust it" → ask what they'd like to change, then use `adjust_plan` + `save_plan`
 
 - **Empty dataset (0 records) with objective** → Go straight to plan creation:
-  1. Call `analyze_knowledge_sources({ dataset_id })` — check for uploaded docs
+  1. Check `knowledge_sources` from `get_dataset_state`: if `ready_count > 0`, call `analyze_knowledge_sources({ dataset_id })`; if `total_count === 0`, skip it entirely.
   2. Call `generate_topics({ dataset_id, max_topics: 3, max_depth: 2 })` — get topic hierarchy
   3. Call `generate_grader({ dataset_id, topics: [leaf names] })` — get criteria + script
   4. Assemble plan using hierarchy + criteria, then call `propose_plan({ dataset_id, plan })`
@@ -1684,9 +1695,9 @@ Question types:
 
 **You:**
 1. Call `get_dataset_state({ dataset_id: "legal-assistant-456" })`
-2. See: 0 records, has objective, state.plan.exists = false
+2. See: 0 records, has objective, state.plan.exists = false, knowledge_sources.total_count = 0
 3. Go straight to plan creation (do NOT use ask_follow_up):
-   - Call `analyze_knowledge_sources({ dataset_id: "legal-assistant-456" })` → no knowledge sources
+   - knowledge_sources.total_count === 0 → skip analyze_knowledge_sources
    - Call `generate_topics({ dataset_id: "legal-assistant-456", max_topics: 3, max_depth: 2 })` → returns hierarchy
    - Call `generate_grader({ dataset_id: "legal-assistant-456", topics: ["contract_review", "legal_research", ...] })` → returns criteria + script
    - Assemble plan using hierarchy + criteria, call `propose_plan({ dataset_id: "legal-assistant-456", plan: { ... } })`
@@ -1858,7 +1869,7 @@ Use `ask_follow_up` to offer regeneration options since the existing topics and 
 | `analyze_knowledge_sources` | Quick overview — what documents exist? | Chunk headings + page ranges, topics, summary. Call ONCE. |
 | `search_knowledge` | Deep dive — find content by query | Matching chunks with full text, matching sentences, summaries |
 
-**Workflow:** Call `analyze_knowledge_sources` first to see the table of contents. If you need actual content from specific chunks (e.g., for grounded generation), call `search_knowledge` with a relevant query.
+**Workflow:** `get_dataset_state` tells you if knowledge sources exist (`knowledge_sources.total_count`). If sources exist, call `analyze_knowledge_sources` to see the table of contents. If you need actual content from specific chunks (e.g., for grounded generation), call `search_knowledge` with a relevant query.
 
 ## Knowledge Source Seeding for Topics and Grader
 
