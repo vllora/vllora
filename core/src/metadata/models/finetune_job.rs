@@ -49,7 +49,7 @@ impl std::str::FromStr for FinetuneJobState {
 pub struct DbFinetuneJob {
     pub id: String,
     pub project_id: String,
-    pub dataset_id: String,
+    pub workflow_id: String,
     pub evaluator_version: Option<i32>,
     pub state: String, // Stored as lowercase string: "pending", "running", etc.
     pub provider: String,
@@ -82,7 +82,7 @@ impl DbFinetuneJob {
 pub struct DbNewFinetuneJob {
     pub id: Option<String>,
     pub project_id: String,
-    pub dataset_id: String,
+    pub workflow_id: String,
     pub evaluator_version: Option<i32>,
     pub state: String,
     pub provider: String,
@@ -98,7 +98,7 @@ pub struct DbNewFinetuneJob {
 impl DbNewFinetuneJob {
     pub fn new(
         project_id: String,
-        dataset_id: String,
+        workflow_id: String,
         provider: String,
         provider_job_id: String,
         base_model: String,
@@ -106,7 +106,7 @@ impl DbNewFinetuneJob {
         Self {
             id: None, // Will use default UUID generation
             project_id,
-            dataset_id,
+            workflow_id,
             evaluator_version: None,
             state: "pending".to_string(),
             provider,

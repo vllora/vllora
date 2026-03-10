@@ -384,7 +384,7 @@ impl ApiServer {
                             .route("", web::get().to(workflows::list_workflows))
                             .route("", web::post().to(workflows::create_workflow))
                             .service(
-                                web::scope("/{id}")
+                                web::scope("/{workflow_id}")
                                     .route("", web::put().to(workflows::update_workflow))
                                     .route("", web::delete().to(workflows::soft_delete_workflow))
                                     .service(
@@ -398,6 +398,47 @@ impl ApiServer {
                                                 "/versions",
                                                 web::get()
                                                     .to(finetune::get_workflow_evaluator_versions),
+                                            ),
+                                    )
+                                    .service(
+                                        web::scope("/jobs")
+                                            .route(
+                                                "",
+                                                web::post().to(finetune::create_reinforcement_job),
+                                            )
+                                            .route(
+                                                "",
+                                                web::get().to(finetune::list_reinforcement_jobs),
+                                            )
+                                            .service(
+                                                web::scope("/{job_id}")
+                                                    .route(
+                                                        "/status",
+                                                        web::get().to(
+                                                            finetune::get_reinforcement_job_status,
+                                                        ),
+                                                    )
+                                                    .route(
+                                                        "/metrics",
+                                                        web::get().to(
+                                                            finetune::get_reinforcement_job_metrics,
+                                                        ),
+                                                    )
+                                                    .route(
+                                                        "/cancel",
+                                                        web::post()
+                                                            .to(finetune::cancel_reinforcement_job),
+                                                    )
+                                                    .route(
+                                                        "/resume",
+                                                        web::post()
+                                                            .to(finetune::resume_reinforcement_job),
+                                                    )
+                                                    .route(
+                                                        "/weights/url",
+                                                        web::get()
+                                                            .to(finetune::get_weights_download_url),
+                                                    ),
                                             ),
                                     ),
                             ),
@@ -424,31 +465,6 @@ impl ApiServer {
                             .route(
                                 "/{evaluation_run_id}",
                                 web::get().to(finetune::get_evaluation_result),
-                            ),
-                    )
-                    .service(
-                        web::scope("/reinforcement-jobs")
-                            .route("", web::post().to(finetune::create_reinforcement_job))
-                            .route("", web::get().to(finetune::list_reinforcement_jobs))
-                            .route(
-                                "/{job_id}/status",
-                                web::get().to(finetune::get_reinforcement_job_status),
-                            )
-                            .route(
-                                "/{job_id}/metrics",
-                                web::get().to(finetune::get_reinforcement_job_metrics),
-                            )
-                            .route(
-                                "/{job_id}/cancel",
-                                web::post().to(finetune::cancel_reinforcement_job),
-                            )
-                            .route(
-                                "/{job_id}/resume",
-                                web::post().to(finetune::resume_reinforcement_job),
-                            )
-                            .route(
-                                "/{job_id}/weights/url",
-                                web::get().to(finetune::get_weights_download_url),
                             ),
                     )
                     .service(

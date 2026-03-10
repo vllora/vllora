@@ -148,7 +148,7 @@ diesel::table! {
     finetune_jobs (id) {
         id -> Text,
         project_id -> Text,
-        dataset_id -> Text,
+        workflow_id -> Text,
         evaluator_version -> Nullable<Integer>,
         state -> Text,
         provider -> Text,

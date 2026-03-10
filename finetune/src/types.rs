@@ -57,8 +57,6 @@ pub struct EvaluatorVersionResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateReinforcementFinetuningJobRequest {
-    #[serde(alias = "dataset")]
-    pub dataset_id: uuid::Uuid,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub evaluator_version: Option<i32>,
     pub base_model: String,

@@ -127,7 +127,7 @@ impl FinetuneJobService {
         project_id: &str,
         limit: Option<u32>,
         after: Option<&str>,
-        dataset_id: Option<&str>,
+        workflow_id: Option<&str>,
     ) -> Result<Vec<DbFinetuneJob>, DatabaseError> {
         let mut conn = self.db_pool.get()?;
 
@@ -146,8 +146,8 @@ impl FinetuneJobService {
             query = query.limit(100); // Default limit
         }
 
-        if let Some(dataset_id) = dataset_id {
-            query = query.filter(dsl::dataset_id.eq(dataset_id));
+        if let Some(workflow_id) = workflow_id {
+            query = query.filter(dsl::workflow_id.eq(workflow_id));
         }
 
         Ok(query.load::<DbFinetuneJob>(&mut conn)?)

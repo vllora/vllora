@@ -1,7 +1,7 @@
 use actix_multipart::Multipart;
 use actix_web::{web, HttpResponse, Result};
 use futures::StreamExt;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use vllora_core::credentials::KeyStorage;
@@ -60,6 +60,12 @@ pub struct LocalReinforcementJobStatusResponse {
     pub status: String,
     pub fine_tuned_model: Option<String>,
     pub error_message: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct JobRequestPath {
+    pub workflow_id: String,
+    pub job_id: String,
 }
 
 pub async fn get_langdb_api_key(
@@ -523,6 +529,7 @@ pub async fn upload_dataset(
 }
 
 pub async fn create_reinforcement_job(
+    workflow_id: web::Path<uuid::Uuid>,
     request: web::Json<CreateReinforcementFinetuningJobRequest>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
@@ -536,7 +543,7 @@ pub async fn create_reinforcement_job(
     })?;
 
     let cloud_response = client
-        .create_reinforcement_job(request_body.clone())
+        .create_reinforcement_job(request_body.clone(), &workflow_id)
         .await
         .map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!("Failed to create job: {}", e))
@@ -546,14 +553,14 @@ pub async fn create_reinforcement_job(
 
     let new_job = DbNewFinetuneJob::new(
         project.id.to_string(),
-        request_body.dataset_id.to_string(),
+        workflow_id.to_string(),
         "langdb".to_string(),
         cloud_response.id.to_string(),
         request_body.base_model.clone(),
     )
     .with_evaluator_version(request_body.evaluator_version)
     .with_fine_tuned_model(cloud_response.fine_tuned_model.clone())
-    .with_training_file_id(Some(request_body.dataset_id.to_string()))
+    .with_training_file_id(Some(workflow_id.to_string()))
     .with_validation_file_id(request_body.evaluation_dataset.clone())
     .with_training_config(request_body.training_config.clone());
 
@@ -565,18 +572,18 @@ pub async fn create_reinforcement_job(
 }
 
 pub async fn get_reinforcement_job_status(
-    job_id: web::Path<String>,
+    path: web::Path<JobRequestPath>,
     _query: web::Query<ReinforcementJobQuery>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
-    let job_id_str = job_id.into_inner();
+    let path = path.into_inner();
 
     let finetune_job_service = FinetuneJobService::new(db_pool.get_ref().clone());
 
     if let Ok(Some(db_job)) =
-        finetune_job_service.get_by_provider_job_id(&job_id_str, &project.id.to_string())
+        finetune_job_service.get_by_provider_job_id(&path.job_id, &project.id.to_string())
     {
         return Ok(
             HttpResponse::Ok().json(LocalReinforcementJobStatusResponse {
@@ -594,7 +601,7 @@ pub async fn get_reinforcement_job_status(
     })?;
 
     let response = client
-        .get_reinforcement_job_status(&job_id_str)
+        .get_reinforcement_job_status(&path.job_id)
         .await
         .map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!("Failed to get job status: {}", e))
@@ -651,7 +658,7 @@ pub async fn list_reinforcement_jobs(
         .map(|job| LocalFinetuningJobResponse {
             id: job.id,
             provider_job_id: job.provider_job_id,
-            dataset_id: job.dataset_id,
+            dataset_id: job.workflow_id,
             evaluator_version: job.evaluator_version,
             status: job.state,
             base_model: job.base_model,

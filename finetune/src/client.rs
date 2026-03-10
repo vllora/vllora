@@ -245,8 +245,9 @@ impl LangdbCloudFinetuneClient {
     pub async fn create_reinforcement_job(
         &self,
         request: CreateReinforcementFinetuningJobRequest,
+        workflow_id: &uuid::Uuid,
     ) -> Result<FinetuningJobResponse, String> {
-        let url = format!("{}/finetune/reinforcement-jobs", self.api_url);
+        let url = format!("{}/finetune/jobs/{workflow_id}", self.api_url);
 
         let req = self.client.post(&url).json(&request);
 
@@ -282,10 +283,7 @@ impl LangdbCloudFinetuneClient {
         &self,
         job_id: &str,
     ) -> Result<ReinforcementJobStatusResponse, String> {
-        let url = format!(
-            "{}/finetune/reinforcement-jobs/{}/status",
-            self.api_url, job_id
-        );
+        let url = format!("{}/finetune/jobs/{}/status", self.api_url, job_id);
 
         let req = self.client.get(&url);
 
@@ -309,10 +307,7 @@ impl LangdbCloudFinetuneClient {
     }
 
     pub async fn cancel_reinforcement_job(&self, job_id: &str) -> Result<(), String> {
-        let url = format!(
-            "{}/finetune/reinforcement-jobs/{}/cancel",
-            self.api_url, job_id
-        );
+        let url = format!("{}/finetune/jobs/{}/cancel", self.api_url, job_id);
 
         let req = self.client.post(&url);
 
@@ -331,10 +326,7 @@ impl LangdbCloudFinetuneClient {
     }
 
     pub async fn resume_reinforcement_job(&self, job_id: &str) -> Result<(), String> {
-        let url = format!(
-            "{}/finetune/reinforcement-jobs/{}/resume",
-            self.api_url, job_id
-        );
+        let url = format!("{}/finetune/jobs/{}/resume", self.api_url, job_id);
 
         let req = self.client.post(&url);
 
@@ -351,10 +343,7 @@ impl LangdbCloudFinetuneClient {
         &self,
         job_id: &str,
     ) -> Result<ReinforcementJobMetricsResponse, String> {
-        let url = format!(
-            "{}/finetune/reinforcement-jobs/{}/metrics",
-            self.api_url, job_id
-        );
+        let url = format!("{}/finetune/jobs/{}/metrics", self.api_url, job_id);
 
         let req = self.client.get(&url);
 
@@ -383,7 +372,7 @@ impl LangdbCloudFinetuneClient {
         limit: Option<u32>,
         after: Option<String>,
     ) -> Result<Vec<FinetuningJobResponse>, String> {
-        let mut url = format!("{}/finetune/reinforcement-jobs", self.api_url);
+        let mut url = format!("{}/finetune/jobs", self.api_url);
         let mut query_params = Vec::new();
         if let Some(limit) = limit {
             query_params.push(format!("limit={}", limit));
