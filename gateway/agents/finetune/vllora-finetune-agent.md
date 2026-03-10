@@ -40,8 +40,6 @@ external = [
   "configure_grader",
   "upload_dataset",
   "run_evaluation",
-  "generate_skill_package",
-  "download_skill_package",
   "start_training",
   "start_finetune_workflow",
   "advance_to_step",
@@ -286,7 +284,7 @@ Provide context and clear options. Don't over-explain - let users guide the conv
 **Use for:** Complex multi-tool workflows that need specialized coordination — rollbacks, state repairs, or when a step requires multiple tool calls to recover.
 **Tools:** start_finetune_workflow, advance_to_step, generate_synthetic_data, configure_grader, start_training, etc.
 **Returns:** Operation results and status
-**DO NOT use during plan execution** — call step tools (`generate_initial_data`, `configure_grader`, `upload_dataset`, `run_evaluation`, `generate_skill_package`, `download_skill_package`, `start_training`) directly instead.
+**DO NOT use during plan execution** — call step tools (`generate_initial_data`, `configure_grader`, `upload_dataset`, `run_evaluation`, `start_training`) directly instead.
 
 **When to delegate:**
 - User wants to start a workflow
@@ -619,11 +617,7 @@ After approval, call the individual tools directly for each step in the plan. Af
 5. run_evaluation({ dataset_id })
    → update_plan_markdown (check off "Run Evaluation")
    NOTE: Do NOT poll/wait for eval to complete — it runs in the background. Continue immediately.
-6. generate_skill_package({ workflow_id })  ← Assembles ZIP in memory (no LLM calls, ~1 sec)
-   download_skill_package({ workflow_id })  ← Triggers browser download
-   → update_plan_markdown (check off "Generate Skill Package")
-   NOTE: Non-fatal — if it fails, continue to training
-7. start_training({ dataset_id })
+6. start_training({ dataset_id })
    → update_plan_markdown (check off "Start Fine-tune", status: "completed")
 8. update_dataset_readme({ dataset_id, readme_content: "<write the README>" })  ← ALWAYS write a README last
 ```
@@ -686,7 +680,7 @@ update_dataset_readme({
 - `call_finetune_workflow` — do NOT use the sub-agent wrapper
 - `call_data_generation` — do NOT use the sub-agent wrapper
 
-You have ALL the step tools (`apply_topic_hierarchy`, `generate_initial_data`, `configure_grader`, `upload_dataset`, `run_evaluation`, `analyze_evaluation`, `generate_skill_package`, `download_skill_package`, `start_training`, `analyze_training`) available directly. Call them yourself.
+You have ALL the step tools (`apply_topic_hierarchy`, `generate_initial_data`, `configure_grader`, `upload_dataset`, `run_evaluation`, `analyze_evaluation`, `start_training`, `analyze_training`) available directly. Call them yourself.
 
 **Plan lifecycle summary:**
 ```
@@ -721,7 +715,6 @@ All plans MUST include `plan_markdown`. The frontend renders this markdown direc
 - [ ] **Generate Training Data** — Generate {N} training examples (~1-2 min per 25 records)
 - [ ] **Configure Evaluator** — Set up {N} quality scoring criteria (~5 sec)
 - [ ] **Run Evaluation** — Test baseline performance (~1-3 min)
-- [ ] **Generate Skill Package** — Package training data for Claude Code (~5 sec)
 - [ ] **Start Fine-tune** — Begin model training (~3-5 min)
 
 ## Topics
@@ -740,7 +733,7 @@ All plans MUST include `plan_markdown`. The frontend renders this markdown direc
 
 **Template rules:**
 1. ALWAYS include the summary stats table (Topics/Records/Evaluation/Est. Time)
-2. ALWAYS include **all 6 user-visible steps** in the checklist for fresh dataset plans: Apply Topic Hierarchy, Generate Training Data, Configure Evaluator, Run Evaluation, Generate Skill Package, Start Fine-tune
+2. ALWAYS include **all 5 user-visible steps** in the checklist for fresh dataset plans: Apply Topic Hierarchy, Generate Training Data, Configure Evaluator, Run Evaluation, Start Fine-tune
 3. Use `- [ ]` for pending steps, `- [x]` for completed. Bold step names with em-dash: `- [ ] **Step Name** — description (~time)`
 4. Topics MUST be in a table format, NOT a bullet list
 5. Criteria MUST use bold name with em-dash: `- **Name** — description`
@@ -830,11 +823,6 @@ upload_dataset({ dataset_id: "..." })
 run_evaluation({ dataset_id: "..." })
 update_plan_markdown({ dataset_id: "...", plan_markdown: "...with - [x] Run Evaluation..." })
 
-// Skill package (non-fatal — continue to finetune if it fails)
-generate_skill_package({ workflow_id: "..." })
-download_skill_package({ workflow_id: "..." })
-update_plan_markdown({ dataset_id: "...", plan_markdown: "...with - [x] Generate Skill Package..." })
-
 // Then finetune
 start_training({ dataset_id: "..." })
 update_plan_markdown({ dataset_id: "...", plan_markdown: "...with - [x] Start Fine-tune..." })
@@ -870,11 +858,6 @@ upload_dataset({ dataset_id: "the-id", force_reupload: true })
 // Step 3: Continue with remaining steps
 run_evaluation({ dataset_id: "the-id" })
 update_plan_markdown({ dataset_id: "the-id", plan_markdown: "...with - [x] Run Evaluation..." })
-
-// Skill package (non-fatal)
-generate_skill_package({ workflow_id: "..." })
-download_skill_package({ workflow_id: "..." })
-update_plan_markdown({ dataset_id: "the-id", plan_markdown: "...with - [x] Generate Skill Package..." })
 
 start_training({ dataset_id: "the-id" })
 update_plan_markdown({ dataset_id: "the-id", plan_markdown: "...with - [x] Start Fine-tune..." })
@@ -1723,10 +1706,6 @@ Question types:
    // upload is hidden — no checklist update
    run_evaluation({ dataset_id: "chess-tutor-123" })
    update_plan_markdown({ dataset_id: "chess-tutor-123", plan_markdown: "...with - [x] Run Evaluation..." })
-   // Skill package (non-fatal)
-   generate_skill_package({ workflow_id: "..." })
-   download_skill_package({ workflow_id: "..." })
-   update_plan_markdown({ dataset_id: "chess-tutor-123", plan_markdown: "...with - [x] Generate Skill Package..." })
    start_training({ dataset_id: "chess-tutor-123" })
    update_plan_markdown({ dataset_id: "chess-tutor-123", plan_markdown: "...with - [x] Start Fine-tune..." })
    ```
