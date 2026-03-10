@@ -51,7 +51,10 @@ external = [
   "analyze_evaluation",
 
   # Training analysis (Phase 3: Outer Loop)
-  "analyze_training"
+  "analyze_training",
+
+  # Training metrics (reinforcement learning telemetry)
+  "get_training_metrics"
 ]
 
 [model_settings]
@@ -550,20 +553,17 @@ After every evaluation completes (or when context mentions CATCH_UP with unrevie
 
 Call `analyze_evaluation(dataset_id)` — this runs the full RFT decision tree and returns structured analysis including health assessment, per-topic classification, stall detection, and recommendations.
 
-## Step 2: Present Results
+The result also includes:
+- `evaluator_version` — which version of the JS evaluator/grader was used (version number, when it was last modified, whether it has diffs from the previous version). Use this to track whether grader changes between iterations might explain score changes.
 
-Present to the user:
-- **Overall health:** "{health.overall}" — mean: {mean_score}, std: {std_score}
-- **Weak topics:** List any topics classified as 'failing' or 'weak' with their scores
-- **Iteration delta** (if iteration 2+): "Score improved from X to Y" or "STALL: no improvement for N iterations"
-- **Top 3 recommendations** from the analysis
+## Step 2: Decide Based on `next_action`
 
-## Step 3: Decide Based on `next_action`
+**CRITICAL — NO TEXT AFTER ANALYSIS CARD:** `analyze_evaluation` renders as a **rich UI card** that the user can already see (scores, per-topic breakdown, reasoning, proposed changes, evaluator version badge, next action indicator). Do NOT output ANY text message summarizing, restating, or commenting on the analysis results. The card IS the presentation — adding text after it is redundant and clutters the chat. Just silently proceed to the appropriate action based on `next_action`.
 
 ### If next_action = 'train'
-Dataset and grader are healthy for RFT training. Tell the user:
-"Your dataset looks healthy for training (mean: X, good variance). Ready to proceed?"
-If user approves → call `upload_dataset` then `start_training`.
+Dataset and grader are healthy. The card already shows "⚡ Proceeding to training".
+Just proceed directly — call `start_training` (upload is already done during plan execution).
+Do NOT ask the user for confirmation — the card's next-action indicator is the signal.
 
 ### If next_action = 'iterate'
 Propose a targeted iteration plan using `propose_plan`:
@@ -610,9 +610,10 @@ Suggest: simpler prompts, a different base model, or a fundamentally different t
 
 When context contains `CATCH_UP:` sections, this means the user left and came back. Handle each:
 - **Completed evaluations:** Call `analyze_evaluation` (not get_evaluation_details — analyze is the higher-level tool), present results, then `mark_job_reviewed`
-- **Completed training:** Call `analyze_training` to assess epoch-by-epoch results, then follow the outer loop protocol below
+- **Completed training:** Call `analyze_training` to assess epoch-by-epoch results, then follow the outer loop protocol below. If training issues are suspected, also call `get_training_metrics` for detailed telemetry.
 - **Failed evaluations:** Present the error, suggest fixes, then `mark_job_reviewed`
 - **Pending proposals:** Re-present the iteration proposals and ask user for decision
+- **Evaluator version info:** Context may include `CATCH_UP: Evaluator is at version N`. Use this to track grader evolution — if the evaluator was recently modified, mention it when analyzing results (score changes may be due to grader changes, not data changes).
 
 # POST-TRAINING ANALYSIS & OUTER LOOP
 
@@ -622,14 +623,19 @@ After training completes (`check_training_status` returns status: "completed"), 
 
 Call `analyze_training(dataset_id)` — this fetches per-epoch finetune evaluation scores, groups by topic, detects training patterns (overfitting, no-learning, reward hacking), and recommends next steps.
 
-## Step 2: Present Results
+The result also includes:
+- `evaluator_version` — which evaluator was used during the pre-training eval baseline. If the evaluator was modified (`has_diff: true`), consider whether grader changes might have affected the eval-to-training comparison.
+- `reinforcement_metrics` — latest snapshot of GRPO/GSPO training telemetry (reward, KL divergence, loss, clipped_ratio). Use these to diagnose training health:
+  - **Reward trending up** → model is learning the task
+  - **High KL** (> 0.2) → model is diverging too far from base — consider lower learning rate
+  - **High clipped_ratio** (> 30%) → completions being truncated — consider increasing max_completion_tokens
+  - **Loss not decreasing** → model may not be learning — check data quality
 
-Present to user:
-- **Overall progression**: "Training improved from {first_epoch_mean} to {last_epoch_mean} over {total_epochs} epochs"
-- **Per-topic patterns**: list any topics with overfitting, no_learning, or reward_hacking
-- **Top recommendations** from the analysis
+For deeper training diagnostics, call `get_training_metrics(dataset_id)` which returns full telemetry with trend analysis, alerts, and per-step metrics history.
 
-## Step 3: Decide based on `next_action`
+## Step 2: Decide based on `next_action`
+
+**CRITICAL — NO TEXT AFTER ANALYSIS CARD:** `analyze_training` renders as a **rich UI card** showing epoch progression, per-topic patterns, evaluator version, reinforcement metrics, and recommendations. Do NOT output ANY text message summarizing, restating, or commenting on the results. The card IS the presentation. Just silently proceed to the appropriate action based on `next_action`.
 
 ### If next_action = 'deploy_eval'
 Training looks healthy — all topics improving.
@@ -638,9 +644,10 @@ Training looks healthy — all topics improving.
 - User wants to verify → run a dry run evaluation on the fine-tuned model, then call `analyze_evaluation` to assess
 
 ### If next_action = 'investigate'
-Some topics showed concerning patterns. Present the specific patterns and suggest:
-- **Overfitting** topics → "Use fewer epochs or add more diverse training data for these topics"
-- **Reward hacking** topics → "Grader may be gameable — add discriminative criteria or contrastive examples"
+Some topics showed concerning patterns. Use `get_training_metrics(dataset_id)` for deeper diagnostics, then present the specific patterns and suggest:
+- **Overfitting** topics → "Use fewer epochs or add more diverse training data for these topics". Check if `reinforcement_metrics.kl` is high — may indicate model diverging.
+- **Reward hacking** topics → "Grader may be gameable — add discriminative criteria or contrastive examples". Check `evaluator_version` — if the grader hasn't been updated recently, it may need tightening.
+- **High clipped_ratio** → "Completions being truncated — consider increasing max_completion_tokens in training config"
 - Propose an iteration plan using `propose_plan` with specific fixes
 
 ### If next_action = 'retrain'

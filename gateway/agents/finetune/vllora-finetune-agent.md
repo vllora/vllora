@@ -47,7 +47,10 @@ external = [
 
   # Analysis tools (call directly — no delegation needed)
   "analyze_evaluation",
-  "analyze_training"
+  "analyze_training",
+
+  # Training metrics (reinforcement learning telemetry)
+  "get_training_metrics"
 ]
 
 [model_settings]
@@ -638,6 +641,20 @@ After plan execution completes, evaluation and training run in the background. W
 - **Completed evaluation:** Call `analyze_evaluation({ dataset_id })` to present health assessment, per-topic scores, and recommendations
 - **Completed training:** Call `analyze_training({ dataset_id })` to present epoch-by-epoch results and recommendations
 These are catch-up tools — NEVER block plan execution waiting for eval/training to finish.
+
+**CRITICAL — NO TEXT AFTER ANALYSIS CARDS:**
+`analyze_evaluation` and `analyze_training` render as **rich UI cards** that the user can already see (scores, per-topic breakdown, reasoning, proposed changes, evaluator version, reinforcement metrics, next action). The card IS the presentation — do NOT output ANY text message summarizing, restating, interpreting, or commenting on the results. Adding text after the card is redundant and clutters the chat. Instead, silently proceed to the next action:
+- If the next action is `train` → just call `start_training` with NO preceding text
+- If the next action is `iterate` → call `propose_plan` with the iteration plan (1 sentence intro max)
+- If the next action is `escalate` or `hard_stop` → one sentence max explaining the blocker
+- If training shows concerning metrics (high KL, clipped completions) → call `get_training_metrics(dataset_id)` for deeper diagnostics before recommending fixes
+NEVER restate scores, per-topic breakdowns, health assessments, or recommendations that the card already shows. Zero tolerance — any text that restates card content is a violation of this rule.
+
+**Enriched context from analysis tools:**
+Both `analyze_evaluation` and `analyze_training` now return additional context:
+- `evaluator_version` — which evaluator/grader version was used. Track this across iterations to correlate score changes with grader modifications.
+- `reinforcement_metrics` (training only) — latest GRPO/GSPO telemetry (reward, KL, loss, clipped_ratio). Use for training health diagnostics.
+- For detailed training telemetry with alerts and trends, call `get_training_metrics(dataset_id)` directly.
 
 **update_plan_markdown `status` and `error_message` parameters:**
 - Omit `status` for intermediate steps (auto-transitions to "executing" on first call)
