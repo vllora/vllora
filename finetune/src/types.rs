@@ -43,7 +43,7 @@ pub struct UpdateEvaluatorResponse {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EvaluatorVersionResponse {
     pub id: uuid::Uuid,
-    pub dataset_id: uuid::Uuid,
+    pub workflow_id: uuid::Uuid,
     pub version: i32,
     pub config: JsonValue,
     #[serde(default, skip_serializing_if = "Option::is_none")]
