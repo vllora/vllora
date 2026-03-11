@@ -180,8 +180,69 @@ diesel::table! {
         id -> Text,
         name -> Text,
         objective -> Text,
+        eval_script -> Nullable<Text>,
         created_at -> Text,
         updated_at -> Text,
+        deleted_at -> Nullable<Text>,
+        state -> Nullable<Text>,
+        iteration_state -> Nullable<Text>,
+    }
+}
+
+diesel::table! {
+    workflow_records (id) {
+        id -> Text,
+        workflow_id -> Text,
+        data -> Text,
+        topic -> Nullable<Text>,
+        span_id -> Nullable<Text>,
+        is_generated -> Integer,
+        source_record_id -> Nullable<Text>,
+        dry_run_score -> Nullable<Float>,
+        finetune_score -> Nullable<Float>,
+        metadata -> Nullable<Text>,
+        created_at -> Text,
+    }
+}
+
+diesel::table! {
+    workflow_topics (id) {
+        id -> Text,
+        workflow_id -> Text,
+        name -> Text,
+        parent_id -> Nullable<Text>,
+        selected -> Integer,
+        source_chunk_refs -> Nullable<Text>,
+        created_at -> Text,
+    }
+}
+
+diesel::table! {
+    eval_jobs (id) {
+        id -> Text,
+        workflow_id -> Text,
+        cloud_run_id -> Nullable<Text>,
+        status -> Text,
+        sample_size -> Nullable<Integer>,
+        rollout_model -> Nullable<Text>,
+        error -> Nullable<Text>,
+        created_at -> Text,
+        updated_at -> Text,
+    }
+}
+
+diesel::table! {
+    knowledge_sources (id) {
+        id -> Text,
+        workflow_id -> Text,
+        name -> Text,
+        #[sql_name = "type"]
+        source_type -> Text,
+        content -> Nullable<Text>,
+        extracted_content -> Nullable<Text>,
+        status -> Text,
+        progress -> Nullable<Text>,
+        created_at -> Text,
         deleted_at -> Nullable<Text>,
     }
 }
@@ -190,8 +251,10 @@ diesel::joinable!(provider_credentials -> projects (project_id));
 diesel::joinable!(finetune_jobs -> projects (project_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
+    eval_jobs,
     finetune_jobs,
     knowledge,
+    knowledge_sources,
     metrics,
     models,
     projects,
@@ -199,5 +262,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     providers,
     sessions,
     traces,
+    workflow_records,
+    workflow_topics,
     workflows,
 );

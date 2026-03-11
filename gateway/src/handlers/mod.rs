@@ -1,10 +1,14 @@
 pub mod agents;
 pub mod debug;
+pub mod eval_jobs;
 pub mod finetune;
+pub mod knowledge_sources;
 pub mod models;
 pub mod projects;
 pub mod session;
 pub mod threads;
+pub mod workflow_records;
+pub mod workflow_topics;
 pub mod workflows;
 
 use actix_web::{web, HttpResponse};

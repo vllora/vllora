@@ -32,6 +32,14 @@ impl WorkflowService {
             .first::<DbWorkflow>(&mut conn)?)
     }
 
+    pub fn get_by_id(&self, workflow_id: &str) -> Result<DbWorkflow, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+        Ok(dsl::workflows
+            .filter(dsl::id.eq(workflow_id))
+            .filter(dsl::deleted_at.is_null())
+            .first::<DbWorkflow>(&mut conn)?)
+    }
+
     pub fn list(&self) -> Result<Vec<DbWorkflow>, DatabaseError> {
         let mut conn = self.db_pool.get()?;
         Ok(dsl::workflows

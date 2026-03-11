@@ -46,17 +46,12 @@ pub fn extract_bearer_token(authorization_header: &str) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::Rng;
 
     fn random_string_key(prefix: &str) -> String {
-        let mut rng = rand::thread_rng();
-        let key = rng.gen_range(1000000..9999999);
-        let key_part = key
-            .to_string()
-            .chars()
-            .map(|c| c as u8)
-            .collect::<Vec<u8>>()
-            .to_vec();
-        format!("{prefix}-{key_part}")
+        let mut rng = rand::rng();
+        let key: i32 = rng.random_range(1000000..9999999);
+        format!("{prefix}-{key}")
     }
     #[test]
     fn test_detect_anthropic() {
