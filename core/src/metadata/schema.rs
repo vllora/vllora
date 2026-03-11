@@ -1,6 +1,16 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
+    knowledge (id) {
+        id -> Text,
+        name -> Text,
+        workflow_id -> Text,
+        metadata -> Nullable<Text>,
+        description -> Nullable<Text>,
+    }
+}
+
+diesel::table! {
     models (id) {
         id -> Nullable<Text>,
         model_name -> Text,
@@ -181,6 +191,7 @@ diesel::joinable!(finetune_jobs -> projects (project_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     finetune_jobs,
+    knowledge,
     metrics,
     models,
     projects,

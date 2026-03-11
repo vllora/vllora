@@ -392,6 +392,10 @@ impl ApiServer {
                                         web::post().to(workflows::create_workflow_knowledge),
                                     )
                                     .route(
+                                        "/knowledge",
+                                        web::get().to(workflows::list_workflow_knowledges),
+                                    )
+                                    .route(
                                         "/knowledge/chunk",
                                         web::post().to(workflows::chunk_workflow_knowledge),
                                     )

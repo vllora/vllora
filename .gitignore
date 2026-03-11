@@ -12,3 +12,4 @@ config.yaml
 **/Cargo.lock
 generated_image*
 .distri/
+.knowledge_store/

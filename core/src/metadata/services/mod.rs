@@ -1,5 +1,6 @@
 pub mod finetune_job;
 pub mod group;
+pub mod knowledge;
 pub mod mcp_config;
 pub mod metric;
 pub mod model;
