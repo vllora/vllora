@@ -109,6 +109,27 @@ impl EvalJobService {
             .first::<DbEvalJob>(&mut conn)?)
     }
 
+    pub fn update_full(
+        &self,
+        job_id: &str,
+        changeset: DbUpdateEvalJob,
+    ) -> Result<DbEvalJob, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+
+        let affected = diesel::update(dsl::eval_jobs)
+            .filter(dsl::id.eq(job_id))
+            .set(&changeset)
+            .execute(&mut conn)?;
+
+        if affected == 0 {
+            return Err(DatabaseError::QueryError(diesel::result::Error::NotFound));
+        }
+
+        Ok(dsl::eval_jobs
+            .filter(dsl::id.eq(job_id))
+            .first::<DbEvalJob>(&mut conn)?)
+    }
+
     pub fn delete(&self, job_id: &str) -> Result<(), DatabaseError> {
         let mut conn = self.db_pool.get()?;
         let affected = diesel::delete(dsl::eval_jobs)

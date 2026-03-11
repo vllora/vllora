@@ -18,6 +18,10 @@ pub struct DbEvalJob {
     pub error: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    pub completed_at: Option<String>,
+    pub started_at: Option<String>,
+    pub polling_snapshot: Option<String>,
+    pub result: Option<String>,
 }
 
 #[derive(Debug, Insertable, Clone)]
@@ -55,6 +59,10 @@ pub struct DbUpdateEvalJob {
     pub status: Option<String>,
     pub error: Option<String>,
     pub updated_at: Option<String>,
+    pub completed_at: Option<String>,
+    pub started_at: Option<String>,
+    pub polling_snapshot: Option<String>,
+    pub result: Option<String>,
 }
 
 impl DbUpdateEvalJob {
@@ -71,6 +79,26 @@ impl DbUpdateEvalJob {
             status: Some(status),
             error: Some(error),
             updated_at: Some(chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()),
+            ..Default::default()
+        }
+    }
+
+    pub fn with_full_update(
+        status: Option<String>,
+        error: Option<String>,
+        completed_at: Option<String>,
+        started_at: Option<String>,
+        polling_snapshot: Option<String>,
+        result: Option<String>,
+    ) -> Self {
+        Self {
+            status,
+            error,
+            updated_at: Some(chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()),
+            completed_at,
+            started_at,
+            polling_snapshot,
+            result,
         }
     }
 }

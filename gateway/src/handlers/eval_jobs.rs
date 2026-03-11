@@ -2,6 +2,7 @@ use actix_web::{error, web, HttpResponse, Result};
 use serde::Deserialize;
 use vllora_core::metadata::error::DatabaseError;
 use vllora_core::metadata::pool::DbPool;
+use vllora_core::metadata::models::eval_job::DbUpdateEvalJob;
 use vllora_core::metadata::services::eval_job::EvalJobService;
 
 fn map_db_error(err: DatabaseError) -> actix_web::Error {
@@ -22,8 +23,12 @@ pub struct CreateEvalJobRequest {
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateEvalJobRequest {
-    pub status: String,
+    pub status: Option<String>,
     pub error: Option<String>,
+    pub completed_at: Option<String>,
+    pub started_at: Option<String>,
+    pub polling_snapshot: Option<String>,
+    pub result: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -97,14 +102,18 @@ pub async fn update_eval_job(
     let payload = body.into_inner();
     let service = EvalJobService::new(db_pool.get_ref().clone());
 
-    let job = match payload.error {
-        Some(err_msg) => service
-            .update_error(&job_id, &payload.status, &err_msg)
-            .map_err(map_db_error)?,
-        None => service
-            .update_status(&job_id, &payload.status)
-            .map_err(map_db_error)?,
-    };
+    let changeset = DbUpdateEvalJob::with_full_update(
+        payload.status,
+        payload.error,
+        payload.completed_at,
+        payload.started_at,
+        payload.polling_snapshot,
+        payload.result,
+    );
+
+    let job = service
+        .update_full(&job_id, changeset)
+        .map_err(map_db_error)?;
     Ok(HttpResponse::Ok().json(job))
 }
 
