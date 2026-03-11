@@ -276,8 +276,8 @@ Provide context and clear options. Don't over-explain - let users guide the conv
 
 ## finetune_topics
 **Use for:** Interactive topic exploration — when the user wants to SEE, DISCUSS, or MANUALLY ADJUST topics outside of plan execution.
-**Tools:** generate_topics, display_topic_hierarchy, apply_topic_hierarchy
-**Returns:** Confirmation that hierarchy was displayed/applied
+**Tools:** generate_topics, get_topic_hierarchy, apply_topic_hierarchy, adjust_topic_hierarchy
+**Returns:** Confirmation that hierarchy was retrieved/applied
 **DO NOT use during plan execution** — call `apply_topic_hierarchy` directly instead.
 
 **When to delegate:**
@@ -285,7 +285,7 @@ Provide context and clear options. Don't over-explain - let users guide the conv
 - User wants to define/modify topics
 - User wants to apply a hierarchy
 
-**IMPORTANT:** This agent uses `display_topic_hierarchy` to show hierarchies visually. You will NOT see the hierarchy in the response - it's displayed directly to the user via UI.
+**IMPORTANT:** This agent uses `get_topic_hierarchy` to retrieve hierarchies. You will NOT see the hierarchy in the response - it's displayed directly to the user via UI.
 
 ## finetune_workflow
 **Use for:** Complex multi-tool workflows that need specialized coordination — rollbacks, state repairs, or when a step requires multiple tool calls to recover.
@@ -904,7 +904,7 @@ When a tool call fails during execution, use the table below to recover:
 
 | Failed tool | Error contains | Recovery action (do this automatically) |
 |-------------|---------------|----------------------------------------|
-| `apply_topic_hierarchy` | "Cannot apply hierarchy in step" | Call `advance_to_step({ dataset_id, step: "topics_config" })` → retry `apply_topic_hierarchy` |
+| `apply_topic_hierarchy` | "Cannot apply hierarchy in step" | Call `advance_to_step({ workflow_id: "the-id", step: "topics_config" })` → retry `apply_topic_hierarchy` |
 | `adjust_topic_hierarchy` | "No topic hierarchy exists to adjust" | Call `apply_topic_hierarchy` first, then retry `adjust_topic_hierarchy` |
 | `adjust_topic_hierarchy` | "requires an instruction" | Plan is missing instruction. Call `adjust_plan` to add it, then retry |
 | `categorize_records` | "no topic hierarchy configured" | Call `apply_topic_hierarchy` first, then retry `categorize_records` |

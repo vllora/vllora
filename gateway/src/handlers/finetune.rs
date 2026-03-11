@@ -612,11 +612,11 @@ pub async fn get_reinforcement_job_status(
 }
 
 pub async fn get_reinforcement_job_metrics(
-    job_id: web::Path<String>,
+    path: web::Path<JobRequestPath>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
 ) -> Result<HttpResponse> {
-    let job_id_str = job_id.into_inner();
+    let job_id_str = path.job_id.to_string();
 
     let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
     let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
@@ -688,12 +688,12 @@ pub async fn list_reinforcement_jobs(
 }
 
 pub async fn cancel_reinforcement_job(
-    job_id: web::Path<String>,
+    path: web::Path<JobRequestPath>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
-    let job_id_str = job_id.into_inner();
+    let job_id_str = path.job_id.to_string();
 
     let finetune_job_service = FinetuneJobService::new(db_pool.get_ref().clone());
     if let Ok(Some(db_job)) =
@@ -725,12 +725,12 @@ pub async fn cancel_reinforcement_job(
 }
 
 pub async fn resume_reinforcement_job(
-    job_id: web::Path<String>,
+    path: web::Path<JobRequestPath>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
-    let job_id_str = job_id.into_inner();
+    let job_id_str = path.job_id.to_string();
 
     let finetune_job_service = FinetuneJobService::new(db_pool.get_ref().clone());
     if let Ok(Some(db_job)) =
@@ -766,11 +766,11 @@ pub async fn resume_reinforcement_job(
 // ============================================================================
 
 pub async fn get_weights_download_url(
-    job_id: web::Path<String>,
+    path: web::Path<JobRequestPath>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
 ) -> Result<HttpResponse> {
-    let job_id_str = job_id.into_inner();
+    let job_id_str = path.job_id.to_string();
 
     let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
     let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
