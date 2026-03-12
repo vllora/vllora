@@ -2,6 +2,7 @@ use crate::metadata::error::DatabaseError;
 use crate::metadata::models::workflow_topic::{DbNewWorkflowTopic, DbWorkflowTopic};
 use crate::metadata::pool::DbPool;
 use crate::metadata::schema::workflow_topics::dsl;
+use diesel::Connection;
 use diesel::ExpressionMethods;
 use diesel::QueryDsl;
 use diesel::RunQueryDsl;
@@ -49,6 +50,34 @@ impl WorkflowTopicService {
             .filter(dsl::workflow_id.eq(workflow_id))
             .execute(&mut conn)?;
         Ok(affected)
+    }
+
+    /// Replace all topics for a workflow in a single transaction (delete + insert).
+    pub fn replace(
+        &self,
+        workflow_id: &str,
+        topics: Vec<DbNewWorkflowTopic>,
+    ) -> Result<usize, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+        let topics: Vec<DbNewWorkflowTopic> = topics
+            .into_iter()
+            .map(|mut t| {
+                t.workflow_id = workflow_id.to_string();
+                t
+            })
+            .collect();
+
+        conn.transaction::<_, DatabaseError, _>(|conn| {
+            diesel::delete(dsl::workflow_topics)
+                .filter(dsl::workflow_id.eq(workflow_id))
+                .execute(conn)?;
+
+            let count = diesel::insert_into(dsl::workflow_topics)
+                .values(&topics)
+                .execute(conn)?;
+
+            Ok(count)
+        })
     }
 }
 

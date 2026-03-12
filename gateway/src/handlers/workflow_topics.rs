@@ -73,6 +73,27 @@ pub async fn create_topics(
     Ok(HttpResponse::Created().json(serde_json::json!({ "created": count })))
 }
 
+pub async fn replace_topics(
+    workflow_id: web::Path<String>,
+    body: web::Json<CreateTopicsRequest>,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let workflow_id = workflow_id.into_inner();
+    let payload = body.into_inner();
+    let service = WorkflowTopicService::new(db_pool.get_ref().clone());
+
+    let db_topics: Vec<DbNewWorkflowTopic> = payload
+        .topics
+        .into_iter()
+        .map(|t| t.into_db_topic(&workflow_id))
+        .collect();
+
+    let count = service
+        .replace(&workflow_id, db_topics)
+        .map_err(map_db_error)?;
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "replaced": count })))
+}
+
 pub async fn delete_all_topics(
     workflow_id: web::Path<String>,
     db_pool: web::Data<DbPool>,
