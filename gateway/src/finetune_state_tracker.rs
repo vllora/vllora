@@ -180,63 +180,59 @@ impl FinetuneJobStateTracker {
             .state_enum()
             .map_err(|e| format!("Invalid current state: {}", e))?;
 
-        if current_state == new_state {
-            // No change, skip update
-            return Ok(());
+        let status_changed = current_state != new_state;
+
+        // Update DB and broadcast SSE only when status actually changes
+        if status_changed {
+            let mut update = DbUpdateFinetuneJob::new().with_state(new_state);
+
+            if let Some(model_id) = status_response.fine_tuned_model {
+                update = update.with_fine_tuned_model(Some(model_id));
+            }
+
+            if let Some(error) = status_response.error_message {
+                update = update.with_error_message(Some(error));
+            }
+
+            if matches!(
+                new_state,
+                FinetuneJobState::Succeeded | FinetuneJobState::Failed | FinetuneJobState::Cancelled
+            ) {
+                update = update.with_completed_at(Some(chrono::Utc::now().to_rfc3339()));
+            }
+
+            let updated_job = service
+                .update(&job.id, &job.project_id, update)
+                .map_err(|e| format!("Failed to update job in database: {}", e))?;
+
+            info!(
+                "Updated job {} from {:?} to {:?}",
+                job.provider_job_id, current_state, new_state
+            );
+
+            let event = Event::Custom {
+                run_context: EventRunContext {
+                    run_id: None,
+                    thread_id: None,
+                    span_id: None,
+                    parent_span_id: None,
+                },
+                timestamp: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis() as u64,
+                custom_event: CustomEventType::FinetuneJobUpdate {
+                    job_id: updated_job.id.clone(),
+                    status: updated_job.state.clone(),
+                },
+            };
+
+            self.broadcaster
+                .send_events(project_slug.unwrap_or_default(), &[event])
+                .await;
         }
 
-        // Update database
-        let mut update = DbUpdateFinetuneJob::new().with_state(new_state);
-
-        if let Some(model_id) = status_response.fine_tuned_model {
-            update = update.with_fine_tuned_model(Some(model_id));
-        }
-
-        if let Some(error) = status_response.error_message {
-            update = update.with_error_message(Some(error));
-        }
-
-        // Set completed_at if job reached terminal state
-        if matches!(
-            new_state,
-            FinetuneJobState::Succeeded | FinetuneJobState::Failed | FinetuneJobState::Cancelled
-        ) {
-            update = update.with_completed_at(Some(chrono::Utc::now().to_rfc3339()));
-        }
-
-        let updated_job = service
-            .update(&job.id, &job.project_id, update)
-            .map_err(|e| format!("Failed to update job in database: {}", e))?;
-
-        info!(
-            "Updated job {} from {:?} to {:?}",
-            job.provider_job_id, current_state, new_state
-        );
-
-        // Send FinetuneJobUpdate event
-        let event = Event::Custom {
-            run_context: EventRunContext {
-                run_id: None,
-                thread_id: None,
-                span_id: None,
-                parent_span_id: None,
-            },
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64,
-            custom_event: CustomEventType::FinetuneJobUpdate {
-                job_id: updated_job.id.clone(),
-                status: updated_job.state.clone(),
-            },
-        };
-
-        // Send event to all connected clients for this project
-        self.broadcaster
-            .send_events(project_slug.unwrap_or_default(), &[event])
-            .await;
-
-        // Write finetune scores (rate-limited to every Nth poll cycle)
+        // Write finetune scores on every poll (rate-limited to every Nth cycle)
         let cycle = self.poll_count.fetch_add(1, Ordering::Relaxed);
         if cycle % SCORE_FETCH_INTERVAL == 0 {
             if let Err(e) = self

@@ -5,7 +5,7 @@ use tokio::time;
 use tracing::{error, info, warn};
 use vllora_core::credentials::KeyStorage;
 use vllora_core::events::ui_broadcaster::EventsUIBroadcaster;
-use vllora_core::metadata::models::eval_job::DbEvalJob;
+use vllora_core::metadata::models::eval_job::{DbEvalJob, DbUpdateEvalJob};
 use vllora_core::metadata::pool::DbPool;
 use vllora_core::metadata::services::eval_job::EvalJobService;
 use vllora_core::metadata::services::project::ProjectServiceImpl;
@@ -139,64 +139,85 @@ impl EvalJobStateTracker {
             .map_err(|e| format!("Failed to get eval result from cloud API: {}", e))?;
 
         let new_status = &result_response.status;
+        let status_changed = job.status != *new_status;
 
-        // No change, skip update
-        if job.status == *new_status {
-            return Ok(());
-        }
+        // Always save the polling_snapshot so FE has fresh progress data
+        let snapshot_json = serde_json::to_string(&result_response)
+            .map_err(|e| format!("Failed to serialize polling snapshot: {}", e))?;
 
-        // Check if the new status indicates failure with an error
-        if new_status == "failed" {
-            let error_msg = format!(
-                "Evaluation failed (completed: {}, failed: {}, total: {})",
-                result_response.completed_rows,
-                result_response.failed_rows,
-                result_response.total_rows,
+        // Build update changeset: always include snapshot, conditionally include status
+        if status_changed {
+            let mut update = DbUpdateEvalJob {
+                status: Some(new_status.clone()),
+                polling_snapshot: Some(snapshot_json),
+                updated_at: Some(chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()),
+                ..Default::default()
+            };
+
+            if new_status == "failed" {
+                update.error = Some(format!(
+                    "Evaluation failed (completed: {}, failed: {}, total: {})",
+                    result_response.completed_rows,
+                    result_response.failed_rows,
+                    result_response.total_rows,
+                ));
+            }
+
+            if TERMINAL_STATUSES.contains(&new_status.as_str()) {
+                update.completed_at =
+                    Some(chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string());
+            }
+
+            service
+                .update_full(&job.id, update)
+                .map_err(|e| format!("Failed to update eval job in database: {}", e))?;
+
+            info!(
+                "Updated eval job {} (cloud: {}) from {:?} to {:?}",
+                job.id, cloud_run_id, job.status, new_status
             );
-            service
-                .update_error(&job.id, new_status, &error_msg)
-                .map_err(|e| format!("Failed to update eval job error in database: {}", e))?;
+
+            let update_event = Event::Custom {
+                run_context: EventRunContext::default(),
+                timestamp: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis() as u64,
+                custom_event: CustomEventType::EvalJobUpdate {
+                    job_id: job.id.clone(),
+                    workflow_id: job.workflow_id.clone(),
+                    status: new_status.clone(),
+                },
+            };
+
+            let broadcaster = self.broadcaster.clone();
+            let events = vec![update_event];
+            tokio::spawn(async move {
+                broadcaster.send_events("", &events).await;
+            });
+
+            if TERMINAL_STATUSES.contains(&new_status.as_str()) {
+                info!("Eval job {} reached terminal status: {}", job.id, new_status);
+            }
         } else {
+            // Status unchanged, just update the snapshot for progress tracking
             service
-                .update_status(&job.id, new_status)
-                .map_err(|e| format!("Failed to update eval job status in database: {}", e))?;
+                .update_full(
+                    &job.id,
+                    DbUpdateEvalJob {
+                        polling_snapshot: Some(snapshot_json),
+                        updated_at: Some(
+                            chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string(),
+                        ),
+                        ..Default::default()
+                    },
+                )
+                .map_err(|e| format!("Failed to update eval job snapshot: {}", e))?;
         }
 
-        info!(
-            "Updated eval job {} (cloud: {}) from {:?} to {:?}",
-            job.id, cloud_run_id, job.status, new_status
-        );
-
-        // Broadcast EvalJobUpdate SSE event
-        let update_event = Event::Custom {
-            run_context: EventRunContext::default(),
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64,
-            custom_event: CustomEventType::EvalJobUpdate {
-                job_id: job.id.clone(),
-                workflow_id: job.workflow_id.clone(),
-                status: new_status.clone(),
-            },
-        };
-
-        let broadcaster = self.broadcaster.clone();
-        let events = vec![update_event];
-        tokio::spawn(async move {
-            broadcaster.send_events("", &events).await;
-        });
-
-        // Write eval scores to workflow records if results are available
+        // Write eval scores on every poll (incremental updates while running)
         if !result_response.results.is_empty() {
             self.write_eval_scores(&job.workflow_id, cloud_run_id, &result_response.results)?;
-        }
-
-        if TERMINAL_STATUSES.contains(&new_status.as_str()) {
-            info!(
-                "Eval job {} reached terminal status: {}",
-                job.id, new_status
-            );
         }
 
         Ok(())
