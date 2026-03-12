@@ -192,7 +192,7 @@ impl ApiServer {
         );
 
         let breakpoint_manager_for_closure = breakpoint_manager.clone();
-        let events_senders_container_for_tracker = events_senders_container.clone();
+
         let config = self.config.clone();
         let server = HttpServer::new(move || {
             let cors = Self::get_cors(CorsOptions::Permissive);
@@ -255,13 +255,9 @@ impl ApiServer {
         let key_storage_for_tracker = Arc::new(Box::new(ProviderKeyResolver::new(
             server_config.db_pool.clone(),
         )) as Box<dyn KeyStorage>);
-        let broadcaster_for_tracker = Arc::new(EventsUIBroadcaster::new(
-            events_senders_container_for_tracker.clone(),
-        ));
         let state_tracker = FinetuneJobStateTracker::new(
             server_config.db_pool.clone(),
             key_storage_for_tracker,
-            broadcaster_for_tracker,
         );
         let _state_tracker_handle = state_tracker.start();
 
@@ -269,13 +265,9 @@ impl ApiServer {
         let key_storage_for_eval_tracker = Arc::new(Box::new(ProviderKeyResolver::new(
             server_config.db_pool.clone(),
         )) as Box<dyn KeyStorage>);
-        let broadcaster_for_eval_tracker = Arc::new(EventsUIBroadcaster::new(
-            events_senders_container_for_tracker.clone(),
-        ));
         let eval_state_tracker = EvalJobStateTracker::new(
             server_config.db_pool.clone(),
             key_storage_for_eval_tracker,
-            broadcaster_for_eval_tracker,
         );
         let _eval_state_tracker_handle = eval_state_tracker.start();
 

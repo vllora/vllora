@@ -4,7 +4,6 @@ use std::time::Duration;
 use tokio::time;
 use tracing::{error, info, warn};
 use vllora_core::credentials::KeyStorage;
-use vllora_core::events::ui_broadcaster::EventsUIBroadcaster;
 use vllora_core::metadata::models::eval_job::{DbEvalJob, DbUpdateEvalJob};
 use vllora_core::metadata::pool::DbPool;
 use vllora_core::metadata::services::eval_job::EvalJobService;
@@ -13,7 +12,6 @@ use vllora_core::metadata::services::workflow_record::WorkflowRecordScoreService
 use vllora_core::types::metadata::services::project::ProjectService;
 use vllora_finetune::LangdbCloudFinetuneClient;
 use vllora_finetune::types::RowEpochResults;
-use vllora_llm::types::events::{CustomEventType, Event, EventRunContext};
 
 const TERMINAL_STATUSES: &[&str] = &["completed", "failed", "cancelled"];
 
@@ -22,7 +20,6 @@ const TERMINAL_STATUSES: &[&str] = &["completed", "failed", "cancelled"];
 pub struct EvalJobStateTracker {
     db_pool: DbPool,
     key_storage: Arc<Box<dyn KeyStorage>>,
-    broadcaster: Arc<EventsUIBroadcaster>,
     poll_interval: Duration,
 }
 
@@ -30,7 +27,6 @@ impl EvalJobStateTracker {
     pub fn new(
         db_pool: DbPool,
         key_storage: Arc<Box<dyn KeyStorage>>,
-        broadcaster: Arc<EventsUIBroadcaster>,
     ) -> Self {
         let poll_interval_secs = std::env::var("EVAL_STATE_TRACKER_INTERVAL_SECS")
             .ok()
@@ -40,7 +36,6 @@ impl EvalJobStateTracker {
         Self {
             db_pool,
             key_storage,
-            broadcaster,
             poll_interval: Duration::from_secs(poll_interval_secs),
         }
     }
@@ -214,25 +209,6 @@ impl EvalJobStateTracker {
             updates.len(),
             workflow_id
         );
-
-        // Broadcast SSE event
-        let event = Event::Custom {
-            run_context: EventRunContext::default(),
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64,
-            custom_event: CustomEventType::RecordScoresUpdated {
-                workflow_id: workflow_id.to_string(),
-                score_type: "eval".to_string(),
-                updated_count: updates.len(),
-            },
-        };
-
-        let broadcaster = self.broadcaster.clone();
-        tokio::spawn(async move {
-            broadcaster.send_events("", &[event]).await;
-        });
 
         Ok(())
     }

@@ -5,7 +5,6 @@ use std::time::Duration;
 use tokio::time;
 use tracing::{error, info, warn};
 use vllora_core::credentials::KeyStorage;
-use vllora_core::events::ui_broadcaster::EventsUIBroadcaster;
 use vllora_core::metadata::models::finetune_job::{
     DbFinetuneJob, DbUpdateFinetuneJob, FinetuneJobState,
 };
@@ -15,7 +14,6 @@ use vllora_core::metadata::services::project::ProjectServiceImpl;
 use vllora_core::metadata::services::workflow_record::WorkflowRecordScoreService;
 use vllora_core::types::metadata::services::project::ProjectService;
 use vllora_finetune::LangdbCloudFinetuneClient;
-use vllora_llm::types::events::{CustomEventType, Event, EventRunContext};
 
 /// State tracker for finetune jobs that periodically polls cloud API
 /// and updates the local database with current job statuses
@@ -25,7 +23,6 @@ const SCORE_FETCH_INTERVAL: u64 = 3;
 pub struct FinetuneJobStateTracker {
     db_pool: DbPool,
     key_storage: Arc<Box<dyn KeyStorage>>,
-    broadcaster: Arc<EventsUIBroadcaster>,
     poll_interval: Duration,
     poll_count: AtomicU64,
 }
@@ -35,7 +32,6 @@ impl FinetuneJobStateTracker {
     pub fn new(
         db_pool: DbPool,
         key_storage: Arc<Box<dyn KeyStorage>>,
-        broadcaster: Arc<EventsUIBroadcaster>,
     ) -> Self {
         let poll_interval_secs = std::env::var("FINETUNE_STATE_TRACKER_INTERVAL_SECS")
             .ok()
@@ -45,7 +41,6 @@ impl FinetuneJobStateTracker {
         Self {
             db_pool,
             key_storage,
-            broadcaster,
             poll_interval: Duration::from_secs(poll_interval_secs),
             poll_count: AtomicU64::new(0),
         }
@@ -141,7 +136,6 @@ impl FinetuneJobStateTracker {
                         &job,
                         &client,
                         &finetune_job_service,
-                        project_slug.as_deref(),
                     )
                     .await
                 {
@@ -161,7 +155,6 @@ impl FinetuneJobStateTracker {
         job: &DbFinetuneJob,
         client: &LangdbCloudFinetuneClient,
         service: &FinetuneJobService,
-        project_slug: Option<&str>,
     ) -> Result<(), String> {
         // Query cloud API for current status
         let status_response = client
@@ -215,7 +208,7 @@ impl FinetuneJobStateTracker {
         let cycle = self.poll_count.fetch_add(1, Ordering::Relaxed);
         if cycle % SCORE_FETCH_INTERVAL == 0 {
             if let Err(e) = self
-                .write_finetune_scores(job, client, project_slug)
+                .write_finetune_scores(job, client)
                 .await
             {
                 warn!("Failed to write finetune scores for job {}: {}", job.provider_job_id, e);
@@ -229,7 +222,6 @@ impl FinetuneJobStateTracker {
         &self,
         job: &DbFinetuneJob,
         client: &LangdbCloudFinetuneClient,
-        project_slug: Option<&str>,
     ) -> Result<(), String> {
         let eval_results = client
             .get_finetune_evaluations(
@@ -279,29 +271,6 @@ impl FinetuneJobStateTracker {
             job.workflow_id,
             job.provider_job_id
         );
-
-        // Broadcast SSE event
-        let event = Event::Custom {
-            run_context: EventRunContext {
-                run_id: None,
-                thread_id: None,
-                span_id: None,
-                parent_span_id: None,
-            },
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64,
-            custom_event: CustomEventType::RecordScoresUpdated {
-                workflow_id: job.workflow_id.clone(),
-                score_type: "finetune".to_string(),
-                updated_count: updates.len(),
-            },
-        };
-
-        self.broadcaster
-            .send_events(project_slug.unwrap_or_default(), &[event])
-            .await;
 
         Ok(())
     }
