@@ -7,12 +7,13 @@ use crate::metadata::models::knowledge_source_part::{
 };
 use crate::metadata::pool::DbPool;
 use crate::metadata::schema::knowledge_source_parts::dsl as parts_dsl;
-use diesel::Connection;
-use diesel::SelectableHelper;
 use crate::metadata::schema::knowledge_sources::dsl;
+use diesel::BoolExpressionMethods;
+use diesel::Connection;
 use diesel::ExpressionMethods;
 use diesel::QueryDsl;
 use diesel::RunQueryDsl;
+use diesel::SelectableHelper;
 
 pub struct KnowledgeSourceService {
     db_pool: DbPool,
@@ -37,6 +38,7 @@ impl KnowledgeSourceService {
             name.to_string(),
             description.map(|s| s.to_string()),
             metadata.map(|s| s.to_string()),
+            None,
         );
         let ks_id = input.id.clone();
 
@@ -84,13 +86,13 @@ impl KnowledgeSourceService {
     pub fn get_typed(&self, ks_id: &str) -> Result<KnowledgeSource, DatabaseError> {
         let mut conn = self.db_pool.get()?;
         let source = dsl::knowledge_sources
-            .filter(dsl::id.eq(ks_id))
             .filter(dsl::deleted_at.is_null())
+            .filter(dsl::id.eq(ks_id).or(dsl::reference_id.eq(ks_id)))
             .select(DbKnowledgeSource::as_select())
             .first::<DbKnowledgeSource>(&mut conn)?;
 
         let parts = parts_dsl::knowledge_source_parts
-            .filter(parts_dsl::source_id.eq(ks_id))
+            .filter(parts_dsl::source_id.eq(&source.id))
             .load::<DbKnowledgeSourcePart>(&mut conn)?;
 
         Ok(KnowledgeSource::from_models(source, parts)?)
@@ -136,9 +138,42 @@ impl KnowledgeSourceService {
         Ok(out)
     }
 
-    pub fn add_parts(
+    pub fn get_by_identifier_and_workflow_id(
         &self,
-        source_id: &str,
+        workflow_id: &str,
+        identifier: &str,
+    ) -> Result<DbKnowledgeSource, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+        Ok(dsl::knowledge_sources
+            .filter(dsl::workflow_id.eq(workflow_id))
+            .filter(dsl::deleted_at.is_null())
+            .filter(dsl::id.eq(identifier).or(dsl::reference_id.eq(identifier)))
+            .select(DbKnowledgeSource::as_select())
+            .first::<DbKnowledgeSource>(&mut conn)?)
+    }
+
+    pub fn get_typed_by_identifier_and_workflow_id(
+        &self,
+        workflow_id: &str,
+        identifier: &str,
+    ) -> Result<KnowledgeSource, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+        let source = dsl::knowledge_sources
+            .filter(dsl::workflow_id.eq(workflow_id))
+            .filter(dsl::deleted_at.is_null())
+            .filter(dsl::id.eq(identifier).or(dsl::reference_id.eq(identifier)))
+            .select(DbKnowledgeSource::as_select())
+            .first::<DbKnowledgeSource>(&mut conn)?;
+        let parts = parts_dsl::knowledge_source_parts
+            .filter(parts_dsl::source_id.eq(&source.id))
+            .load::<DbKnowledgeSourcePart>(&mut conn)?;
+        Ok(KnowledgeSource::from_models(source, parts)?)
+    }
+
+    pub fn add_parts_by_identifier_and_workflow_id(
+        &self,
+        workflow_id: &str,
+        source_identifier: &str,
         parts: Vec<NewKnowledgeSourcePart>,
     ) -> Result<Vec<KnowledgeSourcePart>, DatabaseError> {
         if parts.is_empty() {
@@ -146,17 +181,21 @@ impl KnowledgeSourceService {
         }
 
         let mut conn = self.db_pool.get()?;
-
-        // Ensure source exists and isn't soft-deleted.
-        dsl::knowledge_sources
-            .filter(dsl::id.eq(source_id))
+        let source = dsl::knowledge_sources
+            .filter(dsl::workflow_id.eq(workflow_id))
             .filter(dsl::deleted_at.is_null())
+            .filter(
+                dsl::id
+                    .eq(source_identifier)
+                    .or(dsl::reference_id.eq(source_identifier)),
+            )
             .select(DbKnowledgeSource::as_select())
             .first::<DbKnowledgeSource>(&mut conn)?;
+        let source_id = source.id;
 
         let db_parts: Vec<DbNewKnowledgeSourcePart> = parts
             .into_iter()
-            .map(|p| p.into_db_new(source_id.to_string()))
+            .map(|p| p.into_db_new(source_id.clone()))
             .collect::<Result<Vec<_>, _>>()?;
         let inserted_ids: Vec<String> = db_parts
             .iter()
@@ -171,7 +210,7 @@ impl KnowledgeSourceService {
         })?;
 
         let inserted = parts_dsl::knowledge_source_parts
-            .filter(parts_dsl::source_id.eq(source_id))
+            .filter(parts_dsl::source_id.eq(&source_id))
             .filter(parts_dsl::id.eq_any(inserted_ids))
             .load::<DbKnowledgeSourcePart>(&mut conn)?;
 
@@ -182,15 +221,23 @@ impl KnowledgeSourceService {
             .map_err(DatabaseError::from)
     }
 
-    pub fn list_parts(&self, source_id: &str) -> Result<Vec<KnowledgeSourcePart>, DatabaseError> {
+    pub fn list_parts_by_identifier_and_workflow_id(
+        &self,
+        workflow_id: &str,
+        source_identifier: &str,
+    ) -> Result<Vec<KnowledgeSourcePart>, DatabaseError> {
         let mut conn = self.db_pool.get()?;
-
-        // Ensure source exists and isn't soft-deleted.
-        dsl::knowledge_sources
-            .filter(dsl::id.eq(source_id))
+        let source = dsl::knowledge_sources
+            .filter(dsl::workflow_id.eq(workflow_id))
             .filter(dsl::deleted_at.is_null())
+            .filter(
+                dsl::id
+                    .eq(source_identifier)
+                    .or(dsl::reference_id.eq(source_identifier)),
+            )
             .select(DbKnowledgeSource::as_select())
             .first::<DbKnowledgeSource>(&mut conn)?;
+        let source_id = source.id;
 
         let parts = parts_dsl::knowledge_source_parts
             .filter(parts_dsl::source_id.eq(source_id))
@@ -203,25 +250,47 @@ impl KnowledgeSourceService {
             .map_err(DatabaseError::from)
     }
 
-    pub fn delete_part(&self, source_id: &str, part_id: &str) -> Result<(), DatabaseError> {
+    pub fn delete_part(
+        &self,
+        workflow_id: &str,
+        source_identifier: &str,
+        part_identifier: &str,
+    ) -> Result<(), DatabaseError> {
         let mut conn = self.db_pool.get()?;
-
-        // Ensure source exists and isn't soft-deleted.
-        dsl::knowledge_sources
-            .filter(dsl::id.eq(source_id))
+        let source = dsl::knowledge_sources
+            .filter(dsl::workflow_id.eq(workflow_id))
             .filter(dsl::deleted_at.is_null())
+            .filter(
+                dsl::id
+                    .eq(source_identifier)
+                    .or(dsl::reference_id.eq(source_identifier)),
+            )
             .select(DbKnowledgeSource::as_select())
             .first::<DbKnowledgeSource>(&mut conn)?;
+        let source_id = source.id;
 
         let affected = diesel::delete(parts_dsl::knowledge_source_parts)
-            .filter(parts_dsl::id.eq(part_id))
             .filter(parts_dsl::source_id.eq(source_id))
+            .filter(
+                parts_dsl::id
+                    .eq(part_identifier)
+                    .or(parts_dsl::reference_id.eq(part_identifier)),
+            )
             .execute(&mut conn)?;
 
         if affected == 0 {
             return Err(DatabaseError::QueryError(diesel::result::Error::NotFound));
         }
         Ok(())
+    }
+
+    pub fn soft_delete_by_identifier_and_workflow_id(
+        &self,
+        workflow_id: &str,
+        identifier: &str,
+    ) -> Result<(), DatabaseError> {
+        let source = self.get_by_identifier_and_workflow_id(workflow_id, identifier)?;
+        self.soft_delete(&source.id)
     }
 
     pub fn count(&self, workflow_id: &str) -> Result<i64, DatabaseError> {
@@ -259,6 +328,7 @@ impl KnowledgeSourceService {
             .execute(&mut conn)?;
         Ok(affected)
     }
+
 }
 
 #[cfg(test)]
