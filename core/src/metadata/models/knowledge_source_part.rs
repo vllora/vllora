@@ -19,6 +19,7 @@ pub enum KnowledgePartType {
 #[serde(crate = "serde")]
 pub struct DbKnowledgeSourcePart {
     pub id: String,
+    pub reference_id: Option<String>,
     pub source_id: String,
     #[diesel(column_name = part_type)]
     #[serde(rename = "type")]
@@ -34,6 +35,7 @@ pub struct DbKnowledgeSourcePart {
 #[diesel(table_name = knowledge_source_parts)]
 pub struct DbNewKnowledgeSourcePart {
     pub id: Option<String>,
+    pub reference_id: Option<String>,
     pub source_id: String,
     #[diesel(column_name = part_type)]
     pub part_type: String,
@@ -48,6 +50,7 @@ pub struct DbNewKnowledgeSourcePart {
 #[serde(crate = "serde")]
 pub struct KnowledgeSourcePart {
     pub id: String,
+    pub reference_id: Option<String>,
     pub source_id: String,
     #[serde(rename = "type")]
     pub part_type: KnowledgePartType,
@@ -62,6 +65,7 @@ pub struct KnowledgeSourcePart {
 #[serde(crate = "serde")]
 pub struct NewKnowledgeSourcePart {
     pub id: Option<String>,
+    pub reference_id: Option<String>,
     #[serde(rename = "type")]
     pub part_type: KnowledgePartType,
     pub content: String,
@@ -75,6 +79,7 @@ impl NewKnowledgeSourcePart {
     pub fn into_db_new(self, source_id: String) -> Result<DbNewKnowledgeSourcePart, serde_json::Error> {
         Ok(DbNewKnowledgeSourcePart {
             id: self.id.or_else(|| Some(Uuid::new_v4().to_string())),
+            reference_id: self.reference_id,
             source_id,
             part_type: match self.part_type {
                 KnowledgePartType::Text => "text".to_string(),
@@ -109,6 +114,7 @@ impl TryFrom<DbKnowledgeSourcePart> for KnowledgeSourcePart {
 
         Ok(Self {
             id: value.id,
+            reference_id: value.reference_id,
             source_id: value.source_id,
             part_type,
             content: value.content,

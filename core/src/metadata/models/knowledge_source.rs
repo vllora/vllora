@@ -11,6 +11,7 @@ use uuid::Uuid;
 #[serde(crate = "serde")]
 pub struct DbKnowledgeSource {
     pub id: String,
+    pub reference_id: Option<String>,
     pub workflow_id: String,
     pub name: String,
     pub description: Option<String>,
@@ -23,6 +24,7 @@ pub struct DbKnowledgeSource {
 #[diesel(table_name = knowledge_sources)]
 pub struct DbNewKnowledgeSource {
     pub id: String,
+    pub reference_id: Option<String>,
     pub workflow_id: String,
     pub name: String,
     pub description: Option<String>,
@@ -35,9 +37,11 @@ impl DbNewKnowledgeSource {
         name: String,
         description: Option<String>,
         metadata: Option<String>,
+        reference_id: Option<String>,
     ) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
+            reference_id,
             workflow_id,
             name,
             description,
@@ -58,6 +62,7 @@ pub struct DbUpdateKnowledgeSource {
 #[serde(crate = "serde")]
 pub struct KnowledgeSource {
     pub id: String,
+    pub reference_id: Option<String>,
     pub workflow_id: String,
     pub name: String,
     pub description: Option<String>,
@@ -69,6 +74,7 @@ pub struct KnowledgeSource {
 #[serde(crate = "serde")]
 pub struct NewKnowledgeSource {
     pub id: Option<String>,
+    pub reference_id: Option<String>,
     pub workflow_id: String,
     pub name: String,
     pub description: Option<String>,
@@ -89,6 +95,7 @@ impl NewKnowledgeSource {
         let source_id = self.id.unwrap_or_else(|| Uuid::new_v4().to_string());
         let db_source = DbNewKnowledgeSource {
             id: source_id.clone(),
+            reference_id: self.reference_id,
             workflow_id: self.workflow_id,
             name: self.name,
             description: self.description,
@@ -127,6 +134,7 @@ impl KnowledgeSource {
 
         Ok(Self {
             id: source.id,
+            reference_id: source.reference_id,
             workflow_id: source.workflow_id,
             name: source.name,
             description: source.description,

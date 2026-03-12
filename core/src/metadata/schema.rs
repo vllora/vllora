@@ -238,6 +238,7 @@ diesel::table! {
 diesel::table! {
     knowledge_sources (id) {
         id -> Text,
+        reference_id -> Nullable<Text>,
         workflow_id -> Text,
         name -> Text,
         description -> Nullable<Text>,
@@ -250,6 +251,7 @@ diesel::table! {
 diesel::table! {
     knowledge_source_parts (id) {
         id -> Text,
+        reference_id -> Nullable<Text>,
         source_id -> Text,
         part_type -> Text,
         content -> Text,
