@@ -504,31 +504,31 @@ impl ApiServer {
                                             )
                                             .route(
                                                 "",
-                                                web::get().to(finetune::list_reinforcement_jobs),
+                                                web::get().to(finetune::list_finetune_jobs),
                                             )
                                             .service(
                                                 web::scope("/{job_id}")
                                                     .route(
                                                         "/status",
                                                         web::get().to(
-                                                            finetune::get_reinforcement_job_status,
+                                                            finetune::get_finetune_job_status,
                                                         ),
                                                     )
                                                     .route(
                                                         "/metrics",
                                                         web::get().to(
-                                                            finetune::get_reinforcement_job_metrics,
+                                                            finetune::get_finetune_job_metrics,
                                                         ),
                                                     )
                                                     .route(
                                                         "/cancel",
                                                         web::post()
-                                                            .to(finetune::cancel_reinforcement_job),
+                                                            .to(finetune::cancel_finetune_job),
                                                     )
                                                     .route(
                                                         "/resume",
                                                         web::post()
-                                                            .to(finetune::resume_reinforcement_job),
+                                                            .to(finetune::resume_finetune_job),
                                                     )
                                                     .route(
                                                         "/weights/url",
@@ -536,27 +536,32 @@ impl ApiServer {
                                                             .to(finetune::get_weights_download_url),
                                                     ),
                                             ),
+                                    )
+                                    // Cloud analytics & finetune evaluations (read-only proxies)
+                                    .route(
+                                        "/analytics",
+                                        web::get().to(finetune::get_dataset_analytics),
+                                    )
+                                    .route(
+                                        "/finetune-evaluations",
+                                        web::get().to(finetune::get_finetune_evaluations),
                                     ),
                             ),
                     )
                     .service(
                         web::scope("/eval-jobs")
-                            .route("", web::get().to(eval_jobs::list_eval_jobs_by_status)),
+                            .route("", web::get().to(eval_jobs::list_eval_jobs_by_status))
+                            .route("/{job_id}", web::get().to(eval_jobs::get_eval_job_by_id))
+                            .route("/{job_id}", web::patch().to(eval_jobs::update_eval_job_by_id))
+                            .route("/{job_id}", web::delete().to(eval_jobs::delete_eval_job_by_id)),
                     )
+                    // NOTE: POST /finetune/datasets (upload) was removed — gateway auto-uploads
+                    // via ensure_dataset_uploaded() inside create_evaluation / create_finetune_job.
                     .service(
-                        web::scope("/datasets")
-                            .route("", web::post().to(finetune::upload_dataset))
+                        web::scope("/analytics")
                             .route(
-                                "/analytics/dry-run",
+                                "/dry-run",
                                 web::post().to(finetune::dry_run_dataset_analytics),
-                            )
-                            .route(
-                                "/{dataset_id}/analytics",
-                                web::get().to(finetune::get_dataset_analytics),
-                            )
-                            .route(
-                                "/{dataset_id}/finetune-evaluations",
-                                web::get().to(finetune::get_finetune_evaluations),
                             ),
                     )
                     .service(

@@ -29,9 +29,9 @@ pub struct CreateJobRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub training_config: Option<ReinforcementTrainingConfig>,
+    pub training_config: Option<FinetuneTrainingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub inference_parameters: Option<ReinforcementInferenceParameters>,
+    pub inference_parameters: Option<FinetuneInferenceParameters>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub chunk_size: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -127,11 +127,11 @@ pub struct EvaluatorVersionResponse {
 }
 
 // =============================================================================
-// Reinforcement Fine-Tuning Jobs
+// Fine-Tuning Jobs
 // =============================================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CreateReinforcementFinetuningJobRequest {
+pub struct CreateFinetuneJobRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub evaluator_version: Option<i32>,
     pub base_model: String,
@@ -142,9 +142,9 @@ pub struct CreateReinforcementFinetuningJobRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub training_config: Option<ReinforcementTrainingConfig>,
+    pub training_config: Option<FinetuneTrainingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub inference_parameters: Option<ReinforcementInferenceParameters>,
+    pub inference_parameters: Option<FinetuneInferenceParameters>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub chunk_size: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -152,7 +152,7 @@ pub struct CreateReinforcementFinetuningJobRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReinforcementTrainingConfig {
+pub struct FinetuneTrainingConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub learning_rate: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -172,7 +172,7 @@ pub struct ReinforcementTrainingConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReinforcementInferenceParameters {
+pub struct FinetuneInferenceParameters {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_output_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -195,7 +195,7 @@ pub struct FinetuningJobResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub training_config: Option<ReinforcementTrainingConfig>,
+    pub training_config: Option<FinetuneTrainingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub suffix: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -223,7 +223,7 @@ pub enum FinetuningJobResult {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ReinforcementJobStatusResponse {
+pub struct FinetuneJobStatusResponse {
     pub provider_job_id: uuid::Uuid,
     pub status: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -237,24 +237,24 @@ pub struct ReinforcementJobStatusResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReinforcementJobMetricPoint {
+pub struct FinetuneJobMetricPoint {
     pub metrics: serde_json::Value,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReinforcementJobMetricsResponse {
+pub struct FinetuneJobMetricsResponse {
     pub provider_job_id: uuid::Uuid,
-    pub metrics: Vec<ReinforcementJobMetricPoint>,
+    pub metrics: Vec<FinetuneJobMetricPoint>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReportReinforcementJobMetricsRequest {
+pub struct ReportFinetuneJobMetricsRequest {
     pub metrics: serde_json::Value,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct ReinforcementJobQuery {
+pub struct FinetuneJobQuery {
     pub limit: Option<u32>,
     pub after: Option<String>,
     pub dataset_id: Option<String>,

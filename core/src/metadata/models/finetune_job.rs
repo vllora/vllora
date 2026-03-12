@@ -1,7 +1,7 @@
 use crate::metadata::schema::finetune_jobs;
 use diesel::{AsChangeset, Identifiable, Insertable, Queryable, Selectable};
 use serde::{Deserialize, Serialize};
-use vllora_finetune::types::ReinforcementTrainingConfig;
+use vllora_finetune::types::FinetuneTrainingConfig;
 
 /// Finetune job state enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -132,7 +132,7 @@ impl DbNewFinetuneJob {
 
     pub fn with_training_config(
         mut self,
-        training_config: Option<ReinforcementTrainingConfig>,
+        training_config: Option<FinetuneTrainingConfig>,
     ) -> Self {
         self.training_config = training_config.and_then(|tc| serde_json::to_string(&tc).ok());
         self
@@ -193,7 +193,7 @@ impl DbUpdateFinetuneJob {
 
     pub fn with_training_config(
         mut self,
-        training_config: Option<ReinforcementTrainingConfig>,
+        training_config: Option<FinetuneTrainingConfig>,
     ) -> Self {
         self.training_config = Some(training_config.and_then(|tc| serde_json::to_string(&tc).ok()));
         self.updated_at = Some(chrono::Utc::now().to_rfc3339());

@@ -158,7 +158,7 @@ impl FinetuneJobStateTracker {
     ) -> Result<(), String> {
         // Query cloud API for current status
         let status_response = client
-            .get_reinforcement_job_status(&job.provider_job_id)
+            .get_finetune_job_status(&job.provider_job_id)
             .await
             .map_err(|e| format!("Failed to get status from cloud API: {}", e))?;
 
