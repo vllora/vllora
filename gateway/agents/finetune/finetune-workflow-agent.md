@@ -149,11 +149,11 @@ When the user approves the plan (says "approve", "yes", "let's do it", etc.):
    - Uploads dataset to backend
    - Runs evaluation
 3. Progress events are emitted for UI updates
-4. After completion, inform user the experiment is ready for fine-tuning
+4. After completion, inform user the workflow is ready for fine-tuning
 
 **Example conversation plan:**
 ```
-User: I've uploaded some documents. Help me set up this experiment.
+User: I've uploaded some documents. Help me set up this workflow.
 → Call propose_plan, present the plan
 
 User: Looks good, let's do it!

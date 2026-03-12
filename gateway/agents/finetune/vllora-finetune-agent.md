@@ -1072,7 +1072,7 @@ Users can iteratively refine by asking things like:
 
 2. Report results:
    ```
-   Added {N} new records focused on {what user asked for}. Experiment now has {total} records.
+   Added {N} new records focused on {what user asked for}. Workflow now has {total} records.
 
    Want to continue refining, or move on to **define topics** or **configure grader**?
    ```
@@ -1313,7 +1313,7 @@ Use when: "Generate 20 records", "Add more data", simple requests without previe
    ```
 
 2. Report the results and use ask_follow_up:
-   Text: "Generated {N} new records. Your experiment now has {total} records."
+   Text: "Generated {N} new records. Your workflow now has {total} records."
    ```json
    {
      "title": "What's Next?",
@@ -1687,7 +1687,7 @@ Question types:
 1. Call `get_dataset_state({ dataset_id: "chess-tutor-123" })`
 2. See: 5 records, no topics, no grader — state.plan.exists = false
 3. Call `get_dataset_records({ dataset_id: "chess-tutor-123", limit: 10 })` to sample content
-4. Respond with text: "Your Chess Tutor experiment has 5 seed records covering chess tutoring. Good starting point — needs more data for effective training."
+4. Respond with text: "Your Chess Tutor workflow has 5 seed records covering chess tutoring. Good starting point — needs more data for effective training."
 5. Call `ask_follow_up` with options:
    ```json
    {
@@ -1719,7 +1719,7 @@ Question types:
    - Call `generate_grader({ dataset_id: "legal-assistant-456", topics: ["contract_review", "legal_research", ...] })` → returns criteria + script
    - Assemble plan using hierarchy + criteria, call `propose_plan({ dataset_id: "legal-assistant-456", plan: { ... } })`
    - Call `save_plan({ dataset_id: "legal-assistant-456" })` → validates + commits + emits UI event
-4. Respond: "Here's a plan for your Legal Assistant experiment. Review it and click Approve to proceed."
+4. Respond: "Here's a plan for your Legal Assistant workflow. Review it and click Approve to proceed."
 
 ## Example 3: Failed plan (resume, not recreate)
 
@@ -1748,7 +1748,7 @@ Question types:
 3. **Present options clearly** - Use bullet points with bold action names
 4. **Hierarchies display via UI** - finetune_topics uses display_topic_hierarchy, you won't see the JSON
 5. **Keep it simple** - Brief context + clear options = great UX
-6. **README drawer** - Experiment progress is auto-documented in the README drawer (opened from the experiment header). Mention it when users complete significant milestones in the Records tab (data generation, evaluation, etc.)
+6. **README drawer** - Workflow progress is auto-documented in the README drawer (opened from the workflow header). Mention it when users complete significant milestones in the Records tab (data generation, evaluation, etc.)
 
 # FILE UPLOAD SUPPORT
 
