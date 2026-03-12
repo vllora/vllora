@@ -1,4 +1,5 @@
 use crate::handlers::finetune::get_langdb_api_key;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time;
@@ -11,17 +12,22 @@ use vllora_core::metadata::models::finetune_job::{
 use vllora_core::metadata::pool::DbPool;
 use vllora_core::metadata::services::finetune_job::FinetuneJobService;
 use vllora_core::metadata::services::project::ProjectServiceImpl;
+use vllora_core::metadata::services::workflow_record::WorkflowRecordScoreService;
 use vllora_core::types::metadata::services::project::ProjectService;
 use vllora_finetune::LangdbCloudFinetuneClient;
 use vllora_llm::types::events::{CustomEventType, Event, EventRunContext};
 
 /// State tracker for finetune jobs that periodically polls cloud API
 /// and updates the local database with current job statuses
+/// Rate-limit finetune score fetches: only every N-th poll cycle per job.
+const SCORE_FETCH_INTERVAL: u64 = 3;
+
 pub struct FinetuneJobStateTracker {
     db_pool: DbPool,
     key_storage: Arc<Box<dyn KeyStorage>>,
     broadcaster: Arc<EventsUIBroadcaster>,
     poll_interval: Duration,
+    poll_count: AtomicU64,
 }
 
 impl FinetuneJobStateTracker {
@@ -41,6 +47,7 @@ impl FinetuneJobStateTracker {
             key_storage,
             broadcaster,
             poll_interval: Duration::from_secs(poll_interval_secs),
+            poll_count: AtomicU64::new(0),
         }
     }
 
@@ -225,6 +232,98 @@ impl FinetuneJobStateTracker {
         };
 
         // Send event to all connected clients for this project
+        self.broadcaster
+            .send_events(project_slug.unwrap_or_default(), &[event])
+            .await;
+
+        // Write finetune scores (rate-limited to every Nth poll cycle)
+        let cycle = self.poll_count.fetch_add(1, Ordering::Relaxed);
+        if cycle % SCORE_FETCH_INTERVAL == 0 {
+            if let Err(e) = self
+                .write_finetune_scores(job, client, project_slug)
+                .await
+            {
+                warn!("Failed to write finetune scores for job {}: {}", job.provider_job_id, e);
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn write_finetune_scores(
+        &self,
+        job: &DbFinetuneJob,
+        client: &LangdbCloudFinetuneClient,
+        project_slug: Option<&str>,
+    ) -> Result<(), String> {
+        let eval_results = client
+            .get_finetune_evaluations(
+                &job.workflow_id,
+                None,
+                None,
+                Some(job.provider_job_id.clone()),
+            )
+            .await
+            .map_err(|e| format!("Failed to get finetune evaluations: {}", e))?;
+
+        let updates: Vec<(String, f32)> = eval_results
+            .results
+            .iter()
+            .filter_map(|row| {
+                let record_id = row.row.as_ref()?.get("id")?.as_str()?.to_string();
+                // Average all epoch scores for this row
+                let all_scores: Vec<f64> = row
+                    .epochs
+                    .values()
+                    .flat_map(|results| {
+                        results
+                            .iter()
+                            .filter_map(|v| v.get("score").and_then(|s| s.as_f64()))
+                    })
+                    .collect();
+                if all_scores.is_empty() {
+                    return None;
+                }
+                let avg = all_scores.iter().sum::<f64>() / all_scores.len() as f64;
+                Some((record_id, avg as f32))
+            })
+            .collect();
+
+        if updates.is_empty() {
+            return Ok(());
+        }
+
+        let score_service = WorkflowRecordScoreService::new(self.db_pool.clone());
+        score_service
+            .batch_upsert(&job.workflow_id, &job.provider_job_id, "finetune", &updates)
+            .map_err(|e| format!("Failed to batch upsert finetune scores: {}", e))?;
+
+        info!(
+            "Wrote {} finetune scores for workflow {} (job {})",
+            updates.len(),
+            job.workflow_id,
+            job.provider_job_id
+        );
+
+        // Broadcast SSE event
+        let event = Event::Custom {
+            run_context: EventRunContext {
+                run_id: None,
+                thread_id: None,
+                span_id: None,
+                parent_span_id: None,
+            },
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64,
+            custom_event: CustomEventType::RecordScoresUpdated {
+                workflow_id: job.workflow_id.clone(),
+                score_type: "finetune".to_string(),
+                updated_count: updates.len(),
+            },
+        };
+
         self.broadcaster
             .send_events(project_slug.unwrap_or_default(), &[event])
             .await;

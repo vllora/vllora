@@ -269,8 +269,14 @@ impl ApiServer {
         let key_storage_for_eval_tracker = Arc::new(Box::new(ProviderKeyResolver::new(
             server_config.db_pool.clone(),
         )) as Box<dyn KeyStorage>);
-        let eval_state_tracker =
-            EvalJobStateTracker::new(server_config.db_pool.clone(), key_storage_for_eval_tracker);
+        let broadcaster_for_eval_tracker = Arc::new(EventsUIBroadcaster::new(
+            events_senders_container_for_tracker.clone(),
+        ));
+        let eval_state_tracker = EvalJobStateTracker::new(
+            server_config.db_pool.clone(),
+            key_storage_for_eval_tracker,
+            broadcaster_for_eval_tracker,
+        );
         let _eval_state_tracker_handle = eval_state_tracker.start();
 
         // Print useful info after servers are bound and ready
@@ -404,6 +410,7 @@ impl ApiServer {
                                     .service(
                                         web::scope("/records")
                                             .route("", web::get().to(workflow_records::list_records))
+                                            .route("/count", web::get().to(workflow_records::count_records))
                                             .route("", web::post().to(workflow_records::add_records))
                                             .route("", web::put().to(workflow_records::replace_records))
                                             .route("", web::delete().to(workflow_records::delete_all_records))
@@ -414,7 +421,7 @@ impl ApiServer {
                                             .route("/{record_id}", web::patch().to(workflow_records::update_record_topic))
                                             .route("/{record_id}", web::delete().to(workflow_records::delete_record))
                                             .route("/{record_id}/data", web::patch().to(workflow_records::update_record_data))
-                                            .route("/{record_id}/scores", web::patch().to(workflow_records::update_record_scores)),
+                                            .route("/scores", web::get().to(workflow_records::list_record_scores)),
                                     )
                                     // Topics CRUD
                                     .route("/topics", web::get().to(workflow_topics::list_topics))
@@ -446,14 +453,6 @@ impl ApiServer {
                                             .route("/{ks_id}/parts", web::post().to(knowledge_sources::add_knowledge_source_parts))
                                             .route("/{ks_id}/parts", web::get().to(knowledge_sources::list_knowledge_source_parts))
                                             .route("/{ks_id}/parts/{part_id}", web::delete().to(knowledge_sources::delete_knowledge_source_part)),
-                                    )
-                                    .service(
-                                        web::scope("/jobs")
-                                            .route("", web::post().to(finetune::create_job))
-                                            .route(
-                                                "/{job_id}/status",
-                                                web::get().to(finetune::get_job_status),
-                                            ),
                                     )
                                     // Eval Jobs CRUD
                                     .service(
@@ -498,6 +497,14 @@ impl ApiServer {
                                     )
                                     .service(
                                         web::scope("/jobs")
+                                            .route(
+                                                "/unified",
+                                                web::post().to(finetune::create_job),
+                                            )
+                                            .route(
+                                                "/unified/{job_id}/status",
+                                                web::get().to(finetune::get_job_status),
+                                            )
                                             .route(
                                                 "",
                                                 web::post().to(finetune::create_finetune_job),

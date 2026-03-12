@@ -198,9 +198,19 @@ diesel::table! {
         span_id -> Nullable<Text>,
         is_generated -> Integer,
         source_record_id -> Nullable<Text>,
-        dry_run_score -> Nullable<Float>,
-        finetune_score -> Nullable<Float>,
         metadata -> Nullable<Text>,
+        created_at -> Text,
+    }
+}
+
+diesel::table! {
+    workflow_record_scores (id) {
+        id -> Text,
+        record_id -> Text,
+        workflow_id -> Text,
+        job_id -> Text,
+        score_type -> Text,
+        score -> Float,
         created_at -> Text,
     }
 }

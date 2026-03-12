@@ -232,9 +232,19 @@ pub enum CustomEventType {
     GlobalBreakpoint {
         intercept_all: bool,
     },
+    EvalJobUpdate {
+        job_id: String,
+        workflow_id: String,
+        status: String,
+    },
     FinetuneJobUpdate {
         job_id: String,
         status: String,
+    },
+    RecordScoresUpdated {
+        workflow_id: String,
+        score_type: String,
+        updated_count: usize,
     },
 }
 

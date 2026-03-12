@@ -4,12 +4,16 @@ use std::time::Duration;
 use tokio::time;
 use tracing::{error, info, warn};
 use vllora_core::credentials::KeyStorage;
+use vllora_core::events::ui_broadcaster::EventsUIBroadcaster;
 use vllora_core::metadata::models::eval_job::DbEvalJob;
 use vllora_core::metadata::pool::DbPool;
 use vllora_core::metadata::services::eval_job::EvalJobService;
 use vllora_core::metadata::services::project::ProjectServiceImpl;
+use vllora_core::metadata::services::workflow_record::WorkflowRecordScoreService;
 use vllora_core::types::metadata::services::project::ProjectService;
 use vllora_finetune::LangdbCloudFinetuneClient;
+use vllora_finetune::types::RowEpochResults;
+use vllora_llm::types::events::{CustomEventType, Event, EventRunContext};
 
 const TERMINAL_STATUSES: &[&str] = &["completed", "failed", "cancelled"];
 
@@ -18,11 +22,16 @@ const TERMINAL_STATUSES: &[&str] = &["completed", "failed", "cancelled"];
 pub struct EvalJobStateTracker {
     db_pool: DbPool,
     key_storage: Arc<Box<dyn KeyStorage>>,
+    broadcaster: Arc<EventsUIBroadcaster>,
     poll_interval: Duration,
 }
 
 impl EvalJobStateTracker {
-    pub fn new(db_pool: DbPool, key_storage: Arc<Box<dyn KeyStorage>>) -> Self {
+    pub fn new(
+        db_pool: DbPool,
+        key_storage: Arc<Box<dyn KeyStorage>>,
+        broadcaster: Arc<EventsUIBroadcaster>,
+    ) -> Self {
         let poll_interval_secs = std::env::var("EVAL_STATE_TRACKER_INTERVAL_SECS")
             .ok()
             .and_then(|s| s.parse::<u64>().ok())
@@ -31,6 +40,7 @@ impl EvalJobStateTracker {
         Self {
             db_pool,
             key_storage,
+            broadcaster,
             poll_interval: Duration::from_secs(poll_interval_secs),
         }
     }
@@ -157,8 +167,31 @@ impl EvalJobStateTracker {
             job.id, cloud_run_id, job.status, new_status
         );
 
-        // Note: Not broadcasting UI events here because we don't control the
-        // CustomEventType enum. The UI polls for eval job status via the API.
+        // Broadcast EvalJobUpdate SSE event
+        let update_event = Event::Custom {
+            run_context: EventRunContext::default(),
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64,
+            custom_event: CustomEventType::EvalJobUpdate {
+                job_id: job.id.clone(),
+                workflow_id: job.workflow_id.clone(),
+                status: new_status.clone(),
+            },
+        };
+
+        let broadcaster = self.broadcaster.clone();
+        let events = vec![update_event];
+        tokio::spawn(async move {
+            broadcaster.send_events("", &events).await;
+        });
+
+        // Write eval scores to workflow records if results are available
+        if !result_response.results.is_empty() {
+            self.write_eval_scores(&job.workflow_id, cloud_run_id, &result_response.results)?;
+        }
+
         if TERMINAL_STATUSES.contains(&new_status.as_str()) {
             info!(
                 "Eval job {} reached terminal status: {}",
@@ -168,4 +201,80 @@ impl EvalJobStateTracker {
 
         Ok(())
     }
+
+    fn write_eval_scores(
+        &self,
+        workflow_id: &str,
+        job_id: &str,
+        results: &[RowEpochResults],
+    ) -> Result<(), String> {
+        let updates: Vec<(String, f32)> = results
+            .iter()
+            .filter_map(|row| {
+                let record_id = extract_record_id(&row.row)?;
+                let score = extract_eval_score(&row.epochs)?;
+                Some((record_id, score))
+            })
+            .collect();
+
+        if updates.is_empty() {
+            return Ok(());
+        }
+
+        let score_service = WorkflowRecordScoreService::new(self.db_pool.clone());
+        score_service
+            .batch_upsert(workflow_id, job_id, "eval", &updates)
+            .map_err(|e| format!("Failed to batch upsert eval scores: {}", e))?;
+
+        info!(
+            "Wrote {} eval scores for workflow {}",
+            updates.len(),
+            workflow_id
+        );
+
+        // Broadcast SSE event
+        let event = Event::Custom {
+            run_context: EventRunContext::default(),
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64,
+            custom_event: CustomEventType::RecordScoresUpdated {
+                workflow_id: workflow_id.to_string(),
+                score_type: "eval".to_string(),
+                updated_count: updates.len(),
+            },
+        };
+
+        let broadcaster = self.broadcaster.clone();
+        tokio::spawn(async move {
+            broadcaster.send_events("", &[event]).await;
+        });
+
+        Ok(())
+    }
+}
+
+fn extract_record_id(row: &Option<serde_json::Value>) -> Option<String> {
+    row.as_ref()?.get("id")?.as_str().map(|s| s.to_string())
+}
+
+fn extract_eval_score(
+    epochs: &std::collections::HashMap<String, Vec<serde_json::Value>>,
+) -> Option<f32> {
+    // Use the latest epoch's average score
+    let max_epoch_key = epochs.keys().filter_map(|k| k.parse::<i32>().ok()).max()?;
+    let epoch_results = epochs.get(&max_epoch_key.to_string())?;
+
+    let scores: Vec<f64> = epoch_results
+        .iter()
+        .filter_map(|v| v.get("score").and_then(|s| s.as_f64()))
+        .collect();
+
+    if scores.is_empty() {
+        return None;
+    }
+
+    let avg = scores.iter().sum::<f64>() / scores.len() as f64;
+    Some(avg as f32)
 }

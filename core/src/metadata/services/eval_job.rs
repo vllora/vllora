@@ -55,6 +55,15 @@ impl EvalJobService {
             .load::<DbEvalJob>(&mut conn)?)
     }
 
+    pub fn list_ids_by_workflow(&self, workflow_id: &str) -> Result<Vec<String>, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+        Ok(dsl::eval_jobs
+            .filter(dsl::workflow_id.eq(workflow_id))
+            .select(dsl::id)
+            .order(dsl::created_at.desc())
+            .load::<String>(&mut conn)?)
+    }
+
     pub fn list_by_status(&self, status: &str) -> Result<Vec<DbEvalJob>, DatabaseError> {
         let mut conn = self.db_pool.get()?;
         Ok(dsl::eval_jobs
