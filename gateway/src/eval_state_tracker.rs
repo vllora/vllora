@@ -141,15 +141,10 @@ impl EvalJobStateTracker {
         let new_status = &result_response.status;
         let status_changed = job.status != *new_status;
 
-        // Always save the polling_snapshot so FE has fresh progress data
-        let snapshot_json = serde_json::to_string(&result_response)
-            .map_err(|e| format!("Failed to serialize polling snapshot: {}", e))?;
-
-        // Build update changeset: always include snapshot, conditionally include status
+        // Only update DB when status actually changes (status + score writeback only)
         if status_changed {
             let mut update = DbUpdateEvalJob {
                 status: Some(new_status.clone()),
-                polling_snapshot: Some(snapshot_json),
                 updated_at: Some(chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()),
                 ..Default::default()
             };
@@ -177,42 +172,9 @@ impl EvalJobStateTracker {
                 job.id, cloud_run_id, job.status, new_status
             );
 
-            let update_event = Event::Custom {
-                run_context: EventRunContext::default(),
-                timestamp: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_millis() as u64,
-                custom_event: CustomEventType::EvalJobUpdate {
-                    job_id: job.id.clone(),
-                    workflow_id: job.workflow_id.clone(),
-                    status: new_status.clone(),
-                },
-            };
-
-            let broadcaster = self.broadcaster.clone();
-            let events = vec![update_event];
-            tokio::spawn(async move {
-                broadcaster.send_events("", &events).await;
-            });
-
             if TERMINAL_STATUSES.contains(&new_status.as_str()) {
                 info!("Eval job {} reached terminal status: {}", job.id, new_status);
             }
-        } else {
-            // Status unchanged, just update the snapshot for progress tracking
-            service
-                .update_full(
-                    &job.id,
-                    DbUpdateEvalJob {
-                        polling_snapshot: Some(snapshot_json),
-                        updated_at: Some(
-                            chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string(),
-                        ),
-                        ..Default::default()
-                    },
-                )
-                .map_err(|e| format!("Failed to update eval job snapshot: {}", e))?;
         }
 
         // Write eval scores on every poll (incremental updates while running)

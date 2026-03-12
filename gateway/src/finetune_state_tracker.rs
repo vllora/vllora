@@ -182,7 +182,7 @@ impl FinetuneJobStateTracker {
 
         let status_changed = current_state != new_state;
 
-        // Update DB and broadcast SSE only when status actually changes
+        // Update DB only when status actually changes
         if status_changed {
             let mut update = DbUpdateFinetuneJob::new().with_state(new_state);
 
@@ -201,7 +201,7 @@ impl FinetuneJobStateTracker {
                 update = update.with_completed_at(Some(chrono::Utc::now().to_rfc3339()));
             }
 
-            let updated_job = service
+            service
                 .update(&job.id, &job.project_id, update)
                 .map_err(|e| format!("Failed to update job in database: {}", e))?;
 
@@ -209,27 +209,6 @@ impl FinetuneJobStateTracker {
                 "Updated job {} from {:?} to {:?}",
                 job.provider_job_id, current_state, new_state
             );
-
-            let event = Event::Custom {
-                run_context: EventRunContext {
-                    run_id: None,
-                    thread_id: None,
-                    span_id: None,
-                    parent_span_id: None,
-                },
-                timestamp: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_millis() as u64,
-                custom_event: CustomEventType::FinetuneJobUpdate {
-                    job_id: updated_job.id.clone(),
-                    status: updated_job.state.clone(),
-                },
-            };
-
-            self.broadcaster
-                .send_events(project_slug.unwrap_or_default(), &[event])
-                .await;
         }
 
         // Write finetune scores on every poll (rate-limited to every Nth cycle)
