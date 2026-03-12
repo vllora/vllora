@@ -2,6 +2,7 @@ pub mod eval_job;
 pub mod finetune_job;
 pub mod knowledge;
 pub mod knowledge_source;
+pub mod knowledge_source_part;
 pub mod mcp_config;
 pub mod metric;
 pub mod model;

@@ -240,14 +240,23 @@ diesel::table! {
         id -> Text,
         workflow_id -> Text,
         name -> Text,
-        #[sql_name = "type"]
-        source_type -> Text,
-        content -> Nullable<Text>,
-        extracted_content -> Nullable<Text>,
-        status -> Text,
-        progress -> Nullable<Text>,
+        description -> Nullable<Text>,
+        metadata -> Nullable<Text>,
         created_at -> Text,
         deleted_at -> Nullable<Text>,
+    }
+}
+
+diesel::table! {
+    knowledge_source_parts (id) {
+        id -> Text,
+        source_id -> Text,
+        part_type -> Text,
+        content -> Text,
+        content_metadata -> Nullable<Text>,
+        title -> Nullable<Text>,
+        extraction_path -> Nullable<Text>,
+        extraction_metadata -> Nullable<Text>,
     }
 }
 
@@ -258,6 +267,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     eval_jobs,
     finetune_jobs,
     knowledge,
+    knowledge_source_parts,
     knowledge_sources,
     metrics,
     models,
