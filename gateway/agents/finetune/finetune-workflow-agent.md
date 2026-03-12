@@ -118,7 +118,7 @@ When a user has an EMPTY dataset (0 records) with knowledge sources uploaded, us
 When task contains "propose_plan" or "EXECUTE TOOL: propose_plan":
 1. **IMMEDIATELY invoke the `propose_plan` function** - NO text response first
 2. Extract parameters from the task:
-   - `dataset_id`: The dataset ID mentioned in the task
+   - `workflow_id`: The dataset ID mentioned in the task
    - `seed_count`: 30 (default)
 3. The tool returns a plan object - this is displayed to the user via custom UI
 4. After the tool returns, say: "Plan generated. Please review and click Approve to proceed."
@@ -132,7 +132,7 @@ When task contains "propose_plan" or "EXECUTE TOOL: propose_plan":
 **CORRECT (call the tool FIRST):**
 ```
 // First action: call the tool
-propose_plan({ dataset_id: "xyz-123", seed_count: 30 })
+propose_plan({ workflow_id: "xyz-123", seed_count: 30 })
 
 // Only AFTER tool returns, respond with brief acknowledgment
 ```
@@ -140,7 +140,7 @@ propose_plan({ dataset_id: "xyz-123", seed_count: 30 })
 **Step 2: Execute Plan (After User Approval)**
 When the user approves the plan (says "approve", "yes", "let's do it", etc.):
 1. Call `execute_plan` with:
-   - `dataset_id`: The dataset ID
+   - `workflow_id`: The dataset ID
    - `plan`: The full plan object from propose_plan
 2. The tool automatically executes ALL steps:
    - Applies topic hierarchy
@@ -174,7 +174,7 @@ User: Looks good, let's do it!
 
 ## Start Workflow
 When asked to start a workflow:
-1. Call `start_finetune_workflow` with just the dataset_id
+1. Call `start_finetune_workflow` with just the workflow_id
    - training_goals is OPTIONAL - the tool automatically uses the dataset's datasetObjective
    - Do NOT ask users for training goals - the dataset already has this defined
 2. Return the workflow status to orchestrator
@@ -194,7 +194,7 @@ When asked to generate synthetic data:
 ## Generate Initial Data (Empty or Existing Datasets)
 When asked to generate initial/seed data:
 1. Call `generate_initial_data` with:
-   - `dataset_id`: The target dataset
+   - `workflow_id`: The target dataset
    - `count`: Number of records to generate (default 10)
    - `user_guidance` (optional): Pass any specific instructions from the user about what kind of data they want
 2. This tool generates seed records based on training objective + user guidance
@@ -215,7 +215,7 @@ When asked to generate initial/seed data:
 ## Generate Record Variants
 When asked to generate variants from a specific record:
 1. Call `generate_record_variants` with:
-   - `dataset_id`: The dataset ID containing the source record
+   - `workflow_id`: The dataset ID containing the source record
    - `record_id`: The ID of the source record to generate variants from
    - `count`: Number of variants to generate (default 5)
    - `guidance` (optional): User's specific instructions for how to vary the records
@@ -278,7 +278,7 @@ Details:
 ## Update Objective
 When asked to update the training objective:
 1. Call `update_objective` with:
-   - `dataset_id`: The dataset ID
+   - `workflow_id`: The dataset ID
    - `objective`: The new training objective text
 2. This updates both the dataset's `datasetObjective` and the workflow's `trainingGoals`
 3. Return confirmation with the previous and new objective
@@ -552,7 +552,7 @@ After every evaluation completes (or when context mentions CATCH_UP with unrevie
 
 ## Step 1: Analyze
 
-Call `analyze_evaluation(dataset_id)` — this runs the full RFT decision tree and returns structured analysis including health assessment, per-topic classification, stall detection, and recommendations.
+Call `analyze_evaluation(workflow_id)` — this runs the full RFT decision tree and returns structured analysis including health assessment, per-topic classification, stall detection, and recommendations.
 
 The result also includes:
 - `evaluator_version` — which version of the JS evaluator/grader was used (version number, when it was last modified, whether it has diffs from the previous version). Use this to track whether grader changes between iterations might explain score changes.
@@ -622,7 +622,7 @@ After training completes (`check_training_status` returns status: "completed"), 
 
 ## Step 1: Analyze Training
 
-Call `analyze_training(dataset_id)` — this fetches per-epoch finetune evaluation scores, groups by topic, detects training patterns (overfitting, no-learning, reward hacking), and recommends next steps.
+Call `analyze_training(workflow_id)` — this fetches per-epoch finetune evaluation scores, groups by topic, detects training patterns (overfitting, no-learning, reward hacking), and recommends next steps.
 
 The result also includes:
 - `evaluator_version` — which evaluator was used during the pre-training eval baseline. If the evaluator was modified (`has_diff: true`), consider whether grader changes might have affected the eval-to-training comparison.
@@ -632,7 +632,7 @@ The result also includes:
   - **High clipped_ratio** (> 30%) → completions being truncated — consider increasing max_completion_tokens
   - **Loss not decreasing** → model may not be learning — check data quality
 
-For deeper training diagnostics, call `get_training_metrics(dataset_id)` which returns full telemetry with trend analysis, alerts, and per-step metrics history.
+For deeper training diagnostics, call `get_training_metrics(workflow_id)` which returns full telemetry with trend analysis, alerts, and per-step metrics history.
 
 ## Step 2: Decide based on `next_action`
 
@@ -645,7 +645,7 @@ Training looks healthy — all topics improving.
 - User wants to verify → run a dry run evaluation on the fine-tuned model, then call `analyze_evaluation` to assess
 
 ### If next_action = 'investigate'
-Some topics showed concerning patterns. Use `get_training_metrics(dataset_id)` for deeper diagnostics, then present the specific patterns and suggest:
+Some topics showed concerning patterns. Use `get_training_metrics(workflow_id)` for deeper diagnostics, then present the specific patterns and suggest:
 - **Overfitting** topics → "Use fewer epochs or add more diverse training data for these topics". Check if `reinforcement_metrics.kl` is high — may indicate model diverging.
 - **Reward hacking** topics → "Grader may be gameable — add discriminative criteria or contrastive examples". Check `evaluator_version` — if the grader hasn't been updated recently, it may need tightening.
 - **High clipped_ratio** → "Completions being truncated — consider increasing max_completion_tokens in training config"

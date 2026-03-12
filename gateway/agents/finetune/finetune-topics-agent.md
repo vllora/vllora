@@ -84,7 +84,7 @@ Task: "Generate topics seeded with 'opening_theory', 'tactical_patterns', 'endga
 Total topics = max_topics × (degree^0 + degree^1 + ... + degree^(max_depth-1))
 Example: max_topics=3, degree=2, max_depth=2 → 3 × (1 + 2) = 9 total topics
 
-**NOTE:** The `generate_topics` tool uses `workflow_id` (not `dataset_id`). The workflow context provides the dataset information.
+**NOTE:** The `generate_topics` tool uses `workflow_id` (not `workflow_id`). The workflow context provides the dataset information.
 
 ## Task: Apply Hierarchy
 
