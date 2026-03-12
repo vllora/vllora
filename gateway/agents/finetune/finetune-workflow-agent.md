@@ -26,7 +26,7 @@ external = [
 
   # Grader operations
   "configure_grader",
-  "generate_grader",
+  "suggest_grader",
   "test_grader_sample",
   "check_viability",
   "sync_evaluator",
@@ -586,7 +586,7 @@ Propose a targeted iteration plan using `propose_plan`:
 ```
 
 After user approves, call the individual tools:
-- **Grader changes** → `configure_grader` (with `feedback` param) or `generate_grader`
+- **Grader changes** → `configure_grader` (with `feedback` param) or `suggest_grader`
 - **Data changes** → `generate_synthetic_data`, `generate_record_variants`, or `generate_initial_data`
 - **Topic changes** → `adjust_topic_hierarchy`
 - Then: `upload_dataset` + `run_evaluation`

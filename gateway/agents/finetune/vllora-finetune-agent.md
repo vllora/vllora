@@ -26,8 +26,8 @@ external = [
   "search_knowledge",
 
   # Plan system tools (call directly, no delegation needed)
-  "generate_topics",
-  "generate_grader",
+  "suggest_topics",
+  "suggest_grader",
   "propose_plan",
   "adjust_plan",
   "save_plan",
@@ -178,7 +178,7 @@ Otherwise, skip ask_follow_up. Use the 5-step plan-first sequence directly:
 // User says: "Add 2 subtopics under Code Style, generate 50 records each, re-evaluate"
 // Step 1: Check state
 get_workflow_state({ workflow_id: "..." })
-// Step 2: Construct and propose plan (no generate_topics/generate_grader needed — user specified what they want)
+// Step 2: Construct and propose plan (no suggest_topics/suggest_grader needed — user specified what they want)
 propose_plan({ workflow_id: "...", plan: {
   dataset_name: "...", objective: "...",
   title: "Expand Code Style with 2 new subtopics",
@@ -197,7 +197,7 @@ propose_plan({ workflow_id: "...", plan: {
 save_plan({ workflow_id: "..." })
 ```
 
-After `save_plan` succeeds, say: "Here's the plan for your requested changes. Review it in the workspace — you can edit, then approve when ready."
+**NO TEXT AFTER `save_plan`:** The plan card already renders with Approve / Edit / Dismiss buttons — the user can see it. Do NOT output any text message after `save_plan` succeeds. Adding text is redundant and clutters the chat (same rule as analyze_evaluation / analyze_training cards).
 
 **Initial plan sequence (for EMPTY datasets only, not dynamic plans):**
 
@@ -207,8 +207,8 @@ After `save_plan` succeeds, say: "Here's the plan for your requested changes. Re
    - If `knowledge_sources.processing_count > 0` → documents are still being extracted. **STOP immediately.** Tell the user: "Your documents are still being processed. I'll create the plan once they're ready — this usually takes 30-60 seconds per document." Then STOP and wait. The frontend will notify you when processing is complete.
    - If `knowledge_sources.ready_count > 0` → call `analyze_knowledge_sources({ workflow_id })` to get document details (chunk headings, summaries, etc.)
    - If `knowledge_sources.total_count === 0` → **skip** `analyze_knowledge_sources` entirely. No documents uploaded.
-2. Call `generate_topics({ workflow_id, max_topics: 3, max_depth: 2 })` — get topic suggestions. Returns `{ hierarchy, topic_count, suggest_only: true }`.
-3. Call `generate_grader({ workflow_id, topics: [leaf topic names from step 2] })` — get evaluation criteria + script. Returns `{ criteria, script, suggest_only: true }`.
+2. Call `suggest_topics({ workflow_id, max_topics: 3, max_depth: 2 })` — get topic suggestions. Returns `{ hierarchy, topic_count, suggest_only: true }`.
+3. Call `suggest_grader({ workflow_id, topics: [leaf topic names from step 2] })` — get evaluation criteria + script. Returns `{ criteria, script, suggest_only: true }`.
 4. Assemble the plan using the returned `hierarchy` as `proposed_topics` and `criteria` as `grader_config.criteria`. Call `propose_plan({ workflow_id, plan })`.
 5. Call `save_plan({ workflow_id })` — validates draft, commits, and shows plan to user with diff. If it returns errors, fix the plan and retry from step 4.
 
@@ -216,7 +216,7 @@ After `save_plan` succeeds, say: "Here's the plan for your requested changes. Re
 1. Use the EXACT dataset ID from `WORKFLOW_ID:` at the top of the message - copy it character by character
 2. Call the tools IMMEDIATELY - do NOT respond with text first
 3. Do NOT use transfer_to_agent for this - call the tools yourself
-4. For **initial plans** (path A): ALWAYS call `generate_topics` for topics and `generate_grader` for criteria — never construct them yourself. For **dynamic plans** (path B): you MAY construct the plan directly from the user's request without calling `generate_topics`/`generate_grader` — the user has told you exactly what they want.
+4. For **initial plans** (path A): ALWAYS call `suggest_topics` for topics and `suggest_grader` for criteria — never construct them yourself. For **dynamic plans** (path B): you MAY construct the plan directly from the user's request without calling `suggest_topics`/`suggest_grader` — the user has told you exactly what they want.
 5. NEVER retry `analyze_knowledge_sources` in a loop — if documents are processing, tell the user and wait
 
 **Example (no knowledge sources):**
@@ -225,20 +225,20 @@ After `save_plan` succeeds, say: "Here's the plan for your requested changes. Re
 // get_workflow_state already returned knowledge_sources.total_count === 0
 // → Skip analyze_knowledge_sources entirely
 // Step 1: Generate topic suggestions (no side effects)
-generate_topics({ workflow_id: "01712b80-5508-4a32-83dd-80768c9c9c51", max_topics: 3, max_depth: 2 })
+suggest_topics({ workflow_id: "01712b80-5508-4a32-83dd-80768c9c9c51", max_topics: 3, max_depth: 2 })
 // Step 2: Generate grader criteria + script (no side effects)
-generate_grader({ workflow_id: "01712b80-5508-4a32-83dd-80768c9c9c51", topics: ["italian_game", "sicilian_defense", "pins_and_forks"] })
+suggest_grader({ workflow_id: "01712b80-5508-4a32-83dd-80768c9c9c51", topics: ["italian_game", "sicilian_defense", "pins_and_forks"] })
 // Step 3: Assemble plan using returned data:
-// - proposed_topics = generate_topics result.proposed_topics (COPY DIRECTLY)
-// - grader_config.criteria = generate_grader result.criteria (COPY DIRECTLY)
-// - plan_markdown Topics table = same topic names/counts from generate_topics
-// - plan_markdown Criteria section = same criterion names from generate_grader
+// - proposed_topics = suggest_topics result.proposed_topics (COPY DIRECTLY)
+// - grader_config.criteria = suggest_grader result.criteria (COPY DIRECTLY)
+// - plan_markdown Topics table = same topic names/counts from suggest_topics
+// - plan_markdown Criteria section = same criterion names from suggest_grader
 propose_plan({ workflow_id: "01712b80-5508-4a32-83dd-80768c9c9c51", plan: { ...plan... } })
 // Step 4: Validate + commit + show to user:
 save_plan({ workflow_id: "01712b80-5508-4a32-83dd-80768c9c9c51" })
 ```
 
-After `save_plan` returns `{ success: true }`, briefly say: "Here's the plan. Review it and click Approve to proceed."
+After `save_plan` returns `{ success: true }`, do NOT output any text — the plan card is already visible with Approve / Edit / Dismiss buttons.
 
 ## 1. USUALLY use ask_follow_up for choices (EXCEPT guided onboarding)
 When presenting options or asking users to choose, you MUST use `ask_follow_up`.
@@ -275,7 +275,7 @@ Provide context and clear options. Don't over-explain - let users guide the conv
 
 ## finetune_topics
 **Use for:** Interactive topic exploration — when the user wants to SEE, DISCUSS, or MANUALLY ADJUST topics outside of plan execution.
-**Tools:** generate_topics, get_topic_hierarchy, apply_topic_hierarchy, adjust_topic_hierarchy
+**Tools:** suggest_topics, get_topic_hierarchy, apply_topic_hierarchy, adjust_topic_hierarchy
 **Returns:** Confirmation that hierarchy was retrieved/applied
 **DO NOT use during plan execution** — call `apply_topic_hierarchy` directly instead.
 
@@ -402,31 +402,31 @@ Returns a lightweight overview: document names, summaries, chunk headings with p
 
 **Step 3: Generate topic suggestions (ALWAYS call this)**
 ```
-generate_topics({ workflow_id: "...", max_topics: 3, max_depth: 2 })
+suggest_topics({ workflow_id: "...", max_topics: 3, max_depth: 2 })
 ```
 Returns `{ hierarchy, topic_count, suggest_only: true }`. This tool automatically handles both cases:
 - **With uploaded docs** → generates topics grounded in the actual document content (topics, sections, summaries)
 - **Without docs** → generates topics based on the training objective
 
-**NEVER construct topics yourself.** Always use `generate_topics` — it ensures topics are consistent whether the user triggers plan creation or manually asks "generate topics for me".
+**NEVER construct topics yourself.** Always use `suggest_topics` — it ensures topics are consistent whether the user triggers plan creation or manually asks "generate topics for me".
 
 **Step 4: Generate grader criteria + script (ALWAYS call this)**
 ```
-generate_grader({ workflow_id: "...", topics: ["leaf_topic_1", "leaf_topic_2", ...] })
+suggest_grader({ workflow_id: "...", topics: ["leaf_topic_1", "leaf_topic_2", ...] })
 ```
 Returns `{ criteria, script, suggest_only: true }`. Pass the leaf topic names from step 3 for context. This tool:
 - Uses the training objective + knowledge sources to generate domain-specific evaluation criteria
 - Produces a complete LLM-as-judge JavaScript evaluation function
 
-**NEVER construct criteria yourself.** Always use `generate_grader` — it ensures the grader is informed by knowledge sources and consistent with the `configure_grader` standalone plan.
+**NEVER construct criteria yourself.** Always use `suggest_grader` — it ensures the grader is informed by knowledge sources and consistent with the `configure_grader` standalone plan.
 
 **Step 5: Construct, propose, and save the plan**
 Assemble the plan using:
-- `proposed_topics` — copy directly from `generate_topics` result `proposed_topics` field (already formatted with `source_chunk_refs`)
-- `grader_config.criteria` from `generate_grader` result `criteria`
+- `proposed_topics` — copy directly from `suggest_topics` result `proposed_topics` field (already formatted with `source_chunk_refs`)
+- `grader_config.criteria` from `suggest_grader` result `criteria`
 - `plan_markdown` — REQUIRED. Build it from the ACTUAL tool results:
-  - **Topics table**: Use the real topic names, descriptions, and target_counts from the `generate_topics` result. Each row = one leaf topic. Group by parent category.
-  - **Evaluation Criteria**: Use the real criterion names and descriptions from the `generate_grader` result. Each item = one criterion.
+  - **Topics table**: Use the real topic names, descriptions, and target_counts from the `suggest_topics` result. Each row = one leaf topic. Group by parent category.
+  - **Evaluation Criteria**: Use the real criterion names and descriptions from the `suggest_grader` result. Each item = one criterion.
   - **Summary stats**: Count actual topics/categories/records from the hierarchy. Count actual criteria from the grader result.
   - **NEVER use placeholder text** like "{Topic 1}" or "criterion description here" — always use the actual data returned by the tools.
 - Do NOT include `grader_config.template_preview` — it is generated fresh at execution time
@@ -484,7 +484,7 @@ Assemble the plan using:
 Use this when the user asks to change the plan (e.g., add a topic, tweak counts, update eval criteria) even if they give no numbers.
 
 **Rules:**
-- Do NOT regenerate a new plan or call `generate_topics` / `generate_grader` unless the user explicitly asks to rebuild from scratch.
+- Do NOT regenerate a new plan or call `suggest_topics` / `suggest_grader` unless the user explicitly asks to rebuild from scratch.
 - Call `adjust_plan` with the latest plan + user feedback. This should apply a minimal diff.
 - Keep existing topics, structure, and grader criteria unless the user explicitly requests changes.
 - Always follow up `adjust_plan` with `save_plan` to validate + commit + show the updated plan.
@@ -509,7 +509,7 @@ save_plan({ workflow_id: "..." })
 - `description` (string) — what this topic covers
 - `target_count` (number) — 0 for parent categories, 30 for leaf topics
 - `subtopics` (array, optional) — child topics with same structure
-- `source_chunk_refs` (string[], optional) — knowledge source chunk references from `generate_topics`; copy as-is, do not fabricate
+- `source_chunk_refs` (string[], optional) — knowledge source chunk references from `suggest_topics`; copy as-is, do not fabricate
 
 **`grader_config` fields:**
 - `criteria` — array of `{ "name": "...", "description": "..." }` objects
@@ -528,10 +528,10 @@ The user can edit the plan markdown directly in the UI (any format — tables, c
 6. Call `save_plan({ workflow_id })` to commit and show to the user
 
 **Rules:**
-- Do NOT run the full 5-step sequence (analyze_knowledge_sources → generate_topics → generate_grader). The user already has a plan — they just want it adjusted.
+- Do NOT run the full 5-step sequence (analyze_knowledge_sources → suggest_topics → suggest_grader). The user already has a plan — they just want it adjusted.
 - Do NOT call `adjust_plan` — you are the interpreter. Read the diff yourself and build the updated plan directly.
 - The edited markdown may be in ANY format (the user might have restructured it completely). Interpret the intent, not the format.
-- After `save_plan` succeeds, say something like: "I've reviewed your changes and updated the plan. Here's what I changed: [brief summary]. Review it and approve when ready."
+- After `save_plan` succeeds, do NOT output any text — the plan card is already visible. Exception: if the user edited the plan and you made non-obvious adjustments, output ONE sentence summarizing what changed (e.g., "I merged your two new topics into one category.").
 
 **Example message pattern:**
 ```
@@ -607,14 +607,14 @@ User: "Add 3 more topics under Topic A, generate 100 records per new topic"
 ```
 ```
 
-**After `save_plan` succeeds: Wait for user approval**
-Once `save_plan` returns `{ success: true }`, the plan is shown in the UI. The user clicks "Approve & Execute". After approval, you receive a message "I approve the plan. Please execute it now."
+**After `save_plan` succeeds: Wait for user approval (NO TEXT)**
+Once `save_plan` returns `{ success: true }`, the plan card is shown in the UI with Approve / Edit / Dismiss buttons. Do NOT output any text message — the card is self-explanatory. The user clicks "Approve & Execute". After approval, you receive a message "I approve the plan. Please execute it now."
 
 ### Plan Execution
 
 After approval, call the individual tools directly for each step in the plan. After each **user-visible** step, call `update_plan_markdown` to check off the step in the checklist.
 
-**CRITICAL:** NEVER call `generate_topics` or `generate_grader` during execution — these are PLANNING-ONLY tools. Topics and grader criteria were already generated during the planning phase and are stored in the plan. Calling them again wastes 10-15 seconds and produces duplicate work. Use `apply_topic_hierarchy` (not `generate_topics`) to apply topics during execution.
+**CRITICAL:** NEVER call `suggest_topics` or `suggest_grader` during execution — these are PLANNING-ONLY tools. Topics and grader criteria were already generated during the planning phase and are stored in the plan. Calling them again wastes 10-15 seconds and produces duplicate work. Use `apply_topic_hierarchy` (not `suggest_topics`) to apply topics during execution.
 
 **Execution order for a full initial plan:**
 ```
@@ -700,8 +700,8 @@ update_workflow_readme({
 **DO NOT use ask_follow_up or transfer_to_agent during plan execution** — call the tools directly.
 
 **FORBIDDEN during plan execution — NEVER use these:**
-- `generate_topics` — topics were ALREADY generated during planning, use `apply_topic_hierarchy` instead
-- `generate_grader` — grader criteria were ALREADY generated during planning, use `configure_grader` instead
+- `suggest_topics` — topics were ALREADY generated during planning, use `apply_topic_hierarchy` instead
+- `suggest_grader` — grader criteria were ALREADY generated during planning, use `configure_grader` instead
 - `transfer_to_agent` — do NOT delegate to sub-agents
 - `call_finetune_topics` — do NOT use the sub-agent wrapper
 - `call_finetune_workflow` — do NOT use the sub-agent wrapper
@@ -767,7 +767,7 @@ All plans MUST include `plan_markdown`. The frontend renders this markdown direc
 6. **NEVER show "Upload Dataset" in the checklist** — it is an internal sync step. The agent calls `upload_dataset` silently before `run_evaluation` and `start_training`
 7. **NEVER show "Categorize Records" in the checklist** — only used internally for datasets with existing uncategorized records
 8. For incremental plans (adding data, adjusting topics), only include relevant steps — omit "Start Fine-tune" unless the user wants to retrain
-9. **Data binding**: The Topics table and Evaluation Criteria sections MUST reflect the actual data from `generate_topics` and `generate_grader` results. Copy topic names, descriptions, counts, and criterion names/descriptions directly — never fabricate or use generic placeholders.
+9. **Data binding**: The Topics table and Evaluation Criteria sections MUST reflect the actual data from `suggest_topics` and `suggest_grader` results. Copy topic names, descriptions, counts, and criterion names/descriptions directly — never fabricate or use generic placeholders.
 10. **Dynamic step selection**: Adapt the Steps checklist based on what the plan actually does:
     - **Fresh dataset (initial plan)**: All 6 steps (Topics → Generate → Evaluator → Evaluation → Skill Package → Fine-tune)
     - **Data augmentation** (adding more records): Only relevant steps (e.g., Generate → Evaluation)
@@ -910,7 +910,7 @@ When a tool call fails during execution, use the table below to recover:
 | `categorize_records` | "dataset has no records" | Call `generate_initial_data` first, then retry `categorize_records` |
 | `generate_initial_data` | "no training objective" | Use `ask_follow_up` to ask the user for their training goal. After they answer, retry `generate_initial_data` |
 | `generate_initial_data` | "requires a record count" | Plan is missing `estimated_records`. Call `adjust_plan` to add a count, then retry |
-| `configure_grader` | "criteria is required" | Call `generate_grader({ workflow_id })` to get criteria, call `adjust_plan` to add them, then retry `configure_grader` |
+| `configure_grader` | "criteria is required" | Call `suggest_grader({ workflow_id })` to get criteria, call `adjust_plan` to add them, then retry `configure_grader` |
 | `upload_dataset` | "dataset has no records" | Call `generate_initial_data` first, then retry `upload_dataset` |
 | `upload_dataset` | backend/network error | Retry `upload_dataset({ workflow_id, force_reupload: true })` |
 
@@ -951,13 +951,13 @@ When a tool call fails during execution, use the table below to recover:
 
 - **Empty dataset (0 records) with objective** → Go straight to plan creation:
   1. Check `knowledge_sources` from `get_workflow_state`: if `ready_count > 0`, call `analyze_knowledge_sources({ workflow_id })`; if `total_count === 0`, skip it entirely.
-  2. Call `generate_topics({ workflow_id, max_topics: 3, max_depth: 2 })` — get topic hierarchy
-  3. Call `generate_grader({ workflow_id, topics: [leaf names] })` — get criteria + script
+  2. Call `suggest_topics({ workflow_id, max_topics: 3, max_depth: 2 })` — get topic hierarchy
+  3. Call `suggest_grader({ workflow_id, topics: [leaf names] })` — get criteria + script
   4. Assemble plan using hierarchy + criteria, then call `propose_plan({ workflow_id, plan })`
   5. Call `save_plan({ workflow_id })` — validates + commits + shows plan to user with diff
   Do NOT use `ask_follow_up`. Just create the plan directly.
 
-- **Empty dataset with knowledge sources uploaded** → Same as above (plan-first). Both `generate_topics` and `generate_grader` automatically use knowledge source content.
+- **Empty dataset with knowledge sources uploaded** → Same as above (plan-first). Both `suggest_topics` and `suggest_grader` automatically use knowledge source content.
 
 - **Empty dataset without objective** → Ask the user to define one via `ask_follow_up`. Once the user provides an objective, call `update_objective({ workflow_id, objective })` to save it, then proceed with the plan-first flow.
 
@@ -1078,11 +1078,11 @@ Users can iteratively refine by asking things like:
 
 ## When user wants topic hierarchy
 
-Topic generation has sensible defaults. You can call `generate_topics` directly or delegate to `finetune_topics`.
+Topic generation has sensible defaults. You can call `suggest_topics` directly or delegate to `finetune_topics`.
 
 **Route based on user intent:**
-- **"Use these topics: A, B, C"** → Call `generate_topics({ workflow_id, topics: ["a", "b", "c"] })` directly. Skips LLM, creates hierarchy from names.
-- **"Add topics D, E"** → Call `generate_topics({ workflow_id, topics: ["d", "e"], mode: "append" })`. Merges with existing.
+- **"Use these topics: A, B, C"** → Call `suggest_topics({ workflow_id, topics: ["a", "b", "c"] })` directly. Skips LLM, creates hierarchy from names.
+- **"Add topics D, E"** → Call `suggest_topics({ workflow_id, topics: ["d", "e"], mode: "append" })`. Merges with existing.
 - **"Generate topics" / "Suggest topics"** → Delegate to `finetune_topics` (default LLM generation with UI display).
 
 1. Ensure workflow exists (delegate to finetune_workflow to start if not)
@@ -1463,14 +1463,14 @@ Users can request to generate variants from a specific record. This typically co
 
 **Route based on user intent:**
 
-- **"Generate/set up a grader"** (no specific criteria) → Call `generate_grader({ workflow_id })` directly. It auto-generates criteria from the objective + knowledge sources.
-- **"Use these criteria: A, B, C"** → Call `generate_grader({ workflow_id, criteria: [{ name: "A", description: "..." }, ...] })`. Skips LLM, uses provided criteria directly.
-- **"Add criteria D, E to the existing grader"** → Call `generate_grader({ workflow_id, criteria: [{ name: "D", description: "..." }, ...], mode: "append" })`. Merges with existing criteria.
+- **"Generate/set up a grader"** (no specific criteria) → Call `suggest_grader({ workflow_id })` directly. It auto-generates criteria from the objective + knowledge sources.
+- **"Use these criteria: A, B, C"** → Call `suggest_grader({ workflow_id, criteria: [{ name: "A", description: "..." }, ...] })`. Skips LLM, uses provided criteria directly.
+- **"Add criteria D, E to the existing grader"** → Call `suggest_grader({ workflow_id, criteria: [{ name: "D", description: "..." }, ...], mode: "append" })`. Merges with existing criteria.
 - **"Make the grader stricter" / other feedback** → Delegate to `finetune_workflow` which uses `configure_grader` with `feedback` param for LLM-based script modification.
 
-1. For simple grader setup, call `generate_grader` directly:
+1. For simple grader setup, call `suggest_grader` directly:
    ```
-   generate_grader({ workflow_id: "wf-123" })
+   suggest_grader({ workflow_id: "wf-123" })
    ```
 
 2. For advanced/feedback-based changes, delegate to `finetune_workflow`:
@@ -1714,11 +1714,11 @@ Question types:
 2. See: 0 records, has objective, state.plan.exists = false, knowledge_sources.total_count = 0
 3. Go straight to plan creation (do NOT use ask_follow_up):
    - knowledge_sources.total_count === 0 → skip analyze_knowledge_sources
-   - Call `generate_topics({ workflow_id: "legal-assistant-456", max_topics: 3, max_depth: 2 })` → returns hierarchy
-   - Call `generate_grader({ workflow_id: "legal-assistant-456", topics: ["contract_review", "legal_research", ...] })` → returns criteria + script
+   - Call `suggest_topics({ workflow_id: "legal-assistant-456", max_topics: 3, max_depth: 2 })` → returns hierarchy
+   - Call `suggest_grader({ workflow_id: "legal-assistant-456", topics: ["contract_review", "legal_research", ...] })` → returns criteria + script
    - Assemble plan using hierarchy + criteria, call `propose_plan({ workflow_id: "legal-assistant-456", plan: { ... } })`
    - Call `save_plan({ workflow_id: "legal-assistant-456" })` → validates + commits + emits UI event
-4. Respond: "Here's a plan for your Legal Assistant workflow. Review it and click Approve to proceed."
+4. (No text output — plan card is already visible with Approve / Edit / Dismiss buttons.)
 
 ## Example 3: Failed plan (resume, not recreate)
 
@@ -1855,7 +1855,7 @@ Use `update_objective` when:
 update_objective({ workflow_id: "...", objective: "Train an assistant that..." })
 ```
 
-This updates both the dataset's `datasetObjective` and the workflow's `trainingGoals` (if a workflow exists). After updating, downstream tools (`generate_topics`, `generate_grader`, `generate_initial_data`, etc.) will automatically use the new objective.
+This updates both the dataset's `datasetObjective` and the workflow's `trainingGoals` (if a workflow exists). After updating, downstream tools (`suggest_topics`, `suggest_grader`, `generate_initial_data`, etc.) will automatically use the new objective.
 
 **After updating the objective on a dataset that already has data/topics/grader:**
 Use `ask_follow_up` to offer regeneration options since the existing topics and grader may no longer align with the new objective:
@@ -1895,8 +1895,8 @@ When knowledge sources (PDFs, markdown files, documents) are uploaded, their ext
 
 1. User uploads a PDF/markdown/document to the dataset
 2. Knowledge source processor extracts text, creates semantic chunks with headings and summaries
-3. When `generate_topics` is called, the extracted content is automatically used to ground the hierarchy in the actual document
-4. When `generate_grader` is called, the extracted content informs domain-specific evaluation criteria
+3. When `suggest_topics` is called, the extracted content is automatically used to ground the hierarchy in the actual document
+4. When `suggest_grader` is called, the extracted content informs domain-specific evaluation criteria
 5. Both tools handle this automatically — no special parameters needed
 
 ## Explicit Topics / Criteria
@@ -1905,14 +1905,14 @@ Users can provide explicit topics or criteria instead of LLM generation:
 
 ```
 // Explicit topics — skips LLM, creates flat hierarchy from names
-generate_topics({ workflow_id: "...", topics: ["opening_theory", "tactical_patterns", "endgame_techniques"] })
+suggest_topics({ workflow_id: "...", topics: ["opening_theory", "tactical_patterns", "endgame_techniques"] })
 
 // Explicit criteria — skips LLM, generates JS function from these criteria
-generate_grader({ workflow_id: "...", criteria: [{ name: "Accuracy", description: "..." }] })
+suggest_grader({ workflow_id: "...", criteria: [{ name: "Accuracy", description: "..." }] })
 
 // Append mode — adds to existing without replacing
-generate_topics({ workflow_id: "...", topics: ["new_topic"], mode: "append" })
-generate_grader({ workflow_id: "...", criteria: [{ name: "New Criterion", description: "..." }], mode: "append" })
+suggest_topics({ workflow_id: "...", topics: ["new_topic"], mode: "append" })
+suggest_grader({ workflow_id: "...", criteria: [{ name: "New Criterion", description: "..." }], mode: "append" })
 ```
 
 **Priority:**

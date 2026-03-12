@@ -9,7 +9,7 @@ write_large_tool_responses_to_fs = true
 builtin = ["final"]
 external = [
   # Topic generation
-  "generate_topics",
+  "suggest_topics",
   "apply_topic_hierarchy",
 
   # Topic manipulation
@@ -44,9 +44,9 @@ When asked to generate a topic hierarchy, the orchestrator will provide paramete
 
 **Extract these parameters from the task description and use them:**
 
-1. Call `generate_topics` with the workflow_id AND the provided parameters:
+1. Call `suggest_topics` with the workflow_id AND the provided parameters:
    ```
-   generate_topics({
+   suggest_topics({
      workflow_id: "{workflow_id from context}",
      max_depth: {from task, default 2},
      degree: {from task, default 2},
@@ -64,7 +64,7 @@ Example flow:
 ```
 Task: "Generate topics with max_depth=2, degree=2, max_topics=3, focus='error handling scenarios' for workflow wf-123"
 
-1. generate_topics({ workflow_id: "wf-123", max_depth: 2, degree: 2, max_topics: 3, focus: "error handling scenarios" })
+1. suggest_topics({ workflow_id: "wf-123", max_depth: 2, degree: 2, max_topics: 3, focus: "error handling scenarios" })
    → Returns { success: true, hierarchy: [...], topic_count: 9 }
 
 2. final("Generated topic hierarchy with 9 topics (depth=2, branching=2, 3 root topics).")
@@ -74,7 +74,7 @@ Example with explicit seed topics:
 ```
 Task: "Generate topics seeded with 'opening_theory', 'tactical_patterns', 'endgame' for workflow wf-123"
 
-1. generate_topics({ workflow_id: "wf-123", seed_topics: ["opening_theory", "tactical_patterns", "endgame"] })
+1. suggest_topics({ workflow_id: "wf-123", seed_topics: ["opening_theory", "tactical_patterns", "endgame"] })
    → Returns { success: true, hierarchy: [...], topic_count: 12 }
 
 2. final("Generated topic hierarchy with 12 topics based on seed topics.")
@@ -84,7 +84,7 @@ Task: "Generate topics seeded with 'opening_theory', 'tactical_patterns', 'endga
 Total topics = max_topics × (degree^0 + degree^1 + ... + degree^(max_depth-1))
 Example: max_topics=3, degree=2, max_depth=2 → 3 × (1 + 2) = 9 total topics
 
-**NOTE:** The `generate_topics` tool uses `workflow_id` (not `workflow_id`). The workflow context provides the dataset information.
+**NOTE:** The `suggest_topics` tool uses `workflow_id` (not `workflow_id`). The workflow context provides the dataset information.
 
 ## Task: Apply Hierarchy
 
