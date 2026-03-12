@@ -163,7 +163,6 @@ pub async fn create_job(
         actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
     })?;
 
-    // Keep behavior consistent across job types by upserting local workflow rows to cloud first.
     ensure_dataset_uploaded(workflow_id, &client, db_pool.get_ref()).await?;
 
     let cloud_response = client
