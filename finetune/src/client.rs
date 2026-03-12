@@ -107,7 +107,7 @@ impl LangdbCloudFinetuneClient {
         dataset_id: &str,
     ) -> Result<Vec<EvaluatorVersionResponse>, String> {
         let url = format!(
-            "{}/finetune/datasets/{}/evaluator/versions",
+            "{}/finetune/workflows/{}/evaluator/versions",
             self.api_url, dataset_id
         );
 
@@ -139,7 +139,7 @@ impl LangdbCloudFinetuneClient {
         evaluator: String,
     ) -> Result<(), String> {
         let url = format!(
-            "{}/finetune/datasets/{}/evaluator",
+            "{}/finetune/workflows/{}/evaluator",
             self.api_url, workflow_id
         );
 
