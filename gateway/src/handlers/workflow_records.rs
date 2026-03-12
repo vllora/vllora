@@ -18,7 +18,8 @@ fn map_db_error(err: DatabaseError) -> actix_web::Error {
 pub struct RecordInput {
     pub id: String,
     pub data: serde_json::Value,
-    pub topic: Option<String>,
+    #[serde(alias = "topic")]
+    pub topic_id: Option<String>,
     pub span_id: Option<String>,
     #[serde(default)]
     pub is_generated: bool,
@@ -32,7 +33,7 @@ impl RecordInput {
             id: self.id,
             workflow_id: workflow_id.to_string(),
             data: self.data.to_string(),
-            topic: self.topic,
+            topic_id: self.topic_id,
             span_id: self.span_id,
             is_generated: if self.is_generated { 1 } else { 0 },
             source_record_id: self.source_record_id,
@@ -53,13 +54,15 @@ pub struct ReplaceRecordsRequest {
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateTopicRequest {
-    pub topic: Option<String>,
+    #[serde(alias = "topic")]
+    pub topic_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct TopicUpdate {
     pub record_id: String,
-    pub topic: String,
+    #[serde(alias = "topic")]
+    pub topic_id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -80,8 +83,10 @@ pub struct UpdateScoresRequest {
 
 #[derive(Debug, Deserialize)]
 pub struct RenameTopicRequest {
-    pub old_name: String,
-    pub new_name: String,
+    #[serde(alias = "old_name")]
+    pub old_topic_id: String,
+    #[serde(alias = "new_name")]
+    pub new_topic_id: String,
 }
 
 pub async fn list_records(
@@ -144,7 +149,7 @@ pub async fn update_record_topic(
     let service = WorkflowRecordService::new(db_pool.get_ref().clone());
 
     service
-        .update_topic(&workflow_id, &record_id, payload.topic.as_deref())
+        .update_topic(&workflow_id, &record_id, payload.topic_id.as_deref())
         .map_err(map_db_error)?;
     Ok(HttpResponse::Ok().json(serde_json::json!({ "updated": true })))
 }
@@ -161,7 +166,7 @@ pub async fn batch_update_topics(
     let updates: Vec<(&str, &str)> = payload
         .updates
         .iter()
-        .map(|u| (u.record_id.as_str(), u.topic.as_str()))
+        .map(|u| (u.record_id.as_str(), u.topic_id.as_str()))
         .collect();
 
     service
@@ -215,7 +220,7 @@ pub async fn rename_topic(
     let service = WorkflowRecordService::new(db_pool.get_ref().clone());
 
     let count = service
-        .rename_topic(&workflow_id, &payload.old_name, &payload.new_name)
+        .rename_topic(&workflow_id, &payload.old_topic_id, &payload.new_topic_id)
         .map_err(map_db_error)?;
     Ok(HttpResponse::Ok().json(serde_json::json!({ "renamed": count })))
 }
@@ -224,11 +229,11 @@ pub async fn clear_topic(
     path: web::Path<(String, String)>,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
-    let (workflow_id, topic_name) = path.into_inner();
+    let (workflow_id, topic_id) = path.into_inner();
     let service = WorkflowRecordService::new(db_pool.get_ref().clone());
 
     let count = service
-        .clear_topic(&workflow_id, &topic_name)
+        .clear_topic(&workflow_id, &topic_id)
         .map_err(map_db_error)?;
     Ok(HttpResponse::Ok().json(serde_json::json!({ "cleared": count })))
 }

@@ -76,13 +76,13 @@ impl WorkflowRecordService {
         &self,
         workflow_id: &str,
         record_id: &str,
-        topic: Option<&str>,
+        topic_id: Option<&str>,
     ) -> Result<(), DatabaseError> {
         let mut conn = self.db_pool.get()?;
         let affected = diesel::update(dsl::workflow_records)
             .filter(dsl::id.eq(record_id))
             .filter(dsl::workflow_id.eq(workflow_id))
-            .set(dsl::topic.eq(topic))
+            .set(dsl::topic_id.eq(topic_id))
             .execute(&mut conn)?;
 
         if affected == 0 {
@@ -97,11 +97,11 @@ impl WorkflowRecordService {
         updates: &[(&str, &str)],
     ) -> Result<(), DatabaseError> {
         let mut conn = self.db_pool.get()?;
-        for (record_id, topic) in updates {
+        for (record_id, topic_id) in updates {
             diesel::update(dsl::workflow_records)
                 .filter(dsl::id.eq(record_id))
                 .filter(dsl::workflow_id.eq(workflow_id))
-                .set(dsl::topic.eq(Some(*topic)))
+                .set(dsl::topic_id.eq(Some(*topic_id)))
                 .execute(&mut conn)?;
         }
         Ok(())
@@ -152,14 +152,14 @@ impl WorkflowRecordService {
     pub fn rename_topic(
         &self,
         workflow_id: &str,
-        old_name: &str,
-        new_name: &str,
+        old_topic_id: &str,
+        new_topic_id: &str,
     ) -> Result<usize, DatabaseError> {
         let mut conn = self.db_pool.get()?;
         let affected = diesel::update(dsl::workflow_records)
             .filter(dsl::workflow_id.eq(workflow_id))
-            .filter(dsl::topic.eq(old_name))
-            .set(dsl::topic.eq(new_name))
+            .filter(dsl::topic_id.eq(old_topic_id))
+            .set(dsl::topic_id.eq(new_topic_id))
             .execute(&mut conn)?;
         Ok(affected)
     }
@@ -167,13 +167,13 @@ impl WorkflowRecordService {
     pub fn clear_topic(
         &self,
         workflow_id: &str,
-        topic_name: &str,
+        topic_id: &str,
     ) -> Result<usize, DatabaseError> {
         let mut conn = self.db_pool.get()?;
         let affected = diesel::update(dsl::workflow_records)
             .filter(dsl::workflow_id.eq(workflow_id))
-            .filter(dsl::topic.eq(topic_name))
-            .set(dsl::topic.eq(None::<String>))
+            .filter(dsl::topic_id.eq(topic_id))
+            .set(dsl::topic_id.eq(None::<String>))
             .execute(&mut conn)?;
         Ok(affected)
     }
@@ -182,7 +182,7 @@ impl WorkflowRecordService {
         let mut conn = self.db_pool.get()?;
         let affected = diesel::update(dsl::workflow_records)
             .filter(dsl::workflow_id.eq(workflow_id))
-            .set(dsl::topic.eq(None::<String>))
+            .set(dsl::topic_id.eq(None::<String>))
             .execute(&mut conn)?;
         Ok(affected)
     }
@@ -224,12 +224,12 @@ mod tests {
         wf.id
     }
 
-    fn make_record(id: &str, topic: Option<&str>) -> DbNewWorkflowRecord {
+    fn make_record(id: &str, topic_id: Option<&str>) -> DbNewWorkflowRecord {
         DbNewWorkflowRecord {
             id: id.to_string(),
             workflow_id: String::new(),
             data: r#"{"input":{},"output":{}}"#.to_string(),
-            topic: topic.map(|t| t.to_string()),
+            topic_id: topic_id.map(|t| t.to_string()),
             span_id: None,
             is_generated: 0,
             source_record_id: None,
@@ -292,7 +292,7 @@ mod tests {
         service.update_topic(&wf_id, "r1", Some("new_topic")).unwrap();
 
         let records = service.list(&wf_id).unwrap();
-        assert_eq!(records[0].topic, Some("new_topic".to_string()));
+        assert_eq!(records[0].topic_id, Some("new_topic".to_string()));
     }
 
     #[test]
@@ -320,9 +320,9 @@ mod tests {
         let r1 = records.iter().find(|r| r.id == "r1").unwrap();
         let r2 = records.iter().find(|r| r.id == "r2").unwrap();
         let r3 = records.iter().find(|r| r.id == "r3").unwrap();
-        assert_eq!(r1.topic, Some("topicA".to_string()));
-        assert_eq!(r2.topic, Some("topicB".to_string()));
-        assert_eq!(r3.topic, None);
+        assert_eq!(r1.topic_id, Some("topicA".to_string()));
+        assert_eq!(r2.topic_id, Some("topicB".to_string()));
+        assert_eq!(r3.topic_id, None);
     }
 
     #[test]
@@ -347,11 +347,11 @@ mod tests {
         let records = service.list(&wf_id).unwrap();
         let renamed: Vec<_> = records
             .iter()
-            .filter(|r| r.topic.as_deref() == Some("new_name"))
+            .filter(|r| r.topic_id.as_deref() == Some("new_name"))
             .collect();
         assert_eq!(renamed.len(), 2);
         let unchanged = records.iter().find(|r| r.id == "r3").unwrap();
-        assert_eq!(unchanged.topic, Some("other".to_string()));
+        assert_eq!(unchanged.topic_id, Some("other".to_string()));
     }
 
     #[test]
@@ -413,7 +413,7 @@ mod tests {
         service.clear_all_topics(&wf_id).unwrap();
 
         let records = service.list(&wf_id).unwrap();
-        assert!(records.iter().all(|r| r.topic.is_none()));
+        assert!(records.iter().all(|r| r.topic_id.is_none()));
     }
 
     #[test]

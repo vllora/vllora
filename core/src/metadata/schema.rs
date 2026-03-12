@@ -194,7 +194,7 @@ diesel::table! {
         id -> Text,
         workflow_id -> Text,
         data -> Text,
-        topic -> Nullable<Text>,
+        topic_id -> Nullable<Text>,
         span_id -> Nullable<Text>,
         is_generated -> Integer,
         source_record_id -> Nullable<Text>,

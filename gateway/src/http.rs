@@ -412,7 +412,7 @@ impl ApiServer {
                                             .route("/topics", web::patch().to(workflow_records::batch_update_topics))
                                             .route("/topics", web::delete().to(workflow_records::clear_all_topics))
                                             .route("/rename-topic", web::patch().to(workflow_records::rename_topic))
-                                            .route("/topics/{topic_name}", web::delete().to(workflow_records::clear_topic))
+                                            .route("/topics/{topic_id}", web::delete().to(workflow_records::clear_topic))
                                             .route("/{record_id}", web::patch().to(workflow_records::update_record_topic))
                                             .route("/{record_id}", web::delete().to(workflow_records::delete_record))
                                             .route("/{record_id}/data", web::patch().to(workflow_records::update_record_data))
