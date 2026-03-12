@@ -17,7 +17,7 @@ external = [
   "get_topic_hierarchy",
 
   # Data access
-  "get_dataset_records"
+  "get_workflow_records"
 ]
 
 [model_settings]

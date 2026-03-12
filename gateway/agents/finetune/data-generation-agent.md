@@ -21,8 +21,8 @@ external = [
   "generate_record_variants",
 
   # Dataset tools
-  "get_dataset_state",
-  "get_dataset_records",
+  "get_workflow_state",
+  "get_workflow_records",
   "analyze_coverage"
 ]
 
