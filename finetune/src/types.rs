@@ -247,6 +247,7 @@ pub struct CompletionParams {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateEvaluationRequest {
+    #[serde(alias = "workflow_id")]
     pub dataset_id: uuid::Uuid,
     #[serde(alias = "model_params")]
     pub rollout_model_params: CompletionParams,

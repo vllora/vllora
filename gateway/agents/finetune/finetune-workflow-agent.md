@@ -32,7 +32,6 @@ external = [
   "sync_evaluator",
 
   # Training operations
-  "upload_dataset",
   "run_evaluation",
   "start_training",
   "check_training_status",
@@ -146,7 +145,6 @@ When the user approves the plan (says "approve", "yes", "let's do it", etc.):
    - Applies topic hierarchy
    - Generates initial training data
    - Configures the evaluation grader
-   - Uploads dataset to backend
    - Runs evaluation
 3. Progress events are emitted for UI updates
 4. After completion, inform user the workflow is ready for fine-tuning
@@ -454,13 +452,11 @@ When asked to run evaluation:
    - `workflow_id`: The workflow ID
    - `sample_percentage`: Percentage of records to test (default 100)
    - `rollout_model`: Model for generating responses (use what orchestrator specified, default: gpt-4o-mini)
-2. The tool automatically uploads dataset to backend if needed
-3. Return the verdict and metrics
+2. Return the verdict and metrics
 
 ## Start Training
 When asked to start training:
 1. Call `start_training` with the workflow_id and any specified parameters
-2. The tool automatically uploads dataset to backend if needed
 
 **Required parameter:**
 - `workflow_id`: The workflow ID
@@ -563,7 +559,7 @@ The result also includes:
 
 ### If next_action = 'train'
 Dataset and grader are healthy. The card already shows "⚡ Proceeding to training".
-Just proceed directly — call `start_training` (upload is already done during plan execution).
+Just proceed directly — call `start_training`.
 Do NOT ask the user for confirmation — the card's next-action indicator is the signal.
 
 ### If next_action = 'iterate'
@@ -581,7 +577,6 @@ Propose a targeted iteration plan using `propose_plan`:
 - [ ] [Specific change 2 — e.g., "Generate 15 more records for knife_skills topic"]
 
 ### Verification
-- [ ] Upload updated dataset
 - [ ] Run evaluation to verify improvement
 ```
 
@@ -589,7 +584,7 @@ After user approves, call the individual tools:
 - **Grader changes** → `configure_grader` (with `feedback` param) or `suggest_grader`
 - **Data changes** → `generate_synthetic_data`, `generate_record_variants`, or `generate_initial_data`
 - **Topic changes** → `adjust_topic_hierarchy`
-- Then: `upload_dataset` + `run_evaluation`
+- Then: `run_evaluation`
 - After eval completes: call `analyze_evaluation` again (loop)
 
 ### If next_action = 'escalate'

@@ -37,7 +37,6 @@ external = [
   "apply_topic_hierarchy",
   "generate_initial_data",
   "configure_grader",
-  "upload_dataset",
   "run_evaluation",
   "start_training",
   "start_finetune_workflow",
@@ -166,7 +165,6 @@ Otherwise, skip ask_follow_up. Use the 5-step plan-first sequence directly:
    - Use `adjust_topics` (NOT `topics`) if the dataset already has a topic hierarchy
    - Set `overrides.generate.target_topics` + `per_topic_count` for targeted generation
    - Include only the relevant steps in `steps_to_execute` (omit `finetune` unless user explicitly asks to retrain)
-   - Include `upload` with `force_reupload: true` if generating new data
    - Set `plan_markdown` reflecting only the steps being performed
 3. Call `propose_plan({ workflow_id, plan })` with the constructed plan
 4. Call `save_plan({ workflow_id })` — validates, commits, shows plan to user with diff
@@ -185,11 +183,10 @@ propose_plan({ workflow_id: "...", plan: {
   description: "Add subtopics, generate targeted data, re-evaluate",
   plan_markdown: "# Expand Code Style...\n\n## Steps\n- [ ] **Adjust Topics**...\n- [ ] **Generate Data**...\n- [ ] **Run Evaluation**...",
   adjust_topics_instruction: "Add 2 subtopics under Code Style: ...",
-  steps_to_execute: ["adjust_topics", "generate", "upload", "dryrun"],
+  steps_to_execute: ["adjust_topics", "generate", "dryrun"],
   overrides: {
     adjust_topics: { instruction: "Add 2 subtopics under Code Style: ..." },
-    generate: { target_topics: ["Topic A", "Topic B"], per_topic_count: 50 },
-    upload: { force_reupload: true }
+    generate: { target_topics: ["Topic A", "Topic B"], per_topic_count: 50 }
   },
   estimated_records: 100
 }})
@@ -290,7 +287,7 @@ Provide context and clear options. Don't over-explain - let users guide the conv
 **Use for:** Complex multi-tool workflows that need specialized coordination — rollbacks, state repairs, or when a step requires multiple tool calls to recover.
 **Tools:** start_finetune_workflow, advance_to_step, generate_synthetic_data, configure_grader, start_training, etc.
 **Returns:** Operation results and status
-**DO NOT use during plan execution** — call step tools (`generate_initial_data`, `configure_grader`, `upload_dataset`, `run_evaluation`, `start_training`) directly instead.
+**DO NOT use during plan execution** — call step tools (`generate_initial_data`, `configure_grader`, `run_evaluation`, `start_training`) directly instead.
 
 **When to delegate:**
 - User wants to start a workflow
@@ -472,7 +469,7 @@ Assemble the plan using:
     },
     "output_format": null,
     "knowledge_sources": [],
-    "steps_to_execute": ["topics", "generate", "grader", "upload", "dryrun", "finetune"],
+    "steps_to_execute": ["topics", "generate", "grader", "dryrun", "finetune"],
     "estimated_records": 150,
     "estimated_duration": "~8-15 minutes"
   }
@@ -557,7 +554,6 @@ MY EDITED VERSION:
 | `categorize` | `categorize_records` | Assign/re-assign records to topics using AI classification |
 | `generate` | `generate_initial_data` | Generate training data |
 | `grader` | `configure_grader` | Configure the LLM-as-judge evaluator |
-| `upload` | `upload_dataset` | Upload dataset to backend (HIDDEN — call silently, no checklist update) |
 | `dryrun` | `run_evaluation` | Run evaluation |
 | `finetune` | `start_training` | Start fine-tune job |
 
@@ -578,19 +574,17 @@ User: "Add 3 more topics under Topic A, generate 100 records per new topic"
   "workflow_id": "...",
   "plan": {
     "title": "Expand Topic A with 3 subtopics",
-    "description": "Add new subtopics, generate targeted data, re-upload and evaluate",
+    "description": "Add new subtopics, generate targeted data, and evaluate",
     "adjust_topics_instruction": "Add 3 new subtopics under Topic A covering edge cases, error handling, and advanced patterns",
     "execution_steps": [
       { "step": "Adjust Topics", "step_id": "adjust_topics", "description": "Add 3 subtopics under Topic A", "estimated_time": "~10 sec" },
       { "step": "Generate Data", "step_id": "generate", "description": "Generate 100 records per new topic", "estimated_time": "~3 min" },
-      { "step": "Upload", "step_id": "upload", "description": "Re-upload dataset", "estimated_time": "~10 sec" },
       { "step": "Run Evaluation", "step_id": "dryrun", "description": "Re-evaluate", "estimated_time": "~1 min" }
     ],
-    "steps_to_execute": ["adjust_topics", "generate", "upload", "dryrun"],
+    "steps_to_execute": ["adjust_topics", "generate", "dryrun"],
     "overrides": {
       "adjust_topics": { "instruction": "Add 3 new subtopics under Topic A covering edge cases, error handling, and advanced patterns" },
-      "generate": { "target_topics": ["Edge Cases", "Error Handling", "Advanced Patterns"], "per_topic_count": 100 },
-      "upload": { "force_reupload": true }
+      "generate": { "target_topics": ["Edge Cases", "Error Handling", "Advanced Patterns"], "per_topic_count": 100 }
     },
     "estimated_records": 300,
     "estimated_duration": "~6-10 minutes"
@@ -601,8 +595,8 @@ User: "Add 3 more topics under Topic A, generate 100 records per new topic"
 **Example: Categorize then generate to fill gaps**
 ```json
 {
-  "steps_to_execute": ["categorize", "generate", "upload", "dryrun"],
-  "overrides": { "generate": { "count": 50 }, "upload": { "force_reupload": true } }
+  "steps_to_execute": ["categorize", "generate", "dryrun"],
+  "overrides": { "generate": { "count": 50 } }
 }
 ```
 ```
@@ -633,13 +627,12 @@ After approval, call the individual tools directly for each step in the plan. Af
    → update_plan_markdown (check off "Generate Training Data")
 3. configure_grader({ workflow_id, ... })
    → update_plan_markdown (check off "Configure Evaluator")
-4. upload_dataset({ workflow_id })          ← SILENT (no checklist update)
-5. run_evaluation({ workflow_id })
+4. run_evaluation({ workflow_id })
    → update_plan_markdown (check off "Run Evaluation")
    NOTE: Do NOT poll/wait for eval to complete — it runs in the background. Continue immediately.
-6. start_training({ workflow_id })
+5. start_training({ workflow_id })
    → update_plan_markdown (check off "Start Fine-tune", status: "completed")
-8. update_workflow_readme({ workflow_id, readme_content: "<write the README>" })  ← ALWAYS write a README last
+6. update_workflow_readme({ workflow_id, readme_content: "<write the README>" })  ← ALWAYS write a README last
 ```
 
 **Post-execution analysis (REACTIVE, not during plan execution):**
@@ -714,7 +707,7 @@ update_workflow_readme({
 - `call_finetune_workflow` — do NOT use the sub-agent wrapper
 - `call_data_generation` — do NOT use the sub-agent wrapper
 
-You have ALL the step tools (`apply_topic_hierarchy`, `generate_initial_data`, `configure_grader`, `upload_dataset`, `run_evaluation`, `analyze_evaluation`, `start_training`, `analyze_training`) available directly. Call them yourself.
+You have ALL the step tools (`apply_topic_hierarchy`, `generate_initial_data`, `configure_grader`, `run_evaluation`, `analyze_evaluation`, `start_training`, `analyze_training`) available directly. Call them yourself.
 
 **Plan lifecycle summary:**
 ```
@@ -771,11 +764,10 @@ All plans MUST include `plan_markdown`. The frontend renders this markdown direc
 3. Use `- [ ]` for pending steps, `- [x]` for completed. Bold step names with em-dash: `- [ ] **Step Name** — description (~time)`
 4. Topics MUST be in a table format, NOT a bullet list
 5. Criteria MUST use bold name with em-dash: `- **Name** — description`
-6. **NEVER show "Upload Dataset" in the checklist** — it is an internal sync step. The agent calls `upload_dataset` silently before `run_evaluation` and `start_training`
-7. **NEVER show "Categorize Records" in the checklist** — only used internally for datasets with existing uncategorized records
-8. For incremental plans (adding data, adjusting topics), only include relevant steps — omit "Start Fine-tune" unless the user wants to retrain
-9. **Data binding**: The Topics table and Evaluation Criteria sections MUST reflect the actual data from `suggest_topics` and `suggest_grader` results. Copy topic names, descriptions, counts, and criterion names/descriptions directly — never fabricate or use generic placeholders.
-10. **Dynamic step selection**: Adapt the Steps checklist based on what the plan actually does:
+6. **NEVER show "Categorize Records" in the checklist** — only used internally for datasets with existing uncategorized records
+7. For incremental plans (adding data, adjusting topics), only include relevant steps — omit "Start Fine-tune" unless the user wants to retrain
+8. **Data binding**: The Topics table and Evaluation Criteria sections MUST reflect the actual data from `suggest_topics` and `suggest_grader` results. Copy topic names, descriptions, counts, and criterion names/descriptions directly — never fabricate or use generic placeholders.
+9. **Dynamic step selection**: Adapt the Steps checklist based on what the plan actually does:
     - **Fresh dataset (initial plan)**: All 6 steps (Topics → Generate → Evaluator → Evaluation → Skill Package → Fine-tune)
     - **Data augmentation** (adding more records): Only relevant steps (e.g., Generate → Evaluation)
     - **Topic adjustment**: Only relevant steps (e.g., Apply Topics → Generate → Evaluation)
@@ -822,7 +814,6 @@ This returns what already exists in the database (survives refresh):
 - `topics.leaf_count` — how many topics are configured
 - `records.total_count` — how many records exist (includes partial generation)
 - `grader.configured` — is the evaluator set up?
-- `upload.uploaded` — is the dataset uploaded to backend?
 - `dry_run.completed` — did the evaluation finish?
 - `training.has_job` / `training.status` — is there a finetune job?
 
@@ -838,20 +829,16 @@ For each step in the plan, compare what the plan intended vs what actually exist
   - If partial (e.g., `records.total_count` is 30 but plan wanted 80), set `overrides.generate.count` to the **remaining delta** (50), NOT the original count. This prevents duplicates.
   - If `records.total_count` is 0, re-run with the original count
 - **grader**: Skip if `grader.configured === true`
-- **upload**: Skip if `upload.uploaded === true` AND you're not generating new records. If you ARE generating new records (from the generate step above), include upload with `overrides.upload.force_reupload: true`
 - **dryrun**: Skip if `dry_run.completed === true`. If you generated new records or reconfigured the grader, include it even if a previous evaluation exists.
 - **README**: Written by the agent via `update_workflow_readme` at the end of execution; never add `readme` to `steps_to_execute`
 - **finetune**: Skip if `training.status` is `running`, `pending`, `queued`, or `completed`. Include if `failed` (retry) or no job exists.
 
 **Step 3: Execute remaining steps directly**
-Call the individual tools for each remaining step. After each USER-VISIBLE step, update the plan checklist. Call `upload_dataset` silently before evaluation/finetune (do NOT update checklist for it):
+Call the individual tools for each remaining step. After each USER-VISIBLE step, update the plan checklist:
 ```
 // Example: generate remaining records
 generate_initial_data({ workflow_id: "...", count: 50, distribute_by_topic: true })
 update_plan_markdown({ workflow_id: "...", plan_markdown: "...with - [x] Generate Training Data..." })
-
-// Upload silently (no checklist update)
-upload_dataset({ workflow_id: "..." })
 
 // Then evaluation (fire-and-forget — don't wait for completion)
 run_evaluation({ workflow_id: "..." })
@@ -881,13 +868,13 @@ When a tool call fails during execution, **DO NOT create a new plan.** The exist
 
 **Example:**
 ```
-// upload_dataset failed during execution
+// configure_grader failed during execution
 
 // Step 1: Check actual state
 get_workflow_state({ workflow_id: "the-id" })
 
 // Step 2: Retry the failed step directly
-upload_dataset({ workflow_id: "the-id", force_reupload: true })
+configure_grader({ workflow_id: "the-id" })
 
 // Step 3: Continue with remaining steps
 run_evaluation({ workflow_id: "the-id" })
@@ -918,8 +905,6 @@ When a tool call fails during execution, use the table below to recover:
 | `generate_initial_data` | "no training objective" | Use `ask_follow_up` to ask the user for their training goal. After they answer, retry `generate_initial_data` |
 | `generate_initial_data` | "requires a record count" | Plan is missing `estimated_records`. Call `adjust_plan` to add a count, then retry |
 | `configure_grader` | "criteria is required" | Call `suggest_grader({ workflow_id })` to get criteria, call `adjust_plan` to add them, then retry `configure_grader` |
-| `upload_dataset` | "dataset has no records" | Call `generate_initial_data` first, then retry `upload_dataset` |
-| `upload_dataset` | backend/network error | Retry `upload_dataset({ workflow_id, force_reupload: true })` |
 
 **For any failure not in this table:**
 1. Call `get_workflow_state` to understand actual DB state
@@ -1729,23 +1714,19 @@ Question types:
 
 ## Example 3: Failed plan (resume, not recreate)
 
-**User:** [Opens dataset after upload step failed]
+**User:** [Opens dataset after evaluation step failed]
 
 **You:**
 1. Call `get_workflow_state({ workflow_id: "chess-tutor-123" })`
-2. See: state.plan = { exists: true, status: "failed", completed_steps: ["topics", "generate", "grader"], failed_step: "upload", remaining_steps: ["upload", "dryrun", "finetune"] }
+2. See: state.plan = { exists: true, status: "failed", completed_steps: ["topics", "generate", "grader"], failed_step: "dryrun", remaining_steps: ["dryrun", "finetune"] }
 3. Resume the existing plan (do NOT create a new one) — call tools directly:
    ```
-   upload_dataset({ workflow_id: "chess-tutor-123", force_reupload: true })
-   // upload is hidden — no checklist update
    run_evaluation({ workflow_id: "chess-tutor-123" })
    update_plan_markdown({ workflow_id: "chess-tutor-123", plan_markdown: "...with - [x] Run Evaluation..." })
    start_training({ workflow_id: "chess-tutor-123" })
    update_plan_markdown({ workflow_id: "chess-tutor-123", plan_markdown: "...with - [x] Start Fine-tune..." })
    ```
-4. Respond: "The previous upload step failed. I'm retrying from where we left off."
-   }
-   ```
+4. Respond: "The previous evaluation step failed. I'm retrying from where we left off."
 
 # IMPORTANT REMINDERS
 

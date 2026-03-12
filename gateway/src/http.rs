@@ -487,7 +487,7 @@ impl ApiServer {
                                         web::scope("/jobs")
                                             .route(
                                                 "",
-                                                web::post().to(finetune::create_reinforcement_job),
+                                                web::post().to(finetune::create_finetune_job),
                                             )
                                             .route(
                                                 "",

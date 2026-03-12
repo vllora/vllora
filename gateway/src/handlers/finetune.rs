@@ -9,8 +9,12 @@ use vllora_core::credentials::ProviderCredentialsId;
 use vllora_core::executor::context::ExecutorContext;
 use vllora_core::handler::CallbackHandlerFn;
 use vllora_core::metadata::models::finetune_job::DbNewFinetuneJob;
+use vllora_core::metadata::models::workflow_topic::DbWorkflowTopic;
 use vllora_core::metadata::pool::DbPool;
 use vllora_core::metadata::services::finetune_job::FinetuneJobService;
+use vllora_core::metadata::services::workflow::WorkflowService;
+use vllora_core::metadata::services::workflow_record::WorkflowRecordService;
+use vllora_core::metadata::services::workflow_topic::WorkflowTopicService;
 use vllora_core::model::DefaultModelMetadataFactory;
 use vllora_core::model::ModelMetadataFactory;
 use vllora_core::routing::interceptor::rate_limiter::InMemoryRateLimiterService;
@@ -103,6 +107,7 @@ pub async fn create_evaluation(
     request: web::Json<CreateEvaluationRequest>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
+    db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
     let request_body = request.into_inner();
 
@@ -110,6 +115,9 @@ pub async fn create_evaluation(
     let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
     })?;
+
+    // Auto-upload dataset from local SQLite to cloud (upsert)
+    ensure_dataset_uploaded(request_body.dataset_id, &client, db_pool.get_ref()).await?;
 
     let cloud_request = CreateEvaluationRequest {
         dataset_id: request_body.dataset_id,
@@ -529,7 +537,191 @@ pub async fn upload_dataset(
     Ok(HttpResponse::Created().json(response))
 }
 
-pub async fn create_reinforcement_job(
+// ============================================================================
+// Workflow Dataset Upload (reads from local SQLite, upserts to cloud)
+// ============================================================================
+
+/// Build a topic hierarchy tree from flat DB rows.
+/// Returns a JSON array of root nodes with nested children.
+fn build_topic_hierarchy_json(topics: &[DbWorkflowTopic]) -> serde_json::Value {
+    let mut node_map: HashMap<String, serde_json::Value> = HashMap::new();
+    let mut children_map: HashMap<String, Vec<String>> = HashMap::new();
+    let mut root_ids: Vec<String> = Vec::new();
+
+    // First pass: create all nodes
+    for topic in topics {
+        let mut node = serde_json::json!({
+            "id": topic.id,
+            "name": topic.name,
+            "selected": topic.selected == 1,
+        });
+
+        if let Some(ref chunk_refs) = topic.source_chunk_refs {
+            if let Ok(meta) = serde_json::from_str::<serde_json::Value>(chunk_refs) {
+                if let Some(obj) = meta.as_object() {
+                    for (key, value) in obj {
+                        node[key] = value.clone();
+                    }
+                }
+            }
+        }
+
+        node_map.insert(topic.id.clone(), node);
+
+        if let Some(ref parent_id) = topic.parent_id {
+            children_map
+                .entry(parent_id.clone())
+                .or_default()
+                .push(topic.id.clone());
+        } else {
+            root_ids.push(topic.id.clone());
+        }
+    }
+
+    // Recursive helper to build tree from leaves up
+    fn build_node(
+        id: &str,
+        node_map: &HashMap<String, serde_json::Value>,
+        children_map: &HashMap<String, Vec<String>>,
+    ) -> serde_json::Value {
+        let mut node = node_map.get(id).cloned().unwrap_or(serde_json::json!({}));
+        if let Some(child_ids) = children_map.get(id) {
+            let children: Vec<serde_json::Value> = child_ids
+                .iter()
+                .map(|cid| build_node(cid, node_map, children_map))
+                .collect();
+            node["children"] = serde_json::json!(children);
+        }
+        node
+    }
+
+    let roots: Vec<serde_json::Value> = root_ids
+        .iter()
+        .map(|id| build_node(id, &node_map, &children_map))
+        .collect();
+
+    serde_json::json!(roots)
+}
+
+/// Convert a single record's `data` JSON into OpenAI training format.
+/// Returns None if the record cannot be converted.
+fn record_to_training_line(record_id: &str, data: &str) -> Option<serde_json::Value> {
+    let parsed: serde_json::Value = serde_json::from_str(data).ok()?;
+
+    // If data has messages at top level (OpenAI format)
+    if let Some(messages) = parsed.get("messages").and_then(|m| m.as_array()) {
+        if messages.is_empty() {
+            return None;
+        }
+        return Some(serde_json::json!({
+            "messages": messages,
+            "id": record_id,
+        }));
+    }
+
+    // If data has input/output structure (vLLora format)
+    if parsed.get("input").is_some() && parsed.get("output").is_some() {
+        let mut messages: Vec<serde_json::Value> = Vec::new();
+
+        if let Some(input_msgs) = parsed["input"]
+            .get("messages")
+            .and_then(|m| m.as_array())
+        {
+            messages.extend(input_msgs.iter().cloned());
+        }
+
+        if let Some(output_msgs) = parsed["output"].get("messages") {
+            if let Some(arr) = output_msgs.as_array() {
+                messages.extend(arr.iter().cloned());
+            } else {
+                messages.push(output_msgs.clone());
+            }
+        }
+
+        if messages.is_empty() {
+            return None;
+        }
+
+        return Some(serde_json::json!({
+            "messages": messages,
+            "id": record_id,
+        }));
+    }
+
+    None
+}
+
+/// Read records, topics, and eval_script from local SQLite, build JSONL,
+/// and upsert to LangDB Cloud. Returns the cloud dataset ID.
+async fn ensure_dataset_uploaded(
+    wf_id: uuid::Uuid,
+    client: &LangdbCloudFinetuneClient,
+    db_pool: &DbPool,
+) -> Result<vllora_finetune::types::UploadDatasetResponse, actix_web::Error> {
+    let wf_id_str = wf_id.to_string();
+
+    // Read workflow (for eval_script)
+    let workflow_service = WorkflowService::new(db_pool.clone());
+    let workflow = workflow_service.get_by_id(&wf_id_str).map_err(|e| {
+        actix_web::error::ErrorNotFound(format!("Workflow not found: {}", e))
+    })?;
+
+    // Read records
+    let record_service = WorkflowRecordService::new(db_pool.clone());
+    let records = record_service.list(&wf_id_str).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Failed to read records: {}", e))
+    })?;
+
+    if records.is_empty() {
+        return Err(actix_web::error::ErrorBadRequest(
+            "Workflow has no records to upload",
+        ));
+    }
+
+    // Build JSONL from records
+    let jsonl_lines: Vec<String> = records
+        .iter()
+        .filter_map(|r| record_to_training_line(&r.id, &r.data).map(|v| v.to_string()))
+        .collect();
+
+    if jsonl_lines.is_empty() {
+        return Err(actix_web::error::ErrorBadRequest(
+            "No valid training records found",
+        ));
+    }
+
+    let jsonl_data = jsonl_lines.join("\n").into_bytes();
+
+    // Read topics and build hierarchy JSON
+    let topic_service = WorkflowTopicService::new(db_pool.clone());
+    let topics = topic_service.list(&wf_id_str).unwrap_or_default();
+    let topic_hierarchy = if topics.is_empty() {
+        None
+    } else {
+        Some(build_topic_hierarchy_json(&topics).to_string())
+    };
+
+    // Build evaluator JSON from eval_script
+    let evaluator = workflow.eval_script.as_ref().map(|script| {
+        serde_json::json!({
+            "type": "js",
+            "config": {
+                "script": format!("__inline_script:{}", script)
+            }
+        })
+        .to_string()
+    });
+
+    // Upload to cloud (upsert: dataset_id = workflow_id)
+    client
+        .upload_dataset(jsonl_data, topic_hierarchy, evaluator, Some(wf_id))
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!("Failed to upload dataset: {}", e))
+        })
+}
+
+pub async fn create_finetune_job(
     workflow_id: web::Path<uuid::Uuid>,
     request: web::Json<CreateReinforcementFinetuningJobRequest>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
@@ -542,6 +734,9 @@ pub async fn create_reinforcement_job(
     let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
     })?;
+
+    // Auto-upload dataset from local SQLite to cloud (upsert)
+    ensure_dataset_uploaded(*workflow_id, &client, db_pool.get_ref()).await?;
 
     let cloud_response = client
         .create_reinforcement_job(request_body.clone(), &workflow_id)
