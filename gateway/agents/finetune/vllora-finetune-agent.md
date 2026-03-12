@@ -617,12 +617,19 @@ After approval, call the individual tools directly for each step in the plan. Af
 **CRITICAL:** NEVER call `suggest_topics` or `suggest_grader` during execution — these are PLANNING-ONLY tools. Topics and grader criteria were already generated during the planning phase and are stored in the plan. Calling them again wastes 10-15 seconds and produces duplicate work. Use `apply_topic_hierarchy` (not `suggest_topics`) to apply topics during execution.
 
 **Execution order for a full initial plan:**
+
+**CRITICAL — MUST call `get_workflow_state` FIRST:** Before calling ANY other tool, call `get_workflow_state` to check the current state. Do NOT call `apply_topic_hierarchy` or any other execution tool before checking state — calling apply without checking state leads to duplicate calls.
+
 ```
-0. get_workflow_state({ workflow_id }) — Check existing state first
-1. If topics.leaf_count == 0: apply_topic_hierarchy({ workflow_id, ... })
+0. get_workflow_state({ workflow_id }) — ALWAYS call this FIRST, before any other tool
+   The response includes plan.proposed_topics, plan.grader_config, plan.estimated_records —
+   use these values for the steps below (DO NOT construct topics/grader yourself).
+1. If topics.leaf_count == 0: apply_topic_hierarchy({ workflow_id, hierarchy: state.plan.proposed_topics })
+   Convert plan.proposed_topics to hierarchy format: each topic → { name, description, children: subtopics.map(...) }
    If topics already configured (leaf_count > 0): SKIP this step
+   NEVER call apply_topic_hierarchy more than once — it is NOT idempotent
    → update_plan_markdown (check off "Apply Topic Hierarchy")
-2. generate_initial_data({ workflow_id, count: N, distribute_by_topic: true })
+2. generate_initial_data({ workflow_id, count: state.plan.estimated_records, distribute_by_topic: true })
    → update_plan_markdown (check off "Generate Training Data")
 3. configure_grader({ workflow_id, ... })
    → update_plan_markdown (check off "Configure Evaluator")
