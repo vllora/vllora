@@ -498,16 +498,8 @@ impl ApiServer {
                                     .service(
                                         web::scope("/jobs")
                                             .route(
-                                                "/unified",
-                                                web::post().to(finetune::create_job),
-                                            )
-                                            .route(
-                                                "/unified/{job_id}/status",
-                                                web::get().to(finetune::get_job_status),
-                                            )
-                                            .route(
                                                 "",
-                                                web::post().to(finetune::create_finetune_job),
+                                                web::post().to(finetune::create_job),
                                             )
                                             .route(
                                                 "",
@@ -518,7 +510,7 @@ impl ApiServer {
                                                     .route(
                                                         "/status",
                                                         web::get().to(
-                                                            finetune::get_finetune_job_status,
+                                                            finetune::get_job_status,
                                                         ),
                                                     )
                                                     .route(

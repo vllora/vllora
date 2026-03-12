@@ -57,6 +57,7 @@ pub struct LocalFinetuningJobResponse {
 
 /// Response type for get_finetune_job_status from local SQLite DB.
 #[derive(Debug, Serialize)]
+#[allow(dead_code)]
 pub struct LocalFinetuneJobStatusResponse {
     pub job_id: uuid::Uuid,
     pub provider_job_id: String,
@@ -595,6 +596,7 @@ async fn ensure_dataset_uploaded(
         })
 }
 
+#[allow(dead_code)]
 pub async fn create_finetune_job(
     workflow_id: web::Path<uuid::Uuid>,
     request: web::Json<CreateFinetuneJobRequest>,
@@ -641,6 +643,7 @@ pub async fn create_finetune_job(
     Ok(HttpResponse::Created().json(cloud_response))
 }
 
+#[allow(dead_code)]
 pub async fn get_finetune_job_status(
     path: web::Path<JobRequestPath>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
