@@ -550,21 +550,12 @@ fn build_topic_hierarchy_json(topics: &[DbWorkflowTopic]) -> serde_json::Value {
 
     // First pass: create all nodes
     for topic in topics {
-        let mut node = serde_json::json!({
+        let node = serde_json::json!({
             "id": topic.id,
+            "reference_id": topic.reference_id,
             "name": topic.name,
-            "selected": topic.selected == 1,
+            "system_prompt": topic.system_prompt,
         });
-
-        if let Some(ref chunk_refs) = topic.source_chunk_refs {
-            if let Ok(meta) = serde_json::from_str::<serde_json::Value>(chunk_refs) {
-                if let Some(obj) = meta.as_object() {
-                    for (key, value) in obj {
-                        node[key] = value.clone();
-                    }
-                }
-            }
-        }
 
         node_map.insert(topic.id.clone(), node);
 

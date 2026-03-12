@@ -15,3 +15,4 @@ pub mod trace;
 pub mod workflow;
 pub mod workflow_record;
 pub mod workflow_topic;
+pub mod workflow_topic_source;

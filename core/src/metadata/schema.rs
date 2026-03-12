@@ -208,11 +208,22 @@ diesel::table! {
 diesel::table! {
     workflow_topics (id) {
         id -> Text,
+        reference_id -> Nullable<Text>,
         workflow_id -> Text,
         name -> Text,
         parent_id -> Nullable<Text>,
-        selected -> Integer,
-        source_chunk_refs -> Nullable<Text>,
+        system_prompt -> Nullable<Text>,
+        created_at -> Text,
+    }
+}
+
+diesel::table! {
+    workflow_topic_sources (id) {
+        id -> Text,
+        reference_id -> Nullable<Text>,
+        workflow_id -> Text,
+        topic_id -> Text,
+        source_part_id -> Text,
         created_at -> Text,
     }
 }
@@ -280,5 +291,6 @@ diesel::allow_tables_to_appear_in_same_query!(
     traces,
     workflow_records,
     workflow_topics,
+    workflow_topic_sources,
     workflows,
 );

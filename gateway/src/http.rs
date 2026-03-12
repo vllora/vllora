@@ -421,8 +421,12 @@ impl ApiServer {
                                     // Topics CRUD
                                     .route("/topics", web::get().to(workflow_topics::list_topics))
                                     .route("/topics", web::post().to(workflow_topics::create_topics))
-                                    .route("/topics", web::put().to(workflow_topics::replace_topics))
-                                    .route("/topics", web::delete().to(workflow_topics::delete_all_topics))
+                                    .route("/topics", web::put().to(workflow_topics::update_topics))
+                                    .route("/topics", web::delete().to(workflow_topics::delete_topics))
+                                    .route("/topics/relations", web::get().to(workflow_topics::list_topic_source_relations))
+                                    .route("/topics/relations", web::post().to(workflow_topics::create_topic_source_relations))
+                                    .route("/topics/relations", web::put().to(workflow_topics::update_topic_source_relations))
+                                    .route("/topics/relations", web::delete().to(workflow_topics::delete_topic_source_relations))
                                     .route(
                                         "/topics/generate",
                                         web::post().to(workflows::generate_workflow_topics),
