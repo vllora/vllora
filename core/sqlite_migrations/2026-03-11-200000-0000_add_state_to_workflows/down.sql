@@ -1,0 +1,2 @@
+-- SQLite does not support DROP COLUMN easily.
+-- To reverse this migration, recreate the table without the state and iteration_state columns.

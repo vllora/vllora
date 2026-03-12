@@ -1,9 +1,13 @@
 use crate::callback_handler::init_callback_handler;
 use crate::config::Config;
 use crate::cost::GatewayCostCalculator;
+use crate::eval_state_tracker::EvalJobStateTracker;
 use crate::finetune_state_tracker::FinetuneJobStateTracker;
 use crate::guardrails::GuardrailsService;
-use crate::handlers::{agents, debug, finetune, models, projects, session, threads, workflows};
+use crate::handlers::{
+    agents, debug, eval_jobs, finetune, knowledge_sources, models, projects, session, threads,
+    workflow_records, workflow_topics, workflows,
+};
 use crate::metrics_writer::SqliteMetricsWriterAdapter;
 use crate::middleware::lucy_project::LucyProjectMiddleware;
 use crate::middleware::project::ProjectMiddleware;
@@ -261,6 +265,16 @@ impl ApiServer {
         );
         let _state_tracker_handle = state_tracker.start();
 
+        // Initialize and start eval job state tracker
+        let key_storage_for_eval_tracker = Arc::new(Box::new(ProviderKeyResolver::new(
+            server_config.db_pool.clone(),
+        )) as Box<dyn KeyStorage>);
+        let eval_state_tracker = EvalJobStateTracker::new(
+            server_config.db_pool.clone(),
+            key_storage_for_eval_tracker,
+        );
+        let _eval_state_tracker_handle = eval_state_tracker.start();
+
         // Print useful info after servers are bound and ready
         self.print_useful_info();
 
@@ -385,44 +399,59 @@ impl ApiServer {
                             .route("", web::post().to(workflows::create_workflow))
                             .service(
                                 web::scope("/{workflow_id}")
+                                    .route("", web::get().to(workflows::get_workflow))
                                     .route("", web::put().to(workflows::update_workflow))
                                     .route("", web::delete().to(workflows::soft_delete_workflow))
-                                    .route(
-                                        "/knowledge",
-                                        web::post().to(workflows::create_workflow_knowledge),
+                                    // Records CRUD
+                                    .service(
+                                        web::scope("/records")
+                                            .route("", web::get().to(workflow_records::list_records))
+                                            .route("", web::post().to(workflow_records::add_records))
+                                            .route("", web::put().to(workflow_records::replace_records))
+                                            .route("", web::delete().to(workflow_records::delete_all_records))
+                                            .route("/topics", web::patch().to(workflow_records::batch_update_topics))
+                                            .route("/topics", web::delete().to(workflow_records::clear_all_topics))
+                                            .route("/rename-topic", web::patch().to(workflow_records::rename_topic))
+                                            .route("/topics/{topic_name}", web::delete().to(workflow_records::clear_topic))
+                                            .route("/{record_id}", web::patch().to(workflow_records::update_record_topic))
+                                            .route("/{record_id}", web::delete().to(workflow_records::delete_record))
+                                            .route("/{record_id}/data", web::patch().to(workflow_records::update_record_data))
+                                            .route("/{record_id}/scores", web::patch().to(workflow_records::update_record_scores)),
                                     )
-                                    .route(
-                                        "/knowledge",
-                                        web::get().to(workflows::list_workflow_knowledges),
-                                    )
-                                    .route(
-                                        "/knowledge/chunk",
-                                        web::post().to(workflows::chunk_workflow_knowledge),
-                                    )
-                                    .route(
-                                        "//knowledge/chunk",
-                                        web::post().to(workflows::chunk_workflow_knowledge),
-                                    )
-                                    .route(
-                                        "/knowledge/chunk/{chunk_id}",
-                                        web::delete()
-                                            .to(workflows::delete_workflow_knowledge_chunk),
-                                    )
-                                    .route(
-                                        "/knowledge/trace",
-                                        web::post().to(workflows::create_workflow_knowledge_trace),
-                                    )
-                                    .route(
-                                        "/knowledge/trace/{trace_id}",
-                                        web::delete()
-                                            .to(workflows::delete_workflow_knowledge_trace),
-                                    )
-                                    .route("/topics", web::post().to(workflows::create_workflow_topics))
-                                    .route("/topics", web::delete().to(workflows::delete_workflow_topics))
+                                    // Topics CRUD
+                                    .route("/topics", web::get().to(workflow_topics::list_topics))
+                                    .route("/topics", web::post().to(workflow_topics::create_topics))
+                                    .route("/topics", web::delete().to(workflow_topics::delete_all_topics))
                                     .route(
                                         "/topics/generate",
                                         web::post().to(workflows::generate_workflow_topics),
                                     )
+                                    // Knowledge Sources CRUD
+                                    .service(
+                                        web::scope("/knowledge")
+                                            .route("", web::get().to(knowledge_sources::list_knowledge_sources))
+                                            .route("", web::post().to(knowledge_sources::create_knowledge_source))
+                                            .route("", web::delete().to(knowledge_sources::soft_delete_all_knowledge_sources))
+                                            .route("/count", web::get().to(knowledge_sources::count_knowledge_sources))
+                                            .route("/chunk", web::post().to(workflows::chunk_workflow_knowledge))
+                                            .route("/trace", web::post().to(workflows::create_workflow_knowledge_trace))
+                                            .route("/trace/{trace_id}", web::delete().to(workflows::delete_workflow_knowledge_trace))
+                                            .route("/{ks_id}", web::get().to(knowledge_sources::get_knowledge_source))
+                                            .route("/{ks_id}", web::delete().to(knowledge_sources::soft_delete_knowledge_source))
+                                            .route("/{ks_id}/status", web::patch().to(knowledge_sources::update_knowledge_source_status))
+                                            .route("/{ks_id}/chunks", web::patch().to(knowledge_sources::update_knowledge_source_chunks)),
+                                    )
+                                    // Eval Jobs CRUD
+                                    .service(
+                                        web::scope("/eval-jobs")
+                                            .route("", web::get().to(eval_jobs::list_eval_jobs))
+                                            .route("", web::post().to(eval_jobs::create_eval_job))
+                                            .route("", web::delete().to(eval_jobs::delete_workflow_eval_jobs))
+                                            .route("/{job_id}", web::get().to(eval_jobs::get_eval_job))
+                                            .route("/{job_id}", web::patch().to(eval_jobs::update_eval_job))
+                                            .route("/{job_id}", web::delete().to(eval_jobs::delete_eval_job)),
+                                    )
+                                    // Dataset (cloud JSONL) - keep existing placeholders
                                     .route(
                                         "/dataset/generate",
                                         web::post().to(workflows::generate_workflow_dataset),
@@ -495,6 +524,10 @@ impl ApiServer {
                                             ),
                                     ),
                             ),
+                    )
+                    .service(
+                        web::scope("/eval-jobs")
+                            .route("", web::get().to(eval_jobs::list_eval_jobs_by_status)),
                     )
                     .service(
                         web::scope("/datasets")

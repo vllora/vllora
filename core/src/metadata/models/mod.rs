@@ -1,5 +1,7 @@
+pub mod eval_job;
 pub mod finetune_job;
 pub mod knowledge;
+pub mod knowledge_source;
 pub mod mcp_config;
 pub mod metric;
 pub mod model;
@@ -10,3 +12,5 @@ pub mod run;
 pub mod session;
 pub mod trace;
 pub mod workflow;
+pub mod workflow_record;
+pub mod workflow_topic;

@@ -612,11 +612,11 @@ pub async fn get_reinforcement_job_status(
 }
 
 pub async fn get_reinforcement_job_metrics(
-    job_id: web::Path<String>,
+    path: web::Path<JobRequestPath>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
 ) -> Result<HttpResponse> {
-    let job_id_str = job_id.into_inner();
+    let job_id_str = path.job_id.to_string();
 
     let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
     let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
@@ -637,18 +637,24 @@ pub async fn get_reinforcement_job_metrics(
 }
 
 pub async fn list_reinforcement_jobs(
+    workflow_id: web::Path<uuid::Uuid>,
     query: web::Query<ReinforcementJobQuery>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
     let finetune_job_service = FinetuneJobService::new(db_pool.get_ref().clone());
 
+    // Use workflow_id from path param to scope the job listing.
+    // Falls back to query.dataset_id for backwards compatibility.
+    let filter_workflow_id = Some(workflow_id.to_string());
+    let dataset_filter = filter_workflow_id.as_deref().or(query.dataset_id.as_deref());
+
     let db_jobs = finetune_job_service
         .list_by_project(
             &project.id.to_string(),
             query.limit,
             query.after.as_deref(),
-            query.dataset_id.as_deref(),
+            dataset_filter,
         )
         .map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!("Failed to list jobs: {}", e))
@@ -682,12 +688,12 @@ pub async fn list_reinforcement_jobs(
 }
 
 pub async fn cancel_reinforcement_job(
-    job_id: web::Path<String>,
+    path: web::Path<JobRequestPath>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
-    let job_id_str = job_id.into_inner();
+    let job_id_str = path.job_id.to_string();
 
     let finetune_job_service = FinetuneJobService::new(db_pool.get_ref().clone());
     if let Ok(Some(db_job)) =
@@ -719,12 +725,12 @@ pub async fn cancel_reinforcement_job(
 }
 
 pub async fn resume_reinforcement_job(
-    job_id: web::Path<String>,
+    path: web::Path<JobRequestPath>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
-    let job_id_str = job_id.into_inner();
+    let job_id_str = path.job_id.to_string();
 
     let finetune_job_service = FinetuneJobService::new(db_pool.get_ref().clone());
     if let Ok(Some(db_job)) =
@@ -760,11 +766,11 @@ pub async fn resume_reinforcement_job(
 // ============================================================================
 
 pub async fn get_weights_download_url(
-    job_id: web::Path<String>,
+    path: web::Path<JobRequestPath>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
 ) -> Result<HttpResponse> {
-    let job_id_str = job_id.into_inner();
+    let job_id_str = path.job_id.to_string();
 
     let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
     let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {

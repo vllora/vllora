@@ -32,6 +32,14 @@ impl WorkflowService {
             .first::<DbWorkflow>(&mut conn)?)
     }
 
+    pub fn get_by_id(&self, workflow_id: &str) -> Result<DbWorkflow, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+        Ok(dsl::workflows
+            .filter(dsl::id.eq(workflow_id))
+            .filter(dsl::deleted_at.is_null())
+            .first::<DbWorkflow>(&mut conn)?)
+    }
+
     pub fn list(&self) -> Result<Vec<DbWorkflow>, DatabaseError> {
         let mut conn = self.db_pool.get()?;
         Ok(dsl::workflows
@@ -58,7 +66,12 @@ impl WorkflowService {
             None => return Err(DatabaseError::QueryError(diesel::result::Error::NotFound)),
         };
 
-        if input.name.is_none() && input.objective.is_none() {
+        if input.name.is_none()
+            && input.objective.is_none()
+            && input.eval_script.is_none()
+            && input.state.is_none()
+            && input.iteration_state.is_none()
+        {
             return Ok(existing);
         }
 

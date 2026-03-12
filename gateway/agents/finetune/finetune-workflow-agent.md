@@ -26,6 +26,7 @@ external = [
 
   # Grader operations
   "configure_grader",
+  "generate_grader",
   "test_grader_sample",
   "check_viability",
   "sync_evaluator",
