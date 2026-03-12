@@ -440,7 +440,10 @@ impl ApiServer {
                                             .route("/{ks_id}", web::get().to(knowledge_sources::get_knowledge_source))
                                             .route("/{ks_id}", web::delete().to(knowledge_sources::soft_delete_knowledge_source))
                                             .route("/{ks_id}/status", web::patch().to(knowledge_sources::update_knowledge_source_status))
-                                            .route("/{ks_id}/chunks", web::patch().to(knowledge_sources::update_knowledge_source_chunks)),
+                                            .route("/{ks_id}/chunks", web::patch().to(knowledge_sources::update_knowledge_source_chunks))
+                                            .route("/{ks_id}/parts", web::post().to(knowledge_sources::add_knowledge_source_parts))
+                                            .route("/{ks_id}/parts", web::get().to(knowledge_sources::list_knowledge_source_parts))
+                                            .route("/{ks_id}/parts/{part_id}", web::delete().to(knowledge_sources::delete_knowledge_source_part)),
                                     )
                                     // Eval Jobs CRUD
                                     .service(

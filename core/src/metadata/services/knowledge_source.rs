@@ -1,6 +1,14 @@
 use crate::metadata::error::DatabaseError;
-use crate::metadata::models::knowledge_source::{DbKnowledgeSource, DbNewKnowledgeSource};
+use crate::metadata::models::knowledge_source::{
+    DbKnowledgeSource, DbNewKnowledgeSource, KnowledgeSource, NewKnowledgeSource,
+};
+use crate::metadata::models::knowledge_source_part::{
+    DbKnowledgeSourcePart, DbNewKnowledgeSourcePart, KnowledgeSourcePart, NewKnowledgeSourcePart,
+};
 use crate::metadata::pool::DbPool;
+use crate::metadata::schema::knowledge_source_parts::dsl as parts_dsl;
+use diesel::Connection;
+use diesel::SelectableHelper;
 use crate::metadata::schema::knowledge_sources::dsl;
 use diesel::ExpressionMethods;
 use diesel::QueryDsl;
@@ -19,17 +27,16 @@ impl KnowledgeSourceService {
         &self,
         workflow_id: &str,
         name: &str,
-        source_type: &str,
-        content: Option<&str>,
-        extracted_content: Option<&str>,
+        _source_type: &str,
+        description: Option<&str>,
+        metadata: Option<&str>,
     ) -> Result<DbKnowledgeSource, DatabaseError> {
         let mut conn = self.db_pool.get()?;
         let input = DbNewKnowledgeSource::new(
             workflow_id.to_string(),
             name.to_string(),
-            source_type.to_string(),
-            content.map(|s| s.to_string()),
-            extracted_content.map(|s| s.to_string()),
+            description.map(|s| s.to_string()),
+            metadata.map(|s| s.to_string()),
         );
         let ks_id = input.id.clone();
 
@@ -39,7 +46,30 @@ impl KnowledgeSourceService {
 
         Ok(dsl::knowledge_sources
             .filter(dsl::id.eq(ks_id))
+            .select(DbKnowledgeSource::as_select())
             .first::<DbKnowledgeSource>(&mut conn)?)
+    }
+
+    pub fn create_typed(&self, input: NewKnowledgeSource) -> Result<KnowledgeSource, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+        let (db_source, db_parts): (DbNewKnowledgeSource, Vec<DbNewKnowledgeSourcePart>) =
+            input.into_models()?;
+        let source_id = db_source.id.clone();
+
+        conn.transaction::<(), diesel::result::Error, _>(|conn| {
+            diesel::insert_into(dsl::knowledge_sources)
+                .values(&db_source)
+                .execute(conn)?;
+
+            if !db_parts.is_empty() {
+                diesel::insert_into(parts_dsl::knowledge_source_parts)
+                    .values(&db_parts)
+                    .execute(conn)?;
+            }
+            Ok(())
+        })?;
+
+        self.get_typed(&source_id)
     }
 
     pub fn get(&self, ks_id: &str) -> Result<DbKnowledgeSource, DatabaseError> {
@@ -47,7 +77,23 @@ impl KnowledgeSourceService {
         Ok(dsl::knowledge_sources
             .filter(dsl::id.eq(ks_id))
             .filter(dsl::deleted_at.is_null())
+            .select(DbKnowledgeSource::as_select())
             .first::<DbKnowledgeSource>(&mut conn)?)
+    }
+
+    pub fn get_typed(&self, ks_id: &str) -> Result<KnowledgeSource, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+        let source = dsl::knowledge_sources
+            .filter(dsl::id.eq(ks_id))
+            .filter(dsl::deleted_at.is_null())
+            .select(DbKnowledgeSource::as_select())
+            .first::<DbKnowledgeSource>(&mut conn)?;
+
+        let parts = parts_dsl::knowledge_source_parts
+            .filter(parts_dsl::source_id.eq(ks_id))
+            .load::<DbKnowledgeSourcePart>(&mut conn)?;
+
+        Ok(KnowledgeSource::from_models(source, parts)?)
     }
 
     pub fn get_including_deleted(
@@ -57,6 +103,7 @@ impl KnowledgeSourceService {
         let mut conn = self.db_pool.get()?;
         Ok(dsl::knowledge_sources
             .filter(dsl::id.eq(ks_id))
+            .select(DbKnowledgeSource::as_select())
             .first::<DbKnowledgeSource>(&mut conn)?)
     }
 
@@ -66,7 +113,115 @@ impl KnowledgeSourceService {
             .filter(dsl::workflow_id.eq(workflow_id))
             .filter(dsl::deleted_at.is_null())
             .order(dsl::created_at.desc())
+            .select(DbKnowledgeSource::as_select())
             .load::<DbKnowledgeSource>(&mut conn)?)
+    }
+
+    pub fn list_typed(&self, workflow_id: &str) -> Result<Vec<KnowledgeSource>, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+        let sources = dsl::knowledge_sources
+            .filter(dsl::workflow_id.eq(workflow_id))
+            .filter(dsl::deleted_at.is_null())
+            .order(dsl::created_at.desc())
+            .select(DbKnowledgeSource::as_select())
+            .load::<DbKnowledgeSource>(&mut conn)?;
+
+        let mut out = Vec::with_capacity(sources.len());
+        for source in sources {
+            let parts = parts_dsl::knowledge_source_parts
+                .filter(parts_dsl::source_id.eq(&source.id))
+                .load::<DbKnowledgeSourcePart>(&mut conn)?;
+            out.push(KnowledgeSource::from_models(source, parts)?);
+        }
+        Ok(out)
+    }
+
+    pub fn add_parts(
+        &self,
+        source_id: &str,
+        parts: Vec<NewKnowledgeSourcePart>,
+    ) -> Result<Vec<KnowledgeSourcePart>, DatabaseError> {
+        if parts.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut conn = self.db_pool.get()?;
+
+        // Ensure source exists and isn't soft-deleted.
+        dsl::knowledge_sources
+            .filter(dsl::id.eq(source_id))
+            .filter(dsl::deleted_at.is_null())
+            .select(DbKnowledgeSource::as_select())
+            .first::<DbKnowledgeSource>(&mut conn)?;
+
+        let db_parts: Vec<DbNewKnowledgeSourcePart> = parts
+            .into_iter()
+            .map(|p| p.into_db_new(source_id.to_string()))
+            .collect::<Result<Vec<_>, _>>()?;
+        let inserted_ids: Vec<String> = db_parts
+            .iter()
+            .filter_map(|p| p.id.clone())
+            .collect();
+
+        conn.transaction::<(), diesel::result::Error, _>(|conn| {
+            diesel::insert_into(parts_dsl::knowledge_source_parts)
+                .values(&db_parts)
+                .execute(conn)?;
+            Ok(())
+        })?;
+
+        let inserted = parts_dsl::knowledge_source_parts
+            .filter(parts_dsl::source_id.eq(source_id))
+            .filter(parts_dsl::id.eq_any(inserted_ids))
+            .load::<DbKnowledgeSourcePart>(&mut conn)?;
+
+        inserted
+            .into_iter()
+            .map(KnowledgeSourcePart::try_from)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(DatabaseError::from)
+    }
+
+    pub fn list_parts(&self, source_id: &str) -> Result<Vec<KnowledgeSourcePart>, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+
+        // Ensure source exists and isn't soft-deleted.
+        dsl::knowledge_sources
+            .filter(dsl::id.eq(source_id))
+            .filter(dsl::deleted_at.is_null())
+            .select(DbKnowledgeSource::as_select())
+            .first::<DbKnowledgeSource>(&mut conn)?;
+
+        let parts = parts_dsl::knowledge_source_parts
+            .filter(parts_dsl::source_id.eq(source_id))
+            .load::<DbKnowledgeSourcePart>(&mut conn)?;
+
+        parts
+            .into_iter()
+            .map(KnowledgeSourcePart::try_from)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(DatabaseError::from)
+    }
+
+    pub fn delete_part(&self, source_id: &str, part_id: &str) -> Result<(), DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+
+        // Ensure source exists and isn't soft-deleted.
+        dsl::knowledge_sources
+            .filter(dsl::id.eq(source_id))
+            .filter(dsl::deleted_at.is_null())
+            .select(DbKnowledgeSource::as_select())
+            .first::<DbKnowledgeSource>(&mut conn)?;
+
+        let affected = diesel::delete(parts_dsl::knowledge_source_parts)
+            .filter(parts_dsl::id.eq(part_id))
+            .filter(parts_dsl::source_id.eq(source_id))
+            .execute(&mut conn)?;
+
+        if affected == 0 {
+            return Err(DatabaseError::QueryError(diesel::result::Error::NotFound));
+        }
+        Ok(())
     }
 
     pub fn count(&self, workflow_id: &str) -> Result<i64, DatabaseError> {
@@ -77,36 +232,6 @@ impl KnowledgeSourceService {
             .filter(dsl::deleted_at.is_null())
             .select(count_star())
             .first::<i64>(&mut conn)?)
-    }
-
-    pub fn update_status(&self, ks_id: &str, status: &str) -> Result<(), DatabaseError> {
-        let mut conn = self.db_pool.get()?;
-        let affected = diesel::update(dsl::knowledge_sources)
-            .filter(dsl::id.eq(ks_id))
-            .set(dsl::status.eq(status))
-            .execute(&mut conn)?;
-
-        if affected == 0 {
-            return Err(DatabaseError::QueryError(diesel::result::Error::NotFound));
-        }
-        Ok(())
-    }
-
-    pub fn update_extracted_content(
-        &self,
-        ks_id: &str,
-        extracted_content: &str,
-    ) -> Result<(), DatabaseError> {
-        let mut conn = self.db_pool.get()?;
-        let affected = diesel::update(dsl::knowledge_sources)
-            .filter(dsl::id.eq(ks_id))
-            .set(dsl::extracted_content.eq(Some(extracted_content)))
-            .execute(&mut conn)?;
-
-        if affected == 0 {
-            return Err(DatabaseError::QueryError(diesel::result::Error::NotFound));
-        }
-        Ok(())
     }
 
     pub fn soft_delete(&self, ks_id: &str) -> Result<(), DatabaseError> {
@@ -178,21 +303,6 @@ mod tests {
         let fetched = service.get_including_deleted(&ks.id).unwrap();
         assert!(fetched.deleted_at.is_some());
         assert_eq!(fetched.name, "doc.pdf");
-    }
-
-    #[test]
-    fn test_update_extracted_content() {
-        let db_pool = setup_test_database();
-        let service = KnowledgeSourceService::new(db_pool.clone());
-
-        let ks = service.create("wf1", "doc.pdf", "pdf", None, None).unwrap();
-        let content = r#"{"chunks":[{"id":"c1","title":"Intro","content":"Hello"}]}"#;
-        service.update_extracted_content(&ks.id, content).unwrap();
-        service.update_status(&ks.id, "ready").unwrap();
-
-        let fetched = service.get(&ks.id).unwrap();
-        assert_eq!(fetched.status, "ready");
-        assert!(fetched.extracted_content.is_some());
     }
 
     #[test]
