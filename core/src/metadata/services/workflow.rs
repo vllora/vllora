@@ -66,7 +66,12 @@ impl WorkflowService {
             None => return Err(DatabaseError::QueryError(diesel::result::Error::NotFound)),
         };
 
-        if input.name.is_none() && input.objective.is_none() {
+        if input.name.is_none()
+            && input.objective.is_none()
+            && input.eval_script.is_none()
+            && input.state.is_none()
+            && input.iteration_state.is_none()
+        {
             return Ok(existing);
         }
 
