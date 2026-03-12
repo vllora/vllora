@@ -23,10 +23,11 @@ use vllora_core::types::metadata::project::Project;
 use vllora_core::types::metadata::services::model::ModelService;
 use vllora_core::GatewayApiError;
 use vllora_finetune::types::{
-    CreateEvaluationRequest, DatasetAnalyticsResponse, DryRunDatasetAnalyticsRequest,
-    DryRunDatasetAnalyticsResponse, EvaluationResultResponse, Evaluator,
-    FinetuneEvalResultsResponse, ReinforcementJobMetricsResponse, ReinforcementJobQuery,
-    ReinforcementTrainingConfig, UpdateEvaluatorBody, UpdateEvaluatorResponse,
+    CreateEvaluationRequest, CreateJobRequest, DatasetAnalyticsResponse,
+    DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse, EvaluationResultResponse,
+    Evaluator, FinetuneEvalResultsResponse, JobType, ReinforcementJobMetricsResponse,
+    ReinforcementJobQuery, ReinforcementTrainingConfig, UpdateEvaluatorBody,
+    UpdateEvaluatorResponse,
 };
 use vllora_finetune::{
     CreateDeploymentRequest, CreateReinforcementFinetuningJobRequest, LangdbCloudFinetuneClient,
@@ -69,8 +70,19 @@ pub struct LocalReinforcementJobStatusResponse {
 
 #[derive(Debug, Deserialize)]
 pub struct JobRequestPath {
+    #[allow(dead_code)]
     pub workflow_id: uuid::Uuid,
     pub job_id: uuid::Uuid,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct JobIdPath {
+    pub job_id: uuid::Uuid,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GetJobStatusQuery {
+    pub job_type: Option<JobType>,
 }
 
 pub async fn get_langdb_api_key(
@@ -134,6 +146,94 @@ pub async fn create_evaluation(
     })?;
 
     Ok(HttpResponse::Created().json(response))
+}
+
+pub async fn create_job(
+    workflow_id: web::Path<uuid::Uuid>,
+    request: web::Json<CreateJobRequest>,
+    project: web::ReqData<vllora_core::types::metadata::project::Project>,
+    key_storage: web::Data<Box<dyn KeyStorage>>,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let workflow_id = workflow_id.into_inner();
+    let request_body = request.into_inner();
+
+    let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
+    let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
+    })?;
+
+    // Keep behavior consistent across job types by upserting local workflow rows to cloud first.
+    ensure_dataset_uploaded(workflow_id, &client, db_pool.get_ref()).await?;
+
+    let cloud_response = client
+        .create_job(&workflow_id, request_body.clone())
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!("Failed to create job: {}", e))
+        })?;
+
+    // Persist provider finetune jobs locally for state-tracker/observability.
+    if request_body.job_type == JobType::ProviderFinetune {
+        let finetune_job_service = FinetuneJobService::new(db_pool.get_ref().clone());
+        let new_job = DbNewFinetuneJob::new(
+            project.id.to_string(),
+            workflow_id.to_string(),
+            "langdb".to_string(),
+            cloud_response.job_id.to_string(),
+            request_body.base_model.unwrap_or_default(),
+        )
+        .with_evaluator_version(request_body.evaluator_version)
+        .with_fine_tuned_model(request_body.output_model)
+        .with_training_file_id(Some(workflow_id.to_string()))
+        .with_validation_file_id(request_body.evaluation_dataset)
+        .with_training_config(request_body.training_config);
+
+        if let Err(e) = finetune_job_service.create(new_job) {
+            tracing::warn!(
+                "Failed to save unified finetune job to local database: {}",
+                e
+            );
+        }
+    }
+
+    Ok(HttpResponse::Created().json(cloud_response))
+}
+
+pub async fn get_job_status(
+    path: web::Path<JobIdPath>,
+    query: web::Query<GetJobStatusQuery>,
+    project: web::ReqData<vllora_core::types::metadata::project::Project>,
+    key_storage: web::Data<Box<dyn KeyStorage>>,
+) -> Result<HttpResponse> {
+    let job_id = path.into_inner().job_id.to_string();
+
+    let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
+    let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
+    })?;
+
+    let status_result = if let Some(job_type) = query.into_inner().job_type {
+        client.get_job_status(&job_id, job_type).await
+    } else {
+        // Backward compatible fallback when caller does not pass job_type.
+        match client
+            .get_job_status(&job_id, JobType::ProviderFinetune)
+            .await
+        {
+            Ok(status) => Ok(status),
+            Err(_) => client.get_job_status(&job_id, JobType::EvaluationRun).await,
+        }
+    };
+
+    let status = status_result.map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!(
+            "Failed to get unified job status: {}",
+            e
+        ))
+    })?;
+
+    Ok(HttpResponse::Ok().json(status))
 }
 
 pub async fn get_dataset_analytics(
@@ -614,10 +714,7 @@ fn record_to_training_line(record_id: &str, data: &str) -> Option<serde_json::Va
     if parsed.get("input").is_some() && parsed.get("output").is_some() {
         let mut messages: Vec<serde_json::Value> = Vec::new();
 
-        if let Some(input_msgs) = parsed["input"]
-            .get("messages")
-            .and_then(|m| m.as_array())
-        {
+        if let Some(input_msgs) = parsed["input"].get("messages").and_then(|m| m.as_array()) {
             messages.extend(input_msgs.iter().cloned());
         }
 
@@ -653,9 +750,9 @@ async fn ensure_dataset_uploaded(
 
     // Read workflow (for eval_script)
     let workflow_service = WorkflowService::new(db_pool.clone());
-    let workflow = workflow_service.get_by_id(&wf_id_str).map_err(|e| {
-        actix_web::error::ErrorNotFound(format!("Workflow not found: {}", e))
-    })?;
+    let workflow = workflow_service
+        .get_by_id(&wf_id_str)
+        .map_err(|e| actix_web::error::ErrorNotFound(format!("Workflow not found: {}", e)))?;
 
     // Read records
     let record_service = WorkflowRecordService::new(db_pool.clone());
@@ -833,7 +930,9 @@ pub async fn list_reinforcement_jobs(
     // Use workflow_id from path param to scope the job listing.
     // Falls back to query.dataset_id for backwards compatibility.
     let filter_workflow_id = Some(workflow_id.to_string());
-    let dataset_filter = filter_workflow_id.as_deref().or(query.dataset_id.as_deref());
+    let dataset_filter = filter_workflow_id
+        .as_deref()
+        .or(query.dataset_id.as_deref());
 
     let db_jobs = finetune_job_service
         .list_by_project(

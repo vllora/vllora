@@ -114,7 +114,9 @@ pub async fn add_records(
         .map(|r| r.into_db_record(&workflow_id))
         .collect();
 
-    let count = service.add(&workflow_id, db_records).map_err(map_db_error)?;
+    let count = service
+        .add(&workflow_id, db_records)
+        .map_err(map_db_error)?;
     Ok(HttpResponse::Created().json(serde_json::json!({ "added": count })))
 }
 

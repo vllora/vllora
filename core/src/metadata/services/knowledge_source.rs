@@ -52,7 +52,10 @@ impl KnowledgeSourceService {
             .first::<DbKnowledgeSource>(&mut conn)?)
     }
 
-    pub fn create_typed(&self, input: NewKnowledgeSource) -> Result<KnowledgeSource, DatabaseError> {
+    pub fn create_typed(
+        &self,
+        input: NewKnowledgeSource,
+    ) -> Result<KnowledgeSource, DatabaseError> {
         let mut conn = self.db_pool.get()?;
         let (db_source, db_parts): (DbNewKnowledgeSource, Vec<DbNewKnowledgeSourcePart>) =
             input.into_models()?;
@@ -98,10 +101,7 @@ impl KnowledgeSourceService {
         Ok(KnowledgeSource::from_models(source, parts)?)
     }
 
-    pub fn get_including_deleted(
-        &self,
-        ks_id: &str,
-    ) -> Result<DbKnowledgeSource, DatabaseError> {
+    pub fn get_including_deleted(&self, ks_id: &str) -> Result<DbKnowledgeSource, DatabaseError> {
         let mut conn = self.db_pool.get()?;
         Ok(dsl::knowledge_sources
             .filter(dsl::id.eq(ks_id))
@@ -197,10 +197,7 @@ impl KnowledgeSourceService {
             .into_iter()
             .map(|p| p.into_db_new(source_id.clone()))
             .collect::<Result<Vec<_>, _>>()?;
-        let inserted_ids: Vec<String> = db_parts
-            .iter()
-            .filter_map(|p| p.id.clone())
-            .collect();
+        let inserted_ids: Vec<String> = db_parts.iter().filter_map(|p| p.id.clone()).collect();
 
         conn.transaction::<(), diesel::result::Error, _>(|conn| {
             diesel::insert_into(parts_dsl::knowledge_source_parts)
@@ -328,7 +325,6 @@ impl KnowledgeSourceService {
             .execute(&mut conn)?;
         Ok(affected)
     }
-
 }
 
 #[cfg(test)]

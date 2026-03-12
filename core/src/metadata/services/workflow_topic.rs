@@ -1,7 +1,9 @@
 use crate::metadata::error::DatabaseError;
 use crate::metadata::models::knowledge_source::DbKnowledgeSource;
 use crate::metadata::models::knowledge_source_part::DbKnowledgeSourcePart;
-use crate::metadata::models::workflow_topic::{DbNewWorkflowTopic, DbWorkflowTopic, TopicUpdateInput};
+use crate::metadata::models::workflow_topic::{
+    DbNewWorkflowTopic, DbWorkflowTopic, TopicUpdateInput,
+};
 use crate::metadata::models::workflow_topic_source::{
     DbNewWorkflowTopicSource, DbWorkflowTopicSource, TopicSourceCreateInput, TopicSourceUpdateInput,
 };
@@ -76,8 +78,14 @@ impl WorkflowTopicService {
 
                 let changes = (
                     topic.name.as_ref().map(|v| dsl::name.eq(v)),
-                    topic.parent_id.as_ref().map(|v| dsl::parent_id.eq(Some(v.clone()))),
-                    topic.system_prompt.as_ref().map(|v| dsl::system_prompt.eq(v)),
+                    topic
+                        .parent_id
+                        .as_ref()
+                        .map(|v| dsl::parent_id.eq(Some(v.clone()))),
+                    topic
+                        .system_prompt
+                        .as_ref()
+                        .map(|v| dsl::system_prompt.eq(v)),
                     topic
                         .reference_id
                         .as_ref()
@@ -95,11 +103,19 @@ impl WorkflowTopicService {
         Ok(updated)
     }
 
-    pub fn delete_many(&self, workflow_id: &str, identifiers: Vec<String>) -> Result<usize, DatabaseError> {
+    pub fn delete_many(
+        &self,
+        workflow_id: &str,
+        identifiers: Vec<String>,
+    ) -> Result<usize, DatabaseError> {
         let mut conn = self.db_pool.get()?;
         let affected = diesel::delete(dsl::workflow_topics)
             .filter(dsl::workflow_id.eq(workflow_id))
-            .filter(dsl::id.eq_any(&identifiers).or(dsl::reference_id.eq_any(&identifiers)))
+            .filter(
+                dsl::id
+                    .eq_any(&identifiers)
+                    .or(dsl::reference_id.eq_any(&identifiers)),
+            )
             .execute(&mut conn)?;
         Ok(affected)
     }
@@ -154,7 +170,10 @@ impl WorkflowTopicService {
         Ok(count)
     }
 
-    pub fn list_relations(&self, workflow_id: &str) -> Result<Vec<DbWorkflowTopicSource>, DatabaseError> {
+    pub fn list_relations(
+        &self,
+        workflow_id: &str,
+    ) -> Result<Vec<DbWorkflowTopicSource>, DatabaseError> {
         let mut conn = self.db_pool.get()?;
         Ok(relation_dsl::workflow_topic_sources
             .filter(relation_dsl::workflow_id.eq(workflow_id))
@@ -305,16 +324,14 @@ mod tests {
         let wf_id = create_test_workflow(&db_pool);
         let service = WorkflowTopicService::new(db_pool.clone());
 
-        let topics = vec![
-            DbNewWorkflowTopic {
-                id: Some("t1".into()),
-                reference_id: Some("topic-ref-1".into()),
-                workflow_id: String::new(),
-                name: "Root".into(),
-                parent_id: None,
-                system_prompt: Some("You are a topic assistant".into()),
-            },
-        ];
+        let topics = vec![DbNewWorkflowTopic {
+            id: Some("t1".into()),
+            reference_id: Some("topic-ref-1".into()),
+            workflow_id: String::new(),
+            name: "Root".into(),
+            parent_id: None,
+            system_prompt: Some("You are a topic assistant".into()),
+        }];
         service.create(&wf_id, topics).unwrap();
 
         let result = service.list(&wf_id).unwrap();

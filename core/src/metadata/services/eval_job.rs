@@ -63,11 +63,7 @@ impl EvalJobService {
             .load::<DbEvalJob>(&mut conn)?)
     }
 
-    pub fn update_status(
-        &self,
-        job_id: &str,
-        status: &str,
-    ) -> Result<DbEvalJob, DatabaseError> {
+    pub fn update_status(&self, job_id: &str, status: &str) -> Result<DbEvalJob, DatabaseError> {
         let mut conn = self.db_pool.get()?;
 
         let affected = diesel::update(dsl::eval_jobs)

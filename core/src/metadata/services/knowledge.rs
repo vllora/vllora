@@ -17,10 +17,9 @@ impl KnowledgeService {
 
     pub fn create(&self, input: DbNewKnowledge) -> Result<DbKnowledge, DatabaseError> {
         let mut conn = self.db_pool.get()?;
-        let knowledge_id = input
-            .id
-            .clone()
-            .ok_or_else(|| DatabaseError::InvalidArgument("knowledge id is required".to_string()))?;
+        let knowledge_id = input.id.clone().ok_or_else(|| {
+            DatabaseError::InvalidArgument("knowledge id is required".to_string())
+        })?;
 
         diesel::insert_into(dsl::knowledge)
             .values(&input)
@@ -31,7 +30,10 @@ impl KnowledgeService {
             .first::<DbKnowledge>(&mut conn)?)
     }
 
-    pub fn list_by_workflow_id(&self, workflow_id: &str) -> Result<Vec<DbKnowledge>, DatabaseError> {
+    pub fn list_by_workflow_id(
+        &self,
+        workflow_id: &str,
+    ) -> Result<Vec<DbKnowledge>, DatabaseError> {
         let mut conn = self.db_pool.get()?;
         Ok(dsl::knowledge
             .filter(dsl::workflow_id.eq(workflow_id))

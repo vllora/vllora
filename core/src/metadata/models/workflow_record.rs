@@ -1,10 +1,8 @@
 use crate::metadata::schema::workflow_records;
-use diesel::{Insertable, Queryable, Selectable, Identifiable};
+use diesel::{Identifiable, Insertable, Queryable, Selectable};
 use serde::{Deserialize, Serialize};
 
-#[derive(
-    Debug, Serialize, Deserialize, Queryable, Selectable, Identifiable, Clone, PartialEq,
-)]
+#[derive(Debug, Serialize, Deserialize, Queryable, Selectable, Identifiable, Clone, PartialEq)]
 #[diesel(table_name = workflow_records)]
 #[serde(crate = "serde")]
 pub struct DbWorkflowRecord {

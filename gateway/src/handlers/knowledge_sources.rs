@@ -22,11 +22,13 @@ fn map_db_error(err: DatabaseError) -> actix_web::Error {
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateStatusRequest {
+    #[allow(dead_code)]
     pub status: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateChunksRequest {
+    #[allow(dead_code)]
     pub extracted_content: serde_json::Value,
 }
 
@@ -84,9 +86,11 @@ pub async fn create_knowledge_source(
                     _ => {}
                 }
             }
-            _ => while let Some(chunk) = field.next().await {
-                let _ = chunk.map_err(error::ErrorBadRequest)?;
-            },
+            _ => {
+                while let Some(chunk) = field.next().await {
+                    let _ = chunk.map_err(error::ErrorBadRequest)?;
+                }
+            }
         }
     }
 
@@ -105,7 +109,10 @@ pub async fn create_knowledge_source(
     let base_dir = std::env::var("KNOWLEDGE_STORAGE_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from(".knowledge_store"));
-    let file_path = base_dir.join(&workflow_id).join(&source_id).join(safe_file_name);
+    let file_path = base_dir
+        .join(&workflow_id)
+        .join(&source_id)
+        .join(safe_file_name);
     if let Some(parent) = file_path.parent() {
         fs::create_dir_all(parent)
             .await
@@ -207,7 +214,11 @@ pub async fn add_knowledge_source_parts(
         .map_err(map_db_error)?;
 
     let parts = service
-        .add_parts_by_identifier_and_workflow_id(&workflow_id, &source_identifier, body.into_inner())
+        .add_parts_by_identifier_and_workflow_id(
+            &workflow_id,
+            &source_identifier,
+            body.into_inner(),
+        )
         .map_err(map_db_error)?;
 
     Ok(HttpResponse::Created().json(serde_json::json!({ "parts": parts })))

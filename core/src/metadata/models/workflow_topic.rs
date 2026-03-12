@@ -1,5 +1,5 @@
 use crate::metadata::schema::workflow_topics;
-use diesel::{Insertable, Queryable, Selectable, Identifiable};
+use diesel::{Identifiable, Insertable, Queryable, Selectable};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -49,7 +49,9 @@ pub struct TopicUpdateInput {
     pub system_prompt: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Queryable, Selectable, Identifiable, PartialEq, Eq)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, Queryable, Selectable, Identifiable, PartialEq, Eq,
+)]
 #[diesel(table_name = workflow_topics)]
 #[serde(crate = "serde")]
 pub struct WorkflowTopicIdentifierMap {

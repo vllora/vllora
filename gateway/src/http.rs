@@ -269,10 +269,8 @@ impl ApiServer {
         let key_storage_for_eval_tracker = Arc::new(Box::new(ProviderKeyResolver::new(
             server_config.db_pool.clone(),
         )) as Box<dyn KeyStorage>);
-        let eval_state_tracker = EvalJobStateTracker::new(
-            server_config.db_pool.clone(),
-            key_storage_for_eval_tracker,
-        );
+        let eval_state_tracker =
+            EvalJobStateTracker::new(server_config.db_pool.clone(), key_storage_for_eval_tracker);
         let _eval_state_tracker_handle = eval_state_tracker.start();
 
         // Print useful info after servers are bound and ready
@@ -448,6 +446,14 @@ impl ApiServer {
                                             .route("/{ks_id}/parts", web::post().to(knowledge_sources::add_knowledge_source_parts))
                                             .route("/{ks_id}/parts", web::get().to(knowledge_sources::list_knowledge_source_parts))
                                             .route("/{ks_id}/parts/{part_id}", web::delete().to(knowledge_sources::delete_knowledge_source_part)),
+                                    )
+                                    .service(
+                                        web::scope("/jobs")
+                                            .route("", web::post().to(finetune::create_job))
+                                            .route(
+                                                "/{job_id}/status",
+                                                web::get().to(finetune::get_job_status),
+                                            ),
                                     )
                                     // Eval Jobs CRUD
                                     .service(

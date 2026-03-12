@@ -164,11 +164,7 @@ impl WorkflowRecordService {
         Ok(affected)
     }
 
-    pub fn clear_topic(
-        &self,
-        workflow_id: &str,
-        topic_id: &str,
-    ) -> Result<usize, DatabaseError> {
+    pub fn clear_topic(&self, workflow_id: &str, topic_id: &str) -> Result<usize, DatabaseError> {
         let mut conn = self.db_pool.get()?;
         let affected = diesel::update(dsl::workflow_records)
             .filter(dsl::workflow_id.eq(workflow_id))
@@ -260,7 +256,10 @@ mod tests {
         let service = WorkflowRecordService::new(db_pool.clone());
 
         service
-            .add(&wf_id, vec![make_record("r1", None), make_record("r2", None)])
+            .add(
+                &wf_id,
+                vec![make_record("r1", None), make_record("r2", None)],
+            )
             .unwrap();
         assert_eq!(service.list(&wf_id).unwrap().len(), 2);
 
@@ -289,7 +288,9 @@ mod tests {
             .add(&wf_id, vec![make_record("r1", Some("old"))])
             .unwrap();
 
-        service.update_topic(&wf_id, "r1", Some("new_topic")).unwrap();
+        service
+            .update_topic(&wf_id, "r1", Some("new_topic"))
+            .unwrap();
 
         let records = service.list(&wf_id).unwrap();
         assert_eq!(records[0].topic_id, Some("new_topic".to_string()));
@@ -342,7 +343,9 @@ mod tests {
             )
             .unwrap();
 
-        service.rename_topic(&wf_id, "old_name", "new_name").unwrap();
+        service
+            .rename_topic(&wf_id, "old_name", "new_name")
+            .unwrap();
 
         let records = service.list(&wf_id).unwrap();
         let renamed: Vec<_> = records
@@ -362,7 +365,9 @@ mod tests {
 
         service.add(&wf_id, vec![make_record("r1", None)]).unwrap();
 
-        service.update_scores(&wf_id, "r1", Some(0.85), None).unwrap();
+        service
+            .update_scores(&wf_id, "r1", Some(0.85), None)
+            .unwrap();
 
         let records = service.list(&wf_id).unwrap();
         assert_eq!(records[0].dry_run_score, Some(0.85));
@@ -376,7 +381,10 @@ mod tests {
         let service = WorkflowRecordService::new(db_pool.clone());
 
         service
-            .add(&wf_id, vec![make_record("r1", None), make_record("r2", None)])
+            .add(
+                &wf_id,
+                vec![make_record("r1", None), make_record("r2", None)],
+            )
             .unwrap();
 
         service.delete(&wf_id, "r1").unwrap();
@@ -390,7 +398,10 @@ mod tests {
         let service = WorkflowRecordService::new(db_pool.clone());
 
         service
-            .add(&wf_id, vec![make_record("r1", None), make_record("r2", None)])
+            .add(
+                &wf_id,
+                vec![make_record("r1", None), make_record("r2", None)],
+            )
             .unwrap();
 
         service.delete_all(&wf_id).unwrap();

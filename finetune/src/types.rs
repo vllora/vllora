@@ -3,6 +3,81 @@ use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 
 // =============================================================================
+// Unified Jobs
+// =============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum JobType {
+    ProviderFinetune,
+    EvaluationRun,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateJobRequest {
+    pub job_type: JobType,
+
+    // Provider finetune payload
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evaluator_version: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub base_model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evaluation_dataset: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub training_config: Option<ReinforcementTrainingConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inference_parameters: Option<ReinforcementInferenceParameters>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chunk_size: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub node_count: Option<u32>,
+
+    // Evaluation payload
+    #[serde(alias = "model_params")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rollout_model_params: Option<CompletionParams>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub offset: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateJobResponse {
+    pub job_id: uuid::Uuid,
+    pub job_type: JobType,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_rows: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnifiedJobStatusResponse {
+    pub job_id: uuid::Uuid,
+    pub job_type: JobType,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fine_tuned_model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metrics: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub request: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_rows: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completed_rows: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failed_rows: Option<i32>,
+}
+
+// =============================================================================
 // Dataset
 // =============================================================================
 

@@ -1,11 +1,13 @@
 use actix_web::{error, web, HttpResponse, Result};
 use serde::Deserialize;
+use uuid::Uuid;
 use vllora_core::metadata::error::DatabaseError;
 use vllora_core::metadata::models::workflow_topic::{DbNewWorkflowTopic, TopicUpdateInput};
-use vllora_core::metadata::models::workflow_topic_source::{TopicSourceCreateInput, TopicSourceUpdateInput};
+use vllora_core::metadata::models::workflow_topic_source::{
+    TopicSourceCreateInput, TopicSourceUpdateInput,
+};
 use vllora_core::metadata::pool::DbPool;
 use vllora_core::metadata::services::workflow_topic::WorkflowTopicService;
-use uuid::Uuid;
 
 fn map_db_error(err: DatabaseError) -> actix_web::Error {
     match err {

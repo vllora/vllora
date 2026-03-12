@@ -22,10 +22,7 @@ pub struct EvalJobStateTracker {
 }
 
 impl EvalJobStateTracker {
-    pub fn new(
-        db_pool: DbPool,
-        key_storage: Arc<Box<dyn KeyStorage>>,
-    ) -> Self {
+    pub fn new(db_pool: DbPool, key_storage: Arc<Box<dyn KeyStorage>>) -> Self {
         let poll_interval_secs = std::env::var("EVAL_STATE_TRACKER_INTERVAL_SECS")
             .ok()
             .and_then(|s| s.parse::<u64>().ok())
@@ -90,12 +87,10 @@ impl EvalJobStateTracker {
             .ok()
             .map(|p| p.slug);
 
-        let api_key = get_langdb_api_key(
-            self.key_storage.as_ref().as_ref(),
-            project_slug.as_deref(),
-        )
-        .await
-        .map_err(|e| format!("Failed to get API key for eval state tracker: {}", e))?;
+        let api_key =
+            get_langdb_api_key(self.key_storage.as_ref().as_ref(), project_slug.as_deref())
+                .await
+                .map_err(|e| format!("Failed to get API key for eval state tracker: {}", e))?;
 
         let client = LangdbCloudFinetuneClient::new(api_key)
             .map_err(|e| format!("Failed to create finetune client: {}", e))?;
@@ -106,7 +101,10 @@ impl EvalJobStateTracker {
                 .await
             {
                 let cloud_id = job.cloud_run_id.as_deref().unwrap_or("unknown");
-                warn!("Failed to update status for eval job {} (cloud: {}): {}", job.id, cloud_id, e);
+                warn!(
+                    "Failed to update status for eval job {} (cloud: {}): {}",
+                    job.id, cloud_id, e
+                );
             }
         }
 
@@ -162,7 +160,10 @@ impl EvalJobStateTracker {
         // Note: Not broadcasting UI events here because we don't control the
         // CustomEventType enum. The UI polls for eval job status via the API.
         if TERMINAL_STATUSES.contains(&new_status.as_str()) {
-            info!("Eval job {} reached terminal status: {}", job.id, new_status);
+            info!(
+                "Eval job {} reached terminal status: {}",
+                job.id, new_status
+            );
         }
 
         Ok(())

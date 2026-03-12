@@ -76,7 +76,10 @@ pub struct NewKnowledgeSourcePart {
 }
 
 impl NewKnowledgeSourcePart {
-    pub fn into_db_new(self, source_id: String) -> Result<DbNewKnowledgeSourcePart, serde_json::Error> {
+    pub fn into_db_new(
+        self,
+        source_id: String,
+    ) -> Result<DbNewKnowledgeSourcePart, serde_json::Error> {
         Ok(DbNewKnowledgeSourcePart {
             id: self.id.or_else(|| Some(Uuid::new_v4().to_string())),
             reference_id: self.reference_id,

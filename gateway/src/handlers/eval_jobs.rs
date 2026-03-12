@@ -1,8 +1,8 @@
 use actix_web::{error, web, HttpResponse, Result};
 use serde::Deserialize;
 use vllora_core::metadata::error::DatabaseError;
-use vllora_core::metadata::pool::DbPool;
 use vllora_core::metadata::models::eval_job::DbUpdateEvalJob;
+use vllora_core::metadata::pool::DbPool;
 use vllora_core::metadata::services::eval_job::EvalJobService;
 
 fn map_db_error(err: DatabaseError) -> actix_web::Error {

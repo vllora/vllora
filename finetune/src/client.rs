@@ -1,10 +1,11 @@
 use crate::types::{
-    CreateDeploymentRequest, CreateEvaluationRequest, CreateEvaluationResponse,
-    CreateReinforcementFinetuningJobRequest, DatasetAnalyticsResponse, DeploymentResponse,
-    DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse, EvaluationResultResponse,
-    EvaluatorVersionResponse, FinetuneEvalResultsResponse, FinetuningJobResponse,
-    FinetuningJobResult, ReinforcementJobMetricsResponse, ReinforcementJobStatusResponse,
-    UploadDatasetResponse, WeightsDownloadUrlResponse,
+    CreateDeploymentRequest, CreateEvaluationRequest, CreateEvaluationResponse, CreateJobRequest,
+    CreateJobResponse, CreateReinforcementFinetuningJobRequest, DatasetAnalyticsResponse,
+    DeploymentResponse, DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse,
+    EvaluationResultResponse, EvaluatorVersionResponse, FinetuneEvalResultsResponse,
+    FinetuningJobResponse, FinetuningJobResult, JobType, ReinforcementJobMetricsResponse,
+    ReinforcementJobStatusResponse, UnifiedJobStatusResponse, UploadDatasetResponse,
+    WeightsDownloadUrlResponse,
 };
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 
@@ -162,6 +163,104 @@ impl LangdbCloudFinetuneClient {
         }
 
         Ok(())
+    }
+
+    /// Unified API: create either a provider finetune or evaluation job.
+    pub async fn create_job(
+        &self,
+        workflow_id: &uuid::Uuid,
+        request: CreateJobRequest,
+    ) -> Result<CreateJobResponse, String> {
+        match request.job_type {
+            JobType::ProviderFinetune => {
+                let base_model = request.base_model.ok_or_else(|| {
+                    "base_model is required for provider_finetune jobs".to_string()
+                })?;
+
+                let reinforcement_request = CreateReinforcementFinetuningJobRequest {
+                    evaluator_version: request.evaluator_version,
+                    base_model,
+                    output_model: request.output_model,
+                    evaluation_dataset: request.evaluation_dataset,
+                    display_name: request.display_name,
+                    training_config: request.training_config,
+                    inference_parameters: request.inference_parameters,
+                    chunk_size: request.chunk_size,
+                    node_count: request.node_count,
+                };
+
+                let response = self
+                    .create_reinforcement_job(reinforcement_request, workflow_id)
+                    .await?;
+
+                Ok(CreateJobResponse {
+                    job_id: response.id,
+                    job_type: JobType::ProviderFinetune,
+                    status: response.status,
+                    total_rows: None,
+                })
+            }
+            JobType::EvaluationRun => {
+                let rollout_model_params = request.rollout_model_params.ok_or_else(|| {
+                    "rollout_model_params is required for evaluation_run jobs".to_string()
+                })?;
+
+                let evaluation_request = CreateEvaluationRequest {
+                    dataset_id: *workflow_id,
+                    rollout_model_params,
+                    offset: request.offset,
+                    limit: request.limit,
+                };
+
+                let response = self.create_evaluation(evaluation_request).await?;
+                Ok(CreateJobResponse {
+                    job_id: response.evaluation_run_id,
+                    job_type: JobType::EvaluationRun,
+                    status: response.status,
+                    total_rows: Some(response.total_rows),
+                })
+            }
+        }
+    }
+
+    /// Unified API: get status for provider/evaluation jobs.
+    pub async fn get_job_status(
+        &self,
+        job_id: &str,
+        job_type: JobType,
+    ) -> Result<UnifiedJobStatusResponse, String> {
+        match job_type {
+            JobType::ProviderFinetune => {
+                let status = self.get_reinforcement_job_status(job_id).await?;
+                Ok(UnifiedJobStatusResponse {
+                    job_id: status.provider_job_id,
+                    job_type: JobType::ProviderFinetune,
+                    status: status.status,
+                    fine_tuned_model: status.fine_tuned_model,
+                    error_message: status.error_message,
+                    metrics: status.metrics,
+                    request: status.request,
+                    total_rows: None,
+                    completed_rows: None,
+                    failed_rows: None,
+                })
+            }
+            JobType::EvaluationRun => {
+                let result = self.get_evaluation_result(job_id).await?;
+                Ok(UnifiedJobStatusResponse {
+                    job_id: result.evaluation_run_id,
+                    job_type: JobType::EvaluationRun,
+                    status: result.status,
+                    fine_tuned_model: None,
+                    error_message: None,
+                    metrics: None,
+                    request: None,
+                    total_rows: Some(result.total_rows),
+                    completed_rows: Some(result.completed_rows),
+                    failed_rows: Some(result.failed_rows),
+                })
+            }
+        }
     }
 
     /// Create an evaluation run for a dataset
