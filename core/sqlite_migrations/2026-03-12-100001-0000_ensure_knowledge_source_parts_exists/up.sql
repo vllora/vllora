@@ -1,4 +1,4 @@
-CREATE TABLE knowledge_source_parts (
+CREATE TABLE IF NOT EXISTS knowledge_source_parts (
     id TEXT PRIMARY KEY NOT NULL,
     source_id TEXT NOT NULL,
     part_type TEXT NOT NULL,
@@ -9,4 +9,4 @@ CREATE TABLE knowledge_source_parts (
     extraction_metadata TEXT
 );
 
-CREATE INDEX idx_knowledge_source_parts_source_id ON knowledge_source_parts(source_id);
+CREATE INDEX IF NOT EXISTS idx_knowledge_source_parts_source_id ON knowledge_source_parts(source_id);
