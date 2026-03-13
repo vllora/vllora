@@ -45,7 +45,6 @@ external = [
   "get_evaluation_details",
   "log_iteration",
   "get_iteration_history",
-  "mark_job_reviewed",
 
   # Evaluation analysis (Phase 2: Inner Loop)
   "analyze_evaluation",
@@ -597,17 +596,16 @@ Present the escalation level and recommendation. Ask user to choose:
 "The model cannot perform this task at the current difficulty level."
 Suggest: simpler prompts, a different base model, or a fundamentally different task scope.
 
-## Step 4: Log and Mark
+## Step 4: Log
 
 - Call `log_iteration` with the scores, changes_made description, and decision (iterate/train/escalate)
-- Call `mark_job_reviewed` so results aren't re-presented on next visit
 
 ## Catch-Up Protocol
 
-When context contains `CATCH_UP:` sections, this means the user left and came back. Handle each:
-- **Completed evaluations:** Call `analyze_evaluation` (not get_evaluation_details — analyze is the higher-level tool), present results, then `mark_job_reviewed`
+When context contains `CATCH_UP:` sections, this means the user left and came back. The catch-up context provides a summary of all eval/training jobs sorted by time. Use this to understand the full history — you do NOT need any special flag to know what you've already presented. Just read the job list, identify the latest results, and act accordingly:
+- **Completed evaluations:** Call `analyze_evaluation` (not get_evaluation_details — analyze is the higher-level tool) for the latest completed eval job
 - **Completed training:** Call `analyze_training` to assess epoch-by-epoch results, then follow the outer loop protocol below. If training issues are suspected, also call `get_training_metrics` for detailed telemetry.
-- **Failed evaluations:** Present the error, suggest fixes, then `mark_job_reviewed`
+- **Failed evaluations:** Present the error and suggest fixes
 - **Pending proposals:** Re-present the iteration proposals and ask user for decision
 - **Evaluator version info:** Context may include `CATCH_UP: Evaluator is at version N`. Use this to track grader evolution — if the evaluator was recently modified, mention it when analyzing results (score changes may be due to grader changes, not data changes).
 

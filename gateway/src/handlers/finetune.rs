@@ -9,6 +9,7 @@ use vllora_core::handler::CallbackHandlerFn;
 use vllora_core::metadata::models::finetune_job::DbNewFinetuneJob;
 use vllora_core::metadata::models::workflow_topic::DbWorkflowTopic;
 use vllora_core::metadata::pool::DbPool;
+use vllora_core::metadata::services::eval_job::EvalJobService;
 use vllora_core::metadata::services::finetune_job::FinetuneJobService;
 use vllora_core::metadata::services::workflow::WorkflowService;
 use vllora_core::metadata::services::workflow_record::WorkflowRecordService;
@@ -120,6 +121,9 @@ pub async fn create_evaluation(
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
     let request_body = request.into_inner();
+    let workflow_id = request_body.dataset_id.to_string();
+    let sample_size = request_body.limit;
+    let rollout_model = request_body.rollout_model_params.model.clone();
 
     let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
     let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
@@ -142,6 +146,30 @@ pub async fn create_evaluation(
             e
         ))
     })?;
+
+    // Create tracking record in SQLite with cloud_run_id already set
+    let eval_job_service = EvalJobService::new(db_pool.get_ref().clone());
+    let eval_job = eval_job_service
+        .create(
+            &workflow_id,
+            Some(&response.evaluation_run_id.to_string()),
+            sample_size.map(|v| v as i32),
+            rollout_model.as_deref(),
+        )
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!(
+                "Failed to save eval job to local database: {}",
+                e
+            ))
+        })?;
+
+    // Update status to running since cloud accepted it
+    let _ = eval_job_service.update_full(
+        &eval_job.id,
+        vllora_core::metadata::models::eval_job::DbUpdateEvalJob::with_status(
+            "running".to_string(),
+        ),
+    );
 
     Ok(HttpResponse::Created().json(response))
 }
