@@ -56,6 +56,7 @@ impl DbNewEvalJob {
 #[derive(Debug, AsChangeset, Clone, Default)]
 #[diesel(table_name = eval_jobs)]
 pub struct DbUpdateEvalJob {
+    pub cloud_run_id: Option<String>,
     pub status: Option<String>,
     pub error: Option<String>,
     pub updated_at: Option<String>,
@@ -84,6 +85,7 @@ impl DbUpdateEvalJob {
     }
 
     pub fn with_full_update(
+        cloud_run_id: Option<String>,
         status: Option<String>,
         error: Option<String>,
         completed_at: Option<String>,
@@ -92,6 +94,7 @@ impl DbUpdateEvalJob {
         result: Option<String>,
     ) -> Self {
         Self {
+            cloud_run_id,
             status,
             error,
             updated_at: Some(chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()),

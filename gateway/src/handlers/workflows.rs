@@ -1,9 +1,12 @@
 use actix_web::{error, web, HttpResponse, Result};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use vllora_core::metadata::error::DatabaseError;
-use vllora_core::metadata::models::workflow::{DbNewWorkflow, DbUpdateWorkflow};
+use vllora_core::metadata::models::workflow::{DbNewWorkflow, DbUpdateWorkflow, DbWorkflow};
 use vllora_core::metadata::pool::DbPool;
+use vllora_core::metadata::services::eval_job::EvalJobService;
+use vllora_core::metadata::services::finetune_job::FinetuneJobService;
 use vllora_core::metadata::services::workflow::WorkflowService;
+use vllora_core::metadata::services::workflow_record::WorkflowRecordService;
 
 #[derive(Debug, Deserialize)]
 pub struct CreateWorkflowRequest {
@@ -20,6 +23,15 @@ pub struct UpdateWorkflowRequest {
     pub iteration_state: Option<String>,
 }
 
+#[derive(Debug, Serialize)]
+pub struct WorkflowDetailResponse {
+    #[serde(flatten)]
+    pub workflow: DbWorkflow,
+    pub records_count: i64,
+    pub eval_job_ids: Vec<String>,
+    pub finetune_job_ids: Vec<String>,
+}
+
 fn map_db_error(err: DatabaseError) -> actix_web::Error {
     match err {
         DatabaseError::QueryError(diesel::result::Error::NotFound) => {
@@ -34,9 +46,30 @@ pub async fn get_workflow(
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
     let workflow_id = workflow_id.into_inner();
-    let service = WorkflowService::new(db_pool.get_ref().clone());
-    let workflow = service.get_by_id(&workflow_id).map_err(map_db_error)?;
-    Ok(HttpResponse::Ok().json(workflow))
+    let pool = db_pool.get_ref().clone();
+
+    let workflow = WorkflowService::new(pool.clone())
+        .get_by_id(&workflow_id)
+        .map_err(map_db_error)?;
+
+    let records_count = WorkflowRecordService::new(pool.clone())
+        .count(&workflow_id)
+        .unwrap_or(0);
+
+    let eval_job_ids = EvalJobService::new(pool.clone())
+        .list_ids_by_workflow(&workflow_id)
+        .unwrap_or_default();
+
+    let finetune_job_ids = FinetuneJobService::new(pool)
+        .list_ids_by_workflow(&workflow_id)
+        .unwrap_or_default();
+
+    Ok(HttpResponse::Ok().json(WorkflowDetailResponse {
+        workflow,
+        records_count,
+        eval_job_ids,
+        finetune_job_ids,
+    }))
 }
 
 pub async fn list_workflows(db_pool: web::Data<DbPool>) -> Result<HttpResponse> {

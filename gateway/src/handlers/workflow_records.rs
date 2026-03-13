@@ -3,7 +3,9 @@ use serde::Deserialize;
 use vllora_core::metadata::error::DatabaseError;
 use vllora_core::metadata::models::workflow_record::DbNewWorkflowRecord;
 use vllora_core::metadata::pool::DbPool;
-use vllora_core::metadata::services::workflow_record::WorkflowRecordService;
+use vllora_core::metadata::services::workflow_record::{
+    WorkflowRecordScoreService, WorkflowRecordService,
+};
 
 fn map_db_error(err: DatabaseError) -> actix_web::Error {
     match err {
@@ -75,11 +77,6 @@ pub struct UpdateDataRequest {
     pub data: String,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct UpdateScoresRequest {
-    pub dry_run_score: Option<f32>,
-    pub finetune_score: Option<f32>,
-}
 
 #[derive(Debug, Deserialize)]
 pub struct RenameTopicRequest {
@@ -97,6 +94,16 @@ pub async fn list_records(
     let service = WorkflowRecordService::new(db_pool.get_ref().clone());
     let records = service.list(&workflow_id).map_err(map_db_error)?;
     Ok(HttpResponse::Ok().json(serde_json::json!({ "records": records })))
+}
+
+pub async fn count_records(
+    workflow_id: web::Path<String>,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let workflow_id = workflow_id.into_inner();
+    let service = WorkflowRecordService::new(db_pool.get_ref().clone());
+    let count = service.count(&workflow_id).map_err(map_db_error)?;
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "count": count })))
 }
 
 pub async fn add_records(
@@ -192,26 +199,6 @@ pub async fn update_record_data(
     Ok(HttpResponse::Ok().json(serde_json::json!({ "updated": true })))
 }
 
-pub async fn update_record_scores(
-    path: web::Path<(String, String)>,
-    body: web::Json<UpdateScoresRequest>,
-    db_pool: web::Data<DbPool>,
-) -> Result<HttpResponse> {
-    let (workflow_id, record_id) = path.into_inner();
-    let payload = body.into_inner();
-    let service = WorkflowRecordService::new(db_pool.get_ref().clone());
-
-    service
-        .update_scores(
-            &workflow_id,
-            &record_id,
-            payload.dry_run_score,
-            payload.finetune_score,
-        )
-        .map_err(map_db_error)?;
-    Ok(HttpResponse::Ok().json(serde_json::json!({ "updated": true })))
-}
-
 pub async fn rename_topic(
     workflow_id: web::Path<String>,
     body: web::Json<RenameTopicRequest>,
@@ -275,4 +262,14 @@ pub async fn delete_all_records(
 
     let count = service.delete_all(&workflow_id).map_err(map_db_error)?;
     Ok(HttpResponse::Ok().json(serde_json::json!({ "deleted": count })))
+}
+
+pub async fn list_record_scores(
+    workflow_id: web::Path<String>,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let workflow_id = workflow_id.into_inner();
+    let service = WorkflowRecordScoreService::new(db_pool.get_ref().clone());
+    let scores = service.list_by_workflow(&workflow_id).map_err(map_db_error)?;
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "scores": scores })))
 }

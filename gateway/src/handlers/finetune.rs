@@ -1,6 +1,4 @@
-use actix_multipart::Multipart;
 use actix_web::{web, HttpResponse, Result};
-use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -11,6 +9,7 @@ use vllora_core::handler::CallbackHandlerFn;
 use vllora_core::metadata::models::finetune_job::DbNewFinetuneJob;
 use vllora_core::metadata::models::workflow_topic::DbWorkflowTopic;
 use vllora_core::metadata::pool::DbPool;
+use vllora_core::metadata::services::eval_job::EvalJobService;
 use vllora_core::metadata::services::finetune_job::FinetuneJobService;
 use vllora_core::metadata::services::workflow::WorkflowService;
 use vllora_core::metadata::services::workflow_record::WorkflowRecordService;
@@ -25,30 +24,29 @@ use vllora_core::GatewayApiError;
 use vllora_finetune::types::{
     CreateEvaluationRequest, CreateJobRequest, DatasetAnalyticsResponse,
     DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse, EvaluationResultResponse,
-    Evaluator, FinetuneEvalResultsResponse, JobType, ReinforcementJobMetricsResponse,
-    ReinforcementJobQuery, ReinforcementTrainingConfig, UpdateEvaluatorBody,
-    UpdateEvaluatorResponse,
+    Evaluator, FinetuneEvalResultsResponse, FinetuneJobMetricsResponse, FinetuneJobQuery,
+    FinetuneTrainingConfig, JobType, UpdateEvaluatorBody, UpdateEvaluatorResponse,
 };
 use vllora_finetune::{
-    CreateDeploymentRequest, CreateReinforcementFinetuningJobRequest, LangdbCloudFinetuneClient,
+    CreateDeploymentRequest, CreateFinetuneJobRequest, LangdbCloudFinetuneClient,
 };
 use vllora_llm::types::credentials::Credentials;
 use vllora_llm::types::gateway::ChatCompletionMessage;
 use vllora_llm::types::gateway::CostCalculator;
 
-/// Response type for list_reinforcement_jobs which reads from local SQLite DB.
+/// Response type for list_finetune_jobs which reads from local SQLite DB.
 /// Uses String types to match the SQLite model without conversion overhead.
 #[derive(Debug, Serialize)]
 pub struct LocalFinetuningJobResponse {
     pub id: String,
     pub provider_job_id: String,
-    pub dataset_id: String,
+    pub workflow_id: String,
     pub evaluator_version: Option<i32>,
     pub status: String,
     pub base_model: String,
     pub fine_tuned_model: Option<String>,
     pub provider: String,
-    pub training_config: Option<ReinforcementTrainingConfig>,
+    pub training_config: Option<FinetuneTrainingConfig>,
     pub suffix: Option<String>,
     pub error_message: Option<String>,
     pub training_file_id: String,
@@ -58,9 +56,10 @@ pub struct LocalFinetuningJobResponse {
     pub completed_at: Option<String>,
 }
 
-/// Response type for get_reinforcement_job_status from local SQLite DB.
+/// Response type for get_finetune_job_status from local SQLite DB.
 #[derive(Debug, Serialize)]
-pub struct LocalReinforcementJobStatusResponse {
+#[allow(dead_code)]
+pub struct LocalFinetuneJobStatusResponse {
     pub job_id: uuid::Uuid,
     pub provider_job_id: String,
     pub status: String,
@@ -122,6 +121,9 @@ pub async fn create_evaluation(
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
     let request_body = request.into_inner();
+    let workflow_id = request_body.dataset_id.to_string();
+    let sample_size = request_body.limit;
+    let rollout_model = request_body.rollout_model_params.model.clone();
 
     let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
     let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
@@ -144,6 +146,30 @@ pub async fn create_evaluation(
             e
         ))
     })?;
+
+    // Create tracking record in SQLite with cloud_run_id already set
+    let eval_job_service = EvalJobService::new(db_pool.get_ref().clone());
+    let eval_job = eval_job_service
+        .create(
+            &workflow_id,
+            Some(&response.evaluation_run_id.to_string()),
+            sample_size.map(|v| v as i32),
+            rollout_model.as_deref(),
+        )
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!(
+                "Failed to save eval job to local database: {}",
+                e
+            ))
+        })?;
+
+    // Update status to running since cloud accepted it
+    let _ = eval_job_service.update_full(
+        &eval_job.id,
+        vllora_core::metadata::models::eval_job::DbUpdateEvalJob::with_status(
+            "running".to_string(),
+        ),
+    );
 
     Ok(HttpResponse::Created().json(response))
 }
@@ -236,11 +262,11 @@ pub async fn get_job_status(
 }
 
 pub async fn get_dataset_analytics(
-    dataset_id: web::Path<uuid::Uuid>,
+    workflow_id: web::Path<uuid::Uuid>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
 ) -> Result<HttpResponse> {
-    let dataset_id_str = dataset_id.into_inner().to_string();
+    let dataset_id_str = workflow_id.into_inner().to_string();
 
     let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
     let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
@@ -311,12 +337,12 @@ pub async fn get_evaluation_result(
 }
 
 pub async fn get_finetune_evaluations(
-    dataset_id: web::Path<uuid::Uuid>,
+    workflow_id: web::Path<uuid::Uuid>,
     query: web::Query<HashMap<String, String>>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
 ) -> Result<HttpResponse> {
-    let dataset_id_str = dataset_id.into_inner().to_string();
+    let dataset_id_str = workflow_id.into_inner().to_string();
 
     let row_index = query.get("row_index").and_then(|s| s.parse::<i32>().ok());
     let epoch = query.get("epoch").and_then(|s| s.parse::<i32>().ok());
@@ -424,217 +450,7 @@ pub async fn update_workflow_evaluator(
     }))
 }
 
-// ============================================================================
-// Reinforcement Fine-Tuning Handlers
-// ============================================================================
-
-pub async fn upload_dataset(
-    mut payload: Multipart,
-    project: web::ReqData<vllora_core::types::metadata::project::Project>,
-    key_storage: web::Data<Box<dyn KeyStorage>>,
-) -> Result<HttpResponse> {
-    let mut jsonl_data: Option<Vec<u8>> = None;
-    let mut topic_hierarchy: Option<String> = None;
-    let mut evaluator: Option<String> = None;
-    let mut eval_script: Option<String> = None;
-    let mut dataset_id: Option<uuid::Uuid> = None;
-
-    while let Some(field) = payload.next().await {
-        let mut field = field.map_err(|e| {
-            actix_web::error::ErrorBadRequest(format!("Failed to parse multipart form: {}", e))
-        })?;
-
-        let field_name = field.name();
-
-        match field_name {
-            "file" => {
-                let mut bytes = Vec::new();
-                while let Some(chunk) = field.next().await {
-                    let chunk = chunk.map_err(|e| {
-                        actix_web::error::ErrorBadRequest(format!(
-                            "Failed to read file field: {}",
-                            e
-                        ))
-                    })?;
-                    bytes.extend_from_slice(&chunk);
-                }
-                jsonl_data = Some(bytes);
-            }
-            "topicHierarchy" | "topic_hierarchy" => {
-                let mut bytes = Vec::new();
-                while let Some(chunk) = field.next().await {
-                    let chunk = chunk.map_err(|e| {
-                        actix_web::error::ErrorBadRequest(format!(
-                            "Failed to read topicHierarchy field: {}",
-                            e
-                        ))
-                    })?;
-                    bytes.extend_from_slice(&chunk);
-                }
-
-                if !bytes.is_empty() {
-                    let s = String::from_utf8(bytes).map_err(|e| {
-                        actix_web::error::ErrorBadRequest(format!(
-                            "topicHierarchy must be UTF-8 encoded JSON: {}",
-                            e
-                        ))
-                    })?;
-                    let trimmed = s.trim();
-                    if !trimmed.is_empty() {
-                        serde_json::from_str::<serde_json::Value>(trimmed).map_err(|e| {
-                            actix_web::error::ErrorBadRequest(format!(
-                                "Invalid topicHierarchy JSON: {}",
-                                e
-                            ))
-                        })?;
-                        topic_hierarchy = Some(trimmed.to_string());
-                    }
-                }
-            }
-            "evaluator" => {
-                let mut bytes = Vec::new();
-                while let Some(chunk) = field.next().await {
-                    let chunk = chunk.map_err(|e| {
-                        actix_web::error::ErrorBadRequest(format!(
-                            "Failed to read evaluator field: {}",
-                            e
-                        ))
-                    })?;
-                    bytes.extend_from_slice(&chunk);
-                }
-
-                if !bytes.is_empty() {
-                    let s = String::from_utf8(bytes).map_err(|e| {
-                        actix_web::error::ErrorBadRequest(format!(
-                            "evaluator must be UTF-8 encoded JSON: {}",
-                            e
-                        ))
-                    })?;
-                    let trimmed = s.trim();
-                    if !trimmed.is_empty() {
-                        serde_json::from_str::<Evaluator<ChatCompletionMessage>>(trimmed).map_err(
-                            |e| {
-                                actix_web::error::ErrorBadRequest(format!(
-                                    "Invalid evaluator JSON: {}",
-                                    e
-                                ))
-                            },
-                        )?;
-                        evaluator = Some(trimmed.to_string());
-                    }
-                }
-            }
-            "eval_script" => {
-                let mut bytes = Vec::new();
-                while let Some(chunk) = field.next().await {
-                    let chunk = chunk.map_err(|e| {
-                        actix_web::error::ErrorBadRequest(format!(
-                            "Failed to read eval_script field: {}",
-                            e
-                        ))
-                    })?;
-                    bytes.extend_from_slice(&chunk);
-                }
-                if !bytes.is_empty() {
-                    let s = String::from_utf8(bytes).map_err(|e| {
-                        actix_web::error::ErrorBadRequest(format!(
-                            "eval_script must be UTF-8 encoded: {}",
-                            e
-                        ))
-                    })?;
-                    let trimmed = s.trim();
-                    if !trimmed.is_empty() {
-                        eval_script = Some(format!("__inline_script:{trimmed}"));
-                    }
-                }
-            }
-            "dataset_id" => {
-                let mut bytes = Vec::new();
-                while let Some(chunk) = field.next().await {
-                    let chunk = chunk.map_err(|e| {
-                        actix_web::error::ErrorBadRequest(format!(
-                            "Failed to read dataset_id field: {}",
-                            e
-                        ))
-                    })?;
-                    bytes.extend_from_slice(&chunk);
-                }
-                dataset_id = Some(
-                    uuid::Uuid::parse_str(&String::from_utf8(bytes).map_err(|e| {
-                        actix_web::error::ErrorBadRequest(format!(
-                            "dataset_id must be a valid UUID: {}",
-                            e
-                        ))
-                    })?)
-                    .map_err(|e| {
-                        actix_web::error::ErrorBadRequest(format!("Invalid dataset_id: {}", e))
-                    })?,
-                );
-            }
-            _ => {
-                continue;
-            }
-        }
-    }
-
-    evaluator = match (eval_script, evaluator) {
-        (Some(eval_script_content), Some(evaluator_str)) => {
-            let mut value: serde_json::Value =
-                serde_json::from_str(&evaluator_str).map_err(|e| {
-                    actix_web::error::ErrorBadRequest(format!("Invalid evaluator JSON: {}", e))
-                })?;
-            let merged_str = if let Some(obj) = value.as_object_mut() {
-                if obj.get("type").and_then(|t| t.as_str()) == Some("js") {
-                    if !obj.contains_key("config") {
-                        obj.insert("config".to_string(), serde_json::json!({}));
-                    }
-                    if let Some(config) = obj.get_mut("config").and_then(|c| c.as_object_mut()) {
-                        config.insert(
-                            "script".to_string(),
-                            serde_json::Value::String(eval_script_content),
-                        );
-                    }
-                    Some(serde_json::to_string(&value).map_err(|e| {
-                        actix_web::error::ErrorInternalServerError(format!(
-                            "Failed to serialize evaluator: {}",
-                            e
-                        ))
-                    })?)
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
-            merged_str.or(Some(evaluator_str))
-        }
-        (_, ev) => ev,
-    };
-
-    let jsonl_data = jsonl_data.ok_or_else(|| {
-        actix_web::error::ErrorBadRequest("Missing required field: 'file'".to_string())
-    })?;
-
-    if jsonl_data.is_empty() {
-        return Err(actix_web::error::ErrorBadRequest(
-            "File is empty".to_string(),
-        ));
-    }
-
-    let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
-    let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
-    })?;
-
-    let response = client
-        .upload_dataset(jsonl_data, topic_hierarchy, evaluator, dataset_id)
-        .await
-        .map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!("Failed to upload dataset: {}", e))
-        })?;
-
-    Ok(HttpResponse::Created().json(response))
-}
+// NOTE: upload_dataset was removed — gateway auto-uploads via ensure_dataset_uploaded()
 
 // ============================================================================
 // Workflow Dataset Upload (reads from local SQLite, upserts to cloud)
@@ -808,9 +624,10 @@ async fn ensure_dataset_uploaded(
         })
 }
 
+#[allow(dead_code)]
 pub async fn create_finetune_job(
     workflow_id: web::Path<uuid::Uuid>,
-    request: web::Json<CreateReinforcementFinetuningJobRequest>,
+    request: web::Json<CreateFinetuneJobRequest>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
     db_pool: web::Data<DbPool>,
@@ -826,7 +643,7 @@ pub async fn create_finetune_job(
     ensure_dataset_uploaded(*workflow_id, &client, db_pool.get_ref()).await?;
 
     let cloud_response = client
-        .create_reinforcement_job(request_body.clone(), &workflow_id)
+        .create_finetune_job(request_body.clone(), &workflow_id)
         .await
         .map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!("Failed to create job: {}", e))
@@ -854,7 +671,8 @@ pub async fn create_finetune_job(
     Ok(HttpResponse::Created().json(cloud_response))
 }
 
-pub async fn get_reinforcement_job_status(
+#[allow(dead_code)]
+pub async fn get_finetune_job_status(
     path: web::Path<JobRequestPath>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
@@ -868,7 +686,7 @@ pub async fn get_reinforcement_job_status(
         finetune_job_service.get_by_id(&path.job_id.to_string(), &project.id.to_string())
     {
         return Ok(
-            HttpResponse::Ok().json(LocalReinforcementJobStatusResponse {
+            HttpResponse::Ok().json(LocalFinetuneJobStatusResponse {
                 job_id: path.job_id,
                 provider_job_id: db_job.provider_job_id,
                 status: db_job.state,
@@ -884,7 +702,7 @@ pub async fn get_reinforcement_job_status(
     })?;
 
     let response = client
-        .get_reinforcement_job_status(&path.job_id.to_string())
+        .get_finetune_job_status(&path.job_id.to_string())
         .await
         .map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!("Failed to get job status: {}", e))
@@ -893,24 +711,34 @@ pub async fn get_reinforcement_job_status(
     Ok(HttpResponse::Ok().json(response))
 }
 
-pub async fn get_reinforcement_job_metrics(
+pub async fn get_finetune_job_metrics(
     path: web::Path<JobRequestPath>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
+    db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
-    let job_id_str = path.job_id.to_string();
+    let path = path.into_inner();
+
+    // Resolve provider_job_id from local DB (FE passes local job UUID)
+    let finetune_job_service = FinetuneJobService::new(db_pool.get_ref().clone());
+    let provider_job_id = finetune_job_service
+        .get_by_id(&path.job_id.to_string(), &project.id.to_string())
+        .ok()
+        .flatten()
+        .map(|db_job| db_job.provider_job_id)
+        .unwrap_or_else(|| path.job_id.to_string());
 
     let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
     let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
     })?;
 
-    let response: ReinforcementJobMetricsResponse = client
-        .get_reinforcement_job_metrics(&job_id_str)
+    let response: FinetuneJobMetricsResponse = client
+        .get_finetune_job_metrics(&provider_job_id)
         .await
         .map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!(
-                "Failed to get reinforcement job metrics: {}",
+                "Failed to get finetune job metrics: {}",
                 e
             ))
         })?;
@@ -918,9 +746,9 @@ pub async fn get_reinforcement_job_metrics(
     Ok(HttpResponse::Ok().json(response))
 }
 
-pub async fn list_reinforcement_jobs(
+pub async fn list_finetune_jobs(
     workflow_id: web::Path<uuid::Uuid>,
-    query: web::Query<ReinforcementJobQuery>,
+    query: web::Query<FinetuneJobQuery>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
@@ -949,7 +777,7 @@ pub async fn list_reinforcement_jobs(
         .map(|job| LocalFinetuningJobResponse {
             id: job.id,
             provider_job_id: job.provider_job_id,
-            dataset_id: job.workflow_id,
+            workflow_id: job.workflow_id,
             evaluator_version: job.evaluator_version,
             status: job.state,
             base_model: job.base_model,
@@ -971,20 +799,26 @@ pub async fn list_reinforcement_jobs(
     Ok(HttpResponse::Ok().json(response))
 }
 
-pub async fn cancel_reinforcement_job(
+pub async fn cancel_finetune_job(
     path: web::Path<JobRequestPath>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
-    let job_id_str = path.job_id.to_string();
+    let path = path.into_inner();
 
+    // Resolve provider_job_id from local DB (FE passes local job UUID)
     let finetune_job_service = FinetuneJobService::new(db_pool.get_ref().clone());
-    if let Ok(Some(db_job)) =
-        finetune_job_service.get_by_provider_job_id(&job_id_str, &project.id.to_string())
-    {
+    let (local_job_id, provider_job_id) = finetune_job_service
+        .get_by_id(&path.job_id.to_string(), &project.id.to_string())
+        .ok()
+        .flatten()
+        .map(|db_job| (Some(db_job.id), db_job.provider_job_id))
+        .unwrap_or_else(|| (None, path.job_id.to_string()));
+
+    if let Some(ref id) = local_job_id {
         let _ = finetune_job_service.update_state(
-            &db_job.id,
+            id,
             &project.id.to_string(),
             vllora_core::metadata::models::finetune_job::FinetuneJobState::Cancelled,
         );
@@ -996,11 +830,11 @@ pub async fn cancel_reinforcement_job(
     })?;
 
     client
-        .cancel_reinforcement_job(&job_id_str)
+        .cancel_finetune_job(&provider_job_id)
         .await
         .map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!(
-                "Failed to cancel reinforcement job: {}",
+                "Failed to cancel finetune job: {}",
                 e
             ))
         })?;
@@ -1008,20 +842,26 @@ pub async fn cancel_reinforcement_job(
     Ok(HttpResponse::NoContent().finish())
 }
 
-pub async fn resume_reinforcement_job(
+pub async fn resume_finetune_job(
     path: web::Path<JobRequestPath>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
-    let job_id_str = path.job_id.to_string();
+    let path = path.into_inner();
 
+    // Resolve provider_job_id from local DB (FE passes local job UUID)
     let finetune_job_service = FinetuneJobService::new(db_pool.get_ref().clone());
-    if let Ok(Some(db_job)) =
-        finetune_job_service.get_by_provider_job_id(&job_id_str, &project.id.to_string())
-    {
+    let (local_job_id, provider_job_id) = finetune_job_service
+        .get_by_id(&path.job_id.to_string(), &project.id.to_string())
+        .ok()
+        .flatten()
+        .map(|db_job| (Some(db_job.id), db_job.provider_job_id))
+        .unwrap_or_else(|| (None, path.job_id.to_string()));
+
+    if let Some(ref id) = local_job_id {
         let _ = finetune_job_service.update_state(
-            &db_job.id,
+            id,
             &project.id.to_string(),
             vllora_core::metadata::models::finetune_job::FinetuneJobState::Pending,
         );
@@ -1033,11 +873,11 @@ pub async fn resume_reinforcement_job(
     })?;
 
     client
-        .resume_reinforcement_job(&job_id_str)
+        .resume_finetune_job(&provider_job_id)
         .await
         .map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!(
-                "Failed to resume reinforcement job: {}",
+                "Failed to resume finetune job: {}",
                 e
             ))
         })?;

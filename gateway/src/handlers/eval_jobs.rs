@@ -23,6 +23,7 @@ pub struct CreateEvalJobRequest {
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateEvalJobRequest {
+    pub cloud_run_id: Option<String>,
     pub status: Option<String>,
     pub error: Option<String>,
     pub completed_at: Option<String>,
@@ -103,6 +104,7 @@ pub async fn update_eval_job(
     let service = EvalJobService::new(db_pool.get_ref().clone());
 
     let changeset = DbUpdateEvalJob::with_full_update(
+        payload.cloud_run_id,
         payload.status,
         payload.error,
         payload.completed_at,
@@ -124,6 +126,51 @@ pub async fn delete_eval_job(
     let (_workflow_id, job_id) = path.into_inner();
     let service = EvalJobService::new(db_pool.get_ref().clone());
 
+    service.delete(&job_id).map_err(map_db_error)?;
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "deleted": true })))
+}
+
+// ─── Non-scoped handlers (no workflow_id required) ───────────────────────────
+// Used by FE when only the job_id is known.
+
+pub async fn get_eval_job_by_id(
+    job_id: web::Path<String>,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let service = EvalJobService::new(db_pool.get_ref().clone());
+    let job = service.get(&job_id).map_err(map_db_error)?;
+    Ok(HttpResponse::Ok().json(job))
+}
+
+pub async fn update_eval_job_by_id(
+    job_id: web::Path<String>,
+    body: web::Json<UpdateEvalJobRequest>,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let payload = body.into_inner();
+    let service = EvalJobService::new(db_pool.get_ref().clone());
+
+    let changeset = DbUpdateEvalJob::with_full_update(
+        payload.cloud_run_id,
+        payload.status,
+        payload.error,
+        payload.completed_at,
+        payload.started_at,
+        payload.polling_snapshot,
+        payload.result,
+    );
+
+    let job = service
+        .update_full(&job_id, changeset)
+        .map_err(map_db_error)?;
+    Ok(HttpResponse::Ok().json(job))
+}
+
+pub async fn delete_eval_job_by_id(
+    job_id: web::Path<String>,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let service = EvalJobService::new(db_pool.get_ref().clone());
     service.delete(&job_id).map_err(map_db_error)?;
     Ok(HttpResponse::Ok().json(serde_json::json!({ "deleted": true })))
 }

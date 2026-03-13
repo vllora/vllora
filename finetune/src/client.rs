@@ -1,10 +1,10 @@
 use crate::types::{
-    CreateDeploymentRequest, CreateEvaluationRequest, CreateEvaluationResponse, CreateJobRequest,
-    CreateJobResponse, CreateReinforcementFinetuningJobRequest, DatasetAnalyticsResponse,
+    CreateDeploymentRequest, CreateEvaluationRequest, CreateEvaluationResponse,
+    CreateFinetuneJobRequest, CreateJobRequest, CreateJobResponse, DatasetAnalyticsResponse,
     DeploymentResponse, DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse,
     EvaluationResultResponse, EvaluatorVersionResponse, FinetuneEvalResultsResponse,
-    FinetuningJobResponse, FinetuningJobResult, JobType, ReinforcementJobMetricsResponse,
-    ReinforcementJobStatusResponse, UnifiedJobStatusResponse, UploadDatasetResponse,
+    FinetuneJobMetricsResponse, FinetuneJobStatusResponse, FinetuningJobResponse,
+    FinetuningJobResult, JobType, UnifiedJobStatusResponse, UploadDatasetResponse,
     WeightsDownloadUrlResponse,
 };
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
@@ -79,7 +79,7 @@ impl LangdbCloudFinetuneClient {
             form = form.part("dataset_id", dataset_id_part);
         }
 
-        let url = format!("{}/finetune/datasets", self.api_url);
+        let url = format!("{}/finetune/workflows", self.api_url);
 
         let request = self.client.post(&url).multipart(form);
 
@@ -177,7 +177,7 @@ impl LangdbCloudFinetuneClient {
                     "base_model is required for provider_finetune jobs".to_string()
                 })?;
 
-                let reinforcement_request = CreateReinforcementFinetuningJobRequest {
+                let reinforcement_request = CreateFinetuneJobRequest {
                     evaluator_version: request.evaluator_version,
                     base_model,
                     output_model: request.output_model,
@@ -190,7 +190,7 @@ impl LangdbCloudFinetuneClient {
                 };
 
                 let response = self
-                    .create_reinforcement_job(reinforcement_request, workflow_id)
+                    .create_finetune_job(reinforcement_request, workflow_id)
                     .await?;
 
                 Ok(CreateJobResponse {
@@ -231,7 +231,7 @@ impl LangdbCloudFinetuneClient {
     ) -> Result<UnifiedJobStatusResponse, String> {
         match job_type {
             JobType::ProviderFinetune => {
-                let status = self.get_reinforcement_job_status(job_id).await?;
+                let status = self.get_finetune_job_status(job_id).await?;
                 Ok(UnifiedJobStatusResponse {
                     job_id: status.provider_job_id,
                     job_type: JobType::ProviderFinetune,
@@ -268,7 +268,7 @@ impl LangdbCloudFinetuneClient {
         &self,
         request: CreateEvaluationRequest,
     ) -> Result<CreateEvaluationResponse, String> {
-        let url = format!("{}/finetune/datasets/evaluations", self.api_url);
+        let url = format!("{}/finetune/workflows/evaluations", self.api_url);
 
         let req = self.client.post(&url).json(&request);
 
@@ -300,7 +300,7 @@ impl LangdbCloudFinetuneClient {
         finetune_job_id: Option<String>,
     ) -> Result<FinetuneEvalResultsResponse, String> {
         let url = format!(
-            "{}/finetune/datasets/{}/finetune-evaluations",
+            "{}/finetune/workflows/{}/finetune-evaluations",
             self.api_url, dataset_id
         );
 
@@ -340,10 +340,10 @@ impl LangdbCloudFinetuneClient {
         Ok(body)
     }
 
-    /// Create a reinforcement fine-tuning job
-    pub async fn create_reinforcement_job(
+    /// Create a fine-tuning job
+    pub async fn create_finetune_job(
         &self,
-        request: CreateReinforcementFinetuningJobRequest,
+        request: CreateFinetuneJobRequest,
         workflow_id: &uuid::Uuid,
     ) -> Result<FinetuningJobResponse, String> {
         let url = format!("{}/finetune/jobs/{workflow_id}", self.api_url);
@@ -377,11 +377,11 @@ impl LangdbCloudFinetuneClient {
         }
     }
 
-    /// Get reinforcement fine-tuning job status
-    pub async fn get_reinforcement_job_status(
+    /// Get fine-tuning job status
+    pub async fn get_finetune_job_status(
         &self,
         job_id: &str,
-    ) -> Result<ReinforcementJobStatusResponse, String> {
+    ) -> Result<FinetuneJobStatusResponse, String> {
         let url = format!("{}/finetune/jobs/{}/status", self.api_url, job_id);
 
         let req = self.client.get(&url);
@@ -397,7 +397,7 @@ impl LangdbCloudFinetuneClient {
             return Err(format!("API error {}: {}", status, body));
         }
 
-        let body: ReinforcementJobStatusResponse = response
+        let body: FinetuneJobStatusResponse = response
             .json()
             .await
             .map_err(|e| format!("Failed to parse response: {}", e))?;
@@ -405,7 +405,7 @@ impl LangdbCloudFinetuneClient {
         Ok(body)
     }
 
-    pub async fn cancel_reinforcement_job(&self, job_id: &str) -> Result<(), String> {
+    pub async fn cancel_finetune_job(&self, job_id: &str) -> Result<(), String> {
         let url = format!("{}/finetune/jobs/{}/cancel", self.api_url, job_id);
 
         let req = self.client.post(&url);
@@ -424,7 +424,7 @@ impl LangdbCloudFinetuneClient {
         Ok(())
     }
 
-    pub async fn resume_reinforcement_job(&self, job_id: &str) -> Result<(), String> {
+    pub async fn resume_finetune_job(&self, job_id: &str) -> Result<(), String> {
         let url = format!("{}/finetune/jobs/{}/resume", self.api_url, job_id);
 
         let req = self.client.post(&url);
@@ -437,11 +437,11 @@ impl LangdbCloudFinetuneClient {
         Ok(())
     }
 
-    /// Get reinforcement fine-tuning metrics for a job
-    pub async fn get_reinforcement_job_metrics(
+    /// Get fine-tuning metrics for a job
+    pub async fn get_finetune_job_metrics(
         &self,
         job_id: &str,
-    ) -> Result<ReinforcementJobMetricsResponse, String> {
+    ) -> Result<FinetuneJobMetricsResponse, String> {
         let url = format!("{}/finetune/jobs/{}/metrics", self.api_url, job_id);
 
         let req = self.client.get(&url);
@@ -457,7 +457,7 @@ impl LangdbCloudFinetuneClient {
             return Err(format!("API error {}: {}", status, body));
         }
 
-        let body: ReinforcementJobMetricsResponse = response
+        let body: FinetuneJobMetricsResponse = response
             .json()
             .await
             .map_err(|e| format!("Failed to parse response: {}", e))?;
@@ -465,8 +465,8 @@ impl LangdbCloudFinetuneClient {
         Ok(body)
     }
 
-    /// List reinforcement fine-tuning jobs
-    pub async fn list_reinforcement_jobs(
+    /// List fine-tuning jobs
+    pub async fn list_finetune_jobs(
         &self,
         limit: Option<u32>,
         after: Option<String>,
@@ -511,7 +511,7 @@ impl LangdbCloudFinetuneClient {
         evaluation_run_id: &str,
     ) -> Result<EvaluationResultResponse, String> {
         let url = format!(
-            "{}/finetune/datasets/evaluations/{}",
+            "{}/finetune/workflows/evaluations/{}",
             self.api_url, evaluation_run_id
         );
 
@@ -542,7 +542,7 @@ impl LangdbCloudFinetuneClient {
         dataset_id: &str,
     ) -> Result<DatasetAnalyticsResponse, String> {
         let url = format!(
-            "{}/finetune/datasets/{}/analytics",
+            "{}/finetune/workflows/{}/analytics",
             self.api_url, dataset_id
         );
 
@@ -572,7 +572,7 @@ impl LangdbCloudFinetuneClient {
         &self,
         request: DryRunDatasetAnalyticsRequest,
     ) -> Result<DryRunDatasetAnalyticsResponse, String> {
-        let url = format!("{}/finetune/datasets/analytics/dry-run", self.api_url);
+        let url = format!("{}/finetune/workflows/analytics/dry-run", self.api_url);
 
         let req = self.client.post(&url).json(&request);
 
@@ -643,7 +643,7 @@ impl LangdbCloudFinetuneClient {
         Ok(())
     }
 
-    /// Get a signed URL to download trained weights for a completed reinforcement fine-tuning job
+    /// Get a signed URL to download trained weights for a completed fine-tuning job
     pub async fn get_weights_download_url(
         &self,
         job_id: &str,

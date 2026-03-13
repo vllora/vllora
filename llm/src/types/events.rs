@@ -232,10 +232,6 @@ pub enum CustomEventType {
     GlobalBreakpoint {
         intercept_all: bool,
     },
-    FinetuneJobUpdate {
-        job_id: String,
-        status: String,
-    },
 }
 
 impl Event {

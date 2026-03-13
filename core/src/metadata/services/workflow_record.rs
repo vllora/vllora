@@ -1,5 +1,7 @@
 use crate::metadata::error::DatabaseError;
-use crate::metadata::models::workflow_record::{DbNewWorkflowRecord, DbWorkflowRecord};
+use crate::metadata::models::workflow_record::{
+    DbNewWorkflowRecord, DbNewWorkflowRecordScore, DbWorkflowRecord, DbWorkflowRecordScore,
+};
 use crate::metadata::pool::DbPool;
 use crate::metadata::schema::workflow_records::dsl;
 use diesel::ExpressionMethods;
@@ -44,12 +46,25 @@ impl WorkflowRecordService {
             .load::<DbWorkflowRecord>(&mut conn)?)
     }
 
+    pub fn count(&self, workflow_id: &str) -> Result<i64, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+        Ok(dsl::workflow_records
+            .filter(dsl::workflow_id.eq(workflow_id))
+            .count()
+            .get_result(&mut conn)?)
+    }
+
     pub fn replace_all(
         &self,
         workflow_id: &str,
         records: Vec<DbNewWorkflowRecord>,
     ) -> Result<usize, DatabaseError> {
         let mut conn = self.db_pool.get()?;
+
+        // Delete associated scores first
+        diesel::delete(score_dsl::workflow_record_scores)
+            .filter(score_dsl::workflow_id.eq(workflow_id))
+            .execute(&mut conn)?;
 
         // Delete all existing records for this workflow
         diesel::delete(dsl::workflow_records)
@@ -126,29 +141,6 @@ impl WorkflowRecordService {
         Ok(())
     }
 
-    pub fn update_scores(
-        &self,
-        workflow_id: &str,
-        record_id: &str,
-        dry_run_score: Option<f32>,
-        finetune_score: Option<f32>,
-    ) -> Result<(), DatabaseError> {
-        let mut conn = self.db_pool.get()?;
-        let affected = diesel::update(dsl::workflow_records)
-            .filter(dsl::id.eq(record_id))
-            .filter(dsl::workflow_id.eq(workflow_id))
-            .set((
-                dsl::dry_run_score.eq(dry_run_score),
-                dsl::finetune_score.eq(finetune_score),
-            ))
-            .execute(&mut conn)?;
-
-        if affected == 0 {
-            return Err(DatabaseError::QueryError(diesel::result::Error::NotFound));
-        }
-        Ok(())
-    }
-
     pub fn rename_topic(
         &self,
         workflow_id: &str,
@@ -185,6 +177,13 @@ impl WorkflowRecordService {
 
     pub fn delete(&self, workflow_id: &str, record_id: &str) -> Result<(), DatabaseError> {
         let mut conn = self.db_pool.get()?;
+
+        // Delete associated scores first
+        diesel::delete(score_dsl::workflow_record_scores)
+            .filter(score_dsl::record_id.eq(record_id))
+            .filter(score_dsl::workflow_id.eq(workflow_id))
+            .execute(&mut conn)?;
+
         let affected = diesel::delete(dsl::workflow_records)
             .filter(dsl::id.eq(record_id))
             .filter(dsl::workflow_id.eq(workflow_id))
@@ -198,8 +197,106 @@ impl WorkflowRecordService {
 
     pub fn delete_all(&self, workflow_id: &str) -> Result<usize, DatabaseError> {
         let mut conn = self.db_pool.get()?;
+
+        // Delete associated scores first
+        diesel::delete(score_dsl::workflow_record_scores)
+            .filter(score_dsl::workflow_id.eq(workflow_id))
+            .execute(&mut conn)?;
+
         let affected = diesel::delete(dsl::workflow_records)
             .filter(dsl::workflow_id.eq(workflow_id))
+            .execute(&mut conn)?;
+        Ok(affected)
+    }
+}
+
+// =============================================================================
+// WorkflowRecordScoreService
+// =============================================================================
+
+use crate::metadata::schema::workflow_record_scores::dsl as score_dsl;
+
+pub struct WorkflowRecordScoreService {
+    db_pool: DbPool,
+}
+
+impl WorkflowRecordScoreService {
+    pub fn new(db_pool: DbPool) -> Self {
+        Self { db_pool }
+    }
+
+    /// Upsert scores for a batch of records from a specific job.
+    /// Uses INSERT OR REPLACE on the (record_id, job_id, score_type) unique constraint.
+    pub fn batch_upsert(
+        &self,
+        workflow_id: &str,
+        job_id: &str,
+        score_type: &str,
+        updates: &[(String, f32)],
+    ) -> Result<usize, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+        let mut count = 0;
+
+        for (record_id, score) in updates {
+            // Try to update existing row first
+            let affected = diesel::update(score_dsl::workflow_record_scores)
+                .filter(score_dsl::record_id.eq(record_id))
+                .filter(score_dsl::job_id.eq(job_id))
+                .filter(score_dsl::score_type.eq(score_type))
+                .set(score_dsl::score.eq(*score))
+                .execute(&mut conn)?;
+
+            if affected == 0 {
+                // Insert new row
+                let new_score = DbNewWorkflowRecordScore {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    record_id: record_id.clone(),
+                    workflow_id: workflow_id.to_string(),
+                    job_id: job_id.to_string(),
+                    score_type: score_type.to_string(),
+                    score: *score,
+                };
+                diesel::insert_into(score_dsl::workflow_record_scores)
+                    .values(&new_score)
+                    .execute(&mut conn)?;
+            }
+            count += 1;
+        }
+
+        Ok(count)
+    }
+
+    /// List all scores for a workflow.
+    pub fn list_by_workflow(
+        &self,
+        workflow_id: &str,
+    ) -> Result<Vec<DbWorkflowRecordScore>, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+        Ok(score_dsl::workflow_record_scores
+            .filter(score_dsl::workflow_id.eq(workflow_id))
+            .order(score_dsl::created_at.desc())
+            .load::<DbWorkflowRecordScore>(&mut conn)?)
+    }
+
+    /// List all scores for a specific record.
+    pub fn list_by_record(
+        &self,
+        workflow_id: &str,
+        record_id: &str,
+    ) -> Result<Vec<DbWorkflowRecordScore>, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+        Ok(score_dsl::workflow_record_scores
+            .filter(score_dsl::workflow_id.eq(workflow_id))
+            .filter(score_dsl::record_id.eq(record_id))
+            .order(score_dsl::created_at.desc())
+            .load::<DbWorkflowRecordScore>(&mut conn)?)
+    }
+
+    /// Delete all scores for a workflow.
+    pub fn delete_all(&self, workflow_id: &str) -> Result<usize, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+        let affected = diesel::delete(score_dsl::workflow_record_scores)
+            .filter(score_dsl::workflow_id.eq(workflow_id))
             .execute(&mut conn)?;
         Ok(affected)
     }
@@ -358,20 +455,54 @@ mod tests {
     }
 
     #[test]
-    fn test_update_scores() {
+    fn test_score_service_batch_upsert() {
         let db_pool = setup_test_database();
         let wf_id = create_test_workflow(&db_pool);
-        let service = WorkflowRecordService::new(db_pool.clone());
+        let record_service = WorkflowRecordService::new(db_pool.clone());
+        let score_service = WorkflowRecordScoreService::new(db_pool.clone());
 
-        service.add(&wf_id, vec![make_record("r1", None)]).unwrap();
-
-        service
-            .update_scores(&wf_id, "r1", Some(0.85), None)
+        record_service
+            .add(&wf_id, vec![make_record("r1", None), make_record("r2", None)])
             .unwrap();
 
-        let records = service.list(&wf_id).unwrap();
-        assert_eq!(records[0].dry_run_score, Some(0.85));
-        assert_eq!(records[0].finetune_score, None);
+        // Batch upsert eval scores
+        score_service
+            .batch_upsert(
+                &wf_id,
+                "job-1",
+                "eval",
+                &[("r1".to_string(), 0.85), ("r2".to_string(), 0.70)],
+            )
+            .unwrap();
+
+        let scores = score_service.list_by_workflow(&wf_id).unwrap();
+        assert_eq!(scores.len(), 2);
+        let r1_score = scores.iter().find(|s| s.record_id == "r1").unwrap();
+        assert_eq!(r1_score.score, 0.85);
+        assert_eq!(r1_score.job_id, "job-1");
+        assert_eq!(r1_score.score_type, "eval");
+
+        // Upsert same job updates the score
+        score_service
+            .batch_upsert(&wf_id, "job-1", "eval", &[("r1".to_string(), 0.95)])
+            .unwrap();
+
+        let scores = score_service.list_by_workflow(&wf_id).unwrap();
+        assert_eq!(scores.len(), 2); // still 2, not 3
+        let r1_score = scores.iter().find(|s| s.record_id == "r1").unwrap();
+        assert_eq!(r1_score.score, 0.95);
+
+        // Different job creates a new entry
+        score_service
+            .batch_upsert(&wf_id, "job-2", "eval", &[("r1".to_string(), 0.60)])
+            .unwrap();
+
+        let scores = score_service.list_by_workflow(&wf_id).unwrap();
+        assert_eq!(scores.len(), 3);
+
+        // list_by_record returns both scores for r1
+        let r1_scores = score_service.list_by_record(&wf_id, "r1").unwrap();
+        assert_eq!(r1_scores.len(), 2);
     }
 
     #[test]

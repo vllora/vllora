@@ -6,8 +6,6 @@ CREATE TABLE workflow_records_new (
     span_id TEXT,
     is_generated INTEGER NOT NULL DEFAULT 0,
     source_record_id TEXT,
-    dry_run_score REAL,
-    finetune_score REAL,
     metadata TEXT,
     created_at TEXT DEFAULT (datetime('now')) NOT NULL,
     FOREIGN KEY (topic_id) REFERENCES workflow_topics(id) ON DELETE SET NULL
@@ -21,8 +19,6 @@ INSERT INTO workflow_records_new (
     span_id,
     is_generated,
     source_record_id,
-    dry_run_score,
-    finetune_score,
     metadata,
     created_at
 )
@@ -41,8 +37,6 @@ SELECT
     wr.span_id,
     wr.is_generated,
     wr.source_record_id,
-    wr.dry_run_score,
-    wr.finetune_score,
     wr.metadata,
     wr.created_at
 FROM workflow_records wr;
