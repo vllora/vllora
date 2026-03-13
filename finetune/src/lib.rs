@@ -10,6 +10,6 @@ pub use types::{
     EvaluatorVersionResponse, FinetuneEvalQuery, FinetuneEvalResultsResponse,
     FinetuneInferenceParameters, FinetuneJobQuery, FinetuneJobStatusResponse,
     FinetuneTrainingConfig, FinetuningJobResponse, JobType, RowEpochResults,
-    UnifiedJobStatusResponse, UpdateEvaluatorBody, UpdateEvaluatorResponse,
-    UploadDatasetResponse, WeightsDownloadUrlResponse,
+    UnifiedJobStatusResponse, UpdateEvaluatorBody, UpdateEvaluatorResponse, UploadDatasetResponse,
+    WeightsDownloadUrlResponse,
 };

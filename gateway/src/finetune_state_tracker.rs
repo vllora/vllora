@@ -29,10 +29,7 @@ pub struct FinetuneJobStateTracker {
 
 impl FinetuneJobStateTracker {
     /// Create a new state tracker
-    pub fn new(
-        db_pool: DbPool,
-        key_storage: Arc<Box<dyn KeyStorage>>,
-    ) -> Self {
+    pub fn new(db_pool: DbPool, key_storage: Arc<Box<dyn KeyStorage>>) -> Self {
         let poll_interval_secs = std::env::var("FINETUNE_STATE_TRACKER_INTERVAL_SECS")
             .ok()
             .and_then(|s| s.parse::<u64>().ok())
@@ -132,11 +129,7 @@ impl FinetuneJobStateTracker {
 
             for job in project_jobs {
                 if let Err(e) = self
-                    .update_job_status(
-                        &job,
-                        &client,
-                        &finetune_job_service,
-                    )
+                    .update_job_status(&job, &client, &finetune_job_service)
                     .await
                 {
                     warn!(
@@ -189,7 +182,9 @@ impl FinetuneJobStateTracker {
 
             if matches!(
                 new_state,
-                FinetuneJobState::Succeeded | FinetuneJobState::Failed | FinetuneJobState::Cancelled
+                FinetuneJobState::Succeeded
+                    | FinetuneJobState::Failed
+                    | FinetuneJobState::Cancelled
             ) {
                 update = update.with_completed_at(Some(chrono::Utc::now().to_rfc3339()));
             }
@@ -206,12 +201,12 @@ impl FinetuneJobStateTracker {
 
         // Write finetune scores on every poll (rate-limited to every Nth cycle)
         let cycle = self.poll_count.fetch_add(1, Ordering::Relaxed);
-        if cycle % SCORE_FETCH_INTERVAL == 0 {
-            if let Err(e) = self
-                .write_finetune_scores(job, client)
-                .await
-            {
-                warn!("Failed to write finetune scores for job {}: {}", job.provider_job_id, e);
+        if cycle.is_multiple_of(SCORE_FETCH_INTERVAL) {
+            if let Err(e) = self.write_finetune_scores(job, client).await {
+                warn!(
+                    "Failed to write finetune scores for job {}: {}",
+                    job.provider_job_id, e
+                );
             }
         }
 

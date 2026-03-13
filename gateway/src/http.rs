@@ -255,20 +255,16 @@ impl ApiServer {
         let key_storage_for_tracker = Arc::new(Box::new(ProviderKeyResolver::new(
             server_config.db_pool.clone(),
         )) as Box<dyn KeyStorage>);
-        let state_tracker = FinetuneJobStateTracker::new(
-            server_config.db_pool.clone(),
-            key_storage_for_tracker,
-        );
+        let state_tracker =
+            FinetuneJobStateTracker::new(server_config.db_pool.clone(), key_storage_for_tracker);
         let _state_tracker_handle = state_tracker.start();
 
         // Initialize and start eval job state tracker
         let key_storage_for_eval_tracker = Arc::new(Box::new(ProviderKeyResolver::new(
             server_config.db_pool.clone(),
         )) as Box<dyn KeyStorage>);
-        let eval_state_tracker = EvalJobStateTracker::new(
-            server_config.db_pool.clone(),
-            key_storage_for_eval_tracker,
-        );
+        let eval_state_tracker =
+            EvalJobStateTracker::new(server_config.db_pool.clone(), key_storage_for_eval_tracker);
         let _eval_state_tracker_handle = eval_state_tracker.start();
 
         // Print useful info after servers are bound and ready

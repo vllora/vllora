@@ -130,10 +130,7 @@ impl DbNewFinetuneJob {
         self
     }
 
-    pub fn with_training_config(
-        mut self,
-        training_config: Option<FinetuneTrainingConfig>,
-    ) -> Self {
+    pub fn with_training_config(mut self, training_config: Option<FinetuneTrainingConfig>) -> Self {
         self.training_config = training_config.and_then(|tc| serde_json::to_string(&tc).ok());
         self
     }
@@ -191,10 +188,7 @@ impl DbUpdateFinetuneJob {
         self
     }
 
-    pub fn with_training_config(
-        mut self,
-        training_config: Option<FinetuneTrainingConfig>,
-    ) -> Self {
+    pub fn with_training_config(mut self, training_config: Option<FinetuneTrainingConfig>) -> Self {
         self.training_config = Some(training_config.and_then(|tc| serde_json::to_string(&tc).ok()));
         self.updated_at = Some(chrono::Utc::now().to_rfc3339());
         self

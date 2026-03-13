@@ -462,7 +462,10 @@ mod tests {
         let score_service = WorkflowRecordScoreService::new(db_pool.clone());
 
         record_service
-            .add(&wf_id, vec![make_record("r1", None), make_record("r2", None)])
+            .add(
+                &wf_id,
+                vec![make_record("r1", None), make_record("r2", None)],
+            )
             .unwrap();
 
         // Batch upsert eval scores

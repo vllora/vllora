@@ -1,4 +1,4 @@
-use crate::metadata::schema::{workflow_records, workflow_record_scores};
+use crate::metadata::schema::{workflow_record_scores, workflow_records};
 use diesel::{Identifiable, Insertable, Queryable, Selectable};
 use serde::{Deserialize, Serialize};
 
@@ -31,9 +31,7 @@ pub struct DbNewWorkflowRecord {
     pub metadata: Option<String>,
 }
 
-#[derive(
-    Debug, Serialize, Deserialize, Queryable, Selectable, Identifiable, Clone, PartialEq,
-)]
+#[derive(Debug, Serialize, Deserialize, Queryable, Selectable, Identifiable, Clone, PartialEq)]
 #[diesel(table_name = workflow_record_scores)]
 #[serde(crate = "serde")]
 pub struct DbWorkflowRecordScore {

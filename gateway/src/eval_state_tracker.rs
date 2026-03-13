@@ -10,8 +10,8 @@ use vllora_core::metadata::services::eval_job::EvalJobService;
 use vllora_core::metadata::services::project::ProjectServiceImpl;
 use vllora_core::metadata::services::workflow_record::WorkflowRecordScoreService;
 use vllora_core::types::metadata::services::project::ProjectService;
-use vllora_finetune::LangdbCloudFinetuneClient;
 use vllora_finetune::types::RowEpochResults;
+use vllora_finetune::LangdbCloudFinetuneClient;
 
 const TERMINAL_STATUSES: &[&str] = &["completed", "failed", "cancelled"];
 
@@ -24,10 +24,7 @@ pub struct EvalJobStateTracker {
 }
 
 impl EvalJobStateTracker {
-    pub fn new(
-        db_pool: DbPool,
-        key_storage: Arc<Box<dyn KeyStorage>>,
-    ) -> Self {
+    pub fn new(db_pool: DbPool, key_storage: Arc<Box<dyn KeyStorage>>) -> Self {
         let poll_interval_secs = std::env::var("EVAL_STATE_TRACKER_INTERVAL_SECS")
             .ok()
             .and_then(|s| s.parse::<u64>().ok())
@@ -168,7 +165,10 @@ impl EvalJobStateTracker {
             );
 
             if TERMINAL_STATUSES.contains(&new_status.as_str()) {
-                info!("Eval job {} reached terminal status: {}", job.id, new_status);
+                info!(
+                    "Eval job {} reached terminal status: {}",
+                    job.id, new_status
+                );
             }
         }
 

@@ -77,7 +77,6 @@ pub struct UpdateDataRequest {
     pub data: String,
 }
 
-
 #[derive(Debug, Deserialize)]
 pub struct RenameTopicRequest {
     #[serde(alias = "old_name")]
@@ -270,6 +269,8 @@ pub async fn list_record_scores(
 ) -> Result<HttpResponse> {
     let workflow_id = workflow_id.into_inner();
     let service = WorkflowRecordScoreService::new(db_pool.get_ref().clone());
-    let scores = service.list_by_workflow(&workflow_id).map_err(map_db_error)?;
+    let scores = service
+        .list_by_workflow(&workflow_id)
+        .map_err(map_db_error)?;
     Ok(HttpResponse::Ok().json(serde_json::json!({ "scores": scores })))
 }

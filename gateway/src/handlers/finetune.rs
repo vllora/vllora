@@ -7,6 +7,7 @@ use vllora_core::credentials::ProviderCredentialsId;
 use vllora_core::executor::context::ExecutorContext;
 use vllora_core::handler::CallbackHandlerFn;
 use vllora_core::metadata::models::finetune_job::DbNewFinetuneJob;
+use vllora_core::metadata::models::workflow::DbUpdateWorkflow;
 use vllora_core::metadata::models::workflow_topic::DbWorkflowTopic;
 use vllora_core::metadata::pool::DbPool;
 use vllora_core::metadata::services::eval_job::EvalJobService;
@@ -131,7 +132,8 @@ pub async fn create_evaluation(
     })?;
 
     // Auto-upload dataset from local SQLite to cloud (upsert)
-    ensure_dataset_uploaded(request_body.dataset_id, &client, db_pool.get_ref()).await?;
+    ensure_dataset_and_evaluator_uploaded(request_body.dataset_id, &client, db_pool.get_ref())
+        .await?;
 
     let cloud_request = CreateEvaluationRequest {
         dataset_id: request_body.dataset_id,
@@ -153,7 +155,7 @@ pub async fn create_evaluation(
         .create(
             &workflow_id,
             Some(&response.evaluation_run_id.to_string()),
-            sample_size.map(|v| v as i32),
+            sample_size,
             rollout_model.as_deref(),
         )
         .map_err(|e| {
@@ -189,7 +191,7 @@ pub async fn create_job(
         actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
     })?;
 
-    ensure_dataset_uploaded(workflow_id, &client, db_pool.get_ref()).await?;
+    ensure_dataset_and_evaluator_uploaded(workflow_id, &client, db_pool.get_ref()).await?;
 
     let cloud_response = client
         .create_job(&workflow_id, request_body.clone())
@@ -398,8 +400,9 @@ pub async fn get_workflow_evaluator_versions(
 pub async fn update_workflow_evaluator(
     workflow_id: web::Path<uuid::Uuid>,
     request: web::Json<UpdateEvaluatorBody>,
-    project: web::ReqData<vllora_core::types::metadata::project::Project>,
-    key_storage: web::Data<Box<dyn KeyStorage>>,
+    _project: web::ReqData<vllora_core::types::metadata::project::Project>,
+    _key_storage: web::Data<Box<dyn KeyStorage>>,
+    db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
     let workflow_id = workflow_id.into_inner();
     let request_body = request.into_inner();
@@ -432,17 +435,11 @@ pub async fn update_workflow_evaluator(
         actix_web::error::ErrorBadRequest(format!("Invalid evaluator format: {}", e))
     })?;
 
-    let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
-    let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
-    })?;
-
-    client
-        .update_workflow_evaluator(&workflow_id.to_string(), evaluator_str)
-        .await
-        .map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!("Failed to update evaluator: {}", e))
-        })?;
+    let workflow_service = WorkflowService::new(db_pool.get_ref().clone());
+    workflow_service.update(
+        &workflow_id.to_string(),
+        DbUpdateWorkflow::new().with_eval_script(Some(evaluator_str)),
+    )?;
 
     Ok(HttpResponse::Ok().json(UpdateEvaluatorResponse {
         workflow_id,
@@ -450,7 +447,7 @@ pub async fn update_workflow_evaluator(
     }))
 }
 
-// NOTE: upload_dataset was removed — gateway auto-uploads via ensure_dataset_uploaded()
+// NOTE: upload_dataset was removed — gateway auto-uploads via ensure_dataset_and_evaluator_uploaded()
 
 // ============================================================================
 // Workflow Dataset Upload (reads from local SQLite, upserts to cloud)
@@ -556,7 +553,7 @@ fn record_to_training_line(record_id: &str, data: &str) -> Option<serde_json::Va
 
 /// Read records, topics, and eval_script from local SQLite, build JSONL,
 /// and upsert to LangDB Cloud. Returns the cloud dataset ID.
-async fn ensure_dataset_uploaded(
+async fn ensure_dataset_and_evaluator_uploaded(
     wf_id: uuid::Uuid,
     client: &LangdbCloudFinetuneClient,
     db_pool: &DbPool,
@@ -640,7 +637,7 @@ pub async fn create_finetune_job(
     })?;
 
     // Auto-upload dataset from local SQLite to cloud (upsert)
-    ensure_dataset_uploaded(*workflow_id, &client, db_pool.get_ref()).await?;
+    ensure_dataset_and_evaluator_uploaded(*workflow_id, &client, db_pool.get_ref()).await?;
 
     let cloud_response = client
         .create_finetune_job(request_body.clone(), &workflow_id)
@@ -685,15 +682,13 @@ pub async fn get_finetune_job_status(
     if let Ok(Some(db_job)) =
         finetune_job_service.get_by_id(&path.job_id.to_string(), &project.id.to_string())
     {
-        return Ok(
-            HttpResponse::Ok().json(LocalFinetuneJobStatusResponse {
-                job_id: path.job_id,
-                provider_job_id: db_job.provider_job_id,
-                status: db_job.state,
-                fine_tuned_model: db_job.fine_tuned_model,
-                error_message: db_job.error_message,
-            }),
-        );
+        return Ok(HttpResponse::Ok().json(LocalFinetuneJobStatusResponse {
+            job_id: path.job_id,
+            provider_job_id: db_job.provider_job_id,
+            status: db_job.state,
+            fine_tuned_model: db_job.fine_tuned_model,
+            error_message: db_job.error_message,
+        }));
     }
 
     let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
