@@ -208,7 +208,10 @@ pub async fn download_knowledge_source_file(
 
     Ok(HttpResponse::Ok()
         .content_type(content_type)
-        .append_header(("Content-Disposition", format!("inline; filename=\"{}\"", file_name)))
+        .append_header((
+            "Content-Disposition",
+            format!("inline; filename=\"{}\"", file_name),
+        ))
         .body(bytes))
 }
 

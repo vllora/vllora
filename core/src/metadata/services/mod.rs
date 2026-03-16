@@ -13,5 +13,6 @@ pub mod run;
 pub mod thread;
 pub mod trace;
 pub mod workflow;
+pub mod workflow_log;
 pub mod workflow_record;
 pub mod workflow_topic;

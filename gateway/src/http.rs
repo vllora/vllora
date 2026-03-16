@@ -6,7 +6,7 @@ use crate::finetune_state_tracker::FinetuneJobStateTracker;
 use crate::guardrails::GuardrailsService;
 use crate::handlers::{
     agents, debug, eval_jobs, finetune, knowledge_sources, models, projects, session, threads,
-    workflow_records, workflow_topics, workflows,
+    workflow_logs, workflow_records, workflow_topics, workflows,
 };
 use crate::metrics_writer::SqliteMetricsWriterAdapter;
 use crate::middleware::lucy_project::LucyProjectMiddleware;
@@ -410,6 +410,18 @@ impl ApiServer {
                                             .route("/{record_id}", web::delete().to(workflow_records::delete_record))
                                             .route("/{record_id}/data", web::patch().to(workflow_records::update_record_data))
                                             .route("/scores", web::get().to(workflow_records::list_record_scores)),
+                                    )
+                                    .service(
+                                        web::scope("/logs")
+                                            .route(
+                                                "",
+                                                web::get().to(workflow_logs::list_workflow_logs),
+                                            )
+                                            .route(
+                                                "/bulk",
+                                                web::post()
+                                                    .to(workflow_logs::create_workflow_logs_bulk),
+                                            ),
                                     )
                                     // Topics CRUD
                                     .route("/topics", web::get().to(workflow_topics::list_topics))

@@ -7,6 +7,7 @@ pub mod models;
 pub mod projects;
 pub mod session;
 pub mod threads;
+pub mod workflow_logs;
 pub mod workflow_records;
 pub mod workflow_topics;
 pub mod workflows;
