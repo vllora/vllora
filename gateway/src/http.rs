@@ -436,6 +436,7 @@ impl ApiServer {
                                             .route("/trace/{trace_id}", web::delete().to(workflows::delete_workflow_knowledge_trace))
                                             .route("/{ks_id}", web::get().to(knowledge_sources::get_knowledge_source))
                                             .route("/{ks_id}", web::delete().to(knowledge_sources::soft_delete_knowledge_source))
+                                             .route("/{ks_id}/file", web::get().to(knowledge_sources::download_knowledge_source_file))
                                             .route("/{ks_id}/status", web::patch().to(knowledge_sources::update_knowledge_source_status))
                                             .route("/{ks_id}/chunks", web::patch().to(knowledge_sources::update_knowledge_source_chunks))
                                             .route("/{ks_id}/parts", web::post().to(knowledge_sources::add_knowledge_source_parts))

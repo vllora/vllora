@@ -155,6 +155,63 @@ pub async fn get_knowledge_source(
     Ok(HttpResponse::Ok().json(ks))
 }
 
+/// Serve the original uploaded file for a knowledge source.
+/// Scans the storage directory for the first file matching the source ID.
+pub async fn download_knowledge_source_file(
+    path: web::Path<(String, String)>,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let (workflow_id, identifier) = path.into_inner();
+    let service = KnowledgeSourceService::new(db_pool.get_ref().clone());
+
+    // Verify source exists and get its ID
+    let ks = service
+        .get_by_identifier_and_workflow_id(&workflow_id, &identifier)
+        .map_err(map_db_error)?;
+
+    let base_dir = std::env::var("KNOWLEDGE_STORAGE_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(".knowledge_store"));
+    let source_dir = base_dir.join(&workflow_id).join(&ks.id);
+
+    // Find the first file in the source directory
+    let mut entries = fs::read_dir(&source_dir)
+        .await
+        .map_err(|_| error::ErrorNotFound("Original file not found"))?;
+
+    let file_entry = entries
+        .next_entry()
+        .await
+        .map_err(error::ErrorInternalServerError)?
+        .ok_or_else(|| error::ErrorNotFound("Original file not found"))?;
+
+    let file_path = file_entry.path();
+    let file_name = file_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("document.bin")
+        .to_string();
+
+    let bytes = fs::read(&file_path)
+        .await
+        .map_err(|_| error::ErrorNotFound("Original file not found"))?;
+
+    // Infer content type from extension
+    let content_type = match file_path.extension().and_then(|e| e.to_str()) {
+        Some("pdf") => "application/pdf",
+        Some("png") => "image/png",
+        Some("jpg" | "jpeg") => "image/jpeg",
+        Some("svg") => "image/svg+xml",
+        Some("txt") => "text/plain",
+        _ => "application/octet-stream",
+    };
+
+    Ok(HttpResponse::Ok()
+        .content_type(content_type)
+        .append_header(("Content-Disposition", format!("inline; filename=\"{}\"", file_name)))
+        .body(bytes))
+}
+
 pub async fn list_knowledge_sources(
     workflow_id: web::Path<String>,
     db_pool: web::Data<DbPool>,
