@@ -104,6 +104,26 @@ pub struct DryRunDatasetAnalyticsResponse {
     pub quality: JsonValue,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DryRunEvaluatorRequest {
+    pub script: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub row: Option<JsonValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DryRunEvaluatorResponse {
+    pub score: f64,
+    #[serde(alias = "reasoning")]
+    pub reason: String,
+    #[serde(default)]
+    pub logs: Vec<String>,
+    #[serde(flatten)]
+    pub other: HashMap<String, JsonValue>,
+    #[serde(default)]
+    pub is_success: Option<bool>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct UpdateEvaluatorBody {
     pub evaluator: serde_json::Value,

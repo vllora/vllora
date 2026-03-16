@@ -479,6 +479,11 @@ impl ApiServer {
                                                     .to(finetune::update_workflow_evaluator),
                                             )
                                             .route(
+                                                "/dry-run",
+                                                web::post()
+                                                    .to(finetune::dry_run_workflow_evaluator),
+                                            )
+                                            .route(
                                                 "/versions",
                                                 web::get()
                                                     .to(finetune::get_workflow_evaluator_versions),

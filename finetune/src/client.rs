@@ -2,10 +2,10 @@ use crate::types::{
     CreateDeploymentRequest, CreateEvaluationRequest, CreateEvaluationResponse,
     CreateFinetuneJobRequest, CreateJobRequest, CreateJobResponse, DatasetAnalyticsResponse,
     DeploymentResponse, DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse,
-    EvaluationResultResponse, EvaluatorVersionResponse, FinetuneEvalResultsResponse,
-    FinetuneJobMetricsResponse, FinetuneJobStatusResponse, FinetuningJobResponse,
-    FinetuningJobResult, JobType, UnifiedJobStatusResponse, UploadDatasetResponse,
-    WeightsDownloadUrlResponse,
+    DryRunEvaluatorRequest, DryRunEvaluatorResponse, EvaluationResultResponse,
+    EvaluatorVersionResponse, FinetuneEvalResultsResponse, FinetuneJobMetricsResponse,
+    FinetuneJobStatusResponse, FinetuningJobResponse, FinetuningJobResult, JobType,
+    UnifiedJobStatusResponse, UploadDatasetResponse, WeightsDownloadUrlResponse,
 };
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 
@@ -588,6 +588,51 @@ impl LangdbCloudFinetuneClient {
         }
 
         let body: DryRunDatasetAnalyticsResponse = response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+        Ok(body)
+    }
+
+    /// Run a workflow evaluator script immediately without saving it.
+    pub async fn dry_run_workflow_evaluator(
+        &self,
+        workflow_id: &str,
+        request: DryRunEvaluatorRequest,
+    ) -> Result<DryRunEvaluatorResponse, String> {
+        let url = format!(
+            "{}/finetune/workflows/{}/evaluator/dry-run",
+            self.api_url, workflow_id
+        );
+
+        let mut form = reqwest::multipart::Form::new();
+        let script_part = reqwest::multipart::Part::text(request.script)
+            .mime_str("text/plain")
+            .map_err(|e| format!("Failed to create script part: {}", e))?;
+        form = form.part("script", script_part);
+
+        if let Some(row) = request.row {
+            let row_part = reqwest::multipart::Part::text(row.to_string())
+                .mime_str("application/json")
+                .map_err(|e| format!("Failed to create row part: {}", e))?;
+            form = form.part("row", row_part);
+        }
+
+        let req = self.client.post(&url).multipart(form);
+
+        let response = req
+            .send()
+            .await
+            .map_err(|e| format!("Failed to call cloud API: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!("API error {}: {}", status, body));
+        }
+
+        let body: DryRunEvaluatorResponse = response
             .json()
             .await
             .map_err(|e| format!("Failed to parse response: {}", e))?;

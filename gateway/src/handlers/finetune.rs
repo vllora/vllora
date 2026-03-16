@@ -24,9 +24,10 @@ use vllora_core::types::metadata::services::model::ModelService;
 use vllora_core::GatewayApiError;
 use vllora_finetune::types::{
     CreateEvaluationRequest, CreateJobRequest, DatasetAnalyticsResponse,
-    DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse, EvaluationResultResponse,
-    Evaluator, FinetuneEvalResultsResponse, FinetuneJobMetricsResponse, FinetuneJobQuery,
-    FinetuneTrainingConfig, JobType, UpdateEvaluatorBody, UpdateEvaluatorResponse,
+    DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse, DryRunEvaluatorRequest,
+    EvaluationResultResponse, Evaluator, FinetuneEvalResultsResponse, FinetuneJobMetricsResponse,
+    FinetuneJobQuery, FinetuneTrainingConfig, JobType, UpdateEvaluatorBody,
+    UpdateEvaluatorResponse,
 };
 use vllora_finetune::{
     CreateDeploymentRequest, CreateFinetuneJobRequest, LangdbCloudFinetuneClient,
@@ -306,6 +307,33 @@ pub async fn dry_run_dataset_analytics(
         .map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!(
                 "Failed to compute dry-run dataset analytics: {}",
+                e
+            ))
+        })?;
+
+    Ok(HttpResponse::Ok().json(response))
+}
+
+pub async fn dry_run_workflow_evaluator(
+    workflow_id: web::Path<uuid::Uuid>,
+    body: web::Json<DryRunEvaluatorRequest>,
+    project: web::ReqData<vllora_core::types::metadata::project::Project>,
+    key_storage: web::Data<Box<dyn KeyStorage>>,
+) -> Result<HttpResponse> {
+    let workflow_id = workflow_id.into_inner();
+    let request_body = body.into_inner();
+
+    let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
+    let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
+    })?;
+
+    let response = client
+        .dry_run_workflow_evaluator(&workflow_id.to_string(), request_body)
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!(
+                "Failed to run evaluator dry-run: {}",
                 e
             ))
         })?;
