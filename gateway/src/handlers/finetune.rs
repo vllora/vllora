@@ -437,8 +437,9 @@ pub async fn update_workflow_evaluator(
     let mut script_bytes: Option<Vec<u8>> = None;
 
     while let Some(field) = payload.next().await {
-        let mut field = field
-            .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid multipart field: {e}")))?;
+        let mut field = field.map_err(|e| {
+            actix_web::error::ErrorBadRequest(format!("Invalid multipart field: {e}"))
+        })?;
         match field.name() {
             "file" => {
                 let mut bytes = Vec::new();
@@ -465,9 +466,9 @@ pub async fn update_workflow_evaluator(
         }
     }
 
-    let script_bytes = script_bytes
-        .filter(|b| !b.is_empty())
-        .ok_or_else(|| actix_web::error::ErrorBadRequest("Missing evaluator file in 'file' field"))?;
+    let script_bytes = script_bytes.filter(|b| !b.is_empty()).ok_or_else(|| {
+        actix_web::error::ErrorBadRequest("Missing evaluator file in 'file' field")
+    })?;
     let raw_script = String::from_utf8(script_bytes).map_err(|e| {
         actix_web::error::ErrorBadRequest(format!("Evaluator file must be valid UTF-8: {e}"))
     })?;
@@ -486,9 +487,8 @@ pub async fn update_workflow_evaluator(
     });
     let validation_str = serde_json::to_string(&validation_value)
         .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid evaluator JSON: {e}")))?;
-    serde_json::from_str::<Evaluator<ChatCompletionMessage>>(&validation_str).map_err(|e| {
-        actix_web::error::ErrorBadRequest(format!("Invalid evaluator format: {e}"))
-    })?;
+    serde_json::from_str::<Evaluator<ChatCompletionMessage>>(&validation_str)
+        .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid evaluator format: {e}")))?;
 
     let workflow_service = WorkflowService::new(db_pool.get_ref().clone());
     workflow_service.update(
