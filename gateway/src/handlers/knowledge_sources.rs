@@ -1,7 +1,6 @@
 use actix_multipart::Multipart;
 use actix_web::{error, web, HttpResponse, Result};
 use futures_util::StreamExt;
-use serde::Deserialize;
 use std::path::PathBuf;
 use tokio::fs;
 use uuid::Uuid;
@@ -18,18 +17,6 @@ fn map_db_error(err: DatabaseError) -> actix_web::Error {
         }
         other => error::ErrorInternalServerError(other),
     }
-}
-
-#[derive(Debug, Deserialize)]
-pub struct UpdateStatusRequest {
-    #[allow(dead_code)]
-    pub status: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct UpdateChunksRequest {
-    #[allow(dead_code)]
-    pub extracted_content: serde_json::Value,
 }
 
 pub async fn create_knowledge_source(

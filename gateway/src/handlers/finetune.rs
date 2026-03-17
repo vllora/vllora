@@ -636,20 +636,14 @@ async fn ensure_dataset_and_evaluator_uploaded(
         Some(build_topic_hierarchy_json(&topics).to_string())
     };
 
-    // Build evaluator JSON from eval_script
-    let evaluator = workflow.eval_script.as_ref().map(|script| {
-        serde_json::json!({
-            "type": "js",
-            "config": {
-                "script": format!("__inline_script:{}", script)
-            }
-        })
-        .to_string()
-    });
-
     // Upload to cloud (upsert: dataset_id = workflow_id)
     client
-        .upload_dataset(jsonl_data, topic_hierarchy, evaluator, Some(wf_id))
+        .upload_dataset(
+            jsonl_data,
+            topic_hierarchy,
+            workflow.eval_script,
+            Some(wf_id),
+        )
         .await
         .map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!("Failed to upload dataset: {}", e))
