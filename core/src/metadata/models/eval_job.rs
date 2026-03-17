@@ -20,7 +20,6 @@ pub struct DbEvalJob {
     pub updated_at: String,
     pub completed_at: Option<String>,
     pub started_at: Option<String>,
-    pub polling_snapshot: Option<String>,
     pub result: Option<String>,
 }
 
@@ -62,7 +61,6 @@ pub struct DbUpdateEvalJob {
     pub updated_at: Option<String>,
     pub completed_at: Option<String>,
     pub started_at: Option<String>,
-    pub polling_snapshot: Option<String>,
     pub result: Option<String>,
 }
 
@@ -90,7 +88,6 @@ impl DbUpdateEvalJob {
         error: Option<String>,
         completed_at: Option<String>,
         started_at: Option<String>,
-        polling_snapshot: Option<String>,
         result: Option<String>,
     ) -> Self {
         Self {
@@ -100,7 +97,6 @@ impl DbUpdateEvalJob {
             updated_at: Some(chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()),
             completed_at,
             started_at,
-            polling_snapshot,
             result,
         }
     }

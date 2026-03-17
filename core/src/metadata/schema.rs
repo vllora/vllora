@@ -261,7 +261,6 @@ diesel::table! {
         updated_at -> Text,
         completed_at -> Nullable<Text>,
         started_at -> Nullable<Text>,
-        polling_snapshot -> Nullable<Text>,
         result -> Nullable<Text>,
     }
 }

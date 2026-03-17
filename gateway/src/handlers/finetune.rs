@@ -435,11 +435,12 @@ pub async fn update_workflow_evaluator(
     let workflow_id = workflow_id.into_inner();
     let request_body = request.into_inner();
 
-    // Add __inline_script: prefix if missing (matching the upload path behavior)
-    let mut evaluator_value = serde_json::to_value(&request_body.evaluator)
+    let evaluator_value = serde_json::to_value(&request_body.evaluator)
         .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid evaluator JSON: {}", e)))?;
 
-    if let Some(obj) = evaluator_value.as_object_mut() {
+    // Validate the evaluator format (add __inline_script: prefix for validation)
+    let mut validation_value = evaluator_value.clone();
+    if let Some(obj) = validation_value.as_object_mut() {
         if obj.get("type").and_then(|t| t.as_str()) == Some("js") {
             if let Some(config) = obj.get_mut("config").and_then(|c| c.as_object_mut()) {
                 if let Some(script_val) = config.get_mut("script") {
@@ -455,18 +456,24 @@ pub async fn update_workflow_evaluator(
             }
         }
     }
-
-    let evaluator_str = serde_json::to_string(&evaluator_value)
+    let validation_str = serde_json::to_string(&validation_value)
         .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid evaluator JSON: {}", e)))?;
-
-    serde_json::from_str::<Evaluator<ChatCompletionMessage>>(&evaluator_str).map_err(|e| {
+    serde_json::from_str::<Evaluator<ChatCompletionMessage>>(&validation_str).map_err(|e| {
         actix_web::error::ErrorBadRequest(format!("Invalid evaluator format: {}", e))
     })?;
+
+    // Extract raw script for local storage (eval_script column stores raw JS,
+    // ensure_dataset_and_evaluator_uploaded wraps it into the full evaluator JSON on upload)
+    let raw_script = evaluator_value
+        .get("config")
+        .and_then(|c| c.get("script"))
+        .and_then(|s| s.as_str())
+        .map(|s| s.strip_prefix("__inline_script:").unwrap_or(s).to_string());
 
     let workflow_service = WorkflowService::new(db_pool.get_ref().clone());
     workflow_service.update(
         &workflow_id.to_string(),
-        DbUpdateWorkflow::new().with_eval_script(Some(evaluator_str)),
+        DbUpdateWorkflow::new().with_eval_script(raw_script),
     )?;
 
     Ok(HttpResponse::Ok().json(UpdateEvaluatorResponse {

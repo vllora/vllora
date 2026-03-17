@@ -28,7 +28,6 @@ pub struct UpdateEvalJobRequest {
     pub error: Option<String>,
     pub completed_at: Option<String>,
     pub started_at: Option<String>,
-    pub polling_snapshot: Option<String>,
     pub result: Option<String>,
 }
 
@@ -109,7 +108,6 @@ pub async fn update_eval_job(
         payload.error,
         payload.completed_at,
         payload.started_at,
-        payload.polling_snapshot,
         payload.result,
     );
 
@@ -156,7 +154,6 @@ pub async fn update_eval_job_by_id(
         payload.error,
         payload.completed_at,
         payload.started_at,
-        payload.polling_snapshot,
         payload.result,
     );
 
