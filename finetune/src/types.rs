@@ -124,9 +124,9 @@ pub struct DryRunEvaluatorResponse {
     pub is_success: Option<bool>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct UpdateEvaluatorBody {
-    pub evaluator: serde_json::Value,
+    pub eval_script: String,
 }
 
 #[derive(Debug, Serialize)]

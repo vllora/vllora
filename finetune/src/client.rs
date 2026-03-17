@@ -133,23 +133,22 @@ impl LangdbCloudFinetuneClient {
         Ok(body)
     }
 
-    /// Update the evaluator config for an existing dataset
+    /// Update the evaluator script for an existing dataset.
     pub async fn update_workflow_evaluator(
         &self,
         workflow_id: &str,
-        evaluator: String,
+        eval_script: String,
     ) -> Result<(), String> {
         let url = format!(
             "{}/finetune/workflows/{}/evaluator",
             self.api_url, workflow_id
         );
-
-        let body = serde_json::json!({
-            "evaluator": serde_json::from_str::<serde_json::Value>(&evaluator)
-                .map_err(|e| format!("Invalid evaluator JSON: {}", e))?
-        });
-
-        let req = self.client.patch(&url).json(&body);
+        let script_part = reqwest::multipart::Part::text(eval_script)
+            .file_name("evaluator.js")
+            .mime_str("application/javascript")
+            .map_err(|e| format!("Failed to create evaluator file part: {}", e))?;
+        let form = reqwest::multipart::Form::new().part("file", script_part);
+        let req = self.client.patch(&url).multipart(form);
 
         let response = req
             .send()
