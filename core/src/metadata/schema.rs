@@ -190,6 +190,16 @@ diesel::table! {
 }
 
 diesel::table! {
+    workflow_logs (id) {
+        id -> Text,
+        workflow_id -> Text,
+        target -> Nullable<Text>,
+        log -> Text,
+        created_at -> Text,
+    }
+}
+
+diesel::table! {
     workflow_records (id) {
         id -> Text,
         workflow_id -> Text,
@@ -299,6 +309,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     providers,
     sessions,
     traces,
+    workflow_logs,
     workflow_records,
     workflow_topics,
     workflow_topic_sources,

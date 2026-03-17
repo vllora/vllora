@@ -208,7 +208,10 @@ pub async fn download_knowledge_source_file(
 
     Ok(HttpResponse::Ok()
         .content_type(content_type)
-        .append_header(("Content-Disposition", format!("inline; filename=\"{}\"", file_name)))
+        .append_header((
+            "Content-Disposition",
+            format!("inline; filename=\"{}\"", file_name),
+        ))
         .body(bytes))
 }
 
@@ -232,30 +235,6 @@ pub async fn count_knowledge_sources(
 
     let count = service.count(&workflow_id).map_err(map_db_error)?;
     Ok(HttpResponse::Ok().json(serde_json::json!({ "count": count })))
-}
-
-pub async fn update_knowledge_source_status(
-    path: web::Path<(String, String)>,
-    _body: web::Json<UpdateStatusRequest>,
-    _db_pool: web::Data<DbPool>,
-) -> Result<HttpResponse> {
-    let (_workflow_id, identifier) = path.into_inner();
-    Ok(HttpResponse::NotImplemented().json(serde_json::json!({
-        "message": "Legacy status updates removed from knowledge_sources",
-        "knowledge_source_identifier": identifier
-    })))
-}
-
-pub async fn update_knowledge_source_chunks(
-    path: web::Path<(String, String)>,
-    _body: web::Json<UpdateChunksRequest>,
-    _db_pool: web::Data<DbPool>,
-) -> Result<HttpResponse> {
-    let (_workflow_id, identifier) = path.into_inner();
-    Ok(HttpResponse::NotImplemented().json(serde_json::json!({
-        "message": "Legacy extracted_content updates removed from knowledge_sources; use /knowledge/{ks_id}/parts APIs",
-        "knowledge_source_identifier": identifier
-    })))
 }
 
 pub async fn add_knowledge_source_parts(

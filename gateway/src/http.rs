@@ -6,7 +6,7 @@ use crate::finetune_state_tracker::FinetuneJobStateTracker;
 use crate::guardrails::GuardrailsService;
 use crate::handlers::{
     agents, debug, eval_jobs, finetune, knowledge_sources, models, projects, session, threads,
-    workflow_records, workflow_topics, workflows,
+    workflow_logs, workflow_records, workflow_topics, workflows,
 };
 use crate::metrics_writer::SqliteMetricsWriterAdapter;
 use crate::middleware::lucy_project::LucyProjectMiddleware;
@@ -411,6 +411,18 @@ impl ApiServer {
                                             .route("/{record_id}/data", web::patch().to(workflow_records::update_record_data))
                                             .route("/scores", web::get().to(workflow_records::list_record_scores)),
                                     )
+                                    .service(
+                                        web::scope("/logs")
+                                            .route(
+                                                "",
+                                                web::get().to(workflow_logs::list_workflow_logs),
+                                            )
+                                            .route(
+                                                "/bulk",
+                                                web::post()
+                                                    .to(workflow_logs::create_workflow_logs_bulk),
+                                            ),
+                                    )
                                     // Topics CRUD
                                     .route("/topics", web::get().to(workflow_topics::list_topics))
                                     .route("/topics", web::post().to(workflow_topics::create_topics))
@@ -436,9 +448,7 @@ impl ApiServer {
                                             .route("/trace/{trace_id}", web::delete().to(workflows::delete_workflow_knowledge_trace))
                                             .route("/{ks_id}", web::get().to(knowledge_sources::get_knowledge_source))
                                             .route("/{ks_id}", web::delete().to(knowledge_sources::soft_delete_knowledge_source))
-                                             .route("/{ks_id}/file", web::get().to(knowledge_sources::download_knowledge_source_file))
-                                            .route("/{ks_id}/status", web::patch().to(knowledge_sources::update_knowledge_source_status))
-                                            .route("/{ks_id}/chunks", web::patch().to(knowledge_sources::update_knowledge_source_chunks))
+                                            .route("/{ks_id}/file", web::get().to(knowledge_sources::download_knowledge_source_file))
                                             .route("/{ks_id}/parts", web::post().to(knowledge_sources::add_knowledge_source_parts))
                                             .route("/{ks_id}/parts", web::get().to(knowledge_sources::list_knowledge_source_parts))
                                             .route("/{ks_id}/parts/{part_id}", web::delete().to(knowledge_sources::delete_knowledge_source_part)),
@@ -477,6 +487,11 @@ impl ApiServer {
                                                 "",
                                                 web::patch()
                                                     .to(finetune::update_workflow_evaluator),
+                                            )
+                                            .route(
+                                                "/dry-run",
+                                                web::post()
+                                                    .to(finetune::dry_run_workflow_evaluator),
                                             )
                                             .route(
                                                 "/versions",
