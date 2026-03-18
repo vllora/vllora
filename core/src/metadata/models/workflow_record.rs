@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Queryable, Selectable, Identifiable, Clone, PartialEq)]
 #[diesel(table_name = workflow_records)]
+#[diesel(primary_key(id, workflow_id))]
 #[serde(crate = "serde")]
 pub struct DbWorkflowRecord {
     pub id: String,
