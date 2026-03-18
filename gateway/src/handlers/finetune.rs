@@ -1,4 +1,6 @@
+use actix_multipart::Multipart;
 use actix_web::{web, HttpResponse, Result};
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -26,8 +28,7 @@ use vllora_finetune::types::{
     CreateEvaluationRequest, CreateJobRequest, DatasetAnalyticsResponse,
     DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse, DryRunEvaluatorRequest,
     EvaluationResultResponse, Evaluator, FinetuneEvalResultsResponse, FinetuneJobMetricsResponse,
-    FinetuneJobQuery, FinetuneTrainingConfig, JobType, UpdateEvaluatorBody,
-    UpdateEvaluatorResponse,
+    FinetuneJobQuery, FinetuneTrainingConfig, JobType, UpdateEvaluatorResponse,
 };
 use vllora_finetune::{
     CreateDeploymentRequest, CreateFinetuneJobRequest, LangdbCloudFinetuneClient,
@@ -427,53 +428,72 @@ pub async fn get_workflow_evaluator_versions(
 
 pub async fn update_workflow_evaluator(
     workflow_id: web::Path<uuid::Uuid>,
-    request: web::Json<UpdateEvaluatorBody>,
+    mut payload: Multipart,
     _project: web::ReqData<vllora_core::types::metadata::project::Project>,
     _key_storage: web::Data<Box<dyn KeyStorage>>,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
     let workflow_id = workflow_id.into_inner();
-    let request_body = request.into_inner();
+    let mut script_bytes: Option<Vec<u8>> = None;
 
-    let evaluator_value = serde_json::to_value(&request_body.evaluator)
-        .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid evaluator JSON: {}", e)))?;
-
-    // Validate the evaluator format (add __inline_script: prefix for validation)
-    let mut validation_value = evaluator_value.clone();
-    if let Some(obj) = validation_value.as_object_mut() {
-        if obj.get("type").and_then(|t| t.as_str()) == Some("js") {
-            if let Some(config) = obj.get_mut("config").and_then(|c| c.as_object_mut()) {
-                if let Some(script_val) = config.get_mut("script") {
-                    if let Some(script_str) = script_val.as_str() {
-                        if !script_str.starts_with("__inline_script:") {
-                            *script_val = serde_json::Value::String(format!(
-                                "__inline_script:{}",
-                                script_str
-                            ));
-                        }
-                    }
+    while let Some(field) = payload.next().await {
+        let mut field = field.map_err(|e| {
+            actix_web::error::ErrorBadRequest(format!("Invalid multipart field: {e}"))
+        })?;
+        match field.name() {
+            "file" => {
+                let mut bytes = Vec::new();
+                while let Some(chunk) = field.next().await {
+                    let chunk = chunk.map_err(|e| {
+                        actix_web::error::ErrorBadRequest(format!(
+                            "Failed to read evaluator file chunk: {e}"
+                        ))
+                    })?;
+                    bytes.extend_from_slice(&chunk);
+                }
+                script_bytes = Some(bytes);
+            }
+            _ => {
+                // Drain unknown fields to keep multipart parser state consistent.
+                while let Some(chunk) = field.next().await {
+                    let _ = chunk.map_err(|e| {
+                        actix_web::error::ErrorBadRequest(format!(
+                            "Failed to read multipart field chunk: {e}"
+                        ))
+                    })?;
                 }
             }
         }
     }
-    let validation_str = serde_json::to_string(&validation_value)
-        .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid evaluator JSON: {}", e)))?;
-    serde_json::from_str::<Evaluator<ChatCompletionMessage>>(&validation_str).map_err(|e| {
-        actix_web::error::ErrorBadRequest(format!("Invalid evaluator format: {}", e))
-    })?;
 
-    // Extract raw script for local storage (eval_script column stores raw JS,
-    // ensure_dataset_and_evaluator_uploaded wraps it into the full evaluator JSON on upload)
-    let raw_script = evaluator_value
-        .get("config")
-        .and_then(|c| c.get("script"))
-        .and_then(|s| s.as_str())
-        .map(|s| s.strip_prefix("__inline_script:").unwrap_or(s).to_string());
+    let script_bytes = script_bytes.filter(|b| !b.is_empty()).ok_or_else(|| {
+        actix_web::error::ErrorBadRequest("Missing evaluator file in 'file' field")
+    })?;
+    let raw_script = String::from_utf8(script_bytes).map_err(|e| {
+        actix_web::error::ErrorBadRequest(format!("Evaluator file must be valid UTF-8: {e}"))
+    })?;
+    if raw_script.trim().is_empty() {
+        return Err(actix_web::error::ErrorBadRequest(
+            "Evaluator script file is empty",
+        ));
+    }
+
+    // Validate by constructing JS evaluator config from uploaded file content.
+    let validation_value = serde_json::json!({
+        "type": "js",
+        "config": {
+            "script": format!("__inline_script:{raw_script}")
+        }
+    });
+    let validation_str = serde_json::to_string(&validation_value)
+        .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid evaluator JSON: {e}")))?;
+    serde_json::from_str::<Evaluator<ChatCompletionMessage>>(&validation_str)
+        .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid evaluator format: {e}")))?;
 
     let workflow_service = WorkflowService::new(db_pool.get_ref().clone());
     workflow_service.update(
         &workflow_id.to_string(),
-        DbUpdateWorkflow::new().with_eval_script(raw_script),
+        DbUpdateWorkflow::new().with_eval_script(Some(raw_script)),
     )?;
 
     Ok(HttpResponse::Ok().json(UpdateEvaluatorResponse {
