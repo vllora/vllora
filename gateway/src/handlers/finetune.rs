@@ -578,18 +578,21 @@ fn record_to_training_line(record_id: &str, data: &str) -> Option<serde_json::Va
     }
 
     // If data has input/output structure (vLLora format)
-    if parsed.get("input").is_some() && parsed.get("output").is_some() {
+    // Output is optional — evaluation does a rollout (model generates the output)
+    if parsed.get("input").is_some() {
         let mut messages: Vec<serde_json::Value> = Vec::new();
 
         if let Some(input_msgs) = parsed["input"].get("messages").and_then(|m| m.as_array()) {
             messages.extend(input_msgs.iter().cloned());
         }
 
-        if let Some(output_msgs) = parsed["output"].get("messages") {
-            if let Some(arr) = output_msgs.as_array() {
-                messages.extend(arr.iter().cloned());
-            } else {
-                messages.push(output_msgs.clone());
+        if let Some(output) = parsed.get("output") {
+            if let Some(output_msgs) = output.get("messages") {
+                if let Some(arr) = output_msgs.as_array() {
+                    messages.extend(arr.iter().cloned());
+                } else {
+                    messages.push(output_msgs.clone());
+                }
             }
         }
 
