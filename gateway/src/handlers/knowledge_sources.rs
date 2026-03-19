@@ -286,6 +286,142 @@ pub async fn delete_knowledge_source_part(
     })))
 }
 
+pub async fn upsert_knowledge_source(
+    workflow_id: web::Path<String>,
+    mut payload: Multipart,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let workflow_id = workflow_id.into_inner();
+    let service = KnowledgeSourceService::new(db_pool.get_ref().clone());
+
+    let mut name: Option<String> = None;
+    let mut reference_id: Option<String> = None;
+    let mut description: Option<String> = None;
+    let mut metadata: Option<serde_json::Value> = None;
+    let mut file_name: Option<String> = None;
+    let mut file_bytes: Option<Vec<u8>> = None;
+    let mut parts: Vec<NewKnowledgeSourcePart> = Vec::new();
+
+    while let Some(field) = payload.next().await {
+        let mut field = field.map_err(error::ErrorBadRequest)?;
+        let field_name = field.name().to_string();
+        match field_name.as_str() {
+            "file" => {
+                if let Some(filename) = field.content_disposition().get_filename() {
+                    file_name = Some(filename.to_string());
+                }
+                let mut bytes = Vec::new();
+                while let Some(chunk) = field.next().await {
+                    let chunk = chunk.map_err(error::ErrorBadRequest)?;
+                    bytes.extend_from_slice(&chunk);
+                }
+                file_bytes = Some(bytes);
+            }
+            "name" | "reference_id" | "description" | "metadata" | "parts" => {
+                let mut bytes = Vec::new();
+                while let Some(chunk) = field.next().await {
+                    let chunk = chunk.map_err(error::ErrorBadRequest)?;
+                    bytes.extend_from_slice(&chunk);
+                }
+                let text = String::from_utf8(bytes).map_err(error::ErrorBadRequest)?;
+                match field_name.as_str() {
+                    "name" => name = Some(text),
+                    "reference_id" => reference_id = Some(text),
+                    "description" => description = Some(text),
+                    "metadata" => {
+                        let parsed = serde_json::from_str::<serde_json::Value>(&text)
+                            .map_err(error::ErrorBadRequest)?;
+                        metadata = Some(parsed);
+                    }
+                    "parts" => {
+                        parts = serde_json::from_str::<Vec<NewKnowledgeSourcePart>>(&text)
+                            .map_err(error::ErrorBadRequest)?;
+                    }
+                    _ => {}
+                }
+            }
+            _ => {
+                while let Some(chunk) = field.next().await {
+                    let _ = chunk.map_err(error::ErrorBadRequest)?;
+                }
+            }
+        }
+    }
+
+    let name = name
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| error::ErrorBadRequest("name is required"))?;
+    let reference_id = reference_id
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty());
+    let file_bytes = file_bytes
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| error::ErrorBadRequest("file is required"))?;
+
+    // Check if a knowledge source with this name already exists in the workflow
+    let existing = service
+        .find_by_name_and_workflow_id(&workflow_id, &name)
+        .map_err(map_db_error)?;
+
+    let replaced_id = if let Some(existing_ks) = existing {
+        let old_id = existing_ks.id.clone();
+        service
+            .soft_delete(&existing_ks.id)
+            .map_err(map_db_error)?;
+        Some(old_id)
+    } else {
+        None
+    };
+
+    // Create the new knowledge source
+    let source_id = Uuid::new_v4().to_string();
+    let safe_file_name = file_name.unwrap_or_else(|| "document.bin".to_string());
+    let base_dir = std::env::var("KNOWLEDGE_STORAGE_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(".knowledge_store"));
+    let file_path = base_dir
+        .join(&workflow_id)
+        .join(&source_id)
+        .join(safe_file_name);
+    if let Some(parent) = file_path.parent() {
+        fs::create_dir_all(parent)
+            .await
+            .map_err(error::ErrorInternalServerError)?;
+    }
+    fs::write(&file_path, file_bytes)
+        .await
+        .map_err(error::ErrorInternalServerError)?;
+
+    let ks = service
+        .create_typed(NewKnowledgeSource {
+            id: Some(source_id),
+            reference_id,
+            workflow_id,
+            name,
+            description,
+            metadata,
+            part: parts,
+        })
+        .map_err(|e| {
+            let _ = std::fs::remove_file(&file_path);
+            map_db_error(e)
+        })?;
+
+    let mut status = if replaced_id.is_some() {
+        HttpResponse::Ok()
+    } else {
+        HttpResponse::Created()
+    };
+
+    Ok(status.json(serde_json::json!({
+        "knowledge_source": ks,
+        "document_path": file_path.to_string_lossy().to_string(),
+        "replaced": replaced_id.is_some(),
+        "replaced_id": replaced_id
+    })))
+}
+
 pub async fn soft_delete_knowledge_source(
     path: web::Path<(String, String)>,
     db_pool: web::Data<DbPool>,

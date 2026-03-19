@@ -13,6 +13,7 @@ use diesel::Connection;
 use diesel::ExpressionMethods;
 use diesel::QueryDsl;
 use diesel::RunQueryDsl;
+use diesel::OptionalExtension;
 use diesel::SelectableHelper;
 
 pub struct KnowledgeSourceService {
@@ -288,6 +289,21 @@ impl KnowledgeSourceService {
     ) -> Result<(), DatabaseError> {
         let source = self.get_by_identifier_and_workflow_id(workflow_id, identifier)?;
         self.soft_delete(&source.id)
+    }
+
+    pub fn find_by_name_and_workflow_id(
+        &self,
+        workflow_id: &str,
+        name: &str,
+    ) -> Result<Option<DbKnowledgeSource>, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+        Ok(dsl::knowledge_sources
+            .filter(dsl::workflow_id.eq(workflow_id))
+            .filter(dsl::name.eq(name))
+            .filter(dsl::deleted_at.is_null())
+            .select(DbKnowledgeSource::as_select())
+            .first::<DbKnowledgeSource>(&mut conn)
+            .optional()?)
     }
 
     pub fn count(&self, workflow_id: &str) -> Result<i64, DatabaseError> {

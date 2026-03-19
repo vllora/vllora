@@ -441,6 +441,7 @@ impl ApiServer {
                                         web::scope("/knowledge")
                                             .route("", web::get().to(knowledge_sources::list_knowledge_sources))
                                             .route("", web::post().to(knowledge_sources::create_knowledge_source))
+                                            .route("", web::put().to(knowledge_sources::upsert_knowledge_source))
                                             .route("", web::delete().to(knowledge_sources::soft_delete_all_knowledge_sources))
                                             .route("/count", web::get().to(knowledge_sources::count_knowledge_sources))
                                             .route("/chunk", web::post().to(workflows::chunk_workflow_knowledge))
