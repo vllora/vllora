@@ -200,7 +200,7 @@ diesel::table! {
 }
 
 diesel::table! {
-    workflow_records (id) {
+    workflow_records (id, workflow_id) {
         id -> Text,
         workflow_id -> Text,
         data -> Text,

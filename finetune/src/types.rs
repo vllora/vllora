@@ -36,6 +36,8 @@ pub struct CreateJobRequest {
     pub chunk_size: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub node_count: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resume_mode: Option<ResumeMode>,
 
     // Evaluation payload
     #[serde(alias = "model_params")]
@@ -45,6 +47,13 @@ pub struct CreateJobRequest {
     pub offset: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum ResumeMode {
+    FullState,
+    WeightsOnly,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -169,6 +178,8 @@ pub struct CreateFinetuneJobRequest {
     pub chunk_size: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub node_count: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resume_mode: Option<ResumeMode>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

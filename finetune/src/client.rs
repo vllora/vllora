@@ -186,6 +186,7 @@ impl LangdbCloudFinetuneClient {
                     inference_parameters: request.inference_parameters,
                     chunk_size: request.chunk_size,
                     node_count: request.node_count,
+                    resume_mode: request.resume_mode,
                 };
 
                 let response = self

@@ -226,7 +226,7 @@ impl WorkflowRecordScoreService {
     }
 
     /// Upsert scores for a batch of records from a specific job.
-    /// Uses INSERT OR REPLACE on the (record_id, job_id, score_type) unique constraint.
+    /// Uses UPDATE/INSERT on the (workflow_id, record_id, job_id, score_type) unique constraint.
     pub fn batch_upsert(
         &self,
         workflow_id: &str,
@@ -240,6 +240,7 @@ impl WorkflowRecordScoreService {
         for (record_id, score) in updates {
             // Try to update existing row first
             let affected = diesel::update(score_dsl::workflow_record_scores)
+                .filter(score_dsl::workflow_id.eq(workflow_id))
                 .filter(score_dsl::record_id.eq(record_id))
                 .filter(score_dsl::job_id.eq(job_id))
                 .filter(score_dsl::score_type.eq(score_type))
@@ -306,7 +307,9 @@ impl WorkflowRecordScoreService {
 mod tests {
     use super::*;
     use crate::metadata::models::workflow::DbNewWorkflow;
+    use crate::metadata::models::workflow_topic::DbNewWorkflowTopic;
     use crate::metadata::services::workflow::WorkflowService;
+    use crate::metadata::services::workflow_topic::WorkflowTopicService;
     use crate::metadata::test_utils::setup_test_database;
 
     fn create_test_workflow(db_pool: &DbPool) -> String {
@@ -330,11 +333,29 @@ mod tests {
         }
     }
 
+    fn create_topic(db_pool: &DbPool, workflow_id: &str, topic_id: &str) {
+        let topic_service = WorkflowTopicService::new(db_pool.clone());
+        topic_service
+            .create(
+                workflow_id,
+                vec![DbNewWorkflowTopic {
+                    id: Some(topic_id.to_string()),
+                    reference_id: None,
+                    workflow_id: String::new(),
+                    name: topic_id.to_string(),
+                    parent_id: None,
+                    system_prompt: None,
+                }],
+            )
+            .unwrap();
+    }
+
     #[test]
     fn test_add_and_list_records() {
         let db_pool = setup_test_database();
         let wf_id = create_test_workflow(&db_pool);
         let service = WorkflowRecordService::new(db_pool.clone());
+        create_topic(&db_pool, &wf_id, "greetings");
 
         let records = vec![
             make_record("r1", Some("greetings")),
@@ -380,6 +401,8 @@ mod tests {
         let db_pool = setup_test_database();
         let wf_id = create_test_workflow(&db_pool);
         let service = WorkflowRecordService::new(db_pool.clone());
+        create_topic(&db_pool, &wf_id, "old");
+        create_topic(&db_pool, &wf_id, "new_topic");
 
         service
             .add(&wf_id, vec![make_record("r1", Some("old"))])
@@ -398,6 +421,8 @@ mod tests {
         let db_pool = setup_test_database();
         let wf_id = create_test_workflow(&db_pool);
         let service = WorkflowRecordService::new(db_pool.clone());
+        create_topic(&db_pool, &wf_id, "topicA");
+        create_topic(&db_pool, &wf_id, "topicB");
 
         service
             .add(
@@ -428,6 +453,9 @@ mod tests {
         let db_pool = setup_test_database();
         let wf_id = create_test_workflow(&db_pool);
         let service = WorkflowRecordService::new(db_pool.clone());
+        create_topic(&db_pool, &wf_id, "old_name");
+        create_topic(&db_pool, &wf_id, "new_name");
+        create_topic(&db_pool, &wf_id, "other");
 
         service
             .add(
@@ -547,6 +575,8 @@ mod tests {
         let db_pool = setup_test_database();
         let wf_id = create_test_workflow(&db_pool);
         let service = WorkflowRecordService::new(db_pool.clone());
+        create_topic(&db_pool, &wf_id, "a");
+        create_topic(&db_pool, &wf_id, "b");
 
         service
             .add(
