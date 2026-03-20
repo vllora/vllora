@@ -126,7 +126,7 @@ impl EvalJobStateTracker {
 
         // Query cloud API for current status
         let result_response = client
-            .get_evaluation_result(cloud_run_id)
+            .get_evaluation_result(cloud_run_id, None)
             .await
             .map_err(|e| format!("Failed to get eval result from cloud API: {}", e))?;
 

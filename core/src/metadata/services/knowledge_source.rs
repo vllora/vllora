@@ -11,9 +11,9 @@ use crate::metadata::schema::knowledge_sources::dsl;
 use diesel::BoolExpressionMethods;
 use diesel::Connection;
 use diesel::ExpressionMethods;
+use diesel::OptionalExtension;
 use diesel::QueryDsl;
 use diesel::RunQueryDsl;
-use diesel::OptionalExtension;
 use diesel::SelectableHelper;
 
 pub struct KnowledgeSourceService {

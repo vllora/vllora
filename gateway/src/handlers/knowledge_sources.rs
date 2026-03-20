@@ -366,9 +366,7 @@ pub async fn upsert_knowledge_source(
 
     let replaced_id = if let Some(existing_ks) = existing {
         let old_id = existing_ks.id.clone();
-        service
-            .soft_delete(&existing_ks.id)
-            .map_err(map_db_error)?;
+        service.soft_delete(&existing_ks.id).map_err(map_db_error)?;
         Some(old_id)
     } else {
         None

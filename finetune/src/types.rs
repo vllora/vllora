@@ -393,6 +393,15 @@ pub struct EvaluationResultResponse {
     pub summary: Option<EvaluationSummary>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvaluationResultQuery {
+    pub limit: Option<usize>,
+    pub sort: Option<String>,
+    pub order: Option<String>,
+    // Backward compatibility for older clients using score_asc/score_desc
+    pub sort_by: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RowEpochResults {
     pub row_index: i32,

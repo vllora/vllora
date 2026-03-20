@@ -27,8 +27,9 @@ use vllora_core::GatewayApiError;
 use vllora_finetune::types::{
     CreateEvaluationRequest, CreateJobRequest, DatasetAnalyticsResponse,
     DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse, DryRunEvaluatorRequest,
-    EvaluationResultResponse, Evaluator, FinetuneEvalResultsResponse, FinetuneJobMetricsResponse,
-    FinetuneJobQuery, FinetuneTrainingConfig, JobType, UpdateEvaluatorResponse,
+    EvaluationResultQuery, EvaluationResultResponse, Evaluator, FinetuneEvalResultsResponse,
+    FinetuneJobMetricsResponse, FinetuneJobQuery, FinetuneTrainingConfig, JobType,
+    UpdateEvaluatorResponse,
 };
 use vllora_finetune::{
     CreateDeploymentRequest, CreateFinetuneJobRequest, LangdbCloudFinetuneClient,
@@ -344,6 +345,7 @@ pub async fn dry_run_workflow_evaluator(
 
 pub async fn get_evaluation_result(
     evaluation_run_id: web::Path<uuid::Uuid>,
+    query: web::Query<EvaluationResultQuery>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
 ) -> Result<HttpResponse> {
@@ -355,7 +357,7 @@ pub async fn get_evaluation_result(
     })?;
 
     let response: EvaluationResultResponse = client
-        .get_evaluation_result(&run_id_str)
+        .get_evaluation_result(&run_id_str, Some(query.into_inner()))
         .await
         .map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!(
@@ -571,10 +573,23 @@ fn record_to_training_line(record_id: &str, data: &str) -> Option<serde_json::Va
         if messages.is_empty() {
             return None;
         }
-        return Some(serde_json::json!({
-            "messages": messages,
-            "id": record_id,
-        }));
+        let mut row = serde_json::Map::new();
+        row.insert("messages".to_string(), serde_json::json!(messages));
+        row.insert("id".to_string(), serde_json::json!(record_id));
+
+        if let Some(tool_calls) = parsed.get("tool_calls") {
+            if !tool_calls.is_null() {
+                row.insert("tool_calls".to_string(), tool_calls.clone());
+            }
+        }
+
+        if let Some(ground_truth) = parsed.get("ground_truth") {
+            if !ground_truth.is_null() {
+                row.insert("ground_truth".to_string(), ground_truth.clone());
+            }
+        }
+
+        return Some(serde_json::Value::Object(row));
     }
 
     // If data has input/output structure (vLLora format)
@@ -599,11 +614,32 @@ fn record_to_training_line(record_id: &str, data: &str) -> Option<serde_json::Va
         if messages.is_empty() {
             return None;
         }
+        let mut row = serde_json::Map::new();
+        row.insert("messages".to_string(), serde_json::json!(messages));
+        row.insert("id".to_string(), serde_json::json!(record_id));
 
-        return Some(serde_json::json!({
-            "messages": messages,
-            "id": record_id,
-        }));
+        // Prefer tool calls stored in output; fall back to top-level if present.
+        if let Some(tool_calls) = parsed
+            .get("output")
+            .and_then(|o| o.get("tool_calls"))
+            .or_else(|| parsed.get("tool_calls"))
+        {
+            if !tool_calls.is_null() {
+                row.insert("tool_calls".to_string(), tool_calls.clone());
+            }
+        }
+
+        // Prefer a top-level ground_truth, then fall back to output.ground_truth.
+        if let Some(ground_truth) = parsed
+            .get("ground_truth")
+            .or_else(|| parsed.get("output").and_then(|o| o.get("ground_truth")))
+        {
+            if !ground_truth.is_null() {
+                row.insert("ground_truth".to_string(), ground_truth.clone());
+            }
+        }
+
+        return Some(serde_json::Value::Object(row));
     }
 
     None
