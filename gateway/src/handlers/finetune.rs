@@ -568,81 +568,66 @@ fn build_topic_hierarchy_json(topics: &[DbWorkflowTopic]) -> serde_json::Value {
 fn record_to_training_line(record_id: &str, data: &str) -> Option<serde_json::Value> {
     let parsed: serde_json::Value = serde_json::from_str(data).ok()?;
 
-    // If data has messages at top level (OpenAI format)
-    if let Some(messages) = parsed.get("messages").and_then(|m| m.as_array()) {
-        if messages.is_empty() {
-            return None;
-        }
-        let mut row = serde_json::Map::new();
-        row.insert("messages".to_string(), serde_json::json!(messages));
-        row.insert("id".to_string(), serde_json::json!(record_id));
+    let mut row = parsed.as_object()?.clone();
+    row.insert("id".to_string(), serde_json::json!(record_id));
 
-        if let Some(tool_calls) = parsed.get("tool_calls") {
-            if !tool_calls.is_null() {
-                row.insert("tool_calls".to_string(), tool_calls.clone());
-            }
-        }
+    let messages_missing_or_empty = row
+        .get("messages")
+        .and_then(|m| m.as_array())
+        .map(|arr| arr.is_empty())
+        .unwrap_or(true);
 
-        if let Some(ground_truth) = parsed.get("ground_truth") {
-            if !ground_truth.is_null() {
-                row.insert("ground_truth".to_string(), ground_truth.clone());
-            }
-        }
-
-        return Some(serde_json::Value::Object(row));
-    }
-
-    // If data has input/output structure (vLLora format)
-    // Output is optional — evaluation does a rollout (model generates the output)
-    if parsed.get("input").is_some() {
+    if messages_missing_or_empty {
         let mut messages: Vec<serde_json::Value> = Vec::new();
 
-        if let Some(input_msgs) = parsed["input"].get("messages").and_then(|m| m.as_array()) {
+        if let Some(input_msgs) = parsed
+            .get("input")
+            .and_then(|i| i.get("messages"))
+            .and_then(|m| m.as_array())
+        {
             messages.extend(input_msgs.iter().cloned());
         }
 
-        if let Some(output) = parsed.get("output") {
-            if let Some(output_msgs) = output.get("messages") {
-                if let Some(arr) = output_msgs.as_array() {
-                    messages.extend(arr.iter().cloned());
-                } else {
-                    messages.push(output_msgs.clone());
-                }
+        if let Some(output_msgs) = parsed.get("output").and_then(|o| o.get("messages")) {
+            if let Some(arr) = output_msgs.as_array() {
+                messages.extend(arr.iter().cloned());
+            } else {
+                messages.push(output_msgs.clone());
             }
         }
 
         if messages.is_empty() {
             return None;
         }
-        let mut row = serde_json::Map::new();
-        row.insert("messages".to_string(), serde_json::json!(messages));
-        row.insert("id".to_string(), serde_json::json!(record_id));
 
-        // Prefer tool calls stored in output; fall back to top-level if present.
+        row.insert("messages".to_string(), serde_json::json!(messages));
+    }
+
+    if row.get("tool_calls").map(|v| v.is_null()).unwrap_or(true) {
         if let Some(tool_calls) = parsed
             .get("output")
             .and_then(|o| o.get("tool_calls"))
-            .or_else(|| parsed.get("tool_calls"))
+            .or_else(|| parsed.get("input").and_then(|i| i.get("tool_calls")))
         {
             if !tool_calls.is_null() {
                 row.insert("tool_calls".to_string(), tool_calls.clone());
             }
         }
+    }
 
-        // Prefer a top-level ground_truth, then fall back to output.ground_truth.
+    if row.get("ground_truth").map(|v| v.is_null()).unwrap_or(true) {
         if let Some(ground_truth) = parsed
-            .get("ground_truth")
-            .or_else(|| parsed.get("output").and_then(|o| o.get("ground_truth")))
+            .get("output")
+            .and_then(|o| o.get("ground_truth"))
+            .or_else(|| parsed.get("input").and_then(|i| i.get("ground_truth")))
         {
             if !ground_truth.is_null() {
                 row.insert("ground_truth".to_string(), ground_truth.clone());
             }
         }
-
-        return Some(serde_json::Value::Object(row));
     }
 
-    None
+    Some(serde_json::Value::Object(row))
 }
 
 /// Read records, topics, and eval_script from local SQLite, build JSONL,
