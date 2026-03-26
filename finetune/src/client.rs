@@ -2,10 +2,11 @@ use crate::types::{
     CreateDeploymentRequest, CreateEvaluationRequest, CreateEvaluationResponse,
     CreateFinetuneJobRequest, CreateJobRequest, CreateJobResponse, DatasetAnalyticsResponse,
     DeploymentResponse, DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse,
-    DryRunEvaluatorRequest, DryRunEvaluatorResponse, EvaluationResultResponse,
-    EvaluatorVersionResponse, FinetuneEvalResultsResponse, FinetuneJobMetricsResponse,
-    FinetuneJobStatusResponse, FinetuningJobResponse, FinetuningJobResult, JobType,
-    UnifiedJobStatusResponse, UploadDatasetResponse, WeightsDownloadUrlResponse,
+    DryRunEvaluatorRequest, DryRunEvaluatorResponse, EvaluationResultQuery,
+    EvaluationResultResponse, EvaluatorVersionResponse, FinetuneEvalResultsResponse,
+    FinetuneJobMetricsResponse, FinetuneJobStatusResponse, FinetuningJobResponse,
+    FinetuningJobResult, JobType, UnifiedJobStatusResponse, UploadDatasetResponse,
+    WeightsDownloadUrlResponse,
 };
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 
@@ -246,7 +247,7 @@ impl LangdbCloudFinetuneClient {
                 })
             }
             JobType::EvaluationRun => {
-                let result = self.get_evaluation_result(job_id).await?;
+                let result = self.get_evaluation_result(job_id, None).await?;
                 Ok(UnifiedJobStatusResponse {
                     job_id: result.evaluation_run_id,
                     job_type: JobType::EvaluationRun,
@@ -509,13 +510,34 @@ impl LangdbCloudFinetuneClient {
     pub async fn get_evaluation_result(
         &self,
         evaluation_run_id: &str,
+        query: Option<EvaluationResultQuery>,
     ) -> Result<EvaluationResultResponse, String> {
         let url = format!(
             "{}/finetune/workflows/evaluations/{}",
             self.api_url, evaluation_run_id
         );
 
-        let req = self.client.get(&url);
+        let mut query_params: Vec<(&str, String)> = Vec::new();
+        if let Some(query) = query {
+            if let Some(limit) = query.limit {
+                query_params.push(("limit", limit.to_string()));
+            }
+            if let Some(sort) = query.sort {
+                query_params.push(("sort", sort));
+            }
+            if let Some(order) = query.order {
+                query_params.push(("order", order));
+            }
+            if let Some(sort_by) = query.sort_by {
+                query_params.push(("sort_by", sort_by));
+            }
+        }
+
+        let req = if query_params.is_empty() {
+            self.client.get(&url)
+        } else {
+            self.client.get(&url).query(&query_params)
+        };
 
         let response = req
             .send()

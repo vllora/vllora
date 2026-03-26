@@ -27,8 +27,9 @@ use vllora_core::GatewayApiError;
 use vllora_finetune::types::{
     CreateEvaluationRequest, CreateJobRequest, DatasetAnalyticsResponse,
     DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse, DryRunEvaluatorRequest,
-    EvaluationResultResponse, Evaluator, FinetuneEvalResultsResponse, FinetuneJobMetricsResponse,
-    FinetuneJobQuery, FinetuneTrainingConfig, JobType, UpdateEvaluatorResponse,
+    EvaluationResultQuery, EvaluationResultResponse, Evaluator, FinetuneEvalResultsResponse,
+    FinetuneJobMetricsResponse, FinetuneJobQuery, FinetuneTrainingConfig, JobType,
+    UpdateEvaluatorResponse,
 };
 use vllora_finetune::{
     CreateDeploymentRequest, CreateFinetuneJobRequest, LangdbCloudFinetuneClient,
@@ -344,6 +345,7 @@ pub async fn dry_run_workflow_evaluator(
 
 pub async fn get_evaluation_result(
     evaluation_run_id: web::Path<uuid::Uuid>,
+    query: web::Query<EvaluationResultQuery>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
 ) -> Result<HttpResponse> {
@@ -355,7 +357,7 @@ pub async fn get_evaluation_result(
     })?;
 
     let response: EvaluationResultResponse = client
-        .get_evaluation_result(&run_id_str)
+        .get_evaluation_result(&run_id_str, Some(query.into_inner()))
         .await
         .map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!(
@@ -566,33 +568,31 @@ fn build_topic_hierarchy_json(topics: &[DbWorkflowTopic]) -> serde_json::Value {
 fn record_to_training_line(record_id: &str, data: &str) -> Option<serde_json::Value> {
     let parsed: serde_json::Value = serde_json::from_str(data).ok()?;
 
-    // If data has messages at top level (OpenAI format)
-    if let Some(messages) = parsed.get("messages").and_then(|m| m.as_array()) {
-        if messages.is_empty() {
-            return None;
-        }
-        return Some(serde_json::json!({
-            "messages": messages,
-            "id": record_id,
-        }));
-    }
+    let mut row = parsed.as_object()?.clone();
+    row.insert("id".to_string(), serde_json::json!(record_id));
 
-    // If data has input/output structure (vLLora format)
-    // Output is optional — evaluation does a rollout (model generates the output)
-    if parsed.get("input").is_some() {
+    let messages_missing_or_empty = row
+        .get("messages")
+        .and_then(|m| m.as_array())
+        .map(|arr| arr.is_empty())
+        .unwrap_or(true);
+
+    if messages_missing_or_empty {
         let mut messages: Vec<serde_json::Value> = Vec::new();
 
-        if let Some(input_msgs) = parsed["input"].get("messages").and_then(|m| m.as_array()) {
+        if let Some(input_msgs) = parsed
+            .get("input")
+            .and_then(|i| i.get("messages"))
+            .and_then(|m| m.as_array())
+        {
             messages.extend(input_msgs.iter().cloned());
         }
 
-        if let Some(output) = parsed.get("output") {
-            if let Some(output_msgs) = output.get("messages") {
-                if let Some(arr) = output_msgs.as_array() {
-                    messages.extend(arr.iter().cloned());
-                } else {
-                    messages.push(output_msgs.clone());
-                }
+        if let Some(output_msgs) = parsed.get("output").and_then(|o| o.get("messages")) {
+            if let Some(arr) = output_msgs.as_array() {
+                messages.extend(arr.iter().cloned());
+            } else {
+                messages.push(output_msgs.clone());
             }
         }
 
@@ -600,13 +600,34 @@ fn record_to_training_line(record_id: &str, data: &str) -> Option<serde_json::Va
             return None;
         }
 
-        return Some(serde_json::json!({
-            "messages": messages,
-            "id": record_id,
-        }));
+        row.insert("messages".to_string(), serde_json::json!(messages));
     }
 
-    None
+    if row.get("tool_calls").map(|v| v.is_null()).unwrap_or(true) {
+        if let Some(tool_calls) = parsed
+            .get("output")
+            .and_then(|o| o.get("tool_calls"))
+            .or_else(|| parsed.get("input").and_then(|i| i.get("tool_calls")))
+        {
+            if !tool_calls.is_null() {
+                row.insert("tool_calls".to_string(), tool_calls.clone());
+            }
+        }
+    }
+
+    if row.get("ground_truth").map(|v| v.is_null()).unwrap_or(true) {
+        if let Some(ground_truth) = parsed
+            .get("output")
+            .and_then(|o| o.get("ground_truth"))
+            .or_else(|| parsed.get("input").and_then(|i| i.get("ground_truth")))
+        {
+            if !ground_truth.is_null() {
+                row.insert("ground_truth".to_string(), ground_truth.clone());
+            }
+        }
+    }
+
+    Some(serde_json::Value::Object(row))
 }
 
 /// Read records, topics, and eval_script from local SQLite, build JSONL,

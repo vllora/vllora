@@ -802,6 +802,12 @@ GET /finetune/evaluations/{evaluation_run_id}
 
 Create and manage reinforcement fine-tuning (GRPO/GSPO) jobs. All training job endpoints are scoped under a workflow.
 
+Available models:
+unsloth/Qwen3.5-0.8B
+unsloth/Qwen3.5-2B
+unsloth/Qwen3.5-4B
+unsloth/Qwen3.5-9B
+
 ### Create Training Job
 
 ```
