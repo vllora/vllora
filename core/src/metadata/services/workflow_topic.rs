@@ -12,6 +12,7 @@ use crate::metadata::schema::knowledge_source_parts::dsl as source_parts_dsl;
 use crate::metadata::schema::knowledge_sources::dsl as knowledge_dsl;
 use crate::metadata::schema::workflow_topic_sources::dsl as relation_dsl;
 use crate::metadata::schema::workflow_topics::dsl;
+use diesel::upsert::excluded;
 use diesel::BoolExpressionMethods;
 use diesel::Connection;
 use diesel::ExpressionMethods;
@@ -27,6 +28,10 @@ impl WorkflowTopicService {
         Self { db_pool }
     }
 
+    /// Create or upsert topics for a workflow.
+    /// On conflict (same workflow_id + reference_id), updates name, parent_id,
+    /// and system_prompt in place — preserving the existing topic ID and any
+    /// relations linked to it.
     pub fn create(
         &self,
         workflow_id: &str,
@@ -42,9 +47,23 @@ impl WorkflowTopicService {
             })
             .collect();
 
-        let count = diesel::insert_into(dsl::workflow_topics)
-            .values(&topics)
-            .execute(&mut conn)?;
+        let mut count = 0usize;
+        conn.transaction::<(), DatabaseError, _>(|conn| {
+            for topic in &topics {
+                let rows = diesel::insert_into(dsl::workflow_topics)
+                    .values(topic)
+                    .on_conflict((dsl::workflow_id, dsl::reference_id))
+                    .do_update()
+                    .set((
+                        dsl::name.eq(excluded(dsl::name)),
+                        dsl::parent_id.eq(excluded(dsl::parent_id)),
+                        dsl::system_prompt.eq(excluded(dsl::system_prompt)),
+                    ))
+                    .execute(conn)?;
+                count += rows;
+            }
+            Ok(())
+        })?;
 
         Ok(count)
     }
@@ -164,9 +183,22 @@ impl WorkflowTopicService {
             );
         }
 
-        let count = diesel::insert_into(relation_dsl::workflow_topic_sources)
-            .values(&rows)
-            .execute(&mut conn)?;
+        // Upsert relations — on conflict (same workflow + topic + source_part),
+        // update the reference_id. This handles re-uploads gracefully.
+        let mut count = 0usize;
+        for row in &rows {
+            let rows_affected = diesel::insert_into(relation_dsl::workflow_topic_sources)
+                .values(row)
+                .on_conflict((
+                    relation_dsl::workflow_id,
+                    relation_dsl::topic_id,
+                    relation_dsl::source_part_id,
+                ))
+                .do_update()
+                .set(relation_dsl::reference_id.eq(excluded(relation_dsl::reference_id)))
+                .execute(&mut conn)?;
+            count += rows_affected;
+        }
         Ok(count)
     }
 
