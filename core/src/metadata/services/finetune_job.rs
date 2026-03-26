@@ -130,6 +130,14 @@ impl FinetuneJobService {
             .load::<String>(&mut conn)?)
     }
 
+    pub fn list_by_workflow(&self, workflow_id: &str) -> Result<Vec<DbFinetuneJob>, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+        Ok(dsl::finetune_jobs
+            .filter(dsl::workflow_id.eq(workflow_id))
+            .order(dsl::created_at.desc())
+            .load::<DbFinetuneJob>(&mut conn)?)
+    }
+
     /// List finetune jobs by project ID with pagination
     pub fn list_by_project(
         &self,

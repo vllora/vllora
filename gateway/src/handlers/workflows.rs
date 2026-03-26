@@ -5,8 +5,10 @@ use vllora_core::metadata::models::workflow::{DbNewWorkflow, DbUpdateWorkflow, D
 use vllora_core::metadata::pool::DbPool;
 use vllora_core::metadata::services::eval_job::EvalJobService;
 use vllora_core::metadata::services::finetune_job::FinetuneJobService;
+use vllora_core::metadata::services::knowledge_source::KnowledgeSourceService;
 use vllora_core::metadata::services::workflow::WorkflowService;
 use vllora_core::metadata::services::workflow_record::WorkflowRecordService;
+use vllora_core::metadata::services::workflow_topic::WorkflowTopicService;
 
 #[derive(Debug, Deserialize)]
 pub struct CreateWorkflowRequest {
@@ -30,6 +32,25 @@ pub struct WorkflowDetailResponse {
     pub records_count: i64,
     pub eval_job_ids: Vec<String>,
     pub finetune_job_ids: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct WorkflowListItemJobSummary {
+    pub id: String,
+    pub status: String,
+    pub model: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct WorkflowListItem {
+    #[serde(flatten)]
+    pub workflow: DbWorkflow,
+    pub record_count: i64,
+    pub knowledge_source_count: i64,
+    pub topic_count: usize,
+    pub eval_jobs: Vec<WorkflowListItemJobSummary>,
+    pub training_jobs: Vec<WorkflowListItemJobSummary>,
 }
 
 fn map_db_error(err: DatabaseError) -> actix_web::Error {
@@ -73,9 +94,62 @@ pub async fn get_workflow(
 }
 
 pub async fn list_workflows(db_pool: web::Data<DbPool>) -> Result<HttpResponse> {
-    let service = WorkflowService::new(db_pool.get_ref().clone());
-    let workflows = service.list().map_err(map_db_error)?;
-    Ok(HttpResponse::Ok().json(workflows))
+    let pool = db_pool.get_ref().clone();
+    let workflows = WorkflowService::new(pool.clone())
+        .list()
+        .map_err(map_db_error)?;
+
+    let record_svc = WorkflowRecordService::new(pool.clone());
+    let ks_svc = KnowledgeSourceService::new(pool.clone());
+    let topic_svc = WorkflowTopicService::new(pool.clone());
+    let eval_svc = EvalJobService::new(pool.clone());
+    let ft_svc = FinetuneJobService::new(pool);
+
+    let items: Vec<WorkflowListItem> = workflows
+        .into_iter()
+        .map(|wf| {
+            let wf_id = &wf.id;
+
+            let record_count = record_svc.count(wf_id).unwrap_or(0);
+            let knowledge_source_count = ks_svc.count(wf_id).unwrap_or(0);
+            let topic_count = topic_svc.list(wf_id).map(|t| t.len()).unwrap_or(0);
+
+            let eval_jobs = eval_svc
+                .list_by_workflow(wf_id)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|j| WorkflowListItemJobSummary {
+                    id: j.id,
+                    status: j.status,
+                    model: j.rollout_model,
+                    created_at: j.created_at,
+                })
+                .collect();
+
+            let training_jobs = ft_svc
+                .list_by_workflow(wf_id)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|j| WorkflowListItemJobSummary {
+                    id: j.id,
+                    status: j.state,
+                    model: Some(j.base_model),
+                    created_at: j.created_at,
+                })
+                .collect();
+
+            WorkflowListItem {
+                workflow: wf,
+                record_count,
+                knowledge_source_count,
+                topic_count,
+                eval_jobs,
+                training_jobs,
+            }
+        })
+        .collect();
+
+    Ok(HttpResponse::Ok().json(items))
 }
 
 pub async fn create_workflow(
