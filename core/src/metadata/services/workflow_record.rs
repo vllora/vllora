@@ -4,6 +4,7 @@ use crate::metadata::models::workflow_record::{
 };
 use crate::metadata::pool::DbPool;
 use crate::metadata::schema::workflow_records::dsl;
+use diesel::Connection;
 use diesel::ExpressionMethods;
 use diesel::QueryDsl;
 use diesel::RunQueryDsl;
@@ -31,11 +32,31 @@ impl WorkflowRecordService {
             })
             .collect();
 
-        let count = diesel::insert_into(dsl::workflow_records)
-            .values(&records)
-            .execute(&mut conn)?;
+        // Upsert: ON CONFLICT update mutable fields so re-sent records
+        // (e.g., with updated topic_id or data) are applied rather than rejected.
+        // SQLite requires per-row inserts for on_conflict; wrap in a transaction.
+        let mut total = 0;
+        conn.transaction::<_, DatabaseError, _>(|conn| {
+            for record in &records {
+                let rows = diesel::insert_into(dsl::workflow_records)
+                    .values(record)
+                    .on_conflict((dsl::id, dsl::workflow_id))
+                    .do_update()
+                    .set((
+                        dsl::data.eq(&record.data),
+                        dsl::topic_id.eq(&record.topic_id),
+                        dsl::span_id.eq(&record.span_id),
+                        dsl::is_generated.eq(record.is_generated),
+                        dsl::source_record_id.eq(&record.source_record_id),
+                        dsl::metadata.eq(&record.metadata),
+                    ))
+                    .execute(conn)?;
+                total += rows;
+            }
+            Ok(())
+        })?;
 
-        Ok(count)
+        Ok(total)
     }
 
     pub fn list(&self, workflow_id: &str) -> Result<Vec<DbWorkflowRecord>, DatabaseError> {
