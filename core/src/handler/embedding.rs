@@ -1,11 +1,12 @@
+use crate::credentials::KeyStorage;
 use crate::executor::embeddings::handle_embeddings;
 use crate::types::embed::EmbeddingResult;
+use crate::types::metadata::project::Project;
 use crate::types::metadata::services::model::ModelService;
+use actix_web::HttpRequest;
 use actix_web::{web, HttpResponse};
-use actix_web::{HttpMessage, HttpRequest};
 use tracing::Span;
 use tracing_futures::Instrument;
-use vllora_llm::types::credentials::Credentials;
 
 use vllora_llm::types::gateway::{
     CostCalculator, CreateEmbeddingRequest, CreateEmbeddingResponse, EmbeddingData, EmbeddingUsage,
@@ -22,13 +23,14 @@ pub async fn embeddings_handler(
     models_service: web::Data<Box<dyn ModelService>>,
     callback_handler: web::Data<CallbackHandlerFn>,
     req: HttpRequest,
+    project: web::ReqData<Project>,
+    key_storage: web::Data<Box<dyn KeyStorage>>,
     cost_calculator: web::Data<Box<dyn CostCalculator>>,
 ) -> Result<HttpResponse, GatewayApiError> {
     can_execute_llm_for_request(&req).await?;
     let request = request.into_inner();
     let llm_model =
         find_model_by_full_name(&request.model, models_service.as_ref().as_ref(), None)?;
-    let key_credentials = req.extensions().get::<Credentials>().cloned();
 
     let span = Span::or_current(tracing::info_span!(
         target: "vllora::user_tracing::api_invoke",
@@ -46,10 +48,11 @@ pub async fn embeddings_handler(
         request,
         callback_handler.get_ref(),
         &llm_model,
-        key_credentials.as_ref(),
+        &project.slug,
+        "default",
+        key_storage.get_ref().as_ref(),
         cost_calculator.into_inner(),
         tags,
-        req,
     )
     .instrument(span)
     .await?;

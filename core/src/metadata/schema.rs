@@ -289,6 +289,7 @@ diesel::table! {
         title -> Nullable<Text>,
         extraction_path -> Nullable<Text>,
         extraction_metadata -> Nullable<Text>,
+        embeddings -> Nullable<Text>,
     }
 }
 

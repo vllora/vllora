@@ -8,6 +8,7 @@ use crate::handlers::{
     agents, debug, eval_jobs, finetune, knowledge_sources, models, projects, session, threads,
     workflow_logs, workflow_records, workflow_topics, workflows,
 };
+use crate::knowledge_embeddings::start_embedding_backfill_job;
 use crate::metrics_writer::SqliteMetricsWriterAdapter;
 use crate::middleware::lucy_project::LucyProjectMiddleware;
 use crate::middleware::project::ProjectMiddleware;
@@ -267,6 +268,10 @@ impl ApiServer {
             EvalJobStateTracker::new(server_config.db_pool.clone(), key_storage_for_eval_tracker);
         let _eval_state_tracker_handle = eval_state_tracker.start();
 
+        // Start background embedding backfill/resume loop for knowledge source parts.
+        let _embedding_backfill_handle =
+            start_embedding_backfill_job(server_config.db_pool.clone());
+
         // Print useful info after servers are bound and ready
         self.print_useful_info();
 
@@ -444,6 +449,7 @@ impl ApiServer {
                                             .route("", web::put().to(knowledge_sources::upsert_knowledge_source))
                                             .route("", web::delete().to(knowledge_sources::soft_delete_all_knowledge_sources))
                                             .route("/count", web::get().to(knowledge_sources::count_knowledge_sources))
+                                            .route("/search", web::post().to(knowledge_sources::search_knowledge_source_parts))
                                             .route("/chunk", web::post().to(workflows::chunk_workflow_knowledge))
                                             .route("/trace", web::post().to(workflows::create_workflow_knowledge_trace))
                                             .route("/trace/{trace_id}", web::delete().to(workflows::delete_workflow_knowledge_trace))

@@ -29,6 +29,7 @@ pub struct DbKnowledgeSourcePart {
     pub title: Option<String>,
     pub extraction_path: Option<String>,
     pub extraction_metadata: Option<String>,
+    pub embeddings: Option<String>,
 }
 
 #[derive(Debug, Insertable, Clone)]
@@ -44,6 +45,7 @@ pub struct DbNewKnowledgeSourcePart {
     pub title: Option<String>,
     pub extraction_path: Option<String>,
     pub extraction_metadata: Option<String>,
+    pub embeddings: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -59,6 +61,7 @@ pub struct KnowledgeSourcePart {
     pub title: Option<String>,
     pub extraction_path: Option<String>,
     pub extraction_metadata: Option<JsonValue>,
+    pub embeddings: Option<Vec<f32>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -100,6 +103,7 @@ impl NewKnowledgeSourcePart {
                 .extraction_metadata
                 .map(|v| serde_json::to_string(&v))
                 .transpose()?,
+            embeddings: None,
         })
     }
 }
@@ -132,6 +136,11 @@ impl TryFrom<DbKnowledgeSourcePart> for KnowledgeSourcePart {
                 .extraction_metadata
                 .as_ref()
                 .map(|s| serde_json::from_str::<JsonValue>(s))
+                .transpose()?,
+            embeddings: value
+                .embeddings
+                .as_ref()
+                .map(|s| serde_json::from_str::<Vec<f32>>(s))
                 .transpose()?,
         })
     }

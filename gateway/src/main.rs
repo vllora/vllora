@@ -22,6 +22,7 @@ mod finetune_state_tracker;
 mod guardrails;
 mod handlers;
 mod http;
+mod knowledge_embeddings;
 mod metrics_writer;
 mod middleware;
 mod ports;

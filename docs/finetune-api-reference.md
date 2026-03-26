@@ -80,6 +80,7 @@ All endpoints accept `Authorization: Bearer <token>` header when auth is enabled
 | 57 | GET | `/finetune/workflows/{workflow_id}/jobs/{job_id}/weights/url` | Download weights URL |
 | **Finetune Evaluations** | | | |
 | 58 | GET | `/finetune/datasets/{dataset_id}/finetune-evaluations` | Per-epoch evaluations |
+| 58a | GET | `/finetune/workflows/{workflow_id}/finetune-evaluations` | Per-epoch evaluations (workflow-scoped) |
 | **Deployments** | | | |
 | 59 | POST | `/finetune/deployments` | Deploy model |
 | 60 | DELETE | `/finetune/deployments/{deployment_id}` | Delete deployment |
@@ -979,6 +980,18 @@ Query params: `finetune_job_id`, `row_index`, `epoch` (all optional filters).
 ```
 
 Shows score progression across epochs — useful for detecting overfitting, stalling, or learning curves.
+
+### Get Finetune Evaluations (Workflow-Scoped)
+
+Use this when you have a local `workflow_id` and a `finetune_job_id`, and want the gateway to resolve the underlying cloud dataset automatically.
+
+```
+GET /finetune/workflows/{workflow_id}/finetune-evaluations?finetune_job_id=ft-abc123&epoch=2
+```
+
+Query params: `finetune_job_id` (required), `row_index`, `epoch` (optional filters).
+
+**Response**: Same shape as the dataset-scoped endpoint (`results[]` with `row` + `epochs` map).
 
 ---
 

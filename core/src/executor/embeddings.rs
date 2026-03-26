@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::credentials::{GatewayCredentials, KeyStorage};
 use crate::handler::CallbackHandlerFn;
 use crate::handler::ModelEventWithDetails;
 use crate::llm_gateway::provider::Provider;
 use crate::model::embeddings::initialize_embeddings_model_instance;
 use crate::types::embed::EmbeddingResult;
 use crate::GatewayError;
-use actix_web::HttpRequest;
 use tracing::Span;
 use tracing_futures::Instrument;
 use vllora_llm::types::credentials::Credentials;
@@ -22,27 +22,29 @@ use vllora_llm::types::provider::InferenceModelProvider;
 use vllora_llm::types::ModelEvent;
 use vllora_llm::types::ModelEventType;
 
-use super::get_key_credentials;
-use super::ProvidersConfig;
-
+#[allow(clippy::too_many_arguments)]
 pub async fn handle_embeddings(
     mut request: CreateEmbeddingRequest,
     callback_handler: &CallbackHandlerFn,
     llm_model: &ModelMetadata,
-    key_credentials: Option<&Credentials>,
+    project_slug: &str,
+    tenant_name: &str,
+    key_storage: &dyn KeyStorage,
     cost_calculator: Arc<Box<dyn CostCalculator>>,
     tags: HashMap<String, String>,
-    req: HttpRequest,
 ) -> Result<EmbeddingResult, GatewayError> {
     let span = Span::current();
     request.model = llm_model.inference_provider.model_name.clone();
 
-    let providers_config = req.app_data::<ProvidersConfig>().cloned();
-    let key = get_key_credentials(
-        key_credentials,
-        providers_config.as_ref(),
-        &llm_model.inference_provider.provider.to_string(),
-    );
+    let key = GatewayCredentials::extract_key_from_model::<Credentials>(
+        llm_model,
+        project_slug,
+        tenant_name,
+        key_storage,
+    )
+    .await
+    .map_err(|e| GatewayError::CustomError(e.to_string()))?;
+
     let engine = Provider::get_embeddings_engine_for_model(llm_model, &request, key.as_ref())?;
 
     let api_provider_name = match &llm_model.inference_provider.provider {
@@ -56,7 +58,7 @@ pub async fn handle_embeddings(
         provider_name: api_provider_name.clone(),
         model_type: ModelType::Embeddings,
         price: llm_model.price.clone(),
-        credentials_ident: match key_credentials {
+        credentials_ident: match key {
             Some(_) => CredentialsIdent::Own,
             _ => CredentialsIdent::Vllora,
         },

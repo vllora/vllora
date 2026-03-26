@@ -1,6 +1,8 @@
+use crate::knowledge_embeddings::embed_phrase;
 use actix_multipart::Multipart;
 use actix_web::{error, web, HttpResponse, Result};
 use futures_util::StreamExt;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tokio::fs;
 use uuid::Uuid;
@@ -9,6 +11,7 @@ use vllora_core::metadata::models::knowledge_source::NewKnowledgeSource;
 use vllora_core::metadata::models::knowledge_source_part::NewKnowledgeSourcePart;
 use vllora_core::metadata::pool::DbPool;
 use vllora_core::metadata::services::knowledge_source::KnowledgeSourceService;
+use vllora_core::types::metadata::project::Project;
 
 fn map_db_error(err: DatabaseError) -> actix_web::Error {
     match err {
@@ -17,6 +20,17 @@ fn map_db_error(err: DatabaseError) -> actix_web::Error {
         }
         other => error::ErrorInternalServerError(other),
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SearchKnowledgePartsRequest {
+    pub phrase: String,
+    pub top_k: Option<usize>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SearchKnowledgePartsResponse {
+    pub matches: Vec<vllora_core::metadata::services::knowledge_source::KnowledgeSourcePartMatch>,
 }
 
 pub async fn create_knowledge_source(
@@ -444,4 +458,33 @@ pub async fn soft_delete_all_knowledge_sources(
         .soft_delete_all(&workflow_id)
         .map_err(map_db_error)?;
     Ok(HttpResponse::Ok().json(serde_json::json!({ "deleted": count })))
+}
+
+pub async fn search_knowledge_source_parts(
+    workflow_id: web::Path<String>,
+    body: web::Json<SearchKnowledgePartsRequest>,
+    db_pool: web::Data<DbPool>,
+    project: web::ReqData<Project>,
+) -> Result<HttpResponse> {
+    let workflow_id = workflow_id.into_inner();
+    let req = body.into_inner();
+    let top_k = req.top_k.unwrap_or(5).min(100);
+    let phrase = req.phrase.trim().to_string();
+
+    if phrase.is_empty() {
+        return Err(error::ErrorBadRequest("phrase is required"));
+    }
+
+    let query_embedding = embed_phrase(db_pool.get_ref().clone(), &phrase, &project.slug)
+        .await
+        .map_err(error::ErrorInternalServerError)?;
+    let service = KnowledgeSourceService::new(db_pool.get_ref().clone());
+    let mut matches = service
+        .search_parts_by_similarity(&workflow_id, &query_embedding, top_k)
+        .map_err(map_db_error)?;
+    for m in &mut matches {
+        m.part.embeddings = None;
+    }
+
+    Ok(HttpResponse::Ok().json(SearchKnowledgePartsResponse { matches }))
 }
