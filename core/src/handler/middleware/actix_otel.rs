@@ -177,11 +177,13 @@ where
             req.extensions_mut()
                 .insert(RunSpanExtension(run_span.clone()));
 
-            // Enter the run span to keep it active during request handling
-            let _run_span_guard = run_span.as_ref().map(|s| s.enter());
-
-            // Proceed with the request
-            service.call(req).await
+            // Never hold span guards across `.await` because Actix may poll
+            // different requests on the same thread; instrument the future instead.
+            if let Some(span) = run_span {
+                service.call(req).instrument(span).await
+            } else {
+                service.call(req).await
+            }
         })
     }
 }
@@ -258,10 +260,6 @@ where
             let run_span_id = run_span
                 .as_ref()
                 .map(|span| span.context().span().span_context().span_id());
-
-            // Enter the run span to keep it active during request handling
-            // It will also be entered during body streaming in SpanInstrumentedBody
-            let _run_span_guard = run_span.as_ref().map(|s| s.enter());
 
             // Create the span with the run span as its explicit parent
             // This ensures the run span doesn't end before this span is created
