@@ -300,6 +300,7 @@ impl LangdbCloudFinetuneClient {
         row_index: Option<i32>,
         epoch: Option<i32>,
         finetune_job_id: Option<String>,
+        include_rollout_content: bool,
     ) -> Result<FinetuneEvalResultsResponse, String> {
         let url = format!(
             "{}/finetune/workflows/{}/finetune-evaluations",
@@ -315,6 +316,10 @@ impl LangdbCloudFinetuneClient {
         }
         if let Some(job_id) = finetune_job_id {
             query_params.push(("finetune_job_id", job_id));
+        }
+
+        if include_rollout_content {
+            query_params.push(("include_rollout_content", "true".to_string()));
         }
 
         let req = if query_params.is_empty() {

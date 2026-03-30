@@ -387,7 +387,7 @@ pub async fn get_finetune_evaluations(
     })?;
 
     let response: FinetuneEvalResultsResponse = client
-        .get_finetune_evaluations(&dataset_id_str, row_index, epoch, finetune_job_id)
+        .get_finetune_evaluations(&dataset_id_str, row_index, epoch, finetune_job_id, true)
         .await
         .map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!(
