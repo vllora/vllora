@@ -892,22 +892,44 @@ pub async fn cancel_finetune_job(
         );
     }
 
+    // Cancel on cloud — retry once on failure since a failed cloud cancel
+    // means the training job keeps running and costing money.
     let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
     let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
     })?;
 
-    client
-        .cancel_finetune_job(&provider_job_id)
-        .await
-        .map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!(
-                "Failed to cancel finetune job: {}",
-                e
-            ))
-        })?;
+    let mut cloud_cancel_ok = false;
+    for attempt in 1..=2 {
+        match client.cancel_finetune_job(&provider_job_id).await {
+            Ok(()) => {
+                cloud_cancel_ok = true;
+                break;
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Cloud cancel attempt {}/2 failed for job {}: {}",
+                    attempt,
+                    provider_job_id,
+                    e
+                );
+            }
+        }
+    }
 
-    Ok(HttpResponse::NoContent().finish())
+    if cloud_cancel_ok {
+        Ok(HttpResponse::NoContent().finish())
+    } else {
+        // Local state is cancelled but cloud cancel failed — return 207 (Multi-Status)
+        // so the UI knows the cloud cancel is uncertain and can warn the user.
+        Ok(HttpResponse::build(actix_web::http::StatusCode::MULTI_STATUS).json(
+            serde_json::json!({
+                "local_status": "cancelled",
+                "cloud_cancel": "failed",
+                "message": "Job marked as cancelled locally, but the cloud training job may still be running. Check the provider dashboard to confirm cancellation."
+            }),
+        ))
+    }
 }
 
 pub async fn resume_finetune_job(

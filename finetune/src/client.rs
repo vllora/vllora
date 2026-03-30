@@ -34,6 +34,7 @@ impl LangdbCloudFinetuneClient {
 
         let client = reqwest::Client::builder()
             .default_headers(headers)
+            .timeout(std::time::Duration::from_secs(30))
             .build()
             .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
 
