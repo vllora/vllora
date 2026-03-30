@@ -421,6 +421,7 @@ pub struct FinetuneEvalQuery {
     pub row_index: Option<i32>,
     pub epoch: Option<i32>,
     pub finetune_job_id: Option<uuid::Uuid>,
+    pub include_rollout_content: Option<bool>,
 }
 
 // =============================================================================
