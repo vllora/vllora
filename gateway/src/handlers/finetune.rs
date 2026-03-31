@@ -28,7 +28,8 @@ use vllora_finetune::types::{
     CreateEvaluationRequest, CreateJobRequest, DatasetAnalyticsResponse,
     DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse, DryRunEvaluatorRequest,
     EvaluationResultQuery, EvaluationResultResponse, Evaluator, FinetuneEvalResultsResponse,
-    FinetuneJobMetricsResponse, FinetuneJobQuery, FinetuneTrainingConfig, JobType,
+    FinetuneInferenceParameters, FinetuneJobMetricsResponse, FinetuneJobQuery,
+    FinetuneTrainingConfig, JobType,
     UpdateEvaluatorResponse,
 };
 use vllora_finetune::{
@@ -51,6 +52,7 @@ pub struct LocalFinetuningJobResponse {
     pub fine_tuned_model: Option<String>,
     pub provider: String,
     pub training_config: Option<FinetuneTrainingConfig>,
+    pub inference_parameters: Option<FinetuneInferenceParameters>,
     pub suffix: Option<String>,
     pub error_message: Option<String>,
     pub training_file_id: String,
@@ -226,7 +228,8 @@ pub async fn create_job(
         .with_fine_tuned_model(request_body.output_model)
         .with_training_file_id(Some(workflow_id.to_string()))
         .with_validation_file_id(request_body.evaluation_dataset)
-        .with_training_config(request_body.training_config);
+        .with_training_config(request_body.training_config)
+        .with_inference_parameters(request_body.inference_parameters);
 
         if let Err(e) = finetune_job_service.create(new_job) {
             tracing::warn!(
@@ -863,6 +866,9 @@ pub async fn list_finetune_jobs(
             training_config: job
                 .training_config
                 .and_then(|tc| serde_json::from_str(&tc).ok()),
+            inference_parameters: job
+                .inference_parameters
+                .and_then(|ip| serde_json::from_str(&ip).ok()),
             suffix: None,
             error_message: job.error_message,
             training_file_id: job.training_file_id.unwrap_or_default(),
