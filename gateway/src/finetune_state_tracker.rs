@@ -224,6 +224,7 @@ impl FinetuneJobStateTracker {
                 None,
                 None,
                 Some(job.provider_job_id.clone()),
+                false,
             )
             .await
             .map_err(|e| format!("Failed to get finetune evaluations: {}", e))?;
