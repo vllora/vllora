@@ -1,7 +1,7 @@
 use crate::metadata::schema::finetune_jobs;
 use diesel::{AsChangeset, Identifiable, Insertable, Queryable, Selectable};
 use serde::{Deserialize, Serialize};
-use vllora_finetune::types::FinetuneTrainingConfig;
+use vllora_finetune::types::{FinetuneInferenceParameters, FinetuneTrainingConfig};
 
 /// Finetune job state enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -58,6 +58,7 @@ pub struct DbFinetuneJob {
     pub fine_tuned_model: Option<String>,
     pub error_message: Option<String>,
     pub training_config: Option<String>, // JSON stored as text
+    pub inference_parameters: Option<String>, // JSON stored as text
     pub training_file_id: Option<String>,
     pub validation_file_id: Option<String>,
     pub created_at: String,
@@ -91,6 +92,7 @@ pub struct DbNewFinetuneJob {
     pub fine_tuned_model: Option<String>,
     pub error_message: Option<String>,
     pub training_config: Option<String>,
+    pub inference_parameters: Option<String>,
     pub training_file_id: Option<String>,
     pub validation_file_id: Option<String>,
 }
@@ -115,6 +117,7 @@ impl DbNewFinetuneJob {
             fine_tuned_model: None,
             error_message: None,
             training_config: None,
+            inference_parameters: None,
             training_file_id: None,
             validation_file_id: None,
         }
@@ -132,6 +135,15 @@ impl DbNewFinetuneJob {
 
     pub fn with_training_config(mut self, training_config: Option<FinetuneTrainingConfig>) -> Self {
         self.training_config = training_config.and_then(|tc| serde_json::to_string(&tc).ok());
+        self
+    }
+
+    pub fn with_inference_parameters(
+        mut self,
+        inference_parameters: Option<FinetuneInferenceParameters>,
+    ) -> Self {
+        self.inference_parameters =
+            inference_parameters.and_then(|ip| serde_json::to_string(&ip).ok());
         self
     }
 
@@ -158,6 +170,7 @@ pub struct DbUpdateFinetuneJob {
     pub fine_tuned_model: Option<Option<String>>,
     pub error_message: Option<Option<String>>,
     pub training_config: Option<Option<String>>,
+    pub inference_parameters: Option<Option<String>>,
     pub completed_at: Option<Option<String>>,
     pub updated_at: Option<String>,
 }
@@ -190,6 +203,16 @@ impl DbUpdateFinetuneJob {
 
     pub fn with_training_config(mut self, training_config: Option<FinetuneTrainingConfig>) -> Self {
         self.training_config = Some(training_config.and_then(|tc| serde_json::to_string(&tc).ok()));
+        self.updated_at = Some(chrono::Utc::now().to_rfc3339());
+        self
+    }
+
+    pub fn with_inference_parameters(
+        mut self,
+        inference_parameters: Option<FinetuneInferenceParameters>,
+    ) -> Self {
+        self.inference_parameters =
+            Some(inference_parameters.and_then(|ip| serde_json::to_string(&ip).ok()));
         self.updated_at = Some(chrono::Utc::now().to_rfc3339());
         self
     }

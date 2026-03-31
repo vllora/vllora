@@ -167,6 +167,7 @@ diesel::table! {
         fine_tuned_model -> Nullable<Text>,
         error_message -> Nullable<Text>,
         training_config -> Nullable<Text>,
+        inference_parameters -> Nullable<Text>,
         training_file_id -> Nullable<Text>,
         validation_file_id -> Nullable<Text>,
         created_at -> Text,
