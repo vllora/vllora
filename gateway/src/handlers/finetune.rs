@@ -188,6 +188,15 @@ pub async fn create_job(
 ) -> Result<HttpResponse> {
     let workflow_id = workflow_id.into_inner();
     let request_body = request.into_inner();
+    if let Some(ip) = &request_body.inference_parameters {
+        if let Some(reasoning_effort) = ip.reasoning_effort.as_deref() {
+            if reasoning_effort.trim().is_empty() {
+                return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                    "error": "inference_parameters.reasoning_effort cannot be empty"
+                })));
+            }
+        }
+    }
 
     let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
     let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
