@@ -214,6 +214,10 @@ pub struct FinetuneInferenceParameters {
     pub top_k: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub response_candidates_count: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enable_thinking: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
