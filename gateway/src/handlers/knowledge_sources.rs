@@ -300,6 +300,25 @@ pub async fn delete_knowledge_source_part(
     })))
 }
 
+pub async fn update_parts_metadata(
+    path: web::Path<(String, String)>,
+    body: web::Json<Vec<vllora_core::metadata::services::knowledge_source::PartMetadataUpdate>>,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let (workflow_id, source_identifier) = path.into_inner();
+    let service = KnowledgeSourceService::new(db_pool.get_ref().clone());
+
+    service
+        .get_by_identifier_and_workflow_id(&workflow_id, &source_identifier)
+        .map_err(map_db_error)?;
+
+    let updated = service
+        .update_parts_extraction_metadata(&workflow_id, &source_identifier, body.into_inner())
+        .map_err(map_db_error)?;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "updated": updated })))
+}
+
 pub async fn upsert_knowledge_source(
     workflow_id: web::Path<String>,
     mut payload: Multipart,
