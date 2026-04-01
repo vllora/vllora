@@ -29,8 +29,7 @@ use vllora_finetune::types::{
     DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse, DryRunEvaluatorRequest,
     EvaluationResultQuery, EvaluationResultResponse, Evaluator, FinetuneEvalResultsResponse,
     FinetuneInferenceParameters, FinetuneJobMetricsResponse, FinetuneJobQuery,
-    FinetuneTrainingConfig, JobType,
-    UpdateEvaluatorResponse,
+    FinetuneTrainingConfig, JobType, UpdateEvaluatorResponse,
 };
 use vllora_finetune::{
     CreateDeploymentRequest, CreateFinetuneJobRequest, LangdbCloudFinetuneClient,
