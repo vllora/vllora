@@ -3,13 +3,14 @@ pub mod types;
 
 pub use client::LangdbCloudFinetuneClient;
 pub use types::{
-    AutoscalingPolicy, CompletionParams, CreateDeploymentRequest, CreateEvaluationRequest,
-    CreateEvaluationResponse, CreateFinetuneJobRequest, CreateJobRequest, CreateJobResponse,
-    DatasetAnalyticsResponse, DeploymentResponse, DryRunDatasetAnalyticsRequest,
+    AutoscalingPolicy, BaseModel, CompletionParams, CreateDeploymentRequest,
+    CreateEvaluationRequest, CreateEvaluationResponse, CreateFinetuneJobRequest, CreateJobRequest,
+    CreateJobResponse, DatasetAnalyticsResponse, DeploymentResponse, DryRunDatasetAnalyticsRequest,
     DryRunDatasetAnalyticsResponse, DryRunEvaluatorRequest, DryRunEvaluatorResponse,
-    EstimateJobResponse, EvaluationResultResponse, EvaluationSummary, EvaluatorVersionResponse,
-    FinetuneEvalQuery, FinetuneEvalResultsResponse, FinetuneInferenceParameters, FinetuneJobQuery,
-    FinetuneJobStatusResponse, FinetuneTrainingConfig, FinetuningJobResponse, JobType,
-    LoadPrecision, ResumeMode, RowEpochResults, UnifiedJobStatusResponse, UpdateEvaluatorBody,
-    UpdateEvaluatorResponse, UploadDatasetResponse, WeightsDownloadUrlResponse,
+    EstimateJobResponse, EstimateJobVariant, EvaluationResultResponse, EvaluationSummary,
+    EvaluatorVersionResponse, FinetuneEvalQuery, FinetuneEvalResultsResponse,
+    FinetuneInferenceParameters, FinetuneJobQuery, FinetuneJobStatusResponse,
+    FinetuneTrainingConfig, FinetuningJobResponse, JobType, LoadPrecision, ResumeMode,
+    RowEpochResults, UnifiedJobStatusResponse, UpdateEvaluatorBody, UpdateEvaluatorResponse,
+    UploadDatasetResponse, WeightsDownloadUrlResponse,
 };

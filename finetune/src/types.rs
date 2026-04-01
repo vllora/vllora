@@ -53,6 +53,32 @@ pub enum JobType {
     EvaluationRun,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum BaseModel {
+    #[serde(rename = "Qwen3.5-0.8B", alias = "unsloth/Qwen3.5-0.8B")]
+    Qwen35_0_8B,
+    #[serde(rename = "Qwen3.5-2B", alias = "unsloth/Qwen3.5-2B")]
+    Qwen35_2B,
+    #[serde(rename = "Qwen3.5-4B", alias = "unsloth/Qwen3.5-4B")]
+    Qwen35_4B,
+}
+
+impl BaseModel {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            BaseModel::Qwen35_0_8B => "Qwen3.5-0.8B",
+            BaseModel::Qwen35_2B => "Qwen3.5-2B",
+            BaseModel::Qwen35_4B => "Qwen3.5-4B",
+        }
+    }
+}
+
+impl std::fmt::Display for BaseModel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateJobRequest {
     pub job_type: JobType,
@@ -61,7 +87,7 @@ pub struct CreateJobRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub evaluator_version: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub base_model: Option<String>,
+    pub base_model: Option<BaseModel>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output_model: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -106,7 +132,7 @@ pub struct CreateJobResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EstimateJobResponse {
+pub struct EstimateJobVariant {
     pub workflow_id: uuid::Uuid,
     pub job_type: JobType,
     pub instance: String,
@@ -117,6 +143,12 @@ pub struct EstimateJobResponse {
     pub estimated_duration_seconds: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub estimated_cost_usd: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EstimateJobResponse {
+    pub config_index: usize,
+    pub estimations: Vec<EstimateJobVariant>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -217,7 +249,7 @@ pub struct EvaluatorVersionResponse {
 pub struct CreateFinetuneJobRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub evaluator_version: Option<i32>,
-    pub base_model: String,
+    pub base_model: BaseModel,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output_model: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

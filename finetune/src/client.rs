@@ -229,8 +229,8 @@ impl LangdbCloudFinetuneClient {
     pub async fn estimate_job(
         &self,
         workflow_id: &uuid::Uuid,
-        request: CreateJobRequest,
-    ) -> Result<EstimateJobResponse, String> {
+        request: Vec<CreateJobRequest>,
+    ) -> Result<Vec<EstimateJobResponse>, String> {
         let url = format!("{}/finetune/jobs/{workflow_id}/estimate", self.api_url);
         let req = self.client.post(&url).json(&request);
         let response = req
@@ -245,7 +245,7 @@ impl LangdbCloudFinetuneClient {
         }
 
         response
-            .json::<EstimateJobResponse>()
+            .json::<Vec<EstimateJobResponse>>()
             .await
             .map_err(|e| format!("Failed to parse response: {}", e))
     }

@@ -221,7 +221,11 @@ pub async fn create_job(
             workflow_id.to_string(),
             "langdb".to_string(),
             cloud_response.job_id.to_string(),
-            request_body.base_model.unwrap_or_default(),
+            request_body
+                .base_model
+                .as_ref()
+                .map(|m| m.to_string())
+                .unwrap_or_default(),
         )
         .with_evaluator_version(request_body.evaluator_version)
         .with_fine_tuned_model(request_body.output_model)
@@ -243,7 +247,7 @@ pub async fn create_job(
 
 pub async fn estimate_job(
     workflow_id: web::Path<uuid::Uuid>,
-    request: web::Json<CreateJobRequest>,
+    request: web::Json<Vec<CreateJobRequest>>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
     db_pool: web::Data<DbPool>,
@@ -259,7 +263,7 @@ pub async fn estimate_job(
     // Ensure cloud has up-to-date rows for this workflow before estimating.
     ensure_dataset_and_evaluator_uploaded(workflow_id, &client, db_pool.get_ref()).await?;
 
-    let estimate: EstimateJobResponse = client
+    let estimate: Vec<EstimateJobResponse> = client
         .estimate_job(&workflow_id, request_body)
         .await
         .map_err(|e| {
@@ -765,7 +769,7 @@ pub async fn create_finetune_job(
         workflow_id.to_string(),
         "langdb".to_string(),
         cloud_response.id.to_string(),
-        request_body.base_model.clone(),
+        request_body.base_model.to_string(),
     )
     .with_evaluator_version(request_body.evaluator_version)
     .with_fine_tuned_model(cloud_response.fine_tuned_model.clone())
