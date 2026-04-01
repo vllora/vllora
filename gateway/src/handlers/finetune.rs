@@ -27,9 +27,9 @@ use vllora_core::GatewayApiError;
 use vllora_finetune::types::{
     CreateEvaluationRequest, CreateJobRequest, DatasetAnalyticsResponse,
     DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse, DryRunEvaluatorRequest,
-    EvaluationResultQuery, EvaluationResultResponse, Evaluator, FinetuneEvalResultsResponse,
-    FinetuneInferenceParameters, FinetuneJobMetricsResponse, FinetuneJobQuery,
-    FinetuneTrainingConfig, JobType, UpdateEvaluatorResponse,
+    EstimateJobResponse, EvaluationResultQuery, EvaluationResultResponse, Evaluator,
+    FinetuneEvalResultsResponse, FinetuneInferenceParameters, FinetuneJobMetricsResponse,
+    FinetuneJobQuery, FinetuneTrainingConfig, JobType, UpdateEvaluatorResponse,
 };
 use vllora_finetune::{
     CreateDeploymentRequest, CreateFinetuneJobRequest, LangdbCloudFinetuneClient,
@@ -239,6 +239,34 @@ pub async fn create_job(
     }
 
     Ok(HttpResponse::Created().json(cloud_response))
+}
+
+pub async fn estimate_job(
+    workflow_id: web::Path<uuid::Uuid>,
+    request: web::Json<CreateJobRequest>,
+    project: web::ReqData<vllora_core::types::metadata::project::Project>,
+    key_storage: web::Data<Box<dyn KeyStorage>>,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let workflow_id = workflow_id.into_inner();
+    let request_body = request.into_inner();
+
+    let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
+    let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
+    })?;
+
+    // Ensure cloud has up-to-date rows for this workflow before estimating.
+    ensure_dataset_and_evaluator_uploaded(workflow_id, &client, db_pool.get_ref()).await?;
+
+    let estimate: EstimateJobResponse = client
+        .estimate_job(&workflow_id, request_body)
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!("Failed to estimate job: {}", e))
+        })?;
+
+    Ok(HttpResponse::Ok().json(estimate))
 }
 
 pub async fn get_job_status(

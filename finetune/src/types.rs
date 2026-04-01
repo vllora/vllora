@@ -106,6 +106,20 @@ pub struct CreateJobResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EstimateJobResponse {
+    pub workflow_id: uuid::Uuid,
+    pub job_type: JobType,
+    pub instance: String,
+    pub base_model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_rows: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub estimated_duration_seconds: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub estimated_cost_usd: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UnifiedJobStatusResponse {
     pub job_id: uuid::Uuid,
     pub job_type: JobType,

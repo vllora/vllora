@@ -509,6 +509,10 @@ impl ApiServer {
                                     .service(
                                         web::scope("/jobs")
                                             .route(
+                                                "/estimate",
+                                                web::post().to(finetune::estimate_job),
+                                            )
+                                            .route(
                                                 "",
                                                 web::post().to(finetune::create_job),
                                             )

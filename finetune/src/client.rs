@@ -2,7 +2,7 @@ use crate::types::{
     CreateDeploymentRequest, CreateEvaluationRequest, CreateEvaluationResponse,
     CreateFinetuneJobRequest, CreateJobRequest, CreateJobResponse, DatasetAnalyticsResponse,
     DeploymentResponse, DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse,
-    DryRunEvaluatorRequest, DryRunEvaluatorResponse, EvaluationResultQuery,
+    DryRunEvaluatorRequest, DryRunEvaluatorResponse, EstimateJobResponse, EvaluationResultQuery,
     EvaluationResultResponse, EvaluatorVersionResponse, FinetuneEvalResultsResponse,
     FinetuneJobMetricsResponse, FinetuneJobStatusResponse, FinetuningJobResponse,
     FinetuningJobResult, JobType, UnifiedJobStatusResponse, UploadDatasetResponse,
@@ -223,6 +223,31 @@ impl LangdbCloudFinetuneClient {
                 })
             }
         }
+    }
+
+    /// Unified API: estimate either a provider finetune or evaluation job.
+    pub async fn estimate_job(
+        &self,
+        workflow_id: &uuid::Uuid,
+        request: CreateJobRequest,
+    ) -> Result<EstimateJobResponse, String> {
+        let url = format!("{}/finetune/jobs/{workflow_id}/estimate", self.api_url);
+        let req = self.client.post(&url).json(&request);
+        let response = req
+            .send()
+            .await
+            .map_err(|e| format!("Failed to call cloud API: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!("API error {}: {}", status, body));
+        }
+
+        response
+            .json::<EstimateJobResponse>()
+            .await
+            .map_err(|e| format!("Failed to parse response: {}", e))
     }
 
     /// Unified API: get status for provider/evaluation jobs.
