@@ -1,6 +1,46 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
+
+/// Base model load precision for training (Vertex / Unsloth / HF loaders).
+/// JSON values: `bf16`, `4bit`, `8bit`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LoadPrecision {
+    Bf16,
+    FourBit,
+    EightBit,
+}
+
+impl Serialize for LoadPrecision {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(match self {
+            LoadPrecision::Bf16 => "bf16",
+            LoadPrecision::FourBit => "4bit",
+            LoadPrecision::EightBit => "8bit",
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for LoadPrecision {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        match s.as_str() {
+            "bf16" => Ok(LoadPrecision::Bf16),
+            "4bit" => Ok(LoadPrecision::FourBit),
+            "8bit" => Ok(LoadPrecision::EightBit),
+            _ => Err(serde::de::Error::unknown_variant(
+                &s,
+                &["bf16", "4bit", "8bit"],
+            )),
+        }
+    }
+}
 
 // =============================================================================
 // Unified Jobs
@@ -200,6 +240,8 @@ pub struct FinetuneTrainingConfig {
     pub learning_rate_warmup_steps: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub batch_size_samples: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub load_precision: Option<LoadPrecision>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

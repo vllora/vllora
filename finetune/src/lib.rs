@@ -9,7 +9,7 @@ pub use types::{
     DryRunDatasetAnalyticsResponse, DryRunEvaluatorRequest, DryRunEvaluatorResponse,
     EvaluationResultResponse, EvaluationSummary, EvaluatorVersionResponse, FinetuneEvalQuery,
     FinetuneEvalResultsResponse, FinetuneInferenceParameters, FinetuneJobQuery,
-    FinetuneJobStatusResponse, FinetuneTrainingConfig, FinetuningJobResponse, JobType, ResumeMode,
-    RowEpochResults, UnifiedJobStatusResponse, UpdateEvaluatorBody, UpdateEvaluatorResponse,
-    UploadDatasetResponse, WeightsDownloadUrlResponse,
+    FinetuneJobStatusResponse, FinetuneTrainingConfig, FinetuningJobResponse, JobType,
+    LoadPrecision, ResumeMode, RowEpochResults, UnifiedJobStatusResponse, UpdateEvaluatorBody,
+    UpdateEvaluatorResponse, UploadDatasetResponse, WeightsDownloadUrlResponse,
 };
