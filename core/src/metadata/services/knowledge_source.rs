@@ -16,10 +16,16 @@ use diesel::OptionalExtension;
 use diesel::QueryDsl;
 use diesel::RunQueryDsl;
 use diesel::SelectableHelper;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 pub struct KnowledgeSourceService {
     db_pool: DbPool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PartMetadataUpdate {
+    pub part_identifier: String,
+    pub extraction_metadata: serde_json::Value,
 }
 
 #[derive(Debug, Clone)]
@@ -398,6 +404,46 @@ impl KnowledgeSourceService {
             .first::<String>(&mut conn)
             .optional()
             .map_err(DatabaseError::from)
+    }
+
+    pub fn update_parts_extraction_metadata(
+        &self,
+        workflow_id: &str,
+        source_identifier: &str,
+        updates: Vec<PartMetadataUpdate>,
+    ) -> Result<usize, DatabaseError> {
+        if updates.is_empty() {
+            return Ok(0);
+        }
+
+        let mut conn = self.db_pool.get()?;
+        let source = dsl::knowledge_sources
+            .filter(dsl::workflow_id.eq(workflow_id))
+            .filter(dsl::deleted_at.is_null())
+            .filter(
+                dsl::id
+                    .eq(source_identifier)
+                    .or(dsl::reference_id.eq(source_identifier)),
+            )
+            .select(DbKnowledgeSource::as_select())
+            .first::<DbKnowledgeSource>(&mut conn)?;
+        let source_id = source.id;
+
+        let mut updated = 0usize;
+        for update in updates {
+            let serialized = serde_json::to_string(&update.extraction_metadata)?;
+            let affected = diesel::update(parts_dsl::knowledge_source_parts)
+                .filter(parts_dsl::source_id.eq(&source_id))
+                .filter(
+                    parts_dsl::id
+                        .eq(&update.part_identifier)
+                        .or(parts_dsl::reference_id.eq(&update.part_identifier)),
+                )
+                .set(parts_dsl::extraction_metadata.eq(Some(serialized)))
+                .execute(&mut conn)?;
+            updated += affected;
+        }
+        Ok(updated)
     }
 
     pub fn update_part_embeddings(
