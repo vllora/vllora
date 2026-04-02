@@ -72,12 +72,12 @@ impl ModelEventsHandler {
                                     .map(|c| (c.cost, Some(usage.clone())))
                                     .unwrap_or((0.0, Some(usage.clone())));
 
-                                if cost.0 == 0.0 {
-                                    tracing::error!(
-                                        "Cost is 0 for event {e:?}. Event: {event:?}",
-                                        event = model_event.event
-                                    );
-                                }
+                                // if cost.0 == 0.0 {
+                                //     tracing::error!(
+                                //         "Cost is 0 for event {e:?}. Event: {event:?}",
+                                //         event = model_event.event
+                                //     );
+                                // }
 
                                 cost
                             }
