@@ -106,7 +106,7 @@ pub struct CreateJobRequest {
     pub resume_mode: Option<ResumeMode>,
 
     // Evaluation payload
-    #[serde(alias = "model_params")]
+    #[serde(alias = "model_params", alias = "rollout_model_parameters")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rollout_model_params: Option<CompletionParams>,
     #[serde(skip_serializing_if = "Option::is_none")]
