@@ -8,6 +8,8 @@ use crate::metadata::models::knowledge_source_part::{
 use crate::metadata::pool::DbPool;
 use crate::metadata::schema::knowledge_source_parts::dsl as parts_dsl;
 use crate::metadata::schema::knowledge_sources::dsl;
+use crate::metadata::schema::workflow_topic_sources::dsl as topic_source_dsl;
+use crate::metadata::schema::workflow_topics::dsl as topics_dsl;
 use diesel::BoolExpressionMethods;
 use diesel::Connection;
 use diesel::ExpressionMethods;
@@ -17,6 +19,7 @@ use diesel::QueryDsl;
 use diesel::RunQueryDsl;
 use diesel::SelectableHelper;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 pub struct KnowledgeSourceService {
     db_pool: DbPool,
@@ -40,6 +43,16 @@ pub struct PendingKnowledgeSourcePartEmbedding {
 pub struct KnowledgeSourcePartMatch {
     pub part: KnowledgeSourcePart,
     pub score: f32,
+    pub related_topics: Vec<RelatedTopicSummary>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(crate = "serde")]
+pub struct RelatedTopicSummary {
+    pub id: String,
+    pub topic_id: String,
+    pub reference_id: Option<String>,
+    pub name: String,
 }
 
 impl KnowledgeSourceService {
@@ -485,13 +498,60 @@ impl KnowledgeSourceService {
             .filter(parts_dsl::source_id.eq_any(source_ids))
             .filter(parts_dsl::embeddings.is_not_null())
             .load::<DbKnowledgeSourcePart>(&mut conn)?;
+        let part_ids: Vec<String> = parts.iter().map(|part| part.id.clone()).collect();
+        let topic_relations = topic_source_dsl::workflow_topic_sources
+            .filter(topic_source_dsl::workflow_id.eq(workflow_id))
+            .filter(topic_source_dsl::source_part_id.eq_any(part_ids))
+            .select((
+                topic_source_dsl::id,
+                topic_source_dsl::source_part_id,
+                topic_source_dsl::topic_id,
+            ))
+            .load::<(String, String, String)>(&mut conn)?;
+        let topic_ids: Vec<String> = topic_relations
+            .iter()
+            .map(|(_, _, topic_id)| topic_id.clone())
+            .collect();
+        let topic_rows = topics_dsl::workflow_topics
+            .filter(topics_dsl::workflow_id.eq(workflow_id))
+            .filter(topics_dsl::id.eq_any(topic_ids))
+            .select((topics_dsl::id, topics_dsl::reference_id, topics_dsl::name))
+            .load::<(String, Option<String>, String)>(&mut conn)?;
+        let topics_by_id: HashMap<String, (Option<String>, String)> = topic_rows
+            .into_iter()
+            .map(|(id, reference_id, name)| (id, (reference_id, name)))
+            .collect();
+        let mut related_topics_by_part_id: HashMap<String, Vec<RelatedTopicSummary>> =
+            HashMap::new();
+        for (relation_id, source_part_id, topic_id) in topic_relations {
+            let Some(topic) = topics_by_id.get(&topic_id) else {
+                continue;
+            };
+            related_topics_by_part_id
+                .entry(source_part_id)
+                .or_default()
+                .push(RelatedTopicSummary {
+                    id: relation_id,
+                    topic_id: topic_id.clone(),
+                    reference_id: topic.0.clone(),
+                    name: topic.1.clone(),
+                });
+        }
 
         let mut matches = Vec::new();
         for db_part in parts {
             let part = KnowledgeSourcePart::try_from(db_part)?;
             if let Some(embedding) = part.embeddings.as_ref() {
                 let score = cosine_similarity(query_embedding, embedding);
-                matches.push(KnowledgeSourcePartMatch { part, score });
+                let related_topics = related_topics_by_part_id
+                    .get(&part.id)
+                    .cloned()
+                    .unwrap_or_default();
+                matches.push(KnowledgeSourcePartMatch {
+                    part,
+                    score,
+                    related_topics,
+                });
             }
         }
 
