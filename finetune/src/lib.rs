@@ -10,7 +10,8 @@ pub use types::{
     EstimateJobResponse, EstimateJobVariant, EvaluationResultResponse, EvaluationSummary,
     EvaluatorVersionResponse, FinetuneEvalQuery, FinetuneEvalResultsResponse,
     FinetuneInferenceParameters, FinetuneJobQuery, FinetuneJobStatusResponse,
-    FinetuneTrainingConfig, FinetuningJobResponse, JobType, LoadPrecision, ResumeMode,
-    RowEpochResults, UnifiedJobStatusResponse, UpdateEvaluatorBody, UpdateEvaluatorResponse,
-    UploadDatasetResponse, WeightsDownloadUrlResponse,
+    FinetuneTrainingConfig, FinetuningJobResponse, GrpoLossType, ImportanceSamplingLevel, JobType,
+    LoadPrecision, ResumeMode, RowEpochResults, ScaleRewards, UnifiedJobStatusResponse,
+    UpdateEvaluatorBody, UpdateEvaluatorResponse, UploadDatasetResponse,
+    WeightsDownloadUrlResponse,
 };

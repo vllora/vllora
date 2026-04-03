@@ -42,6 +42,33 @@ impl<'de> Deserialize<'de> for LoadPrecision {
     }
 }
 
+/// TRL `GRPOConfig.loss_type` values (Dr. GRPO, GRPO, DAPO, BNPO).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum GrpoLossType {
+    DrGrpo,
+    Grpo,
+    Dapo,
+    Bnpo,
+}
+
+/// TRL `GRPOConfig.importance_sampling_level`.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ImportanceSamplingLevel {
+    Token,
+    Sequence,
+}
+
+/// TRL `GRPOConfig.scale_rewards`.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ScaleRewards {
+    Group,
+    Batch,
+    None,
+}
+
 // =============================================================================
 // Unified Jobs
 // =============================================================================
@@ -288,6 +315,16 @@ pub struct FinetuneTrainingConfig {
     pub batch_size_samples: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub load_precision: Option<LoadPrecision>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mask_truncated_completions: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub loss_type: Option<GrpoLossType>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub importance_sampling_level: Option<ImportanceSamplingLevel>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scale_rewards: Option<ScaleRewards>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub beta: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
