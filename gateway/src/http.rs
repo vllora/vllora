@@ -428,6 +428,19 @@ impl ApiServer {
                                                     .to(workflow_logs::create_workflow_logs_bulk),
                                             ),
                                     )
+                                    // Pipeline Journal
+                                    .service(
+                                        web::scope("/journal")
+                                            .route(
+                                                "",
+                                                web::get().to(workflows::get_pipeline_journal),
+                                            )
+                                            .route(
+                                                "/entries",
+                                                web::post()
+                                                    .to(workflows::append_journal_entries),
+                                            ),
+                                    )
                                     // Topics CRUD
                                     .route("/topics", web::get().to(workflow_topics::list_topics))
                                     .route("/topics", web::post().to(workflow_topics::create_topics))

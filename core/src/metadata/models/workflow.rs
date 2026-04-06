@@ -18,6 +18,7 @@ pub struct DbWorkflow {
     pub deleted_at: Option<String>,
     pub state: Option<String>,
     pub iteration_state: Option<String>,
+    pub pipeline_journal: Option<String>,
 }
 
 #[derive(Debug, Insertable, Clone)]
@@ -47,6 +48,7 @@ pub struct DbUpdateWorkflow {
     pub updated_at: Option<String>,
     pub state: Option<Option<String>>,
     pub iteration_state: Option<Option<String>>,
+    pub pipeline_journal: Option<Option<String>>,
 }
 
 impl DbUpdateWorkflow {
@@ -83,6 +85,12 @@ impl DbUpdateWorkflow {
 
     pub fn with_iteration_state(mut self, iteration_state: Option<String>) -> Self {
         self.iteration_state = Some(iteration_state);
+        self.updated_at = Some(chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string());
+        self
+    }
+
+    pub fn with_pipeline_journal(mut self, pipeline_journal: Option<String>) -> Self {
+        self.pipeline_journal = Some(pipeline_journal);
         self.updated_at = Some(chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string());
         self
     }

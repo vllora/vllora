@@ -71,6 +71,7 @@ impl WorkflowService {
             && input.eval_script.is_none()
             && input.state.is_none()
             && input.iteration_state.is_none()
+            && input.pipeline_journal.is_none()
         {
             return Ok(existing);
         }

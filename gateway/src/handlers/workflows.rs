@@ -23,6 +23,7 @@ pub struct UpdateWorkflowRequest {
     pub eval_script: Option<String>,
     pub state: Option<String>,
     pub iteration_state: Option<String>,
+    pub pipeline_journal: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -179,7 +180,8 @@ pub async fn update_workflow(
         .with_objective(payload.objective)
         .with_eval_script(payload.eval_script)
         .with_state(payload.state)
-        .with_iteration_state(payload.iteration_state);
+        .with_iteration_state(payload.iteration_state)
+        .with_pipeline_journal(payload.pipeline_journal);
 
     let workflow = service.update(&workflow_id, update).map_err(map_db_error)?;
 
@@ -199,6 +201,115 @@ pub async fn soft_delete_workflow(
         "id": workflow_id,
         "deleted": true
     })))
+}
+
+// =============================================================================
+// Pipeline Journal endpoints
+// =============================================================================
+
+#[derive(Debug, Serialize)]
+pub struct PipelineJournalResponse {
+    pub workflow_id: String,
+    pub pipeline_journal: Option<serde_json::Value>,
+}
+
+/// GET /finetune/workflows/{workflow_id}/journal
+pub async fn get_pipeline_journal(
+    workflow_id: web::Path<String>,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let workflow_id = workflow_id.into_inner();
+    let service = WorkflowService::new(db_pool.get_ref().clone());
+
+    let workflow = service.get_by_id(&workflow_id).map_err(map_db_error)?;
+
+    let journal_value = workflow
+        .pipeline_journal
+        .as_deref()
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok());
+
+    Ok(HttpResponse::Ok().json(PipelineJournalResponse {
+        workflow_id: workflow.id,
+        pipeline_journal: journal_value,
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AppendJournalEntriesRequest {
+    /// Individual entries to append to the journal
+    pub entries: Vec<serde_json::Value>,
+    /// Workflow objective (set on first call, ignored after)
+    pub objective: Option<String>,
+}
+
+/// POST /finetune/workflows/{workflow_id}/journal/entries
+///
+/// Atomically appends entries to the pipeline journal. Server-side
+/// read-modify-write ensures no entries are lost from concurrent calls.
+pub async fn append_journal_entries(
+    workflow_id: web::Path<String>,
+    body: web::Json<AppendJournalEntriesRequest>,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let workflow_id = workflow_id.into_inner();
+    let payload = body.into_inner();
+
+    if payload.entries.is_empty() {
+        return Err(error::ErrorBadRequest("entries array must not be empty"));
+    }
+
+    let pool = db_pool.get_ref().clone();
+    let service = WorkflowService::new(pool);
+
+    // Read current journal (or create empty one)
+    let workflow = service.get_by_id(&workflow_id).map_err(map_db_error)?;
+
+    let mut journal: serde_json::Value = workflow
+        .pipeline_journal
+        .as_deref()
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or_else(|| {
+            serde_json::json!({
+                "version": "1.0",
+                "workflow_id": workflow_id,
+                "objective": payload.objective.as_deref().unwrap_or(""),
+                "entries": []
+            })
+        });
+
+    // Set objective if provided and currently empty
+    if let Some(obj) = &payload.objective {
+        if let Some(current) = journal.get("objective").and_then(|v| v.as_str()) {
+            if current.is_empty() {
+                journal["objective"] = serde_json::Value::String(obj.clone());
+            }
+        }
+    }
+
+    // Append new entries
+    if let Some(entries_arr) = journal.get_mut("entries").and_then(|v| v.as_array_mut()) {
+        for entry in payload.entries {
+            entries_arr.push(entry);
+        }
+    }
+
+    let journal_str = serde_json::to_string(&journal)
+        .map_err(|e| error::ErrorInternalServerError(format!("JSON serialization error: {e}")))?;
+
+    let update = DbUpdateWorkflow::new().with_pipeline_journal(Some(journal_str));
+    let updated = service
+        .update(&workflow_id, update)
+        .map_err(map_db_error)?;
+
+    let journal_value = updated
+        .pipeline_journal
+        .as_deref()
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok());
+
+    Ok(HttpResponse::Ok().json(PipelineJournalResponse {
+        workflow_id: updated.id,
+        pipeline_journal: journal_value,
+    }))
 }
 
 fn placeholder(endpoint: &str, method: &str, workspace_id: &str) -> HttpResponse {

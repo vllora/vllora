@@ -187,6 +187,7 @@ diesel::table! {
         deleted_at -> Nullable<Text>,
         state -> Nullable<Text>,
         iteration_state -> Nullable<Text>,
+        pipeline_journal -> Nullable<Text>,
     }
 }
 
