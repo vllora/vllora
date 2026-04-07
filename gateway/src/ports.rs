@@ -65,7 +65,9 @@ pub async fn resolve_ports(config: &Config) -> Result<Vec<ServicePort>, CliError
     debug!("IPv6 support detected: {}", ipv6_supported);
 
     for service in &mut services {
-        let port_check = is_port_available_detailed(service.host.clone(), service.initial_port, ipv6_supported).await;
+        let port_check =
+            is_port_available_detailed(service.host.clone(), service.initial_port, ipv6_supported)
+                .await;
         if !port_check.is_available {
             debug!(
                 "{} service: port {} is in use - {}",
@@ -113,24 +115,33 @@ async fn is_ipv6_supported() -> bool {
 
 async fn is_port_available(host: String, port: u16) -> bool {
     let ipv6_supported = is_ipv6_supported().await;
-    is_port_available_detailed(host, port, ipv6_supported).await.is_available
+    is_port_available_detailed(host, port, ipv6_supported)
+        .await
+        .is_available
 }
 
-async fn is_port_available_detailed(host: String, port: u16, ipv6_supported: bool) -> PortCheckResult {
+async fn is_port_available_detailed(
+    host: String,
+    port: u16,
+    ipv6_supported: bool,
+) -> PortCheckResult {
     match tokio::net::TcpListener::bind(format!("{host}:{port}")).await {
         Ok(_) => PortCheckResult {
             is_available: true,
             reason: "available".to_string(),
         },
-        Err(e) if !ipv6_supported && (e.raw_os_error() == Some(97) || e.kind() == std::io::ErrorKind::Unsupported) => {
+        Err(e)
+            if !ipv6_supported
+                && (e.raw_os_error() == Some(97)
+                    || e.kind() == std::io::ErrorKind::Unsupported) =>
+        {
             // IPv6 not supported (error 97), try IPv4 fallback
-            let ipv4_host = if host == "[::]" {
-                "0.0.0.0"
-            } else {
-                &host
-            };
+            let ipv4_host = if host == "[::]" { "0.0.0.0" } else { &host };
 
-            debug!("IPv6 not supported, trying IPv4 fallback for {}:{}", ipv4_host, port);
+            debug!(
+                "IPv6 not supported, trying IPv4 fallback for {}:{}",
+                ipv4_host, port
+            );
 
             match tokio::net::TcpListener::bind(format!("{ipv4_host}:{port}")).await {
                 Ok(_) => PortCheckResult {
@@ -139,7 +150,12 @@ async fn is_port_available_detailed(host: String, port: u16, ipv6_supported: boo
                 },
                 Err(e2) => PortCheckResult {
                     is_available: false,
-                    reason: format!("IPv6 failed: {}, IPv4 failed: {} (kind: {:?})", e, e2, e2.kind()),
+                    reason: format!(
+                        "IPv6 failed: {}, IPv4 failed: {} (kind: {:?})",
+                        e,
+                        e2,
+                        e2.kind()
+                    ),
                 },
             }
         }
