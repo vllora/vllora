@@ -47,7 +47,12 @@ pub async fn process_embedding_batch(
         let project_slug = service
             .get_project_slug_by_workflow_id(&part.workflow_id)?
             .unwrap_or_else(|| "default".to_string());
-        match embed_phrase(db_pool.clone(), &part.content, &project_slug).await {
+        let content_truncated = if part.content.len() > 2000 {
+            part.content[..2000].to_string()
+        } else {
+            part.content.clone()
+        };
+        match embed_phrase(db_pool.clone(), &content_truncated, &project_slug).await {
             Ok(embedding) => {
                 if let Err(e) = service.update_part_embeddings(&part.id, &embedding) {
                     tracing::warn!("failed to persist embedding for part {}: {}", part.id, e);

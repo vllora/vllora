@@ -76,7 +76,8 @@ pub enum ScaleRewards {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum JobType {
-    ProviderFinetune,
+    #[serde(alias = "provider_finetune")]
+    Finetune,
     EvaluationRun,
 }
 
@@ -88,6 +89,8 @@ pub enum BaseModel {
     Qwen35_2B,
     #[serde(rename = "Qwen3.5-4B", alias = "unsloth/Qwen3.5-4B")]
     Qwen35_4B,
+    #[serde(alias = "gemma-4-E2B")]
+    Gemma4E2B,
 }
 
 impl BaseModel {
@@ -96,6 +99,7 @@ impl BaseModel {
             BaseModel::Qwen35_0_8B => "Qwen3.5-0.8B",
             BaseModel::Qwen35_2B => "Qwen3.5-2B",
             BaseModel::Qwen35_4B => "Qwen3.5-4B",
+            BaseModel::Gemma4E2B => "gemma-4-E2B",
         }
     }
 }
@@ -482,8 +486,8 @@ pub struct CompletionParams {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateEvaluationRequest {
-    #[serde(alias = "workflow_id")]
-    pub dataset_id: uuid::Uuid,
+    #[serde(alias = "dataset_id")]
+    pub workflow_id: uuid::Uuid,
     #[serde(alias = "model_params")]
     pub rollout_model_params: CompletionParams,
     pub offset: Option<i32>,

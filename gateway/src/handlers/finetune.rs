@@ -126,7 +126,7 @@ pub async fn create_evaluation(
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
     let request_body = request.into_inner();
-    let workflow_id = request_body.dataset_id.to_string();
+    let workflow_id = request_body.workflow_id.to_string();
     let sample_size = request_body.limit;
     let rollout_model = request_body.rollout_model_params.model.clone();
 
@@ -136,11 +136,11 @@ pub async fn create_evaluation(
     })?;
 
     // Auto-upload dataset from local SQLite to cloud (upsert)
-    ensure_dataset_and_evaluator_uploaded(request_body.dataset_id, &client, db_pool.get_ref())
+    ensure_dataset_and_evaluator_uploaded(request_body.workflow_id, &client, db_pool.get_ref())
         .await?;
 
     let cloud_request = CreateEvaluationRequest {
-        dataset_id: request_body.dataset_id,
+        workflow_id: request_body.workflow_id,
         rollout_model_params: request_body.rollout_model_params,
         offset: request_body.offset,
         limit: request_body.limit,
@@ -214,7 +214,7 @@ pub async fn create_job(
         })?;
 
     // Persist provider finetune jobs locally for state-tracker/observability.
-    if request_body.job_type == JobType::ProviderFinetune {
+    if request_body.job_type == JobType::Finetune {
         let finetune_job_service = FinetuneJobService::new(db_pool.get_ref().clone());
         let new_job = DbNewFinetuneJob::new(
             project.id.to_string(),
@@ -290,10 +290,7 @@ pub async fn get_job_status(
         client.get_job_status(&job_id, job_type).await
     } else {
         // Backward compatible fallback when caller does not pass job_type.
-        match client
-            .get_job_status(&job_id, JobType::ProviderFinetune)
-            .await
-        {
+        match client.get_job_status(&job_id, JobType::Finetune).await {
             Ok(status) => Ok(status),
             Err(_) => client.get_job_status(&job_id, JobType::EvaluationRun).await,
         }
