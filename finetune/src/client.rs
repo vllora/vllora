@@ -173,7 +173,7 @@ impl LangdbCloudFinetuneClient {
         request: CreateJobRequest,
     ) -> Result<CreateJobResponse, String> {
         match request.job_type {
-            JobType::ProviderFinetune => {
+            JobType::Finetune => {
                 let base_model = request.base_model.ok_or_else(|| {
                     "base_model is required for provider_finetune jobs".to_string()
                 })?;
@@ -197,7 +197,7 @@ impl LangdbCloudFinetuneClient {
 
                 Ok(CreateJobResponse {
                     job_id: response.id,
-                    job_type: JobType::ProviderFinetune,
+                    job_type: JobType::Finetune,
                     status: response.status,
                     total_rows: None,
                 })
@@ -257,11 +257,11 @@ impl LangdbCloudFinetuneClient {
         job_type: JobType,
     ) -> Result<UnifiedJobStatusResponse, String> {
         match job_type {
-            JobType::ProviderFinetune => {
+            JobType::Finetune => {
                 let status = self.get_finetune_job_status(job_id).await?;
                 Ok(UnifiedJobStatusResponse {
                     job_id: status.provider_job_id,
-                    job_type: JobType::ProviderFinetune,
+                    job_type: JobType::Finetune,
                     status: status.status,
                     fine_tuned_model: status.fine_tuned_model,
                     error_message: status.error_message,

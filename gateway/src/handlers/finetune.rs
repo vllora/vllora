@@ -214,7 +214,7 @@ pub async fn create_job(
         })?;
 
     // Persist provider finetune jobs locally for state-tracker/observability.
-    if request_body.job_type == JobType::ProviderFinetune {
+    if request_body.job_type == JobType::Finetune {
         let finetune_job_service = FinetuneJobService::new(db_pool.get_ref().clone());
         let new_job = DbNewFinetuneJob::new(
             project.id.to_string(),
@@ -291,7 +291,7 @@ pub async fn get_job_status(
     } else {
         // Backward compatible fallback when caller does not pass job_type.
         match client
-            .get_job_status(&job_id, JobType::ProviderFinetune)
+            .get_job_status(&job_id, JobType::Finetune)
             .await
         {
             Ok(status) => Ok(status),
