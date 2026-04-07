@@ -478,11 +478,8 @@ impl ApiServer {
                                     .service(
                                         web::scope("/eval-jobs")
                                             .route("", web::get().to(eval_jobs::list_eval_jobs))
-                                            .route("", web::post().to(eval_jobs::create_eval_job))
                                             .route("", web::delete().to(eval_jobs::delete_workflow_eval_jobs))
-                                            .route("/{job_id}", web::get().to(eval_jobs::get_eval_job))
-                                            .route("/{job_id}", web::patch().to(eval_jobs::update_eval_job))
-                                            .route("/{job_id}", web::delete().to(eval_jobs::delete_eval_job)),
+                                            .route("/{job_id}", web::get().to(eval_jobs::get_eval_job)),
                                     )
                                     // Dataset (cloud JSONL) - keep existing placeholders
                                     .route(
@@ -580,9 +577,7 @@ impl ApiServer {
                         web::scope("/eval-jobs")
                             .route("", web::get().to(eval_jobs::list_eval_jobs_by_status))
                             .route("/{job_id}", web::get().to(eval_jobs::get_eval_job_by_id))
-                            .route("/{job_id}", web::patch().to(eval_jobs::update_eval_job_by_id))
-                            .route("/{job_id}", web::delete().to(eval_jobs::delete_eval_job_by_id)),
-                    )
+                        )
                     // NOTE: POST /finetune/datasets (upload) was removed — gateway auto-uploads
                     // via ensure_dataset_uploaded() inside create_evaluation / create_finetune_job.
                     .service(

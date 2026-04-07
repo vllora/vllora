@@ -90,7 +90,7 @@ pub enum BaseModel {
     #[serde(rename = "Qwen3.5-4B", alias = "unsloth/Qwen3.5-4B")]
     Qwen35_4B,
     #[serde(alias = "gemma-4-E2B")]
-    Gemma4E2B
+    Gemma4E2B,
 }
 
 impl BaseModel {
@@ -486,8 +486,8 @@ pub struct CompletionParams {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateEvaluationRequest {
-    #[serde(alias = "workflow_id")]
-    pub dataset_id: uuid::Uuid,
+    #[serde(alias = "dataset_id")]
+    pub workflow_id: uuid::Uuid,
     #[serde(alias = "model_params")]
     pub rollout_model_params: CompletionParams,
     pub offset: Option<i32>,

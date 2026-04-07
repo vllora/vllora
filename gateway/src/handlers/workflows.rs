@@ -297,9 +297,7 @@ pub async fn append_journal_entries(
         .map_err(|e| error::ErrorInternalServerError(format!("JSON serialization error: {e}")))?;
 
     let update = DbUpdateWorkflow::new().with_pipeline_journal(Some(journal_str));
-    let updated = service
-        .update(&workflow_id, update)
-        .map_err(map_db_error)?;
+    let updated = service.update(&workflow_id, update).map_err(map_db_error)?;
 
     let journal_value = updated
         .pipeline_journal

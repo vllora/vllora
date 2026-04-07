@@ -208,7 +208,7 @@ impl LangdbCloudFinetuneClient {
                 })?;
 
                 let evaluation_request = CreateEvaluationRequest {
-                    dataset_id: *workflow_id,
+                    workflow_id: *workflow_id,
                     rollout_model_params,
                     offset: request.offset,
                     limit: request.limit,
