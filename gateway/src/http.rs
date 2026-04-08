@@ -474,11 +474,14 @@ impl ApiServer {
                                             .route("/{ks_id}/parts", web::patch().to(knowledge_sources::update_parts_metadata))
                                             .route("/{ks_id}/parts/{part_id}", web::delete().to(knowledge_sources::delete_knowledge_source_part)),
                                     )
-                                    // Eval Jobs CRUD
+                                    // Workflow-scoped evaluation metadata (local DB)
                                     .service(
-                                        web::scope("/eval-jobs")
+                                        web::scope("/evaluations")
                                             .route("", web::get().to(eval_jobs::list_eval_jobs))
-                                            .route("", web::delete().to(eval_jobs::delete_workflow_eval_jobs))
+                                            .route(
+                                                "",
+                                                web::delete().to(eval_jobs::delete_workflow_eval_jobs),
+                                            )
                                             .route("/{job_id}", web::get().to(eval_jobs::get_eval_job)),
                                     )
                                     // Dataset (cloud JSONL) - keep existing placeholders
@@ -573,11 +576,6 @@ impl ApiServer {
                                     ),
                             ),
                     )
-                    .service(
-                        web::scope("/eval-jobs")
-                            .route("", web::get().to(eval_jobs::list_eval_jobs_by_status))
-                            .route("/{job_id}", web::get().to(eval_jobs::get_eval_job_by_id))
-                        )
                     // NOTE: POST /finetune/datasets (upload) was removed — gateway auto-uploads
                     // via ensure_dataset_uploaded() inside create_evaluation / create_finetune_job.
                     .service(
