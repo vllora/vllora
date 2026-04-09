@@ -29,8 +29,8 @@ use vllora_finetune::types::{
     DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse, DryRunEvaluatorRequest,
     EstimateJobResponse, EvaluationResultQuery, EvaluationResultResponse, Evaluator,
     FinetuneEvalResultsResponse, FinetuneInferenceParameters, FinetuneJobMetricsResponse,
-    FinetuneJobModelsResponse,
-    FinetuneJobQuery, FinetuneTrainingConfig, JobType, UpdateEvaluatorResponse,
+    FinetuneJobModelsResponse, FinetuneJobQuery, FinetuneTrainingConfig, JobType,
+    UpdateEvaluatorResponse,
 };
 use vllora_finetune::{
     CreateDeploymentRequest, CreateFinetuneJobRequest, LangdbCloudFinetuneClient,
@@ -421,6 +421,15 @@ pub async fn get_finetune_evaluations(
     let row_index = query.get("row_index").and_then(|s| s.parse::<i32>().ok());
     let epoch = query.get("epoch").and_then(|s| s.parse::<i32>().ok());
     let finetune_job_id = query.get("finetune_job_id").cloned();
+    let include_rollout_content = query
+        .get("include_rollout_content")
+        .and_then(|s| s.parse::<bool>().ok())
+        .unwrap_or(true);
+    let limit = query
+        .get("limit")
+        .and_then(|s| s.parse::<usize>().ok())
+        .or(Some(20));
+    let offset = query.get("offset").and_then(|s| s.parse::<usize>().ok());
 
     let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
     let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
@@ -428,7 +437,15 @@ pub async fn get_finetune_evaluations(
     })?;
 
     let response: FinetuneEvalResultsResponse = client
-        .get_finetune_evaluations(&dataset_id_str, row_index, epoch, finetune_job_id, true)
+        .get_finetune_evaluations(
+            &dataset_id_str,
+            row_index,
+            epoch,
+            finetune_job_id,
+            include_rollout_content,
+            limit,
+            offset,
+        )
         .await
         .map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!(

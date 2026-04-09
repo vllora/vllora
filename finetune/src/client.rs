@@ -4,9 +4,9 @@ use crate::types::{
     DeploymentResponse, DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse,
     DryRunEvaluatorRequest, DryRunEvaluatorResponse, EstimateJobResponse, EvaluationResultQuery,
     EvaluationResultResponse, EvaluatorVersionResponse, FinetuneEvalResultsResponse,
-    FinetuneJobMetricsResponse, FinetuneJobModelsResponse, FinetuneJobStatusResponse, FinetuningJobResponse,
-    FinetuningJobResult, JobType, UnifiedJobStatusResponse, UploadDatasetResponse,
-    WeightsDownloadUrlResponse,
+    FinetuneJobMetricsResponse, FinetuneJobModelsResponse, FinetuneJobStatusResponse,
+    FinetuningJobResponse, FinetuningJobResult, JobType, UnifiedJobStatusResponse,
+    UploadDatasetResponse, WeightsDownloadUrlResponse,
 };
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 
@@ -319,6 +319,7 @@ impl LangdbCloudFinetuneClient {
     }
 
     /// Fetch finetune evaluation results grouped by row and epoch
+    #[allow(clippy::too_many_arguments)]
     pub async fn get_finetune_evaluations(
         &self,
         dataset_id: &str,
@@ -326,6 +327,8 @@ impl LangdbCloudFinetuneClient {
         epoch: Option<i32>,
         finetune_job_id: Option<String>,
         include_rollout_content: bool,
+        limit: Option<usize>,
+        offset: Option<usize>,
     ) -> Result<FinetuneEvalResultsResponse, String> {
         let url = format!(
             "{}/finetune/workflows/{}/finetune-evaluations",
@@ -341,6 +344,12 @@ impl LangdbCloudFinetuneClient {
         }
         if let Some(job_id) = finetune_job_id {
             query_params.push(("finetune_job_id", job_id));
+        }
+        if let Some(limit) = limit {
+            query_params.push(("limit", limit.to_string()));
+        }
+        if let Some(offset) = offset {
+            query_params.push(("offset", offset.to_string()));
         }
 
         if include_rollout_content {
