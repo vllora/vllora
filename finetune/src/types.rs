@@ -413,6 +413,17 @@ pub struct FinetuneJobMetricsResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FinetuneJobModelsResponse {
+    pub provider_job_id: uuid::Uuid,
+    #[serde(default)]
+    pub checkpoints: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latest_checkpoint_model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub finetuned_model: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReportFinetuneJobMetricsRequest {
     pub metrics: serde_json::Value,
 }

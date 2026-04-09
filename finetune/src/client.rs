@@ -4,7 +4,7 @@ use crate::types::{
     DeploymentResponse, DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse,
     DryRunEvaluatorRequest, DryRunEvaluatorResponse, EstimateJobResponse, EvaluationResultQuery,
     EvaluationResultResponse, EvaluatorVersionResponse, FinetuneEvalResultsResponse,
-    FinetuneJobMetricsResponse, FinetuneJobStatusResponse, FinetuningJobResponse,
+    FinetuneJobMetricsResponse, FinetuneJobModelsResponse, FinetuneJobStatusResponse, FinetuningJobResponse,
     FinetuningJobResult, JobType, UnifiedJobStatusResponse, UploadDatasetResponse,
     WeightsDownloadUrlResponse,
 };
@@ -490,6 +490,33 @@ impl LangdbCloudFinetuneClient {
         }
 
         let body: FinetuneJobMetricsResponse = response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+        Ok(body)
+    }
+
+    /// Get available model aliases for a finetune job (checkpoints + finetuned model).
+    pub async fn get_finetune_job_models(
+        &self,
+        job_id: &str,
+    ) -> Result<FinetuneJobModelsResponse, String> {
+        let url = format!("{}/finetune/jobs/{}/models", self.api_url, job_id);
+
+        let req = self.client.get(&url);
+        let response = req
+            .send()
+            .await
+            .map_err(|e| format!("Failed to call cloud API: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!("API error {}: {}", status, body));
+        }
+
+        let body: FinetuneJobModelsResponse = response
             .json()
             .await
             .map_err(|e| format!("Failed to parse response: {}", e))?;

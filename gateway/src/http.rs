@@ -549,6 +549,11 @@ impl ApiServer {
                                                         ),
                                                     )
                                                     .route(
+                                                        "/models",
+                                                        web::get()
+                                                            .to(finetune::get_finetune_job_models),
+                                                    )
+                                                    .route(
                                                         "/cancel",
                                                         web::post()
                                                             .to(finetune::cancel_finetune_job),

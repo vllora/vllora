@@ -29,6 +29,7 @@ use vllora_finetune::types::{
     DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse, DryRunEvaluatorRequest,
     EstimateJobResponse, EvaluationResultQuery, EvaluationResultResponse, Evaluator,
     FinetuneEvalResultsResponse, FinetuneInferenceParameters, FinetuneJobMetricsResponse,
+    FinetuneJobModelsResponse,
     FinetuneJobQuery, FinetuneTrainingConfig, JobType, UpdateEvaluatorResponse,
 };
 use vllora_finetune::{
@@ -847,6 +848,41 @@ pub async fn get_finetune_job_metrics(
         .map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!(
                 "Failed to get finetune job metrics: {}",
+                e
+            ))
+        })?;
+
+    Ok(HttpResponse::Ok().json(response))
+}
+
+pub async fn get_finetune_job_models(
+    path: web::Path<JobRequestPath>,
+    project: web::ReqData<vllora_core::types::metadata::project::Project>,
+    key_storage: web::Data<Box<dyn KeyStorage>>,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let path = path.into_inner();
+
+    // Resolve provider_job_id from local DB (FE passes local job UUID)
+    let finetune_job_service = FinetuneJobService::new(db_pool.get_ref().clone());
+    let provider_job_id = finetune_job_service
+        .get_by_id(&path.job_id.to_string(), &project.id.to_string())
+        .ok()
+        .flatten()
+        .map(|db_job| db_job.provider_job_id)
+        .unwrap_or_else(|| path.job_id.to_string());
+
+    let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
+    let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
+    })?;
+
+    let response: FinetuneJobModelsResponse = client
+        .get_finetune_job_models(&provider_job_id)
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!(
+                "Failed to get finetune job models: {}",
                 e
             ))
         })?;
