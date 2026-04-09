@@ -68,6 +68,6 @@ reqwest = { version = "0.12.24", default-features = false, features = [
 base64 = "0.22.1"
 uuid = { version = "1.19.0", features = ["serde", "v4"] }
 dashmap = "6.1.0"
-bytemuck = { version = "1.24", features = ["derive"] }
+bytemuck = { version = "1.25", features = ["derive"] }
 futures = "0.3.30"
 schemars = "1.2.1"
