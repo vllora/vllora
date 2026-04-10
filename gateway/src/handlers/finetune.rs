@@ -27,8 +27,8 @@ use vllora_core::GatewayApiError;
 use vllora_finetune::types::{
     CreateEvaluationRequest, CreateJobRequest, DatasetAnalyticsResponse,
     DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse, DryRunEvaluatorRequest,
-    EstimateJobResponse, EvaluationResultQuery, EvaluationResultResponse, Evaluator,
-    FinetuneEvalJobMetrics, FinetuneEvalResultsResponse, FinetuneInferenceParameters,
+    EstimateJobResponse, EvaluationResultQuery, EvaluationResultResponse, EvaluationRunMetrics,
+    Evaluator, FinetuneEvalJobMetrics, FinetuneEvalResultsResponse, FinetuneInferenceParameters,
     FinetuneJobEvalMetrics, FinetuneJobMetricsResponse, FinetuneJobModelsResponse,
     FinetuneJobQuery, FinetuneTrainingConfig, JobType, UpdateEvaluatorResponse,
 };
@@ -405,6 +405,31 @@ pub async fn get_evaluation_result(
         .map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!(
                 "Failed to get evaluation result: {}",
+                e
+            ))
+        })?;
+
+    Ok(HttpResponse::Ok().json(response))
+}
+
+pub async fn get_workflow_evaluation_metrics(
+    workflow_id: web::Path<uuid::Uuid>,
+    project: web::ReqData<vllora_core::types::metadata::project::Project>,
+    key_storage: web::Data<Box<dyn KeyStorage>>,
+) -> Result<HttpResponse> {
+    let workflow_id = workflow_id.into_inner().to_string();
+
+    let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
+    let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
+    })?;
+
+    let response: Vec<EvaluationRunMetrics> = client
+        .get_workflow_evaluation_metrics(&workflow_id)
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!(
+                "Failed to get workflow evaluation metrics: {}",
                 e
             ))
         })?;

@@ -479,6 +479,11 @@ impl ApiServer {
                                         web::scope("/evaluations")
                                             .route("", web::get().to(eval_jobs::list_eval_jobs))
                                             .route(
+                                                "/metrics",
+                                                web::get()
+                                                    .to(finetune::get_workflow_evaluation_metrics),
+                                            )
+                                            .route(
                                                 "",
                                                 web::delete().to(eval_jobs::delete_workflow_eval_jobs),
                                             )
@@ -582,6 +587,10 @@ impl ApiServer {
                                     .route(
                                         "/finetune-evaluations/metrics",
                                         web::get().to(finetune::get_finetune_evaluations_metrics),
+                                    )
+                                    .route(
+                                        "/evaluations/metrics",
+                                        web::get().to(finetune::get_workflow_evaluation_metrics),
                                     ),
                             ),
                     )

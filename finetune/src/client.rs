@@ -3,10 +3,11 @@ use crate::types::{
     CreateFinetuneJobRequest, CreateJobRequest, CreateJobResponse, DatasetAnalyticsResponse,
     DeploymentResponse, DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse,
     DryRunEvaluatorRequest, DryRunEvaluatorResponse, EstimateJobResponse, EvaluationResultQuery,
-    EvaluationResultResponse, EvaluatorVersionResponse, FinetuneEvalJobMetrics,
-    FinetuneEvalResultsResponse, FinetuneJobMetricsResponse, FinetuneJobModelsResponse,
-    FinetuneJobStatusResponse, FinetuningJobResponse, FinetuningJobResult, JobType,
-    UnifiedJobStatusResponse, UploadDatasetResponse, WeightsDownloadUrlResponse,
+    EvaluationResultResponse, EvaluationRunMetrics, EvaluatorVersionResponse,
+    FinetuneEvalJobMetrics, FinetuneEvalResultsResponse, FinetuneJobMetricsResponse,
+    FinetuneJobModelsResponse, FinetuneJobStatusResponse, FinetuningJobResponse,
+    FinetuningJobResult, JobType, UnifiedJobStatusResponse, UploadDatasetResponse,
+    WeightsDownloadUrlResponse,
 };
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 
@@ -656,6 +657,35 @@ impl LangdbCloudFinetuneClient {
             .map_err(|e| format!("Failed to parse response: {}", e))?;
 
         Ok(body)
+    }
+
+    /// Get aggregated metrics for all evaluation runs of a workflow
+    pub async fn get_workflow_evaluation_metrics(
+        &self,
+        workflow_id: &str,
+    ) -> Result<Vec<EvaluationRunMetrics>, String> {
+        let url = format!(
+            "{}/finetune/workflows/{}/evaluations/metrics",
+            self.api_url, workflow_id
+        );
+
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to call cloud API: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!("API error {}: {}", status, body));
+        }
+
+        response
+            .json::<Vec<EvaluationRunMetrics>>()
+            .await
+            .map_err(|e| format!("Failed to parse response: {}", e))
     }
 
     /// Get analytics for a given dataset (structure + quality)

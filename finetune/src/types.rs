@@ -568,6 +568,30 @@ pub struct EvaluationResultResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvaluationRunMetrics {
+    pub evaluation_run_id: uuid::Uuid,
+    pub status: String,
+    #[serde(default)]
+    pub total_rows: i32,
+    #[serde(default)]
+    pub completed_rows: i32,
+    #[serde(default)]
+    pub failed_rows: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub average_score: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub score_stddev: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_score: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_score: Option<f64>,
+    #[serde(default)]
+    pub scored_count: usize,
+    #[serde(default)]
+    pub passed_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EvaluationResultQuery {
     pub limit: Option<usize>,
     pub sort: Option<String>,
