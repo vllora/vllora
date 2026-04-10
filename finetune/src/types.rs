@@ -434,32 +434,13 @@ pub struct FinetuneEpochScore {
     pub avg_score: f64,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum AvgScoreByEpochWire {
-    List(Vec<FinetuneEpochScore>),
-    Map(HashMap<String, f64>),
-}
-
 fn deserialize_avg_score_by_epoch<'de, D>(
     deserializer: D,
 ) -> Result<Vec<FinetuneEpochScore>, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let wire = AvgScoreByEpochWire::deserialize(deserializer)?;
-    let mut list = match wire {
-        AvgScoreByEpochWire::List(list) => list,
-        AvgScoreByEpochWire::Map(map) => map
-            .into_iter()
-            .filter_map(|(epoch, avg_score)| {
-                epoch.parse::<i32>().ok().map(|parsed| FinetuneEpochScore {
-                    epoch: parsed,
-                    avg_score,
-                })
-            })
-            .collect::<Vec<_>>(),
-    };
+    let mut list = Vec::<FinetuneEpochScore>::deserialize(deserializer)?;
     list.sort_by_key(|entry| entry.epoch);
     Ok(list)
 }
