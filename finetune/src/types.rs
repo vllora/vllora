@@ -428,11 +428,60 @@ pub struct ReportFinetuneJobMetricsRequest {
     pub metrics: serde_json::Value,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FinetuneEpochScore {
+    pub epoch: i32,
+    pub avg_score: f64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum AvgScoreByEpochWire {
+    List(Vec<FinetuneEpochScore>),
+    Map(HashMap<String, f64>),
+}
+
+fn deserialize_avg_score_by_epoch<'de, D>(
+    deserializer: D,
+) -> Result<Vec<FinetuneEpochScore>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let wire = AvgScoreByEpochWire::deserialize(deserializer)?;
+    let mut list = match wire {
+        AvgScoreByEpochWire::List(list) => list,
+        AvgScoreByEpochWire::Map(map) => map
+            .into_iter()
+            .filter_map(|(epoch, avg_score)| {
+                epoch.parse::<i32>().ok().map(|parsed| FinetuneEpochScore {
+                    epoch: parsed,
+                    avg_score,
+                })
+            })
+            .collect::<Vec<_>>(),
+    };
+    list.sort_by_key(|entry| entry.epoch);
+    Ok(list)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FinetuneJobEvalMetrics {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latest_epoch_with_score: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avg_score: Option<f64>,
+    #[serde(default, deserialize_with = "deserialize_avg_score_by_epoch")]
+    pub avg_score_by_epoch: Vec<FinetuneEpochScore>,
+    #[serde(default)]
+    pub distinct_rows_with_eval: usize,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct FinetuneJobQuery {
     pub limit: Option<u32>,
     pub after: Option<String>,
     pub dataset_id: Option<String>,
+    pub include_metrics: Option<bool>,
 }
 
 // =============================================================================
@@ -558,6 +607,19 @@ pub struct RowEpochResults {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FinetuneEvalResultsResponse {
     pub results: Vec<RowEpochResults>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FinetuneEvalJobMetrics {
+    pub job_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latest_epoch: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avg_score: Option<f64>,
+    #[serde(default, deserialize_with = "deserialize_avg_score_by_epoch")]
+    pub avg_score_by_epoch: Vec<FinetuneEpochScore>,
+    #[serde(default)]
+    pub distinct_rows_with_eval: usize,
 }
 
 #[derive(Debug, Deserialize)]

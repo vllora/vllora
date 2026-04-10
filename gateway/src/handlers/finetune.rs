@@ -28,9 +28,9 @@ use vllora_finetune::types::{
     CreateEvaluationRequest, CreateJobRequest, DatasetAnalyticsResponse,
     DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse, DryRunEvaluatorRequest,
     EstimateJobResponse, EvaluationResultQuery, EvaluationResultResponse, Evaluator,
-    FinetuneEvalResultsResponse, FinetuneInferenceParameters, FinetuneJobMetricsResponse,
-    FinetuneJobModelsResponse, FinetuneJobQuery, FinetuneTrainingConfig, JobType,
-    UpdateEvaluatorResponse,
+    FinetuneEvalJobMetrics, FinetuneEvalResultsResponse, FinetuneInferenceParameters,
+    FinetuneJobEvalMetrics, FinetuneJobMetricsResponse, FinetuneJobModelsResponse,
+    FinetuneJobQuery, FinetuneTrainingConfig, JobType, UpdateEvaluatorResponse,
 };
 use vllora_finetune::{
     CreateDeploymentRequest, CreateFinetuneJobRequest, LangdbCloudFinetuneClient,
@@ -60,6 +60,8 @@ pub struct LocalFinetuningJobResponse {
     pub created_at: String,
     pub updated_at: String,
     pub completed_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub eval_metrics: Option<FinetuneJobEvalMetrics>,
 }
 
 /// Response type for get_finetune_job_status from local SQLite DB.
@@ -450,6 +452,31 @@ pub async fn get_finetune_evaluations(
         .map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!(
                 "Failed to get finetune evaluations: {}",
+                e
+            ))
+        })?;
+
+    Ok(HttpResponse::Ok().json(response))
+}
+
+pub async fn get_finetune_evaluations_metrics(
+    workflow_id: web::Path<uuid::Uuid>,
+    project: web::ReqData<vllora_core::types::metadata::project::Project>,
+    key_storage: web::Data<Box<dyn KeyStorage>>,
+) -> Result<HttpResponse> {
+    let workflow_id = workflow_id.into_inner();
+
+    let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
+    let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
+    })?;
+
+    let response = client
+        .get_finetune_evaluations_metrics(&workflow_id.to_string())
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!(
+                "Failed to get finetune evaluation metrics: {}",
                 e
             ))
         })?;
@@ -912,6 +939,7 @@ pub async fn list_finetune_jobs(
     query: web::Query<FinetuneJobQuery>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     db_pool: web::Data<DbPool>,
+    key_storage: web::Data<Box<dyn KeyStorage>>,
 ) -> Result<HttpResponse> {
     let finetune_job_service = FinetuneJobService::new(db_pool.get_ref().clone());
 
@@ -933,30 +961,66 @@ pub async fn list_finetune_jobs(
             actix_web::error::ErrorInternalServerError(format!("Failed to list jobs: {}", e))
         })?;
 
+    let include_metrics = query.include_metrics.unwrap_or(false);
+    let mut metrics_by_job_id: HashMap<String, Option<FinetuneJobEvalMetrics>> = HashMap::new();
+    if include_metrics {
+        let api_key =
+            get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
+        let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
+        })?;
+
+        let workflow_metrics: Vec<FinetuneEvalJobMetrics> = client
+            .get_finetune_evaluations_metrics(&workflow_id.to_string())
+            .await
+            .map_err(|e| {
+                actix_web::error::ErrorInternalServerError(format!(
+                    "Failed to load eval metrics for workflow {}: {}",
+                    workflow_id, e
+                ))
+            })?;
+
+        for metric in workflow_metrics {
+            metrics_by_job_id.insert(
+                metric.job_id,
+                Some(FinetuneJobEvalMetrics {
+                    latest_epoch_with_score: metric.latest_epoch,
+                    avg_score: metric.avg_score,
+                    avg_score_by_epoch: metric.avg_score_by_epoch,
+                    distinct_rows_with_eval: metric.distinct_rows_with_eval,
+                }),
+            );
+        }
+    }
+
     let response: Vec<LocalFinetuningJobResponse> = db_jobs
         .into_iter()
-        .map(|job| LocalFinetuningJobResponse {
-            id: job.id,
-            provider_job_id: job.provider_job_id,
-            workflow_id: job.workflow_id,
-            evaluator_version: job.evaluator_version,
-            status: job.state,
-            base_model: job.base_model,
-            fine_tuned_model: job.fine_tuned_model,
-            provider: job.provider,
-            training_config: job
-                .training_config
-                .and_then(|tc| serde_json::from_str(&tc).ok()),
-            inference_parameters: job
-                .inference_parameters
-                .and_then(|ip| serde_json::from_str(&ip).ok()),
-            suffix: None,
-            error_message: job.error_message,
-            training_file_id: job.training_file_id.unwrap_or_default(),
-            validation_file_id: job.validation_file_id,
-            created_at: job.created_at,
-            updated_at: job.updated_at,
-            completed_at: job.completed_at,
+        .map(|job| {
+            let provider_job_id = job.provider_job_id.clone();
+            LocalFinetuningJobResponse {
+                id: job.id,
+                provider_job_id: provider_job_id.clone(),
+                workflow_id: job.workflow_id,
+                evaluator_version: job.evaluator_version,
+                status: job.state,
+                base_model: job.base_model,
+                fine_tuned_model: job.fine_tuned_model,
+                provider: job.provider,
+                training_config: job
+                    .training_config
+                    .and_then(|tc| serde_json::from_str(&tc).ok()),
+                inference_parameters: job
+                    .inference_parameters
+                    .and_then(|ip| serde_json::from_str(&ip).ok()),
+                suffix: None,
+                error_message: job.error_message,
+                training_file_id: job.training_file_id.unwrap_or_default(),
+                validation_file_id: job.validation_file_id,
+                created_at: job.created_at,
+                updated_at: job.updated_at,
+                completed_at: job.completed_at,
+                eval_metrics: metrics_by_job_id.remove(&provider_job_id).flatten(),
+            }
         })
         .collect();
 

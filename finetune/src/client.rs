@@ -3,10 +3,10 @@ use crate::types::{
     CreateFinetuneJobRequest, CreateJobRequest, CreateJobResponse, DatasetAnalyticsResponse,
     DeploymentResponse, DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse,
     DryRunEvaluatorRequest, DryRunEvaluatorResponse, EstimateJobResponse, EvaluationResultQuery,
-    EvaluationResultResponse, EvaluatorVersionResponse, FinetuneEvalResultsResponse,
-    FinetuneJobMetricsResponse, FinetuneJobModelsResponse, FinetuneJobStatusResponse,
-    FinetuningJobResponse, FinetuningJobResult, JobType, UnifiedJobStatusResponse,
-    UploadDatasetResponse, WeightsDownloadUrlResponse,
+    EvaluationResultResponse, EvaluatorVersionResponse, FinetuneEvalJobMetrics,
+    FinetuneEvalResultsResponse, FinetuneJobMetricsResponse, FinetuneJobModelsResponse,
+    FinetuneJobStatusResponse, FinetuningJobResponse, FinetuningJobResult, JobType,
+    UnifiedJobStatusResponse, UploadDatasetResponse, WeightsDownloadUrlResponse,
 };
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 
@@ -379,6 +379,39 @@ impl LangdbCloudFinetuneClient {
             .map_err(|e| format!("Failed to parse response: {}", e))?;
 
         Ok(body)
+    }
+
+    /// Fetch aggregated finetune evaluation metrics for all jobs in a workflow.
+    pub async fn get_finetune_evaluations_metrics(
+        &self,
+        workflow_id: &str,
+    ) -> Result<Vec<FinetuneEvalJobMetrics>, String> {
+        let url = format!(
+            "{}/finetune/workflows/{}/finetune-evaluations/metrics",
+            self.api_url, workflow_id
+        );
+
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to call cloud API: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!("API error {}: {}", status, body));
+        }
+
+        let body = response
+            .text()
+            .await
+            .map_err(|e| format!("Failed to read response body: {}", e))?;
+        serde_json::from_str::<Vec<FinetuneEvalJobMetrics>>(&body).map_err(|e| {
+            let preview: String = body.chars().take(600).collect();
+            format!("Failed to parse response: {}. body_preview={}", e, preview)
+        })
     }
 
     /// Create a fine-tuning job

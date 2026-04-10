@@ -578,6 +578,10 @@ impl ApiServer {
                                     .route(
                                         "/finetune-evaluations",
                                         web::get().to(finetune::get_finetune_evaluations),
+                                    )
+                                    .route(
+                                        "/finetune-evaluations/metrics",
+                                        web::get().to(finetune::get_finetune_evaluations_metrics),
                                     ),
                             ),
                     )
