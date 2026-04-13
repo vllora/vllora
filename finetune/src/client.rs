@@ -3,8 +3,9 @@ use crate::types::{
     CreateFinetuneJobRequest, CreateJobRequest, CreateJobResponse, DatasetAnalyticsResponse,
     DeploymentResponse, DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse,
     DryRunEvaluatorRequest, DryRunEvaluatorResponse, EstimateJobResponse, EvaluationResultQuery,
-    EvaluationResultResponse, EvaluatorVersionResponse, FinetuneEvalResultsResponse,
-    FinetuneJobMetricsResponse, FinetuneJobStatusResponse, FinetuningJobResponse,
+    EvaluationResultResponse, EvaluationRunMetrics, EvaluatorVersionResponse,
+    FinetuneEvalJobMetrics, FinetuneEvalResultsResponse, FinetuneJobMetricsResponse,
+    FinetuneJobModelsResponse, FinetuneJobStatusResponse, FinetuningJobResponse,
     FinetuningJobResult, JobType, UnifiedJobStatusResponse, UploadDatasetResponse,
     WeightsDownloadUrlResponse,
 };
@@ -319,6 +320,7 @@ impl LangdbCloudFinetuneClient {
     }
 
     /// Fetch finetune evaluation results grouped by row and epoch
+    #[allow(clippy::too_many_arguments)]
     pub async fn get_finetune_evaluations(
         &self,
         dataset_id: &str,
@@ -326,6 +328,8 @@ impl LangdbCloudFinetuneClient {
         epoch: Option<i32>,
         finetune_job_id: Option<String>,
         include_rollout_content: bool,
+        limit: Option<usize>,
+        offset: Option<usize>,
     ) -> Result<FinetuneEvalResultsResponse, String> {
         let url = format!(
             "{}/finetune/workflows/{}/finetune-evaluations",
@@ -341,6 +345,12 @@ impl LangdbCloudFinetuneClient {
         }
         if let Some(job_id) = finetune_job_id {
             query_params.push(("finetune_job_id", job_id));
+        }
+        if let Some(limit) = limit {
+            query_params.push(("limit", limit.to_string()));
+        }
+        if let Some(offset) = offset {
+            query_params.push(("offset", offset.to_string()));
         }
 
         if include_rollout_content {
@@ -370,6 +380,39 @@ impl LangdbCloudFinetuneClient {
             .map_err(|e| format!("Failed to parse response: {}", e))?;
 
         Ok(body)
+    }
+
+    /// Fetch aggregated finetune evaluation metrics for all jobs in a workflow.
+    pub async fn get_finetune_evaluations_metrics(
+        &self,
+        workflow_id: &str,
+    ) -> Result<Vec<FinetuneEvalJobMetrics>, String> {
+        let url = format!(
+            "{}/finetune/workflows/{}/finetune-evaluations/metrics",
+            self.api_url, workflow_id
+        );
+
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to call cloud API: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!("API error {}: {}", status, body));
+        }
+
+        let body = response
+            .text()
+            .await
+            .map_err(|e| format!("Failed to read response body: {}", e))?;
+        serde_json::from_str::<Vec<FinetuneEvalJobMetrics>>(&body).map_err(|e| {
+            let preview: String = body.chars().take(600).collect();
+            format!("Failed to parse response: {}. body_preview={}", e, preview)
+        })
     }
 
     /// Create a fine-tuning job
@@ -497,6 +540,33 @@ impl LangdbCloudFinetuneClient {
         Ok(body)
     }
 
+    /// Get available model aliases for a finetune job (checkpoints + finetuned model).
+    pub async fn get_finetune_job_models(
+        &self,
+        job_id: &str,
+    ) -> Result<FinetuneJobModelsResponse, String> {
+        let url = format!("{}/finetune/jobs/{}/models", self.api_url, job_id);
+
+        let req = self.client.get(&url);
+        let response = req
+            .send()
+            .await
+            .map_err(|e| format!("Failed to call cloud API: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!("API error {}: {}", status, body));
+        }
+
+        let body: FinetuneJobModelsResponse = response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+        Ok(body)
+    }
+
     /// List fine-tuning jobs
     pub async fn list_finetune_jobs(
         &self,
@@ -587,6 +657,35 @@ impl LangdbCloudFinetuneClient {
             .map_err(|e| format!("Failed to parse response: {}", e))?;
 
         Ok(body)
+    }
+
+    /// Get aggregated metrics for all evaluation runs of a workflow
+    pub async fn get_workflow_evaluation_metrics(
+        &self,
+        workflow_id: &str,
+    ) -> Result<Vec<EvaluationRunMetrics>, String> {
+        let url = format!(
+            "{}/finetune/workflows/{}/evaluations/metrics",
+            self.api_url, workflow_id
+        );
+
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to call cloud API: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!("API error {}: {}", status, body));
+        }
+
+        response
+            .json::<Vec<EvaluationRunMetrics>>()
+            .await
+            .map_err(|e| format!("Failed to parse response: {}", e))
     }
 
     /// Get analytics for a given dataset (structure + quality)

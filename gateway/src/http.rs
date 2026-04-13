@@ -491,10 +491,19 @@ impl ApiServer {
                                             ),
                                     )
                                     // Eval Jobs CRUD
+                                    // Workflow-scoped evaluation metadata (local DB)
                                     .service(
-                                        web::scope("/eval-jobs")
+                                        web::scope("/evaluations")
                                             .route("", web::get().to(eval_jobs::list_eval_jobs))
-                                            .route("", web::delete().to(eval_jobs::delete_workflow_eval_jobs))
+                                            .route(
+                                                "/metrics",
+                                                web::get()
+                                                    .to(finetune::get_workflow_evaluation_metrics),
+                                            )
+                                            .route(
+                                                "",
+                                                web::delete().to(eval_jobs::delete_workflow_eval_jobs),
+                                            )
                                             .route("/{job_id}", web::get().to(eval_jobs::get_eval_job)),
                                     )
                                     // Dataset (cloud JSONL) - keep existing placeholders
@@ -562,6 +571,11 @@ impl ApiServer {
                                                         ),
                                                     )
                                                     .route(
+                                                        "/models",
+                                                        web::get()
+                                                            .to(finetune::get_finetune_job_models),
+                                                    )
+                                                    .route(
                                                         "/cancel",
                                                         web::post()
                                                             .to(finetune::cancel_finetune_job),
@@ -586,14 +600,17 @@ impl ApiServer {
                                     .route(
                                         "/finetune-evaluations",
                                         web::get().to(finetune::get_finetune_evaluations),
+                                    )
+                                    .route(
+                                        "/finetune-evaluations/metrics",
+                                        web::get().to(finetune::get_finetune_evaluations_metrics),
+                                    )
+                                    .route(
+                                        "/evaluations/metrics",
+                                        web::get().to(finetune::get_workflow_evaluation_metrics),
                                     ),
                             ),
                     )
-                    .service(
-                        web::scope("/eval-jobs")
-                            .route("", web::get().to(eval_jobs::list_eval_jobs_by_status))
-                            .route("/{job_id}", web::get().to(eval_jobs::get_eval_job_by_id))
-                        )
                     // NOTE: POST /finetune/datasets (upload) was removed — gateway auto-uploads
                     // via ensure_dataset_uploaded() inside create_evaluation / create_finetune_job.
                     .service(
