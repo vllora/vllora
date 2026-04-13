@@ -90,9 +90,11 @@ pub struct RenameTopicRequest {
 pub struct ListRecordsQuery {
     pub limit: Option<i64>,
     pub offset: Option<i64>,
+    pub topic_id: Option<String>,
 }
 
 /// List records — supports optional pagination via `?limit=N&offset=M`.
+/// Optional `?topic_id=UUID` filter narrows to a single topic.
 /// Without query params: returns `{ "records": [...] }` (backward-compatible).
 /// With query params: returns `{ "data": [...], "pagination": { offset, limit, total } }`.
 pub async fn list_records(
@@ -105,9 +107,15 @@ pub async fn list_records(
 
     if let Some(limit) = query.limit {
         let offset = query.offset.unwrap_or(0);
-        let (records, total) = service
-            .list_paginated(&workflow_id, limit, offset)
-            .map_err(map_db_error)?;
+        let (records, total) = if let Some(ref topic_id) = query.topic_id {
+            service
+                .list_paginated_by_topic(&workflow_id, topic_id, limit, offset)
+                .map_err(map_db_error)?
+        } else {
+            service
+                .list_paginated(&workflow_id, limit, offset)
+                .map_err(map_db_error)?
+        };
         Ok(HttpResponse::Ok().json(PaginatedResult::new(
             records,
             Pagination { offset, limit, total },
@@ -154,6 +162,16 @@ pub async fn count_records(
     let service = WorkflowRecordService::new(db_pool.get_ref().clone());
     let count = service.count(&workflow_id).map_err(map_db_error)?;
     Ok(HttpResponse::Ok().json(serde_json::json!({ "count": count })))
+}
+
+pub async fn counts_by_topic(
+    workflow_id: web::Path<String>,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let workflow_id = workflow_id.into_inner();
+    let service = WorkflowRecordService::new(db_pool.get_ref().clone());
+    let counts = service.counts_by_topic(&workflow_id).map_err(map_db_error)?;
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "counts": counts })))
 }
 
 pub async fn add_records(

@@ -1,7 +1,7 @@
 use crate::metadata::error::DatabaseError;
 use crate::metadata::models::workflow_record::{
     DbNewWorkflowRecord, DbNewWorkflowRecordScore, DbWorkflowRecord, DbWorkflowRecordScore,
-    RecordsSummary,
+    RecordsSummary, TopicRecordCount,
 };
 use crate::metadata::pool::DbPool;
 use crate::metadata::schema::workflow_records::dsl;
@@ -97,6 +97,30 @@ impl WorkflowRecordService {
         Ok((records, total))
     }
 
+    /// Paginated list filtered by topic_id: returns (records, total_count).
+    pub fn list_paginated_by_topic(
+        &self,
+        workflow_id: &str,
+        topic_id: &str,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<DbWorkflowRecord>, i64), DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+        let total: i64 = dsl::workflow_records
+            .filter(dsl::workflow_id.eq(workflow_id))
+            .filter(dsl::topic_id.eq(topic_id))
+            .count()
+            .get_result(&mut conn)?;
+        let records = dsl::workflow_records
+            .filter(dsl::workflow_id.eq(workflow_id))
+            .filter(dsl::topic_id.eq(topic_id))
+            .order(dsl::created_at.desc())
+            .limit(limit)
+            .offset(offset)
+            .load::<DbWorkflowRecord>(&mut conn)?;
+        Ok((records, total))
+    }
+
     /// Lightweight aggregate stats — no row data transferred.
     pub fn summary(&self, workflow_id: &str) -> Result<RecordsSummary, DatabaseError> {
         let mut conn = self.db_pool.get()?;
@@ -115,6 +139,24 @@ impl WorkflowRecordService {
             .count()
             .get_result(&mut conn)?;
         Ok(RecordsSummary { total, with_topic, generated })
+    }
+
+    /// Record counts grouped by topic_id — no row data transferred.
+    pub fn counts_by_topic(
+        &self,
+        workflow_id: &str,
+    ) -> Result<Vec<TopicRecordCount>, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+        let results = diesel::sql_query(
+            "SELECT topic_id, COUNT(*) as count \
+             FROM workflow_records \
+             WHERE workflow_id = ? AND topic_id IS NOT NULL \
+             GROUP BY topic_id",
+        )
+        .bind::<diesel::sql_types::Text, _>(workflow_id)
+        .load::<TopicRecordCount>(&mut conn)
+        .map_err(DatabaseError::QueryError)?;
+        Ok(results)
     }
 
     /// Check if a span_id exists without loading all records.

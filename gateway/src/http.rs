@@ -405,6 +405,7 @@ impl ApiServer {
                                         web::scope("/records")
                                             .route("", web::get().to(workflow_records::list_records))
                                             .route("/count", web::get().to(workflow_records::count_records))
+                                            .route("/counts-by-topic", web::get().to(workflow_records::counts_by_topic))
                                             .route("/summary", web::get().to(workflow_records::records_summary))
                                             .route("/exists", web::get().to(workflow_records::span_exists))
                                             .route("", web::post().to(workflow_records::add_records))

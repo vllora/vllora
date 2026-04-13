@@ -54,6 +54,16 @@ pub struct RecordsSummary {
     pub generated: i64,
 }
 
+/// Record count for a single topic.
+#[derive(Debug, Serialize, Clone, diesel::QueryableByName)]
+#[serde(crate = "serde")]
+pub struct TopicRecordCount {
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    pub topic_id: String,
+    #[diesel(sql_type = diesel::sql_types::BigInt)]
+    pub count: i64,
+}
+
 #[derive(Debug, Insertable, Clone)]
 #[diesel(table_name = workflow_record_scores)]
 pub struct DbNewWorkflowRecordScore {
