@@ -6,6 +6,7 @@ use vllora_core::metadata::pool::DbPool;
 use vllora_core::metadata::services::workflow_record::{
     WorkflowRecordScoreService, WorkflowRecordService,
 };
+use vllora_core::types::handlers::pagination::{PaginatedResult, Pagination};
 
 fn map_db_error(err: DatabaseError) -> actix_web::Error {
     match err {
@@ -85,14 +86,64 @@ pub struct RenameTopicRequest {
     pub new_topic_id: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ListRecordsQuery {
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
+
+/// List records — supports optional pagination via `?limit=N&offset=M`.
+/// Without query params: returns `{ "records": [...] }` (backward-compatible).
+/// With query params: returns `{ "data": [...], "pagination": { offset, limit, total } }`.
 pub async fn list_records(
+    workflow_id: web::Path<String>,
+    query: web::Query<ListRecordsQuery>,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let workflow_id = workflow_id.into_inner();
+    let service = WorkflowRecordService::new(db_pool.get_ref().clone());
+
+    if let Some(limit) = query.limit {
+        let offset = query.offset.unwrap_or(0);
+        let (records, total) = service
+            .list_paginated(&workflow_id, limit, offset)
+            .map_err(map_db_error)?;
+        Ok(HttpResponse::Ok().json(PaginatedResult::new(
+            records,
+            Pagination { offset, limit, total },
+        )))
+    } else {
+        let records = service.list(&workflow_id).map_err(map_db_error)?;
+        Ok(HttpResponse::Ok().json(serde_json::json!({ "records": records })))
+    }
+}
+
+pub async fn records_summary(
     workflow_id: web::Path<String>,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
     let workflow_id = workflow_id.into_inner();
     let service = WorkflowRecordService::new(db_pool.get_ref().clone());
-    let records = service.list(&workflow_id).map_err(map_db_error)?;
-    Ok(HttpResponse::Ok().json(serde_json::json!({ "records": records })))
+    let summary = service.summary(&workflow_id).map_err(map_db_error)?;
+    Ok(HttpResponse::Ok().json(summary))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SpanExistsQuery {
+    pub span_id: String,
+}
+
+pub async fn span_exists(
+    workflow_id: web::Path<String>,
+    query: web::Query<SpanExistsQuery>,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let workflow_id = workflow_id.into_inner();
+    let service = WorkflowRecordService::new(db_pool.get_ref().clone());
+    let exists = service
+        .span_exists(&workflow_id, &query.span_id)
+        .map_err(map_db_error)?;
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "exists": exists })))
 }
 
 pub async fn count_records(

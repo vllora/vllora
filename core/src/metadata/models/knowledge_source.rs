@@ -18,6 +18,7 @@ pub struct DbKnowledgeSource {
     pub metadata: Option<String>,
     pub created_at: String,
     pub deleted_at: Option<String>,
+    pub trace_bundle_id: Option<String>,
 }
 
 #[derive(Debug, Insertable, Clone)]
@@ -29,6 +30,7 @@ pub struct DbNewKnowledgeSource {
     pub name: String,
     pub description: Option<String>,
     pub metadata: Option<String>,
+    pub trace_bundle_id: Option<String>,
 }
 
 impl DbNewKnowledgeSource {
@@ -46,6 +48,7 @@ impl DbNewKnowledgeSource {
             name,
             description,
             metadata,
+            trace_bundle_id: None,
         }
     }
 }
@@ -56,6 +59,7 @@ pub struct DbUpdateKnowledgeSource {
     pub description: Option<String>,
     pub metadata: Option<String>,
     pub deleted_at: Option<String>,
+    pub trace_bundle_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -67,6 +71,8 @@ pub struct KnowledgeSource {
     pub name: String,
     pub description: Option<String>,
     pub metadata: Option<JsonValue>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trace_bundle_id: Option<String>,
     pub part: Vec<crate::metadata::models::knowledge_source_part::KnowledgeSourcePart>,
 }
 
@@ -79,6 +85,9 @@ pub struct NewKnowledgeSource {
     pub name: String,
     pub description: Option<String>,
     pub metadata: Option<JsonValue>,
+    #[serde(default)]
+    pub trace_bundle_id: Option<String>,
+    #[serde(default)]
     pub part: Vec<crate::metadata::models::knowledge_source_part::NewKnowledgeSourcePart>,
 }
 
@@ -104,6 +113,7 @@ impl NewKnowledgeSource {
                 .as_ref()
                 .map(serde_json::to_string)
                 .transpose()?,
+            trace_bundle_id: self.trace_bundle_id,
         };
 
         let db_parts = self
@@ -139,6 +149,7 @@ impl KnowledgeSource {
             name: source.name,
             description: source.description,
             metadata,
+            trace_bundle_id: source.trace_bundle_id,
             part,
         })
     }

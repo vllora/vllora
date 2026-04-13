@@ -277,6 +277,21 @@ diesel::table! {
         metadata -> Nullable<Text>,
         created_at -> Text,
         deleted_at -> Nullable<Text>,
+        trace_bundle_id -> Nullable<Text>,
+    }
+}
+
+diesel::table! {
+    trace_bundles (id) {
+        id -> Text,
+        workflow_id -> Text,
+        name -> Text,
+        span_count -> Integer,
+        tool_names -> Text,
+        model_names -> Text,
+        raw_blob -> Binary,
+        created_at -> Text,
+        updated_at -> Text,
     }
 }
 
@@ -310,6 +325,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     provider_credentials,
     providers,
     sessions,
+    trace_bundles,
     traces,
     workflow_logs,
     workflow_records,

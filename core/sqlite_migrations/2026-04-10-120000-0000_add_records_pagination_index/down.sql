@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_workflow_records_workflow_created;

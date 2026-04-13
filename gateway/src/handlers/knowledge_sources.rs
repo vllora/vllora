@@ -48,6 +48,11 @@ pub async fn create_knowledge_source(
     let mut file_name: Option<String> = None;
     let mut file_bytes: Option<Vec<u8>> = None;
     let mut parts: Vec<NewKnowledgeSourcePart> = Vec::new();
+    // OTel trace pipeline (Track A): when a source is backed by an already-
+    // persisted `trace_bundles` row, the client sends `kind=otel-trace` +
+    // `trace_bundle_id=<uuid>` instead of a file upload.
+    let mut kind: Option<String> = None;
+    let mut trace_bundle_id: Option<String> = None;
 
     while let Some(field) = payload.next().await {
         let mut field = field.map_err(error::ErrorBadRequest)?;
@@ -64,7 +69,8 @@ pub async fn create_knowledge_source(
                 }
                 file_bytes = Some(bytes);
             }
-            "name" | "reference_id" | "description" | "metadata" | "parts" => {
+            "name" | "reference_id" | "description" | "metadata" | "parts" | "kind"
+            | "trace_bundle_id" => {
                 let mut bytes = Vec::new();
                 while let Some(chunk) = field.next().await {
                     let chunk = chunk.map_err(error::ErrorBadRequest)?;
@@ -84,6 +90,8 @@ pub async fn create_knowledge_source(
                         parts = serde_json::from_str::<Vec<NewKnowledgeSourcePart>>(&text)
                             .map_err(error::ErrorBadRequest)?;
                     }
+                    "kind" => kind = Some(text),
+                    "trace_bundle_id" => trace_bundle_id = Some(text),
                     _ => {}
                 }
             }
@@ -102,6 +110,37 @@ pub async fn create_knowledge_source(
     let reference_id = reference_id
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty());
+    let kind = kind
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty());
+    let trace_bundle_id = trace_bundle_id
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty());
+    let is_otel_trace = kind.as_deref() == Some("otel-trace") || trace_bundle_id.is_some();
+
+    if is_otel_trace {
+        let trace_bundle_id = trace_bundle_id.ok_or_else(|| {
+            error::ErrorBadRequest("trace_bundle_id is required when kind=otel-trace")
+        })?;
+        // OTel-backed sources don't have a file upload; the blob lives in trace_bundles.
+        let source_id = Uuid::new_v4().to_string();
+        let ks = service
+            .create_typed(NewKnowledgeSource {
+                id: Some(source_id),
+                reference_id,
+                workflow_id,
+                name,
+                description,
+                metadata,
+                trace_bundle_id: Some(trace_bundle_id),
+                part: parts,
+            })
+            .map_err(map_db_error)?;
+        return Ok(HttpResponse::Created().json(serde_json::json!({
+            "knowledge_source": ks,
+        })));
+    }
+
     let file_bytes = file_bytes
         .filter(|v| !v.is_empty())
         .ok_or_else(|| error::ErrorBadRequest("file is required"))?;
@@ -131,6 +170,7 @@ pub async fn create_knowledge_source(
             name,
             description,
             metadata,
+            trace_bundle_id: None,
             part: parts,
         })
         .map_err(|e| {
@@ -432,6 +472,7 @@ pub async fn upsert_knowledge_source(
             name,
             description,
             metadata,
+            trace_bundle_id: None,
             part: parts,
         })
         .map_err(|e| {

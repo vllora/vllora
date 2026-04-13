@@ -6,6 +6,7 @@ use crate::finetune_state_tracker::FinetuneJobStateTracker;
 use crate::guardrails::GuardrailsService;
 use crate::handlers::{
     agents, debug, eval_jobs, finetune, knowledge_sources, models, projects, session, threads,
+    trace_bundles,
     workflow_logs, workflow_records, workflow_topics, workflows,
 };
 use crate::knowledge_embeddings::start_embedding_backfill_job;
@@ -404,6 +405,8 @@ impl ApiServer {
                                         web::scope("/records")
                                             .route("", web::get().to(workflow_records::list_records))
                                             .route("/count", web::get().to(workflow_records::count_records))
+                                            .route("/summary", web::get().to(workflow_records::records_summary))
+                                            .route("/exists", web::get().to(workflow_records::span_exists))
                                             .route("", web::post().to(workflow_records::add_records))
                                             .route("", web::put().to(workflow_records::replace_records))
                                             .route("", web::delete().to(workflow_records::delete_all_records))
@@ -473,6 +476,19 @@ impl ApiServer {
                                             .route("/{ks_id}/parts", web::get().to(knowledge_sources::list_knowledge_source_parts))
                                             .route("/{ks_id}/parts", web::patch().to(knowledge_sources::update_parts_metadata))
                                             .route("/{ks_id}/parts/{part_id}", web::delete().to(knowledge_sources::delete_knowledge_source_part)),
+                                    )
+                                    // Trace Bundles (OTel GenAI trace pipeline — Track A)
+                                    .service(
+                                        web::scope("/trace-bundles")
+                                            .route(
+                                                "",
+                                                web::post()
+                                                    .to(trace_bundles::create_trace_bundle),
+                                            )
+                                            .route(
+                                                "/{bundle_id}",
+                                                web::get().to(trace_bundles::get_trace_bundle),
+                                            ),
                                     )
                                     // Eval Jobs CRUD
                                     .service(

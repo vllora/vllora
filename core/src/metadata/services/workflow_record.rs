@@ -1,6 +1,7 @@
 use crate::metadata::error::DatabaseError;
 use crate::metadata::models::workflow_record::{
     DbNewWorkflowRecord, DbNewWorkflowRecordScore, DbWorkflowRecord, DbWorkflowRecordScore,
+    RecordsSummary,
 };
 use crate::metadata::pool::DbPool;
 use crate::metadata::schema::workflow_records::dsl;
@@ -73,6 +74,58 @@ impl WorkflowRecordService {
             .filter(dsl::workflow_id.eq(workflow_id))
             .count()
             .get_result(&mut conn)?)
+    }
+
+    /// Paginated list: returns (records, total_count).
+    pub fn list_paginated(
+        &self,
+        workflow_id: &str,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<DbWorkflowRecord>, i64), DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+        let total: i64 = dsl::workflow_records
+            .filter(dsl::workflow_id.eq(workflow_id))
+            .count()
+            .get_result(&mut conn)?;
+        let records = dsl::workflow_records
+            .filter(dsl::workflow_id.eq(workflow_id))
+            .order(dsl::created_at.desc())
+            .limit(limit)
+            .offset(offset)
+            .load::<DbWorkflowRecord>(&mut conn)?;
+        Ok((records, total))
+    }
+
+    /// Lightweight aggregate stats — no row data transferred.
+    pub fn summary(&self, workflow_id: &str) -> Result<RecordsSummary, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+        let total: i64 = dsl::workflow_records
+            .filter(dsl::workflow_id.eq(workflow_id))
+            .count()
+            .get_result(&mut conn)?;
+        let with_topic: i64 = dsl::workflow_records
+            .filter(dsl::workflow_id.eq(workflow_id))
+            .filter(dsl::topic_id.is_not_null())
+            .count()
+            .get_result(&mut conn)?;
+        let generated: i64 = dsl::workflow_records
+            .filter(dsl::workflow_id.eq(workflow_id))
+            .filter(dsl::is_generated.eq(1))
+            .count()
+            .get_result(&mut conn)?;
+        Ok(RecordsSummary { total, with_topic, generated })
+    }
+
+    /// Check if a span_id exists without loading all records.
+    pub fn span_exists(&self, workflow_id: &str, span_id: &str) -> Result<bool, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+        let count: i64 = dsl::workflow_records
+            .filter(dsl::workflow_id.eq(workflow_id))
+            .filter(dsl::span_id.eq(span_id))
+            .count()
+            .get_result(&mut conn)?;
+        Ok(count > 0)
     }
 
     pub fn replace_all(
@@ -610,6 +663,70 @@ mod tests {
 
         let records = service.list(&wf_id).unwrap();
         assert!(records.iter().all(|r| r.topic_id.is_none()));
+    }
+
+    #[test]
+    fn test_list_paginated() {
+        let db_pool = setup_test_database();
+        let wf_id = create_test_workflow(&db_pool);
+        let service = WorkflowRecordService::new(db_pool.clone());
+
+        let records: Vec<_> = (0..10).map(|i| make_record(&format!("r{}", i), None)).collect();
+        service.add(&wf_id, records).unwrap();
+
+        let (page, total) = service.list_paginated(&wf_id, 3, 0).unwrap();
+        assert_eq!(total, 10);
+        assert_eq!(page.len(), 3);
+
+        let (page2, total2) = service.list_paginated(&wf_id, 3, 3).unwrap();
+        assert_eq!(total2, 10);
+        assert_eq!(page2.len(), 3);
+
+        // Past end
+        let (page_end, _) = service.list_paginated(&wf_id, 5, 8).unwrap();
+        assert_eq!(page_end.len(), 2);
+    }
+
+    #[test]
+    fn test_summary() {
+        let db_pool = setup_test_database();
+        let wf_id = create_test_workflow(&db_pool);
+        let service = WorkflowRecordService::new(db_pool.clone());
+        create_topic(&db_pool, &wf_id, "t1");
+
+        service
+            .add(
+                &wf_id,
+                vec![
+                    make_record("r1", Some("t1")),
+                    make_record("r2", None),
+                    {
+                        let mut r = make_record("r3", None);
+                        r.is_generated = 1;
+                        r
+                    },
+                ],
+            )
+            .unwrap();
+
+        let summary = service.summary(&wf_id).unwrap();
+        assert_eq!(summary.total, 3);
+        assert_eq!(summary.with_topic, 1);
+        assert_eq!(summary.generated, 1);
+    }
+
+    #[test]
+    fn test_span_exists() {
+        let db_pool = setup_test_database();
+        let wf_id = create_test_workflow(&db_pool);
+        let service = WorkflowRecordService::new(db_pool.clone());
+
+        let mut record = make_record("r1", None);
+        record.span_id = Some("span-abc".to_string());
+        service.add(&wf_id, vec![record]).unwrap();
+
+        assert!(service.span_exists(&wf_id, "span-abc").unwrap());
+        assert!(!service.span_exists(&wf_id, "span-xyz").unwrap());
     }
 
     #[test]

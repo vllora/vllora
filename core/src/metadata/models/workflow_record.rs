@@ -45,6 +45,15 @@ pub struct DbWorkflowRecordScore {
     pub created_at: String,
 }
 
+/// Lightweight aggregate stats for a workflow's records (no row data).
+#[derive(Debug, Serialize, Clone)]
+#[serde(crate = "serde")]
+pub struct RecordsSummary {
+    pub total: i64,
+    pub with_topic: i64,
+    pub generated: i64,
+}
+
 #[derive(Debug, Insertable, Clone)]
 #[diesel(table_name = workflow_record_scores)]
 pub struct DbNewWorkflowRecordScore {
