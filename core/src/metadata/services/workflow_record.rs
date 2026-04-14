@@ -138,7 +138,11 @@ impl WorkflowRecordService {
             .filter(dsl::is_generated.eq(1))
             .count()
             .get_result(&mut conn)?;
-        Ok(RecordsSummary { total, with_topic, generated })
+        Ok(RecordsSummary {
+            total,
+            with_topic,
+            generated,
+        })
     }
 
     /// Record counts grouped by topic_id — no row data transferred.
@@ -713,7 +717,9 @@ mod tests {
         let wf_id = create_test_workflow(&db_pool);
         let service = WorkflowRecordService::new(db_pool.clone());
 
-        let records: Vec<_> = (0..10).map(|i| make_record(&format!("r{}", i), None)).collect();
+        let records: Vec<_> = (0..10)
+            .map(|i| make_record(&format!("r{}", i), None))
+            .collect();
         service.add(&wf_id, records).unwrap();
 
         let (page, total) = service.list_paginated(&wf_id, 3, 0).unwrap();
@@ -739,15 +745,11 @@ mod tests {
         service
             .add(
                 &wf_id,
-                vec![
-                    make_record("r1", Some("t1")),
-                    make_record("r2", None),
-                    {
-                        let mut r = make_record("r3", None);
-                        r.is_generated = 1;
-                        r
-                    },
-                ],
+                vec![make_record("r1", Some("t1")), make_record("r2", None), {
+                    let mut r = make_record("r3", None);
+                    r.is_generated = 1;
+                    r
+                }],
             )
             .unwrap();
 

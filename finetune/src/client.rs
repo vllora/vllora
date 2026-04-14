@@ -6,8 +6,8 @@ use crate::types::{
     EvaluationResultResponse, EvaluationRunMetrics, EvaluatorVersionResponse,
     FinetuneEvalJobMetrics, FinetuneEvalResultsResponse, FinetuneJobMetricsResponse,
     FinetuneJobModelsResponse, FinetuneJobStatusResponse, FinetuningJobResponse,
-    FinetuningJobResult, JobType, UnifiedJobStatusResponse, UploadDatasetResponse,
-    WeightsDownloadUrlResponse,
+    FinetuningJobResult, JobType, ReportFinetuneJobCheckpointStepRequest, UnifiedJobStatusResponse,
+    UploadDatasetResponse, WeightsDownloadUrlResponse,
 };
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 
@@ -538,6 +538,29 @@ impl LangdbCloudFinetuneClient {
             .map_err(|e| format!("Failed to parse response: {}", e))?;
 
         Ok(body)
+    }
+
+    pub async fn report_finetune_job_checkpoint_step(
+        &self,
+        job_id: &str,
+        request: ReportFinetuneJobCheckpointStepRequest,
+    ) -> Result<(), String> {
+        let url = format!("{}/finetune/jobs/{}/checkpoint_step", self.api_url, job_id);
+        let response = self
+            .client
+            .post(&url)
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to call cloud API: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!("API error {}: {}", status, body));
+        }
+
+        Ok(())
     }
 
     /// Get available model aliases for a finetune job (checkpoints + finetuned model).

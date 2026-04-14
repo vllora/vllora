@@ -429,6 +429,11 @@ pub struct ReportFinetuneJobMetricsRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReportFinetuneJobCheckpointStepRequest {
+    pub checkpoint_step: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FinetuneEpochScore {
     pub epoch: i32,
     pub avg_score: f64,
