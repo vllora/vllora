@@ -4,6 +4,7 @@ pub mod eval_jobs;
 pub mod finetune;
 pub mod knowledge_sources;
 pub mod models;
+pub mod trace_analysis;
 pub mod trace_bundles;
 pub mod projects;
 pub mod session;

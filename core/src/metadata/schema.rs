@@ -296,6 +296,19 @@ diesel::table! {
 }
 
 diesel::table! {
+    trace_analyses (id) {
+        id -> Text,
+        workflow_id -> Text,
+        priority_json -> Nullable<Text>,
+        topics_json -> Nullable<Text>,
+        prompts_json -> Nullable<Text>,
+        grader_hints_json -> Nullable<Text>,
+        created_at -> Text,
+        updated_at -> Text,
+    }
+}
+
+diesel::table! {
     knowledge_source_parts (id) {
         id -> Text,
         reference_id -> Nullable<Text>,
@@ -325,6 +338,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     provider_credentials,
     providers,
     sessions,
+    trace_analyses,
     trace_bundles,
     traces,
     workflow_logs,

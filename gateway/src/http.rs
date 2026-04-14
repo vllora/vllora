@@ -6,7 +6,7 @@ use crate::finetune_state_tracker::FinetuneJobStateTracker;
 use crate::guardrails::GuardrailsService;
 use crate::handlers::{
     agents, debug, eval_jobs, finetune, knowledge_sources, models, projects, session, threads,
-    trace_bundles,
+    trace_analysis, trace_bundles,
     workflow_logs, workflow_records, workflow_topics, workflows,
 };
 use crate::knowledge_embeddings::start_embedding_backfill_job;
@@ -490,6 +490,15 @@ impl ApiServer {
                                                 "/{bundle_id}",
                                                 web::get().to(trace_bundles::get_trace_bundle),
                                             ),
+                                    )
+                                    // Trace Analysis (trace-informed curriculum)
+                                    .route(
+                                        "/trace-analysis",
+                                        web::get().to(trace_analysis::get_trace_analysis),
+                                    )
+                                    .route(
+                                        "/trace-analysis",
+                                        web::put().to(trace_analysis::put_trace_analysis),
                                     )
                                     // Eval Jobs CRUD
                                     // Workflow-scoped evaluation metadata (local DB)

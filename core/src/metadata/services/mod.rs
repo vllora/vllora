@@ -12,6 +12,7 @@ pub mod provider_credential;
 pub mod run;
 pub mod thread;
 pub mod trace;
+pub mod trace_analysis;
 pub mod trace_bundle;
 pub mod workflow;
 pub mod workflow_log;
