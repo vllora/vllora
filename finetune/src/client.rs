@@ -4,12 +4,13 @@ use crate::types::{
     DeploymentResponse, DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse,
     DryRunEvaluatorRequest, DryRunEvaluatorResponse, EstimateJobResponse, EvaluationResultQuery,
     EvaluationResultResponse, EvaluationRunMetrics, EvaluatorVersionResponse,
-    FinetuneEvalJobMetrics, FinetuneEvalResultsResponse, FinetuneJobMetricsResponse,
-    FinetuneJobModelsResponse, FinetuneJobStatusResponse, FinetuningJobResponse,
-    FinetuningJobResult, JobType, ReportFinetuneJobCheckpointStepRequest, UnifiedJobStatusResponse,
-    UploadDatasetResponse, WeightsDownloadUrlResponse,
+    FinetuneEvalJobMetrics, FinetuneEvalResultsResponse, FinetuneJobInfraMetricsResponse,
+    FinetuneJobMetricsResponse, FinetuneJobModelsResponse, FinetuneJobStatusResponse,
+    FinetuningJobResponse, FinetuningJobResult, JobType, ReportFinetuneJobCheckpointStepRequest,
+    UnifiedJobStatusResponse, UploadDatasetResponse, WeightsDownloadUrlResponse,
 };
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
+use serde::de::DeserializeOwned;
 
 /// Get cloud API URL
 fn get_api_url() -> String {
@@ -23,6 +24,26 @@ pub struct LangdbCloudFinetuneClient {
 }
 
 impl LangdbCloudFinetuneClient {
+    async fn ensure_success(response: reqwest::Response) -> Result<reqwest::Response, String> {
+        if response.status().is_success() {
+            return Ok(response);
+        }
+
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        Err(format!("API error {}: {}", status, body))
+    }
+
+    async fn parse_json_response<T: DeserializeOwned>(
+        response: reqwest::Response,
+    ) -> Result<T, String> {
+        let response = Self::ensure_success(response).await?;
+        response
+            .json::<T>()
+            .await
+            .map_err(|e| format!("Failed to parse response: {}", e))
+    }
+
     /// Create a new client with API key
     pub fn new(api_key: String) -> Result<Self, String> {
         let mut headers = HeaderMap::new();
@@ -91,18 +112,8 @@ impl LangdbCloudFinetuneClient {
             .await
             .map_err(|e| format!("Failed to call cloud API: {}", e))?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(format!("API error {}: {}", status, body));
-        }
-
-        let body: UploadDatasetResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
-
-        Ok(body)
+        let response = Self::ensure_success(response).await?;
+        Self::parse_json_response(response).await
     }
 
     /// List all evaluator versions for a dataset (newest to oldest)
@@ -122,18 +133,8 @@ impl LangdbCloudFinetuneClient {
             .await
             .map_err(|e| format!("Failed to call cloud API: {}", e))?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(format!("API error {}: {}", status, body));
-        }
-
-        let body: Vec<EvaluatorVersionResponse> = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
-
-        Ok(body)
+        let response = Self::ensure_success(response).await?;
+        Self::parse_json_response(response).await
     }
 
     /// Update the evaluator script for an existing dataset.
@@ -158,11 +159,7 @@ impl LangdbCloudFinetuneClient {
             .await
             .map_err(|e| format!("Failed to call cloud API: {}", e))?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(format!("API error {}: {}", status, body));
-        }
+        Self::ensure_success(response).await?;
 
         Ok(())
     }
@@ -239,11 +236,7 @@ impl LangdbCloudFinetuneClient {
             .await
             .map_err(|e| format!("Failed to call cloud API: {}", e))?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(format!("API error {}: {}", status, body));
-        }
+        let response = Self::ensure_success(response).await?;
 
         response
             .json::<Vec<EstimateJobResponse>>()
@@ -305,18 +298,8 @@ impl LangdbCloudFinetuneClient {
             .await
             .map_err(|e| format!("Failed to call cloud API: {}", e))?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(format!("API error {}: {}", status, body));
-        }
-
-        let body: CreateEvaluationResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
-
-        Ok(body)
+        let response = Self::ensure_success(response).await?;
+        Self::parse_json_response(response).await
     }
 
     /// Fetch finetune evaluation results grouped by row and epoch
@@ -368,18 +351,8 @@ impl LangdbCloudFinetuneClient {
             .await
             .map_err(|e| format!("Failed to call cloud API: {}", e))?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(format!("API error {}: {}", status, body));
-        }
-
-        let body: FinetuneEvalResultsResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
-
-        Ok(body)
+        let response = Self::ensure_success(response).await?;
+        Self::parse_json_response(response).await
     }
 
     /// Fetch aggregated finetune evaluation metrics for all jobs in a workflow.
@@ -399,11 +372,7 @@ impl LangdbCloudFinetuneClient {
             .await
             .map_err(|e| format!("Failed to call cloud API: {}", e))?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(format!("API error {}: {}", status, body));
-        }
+        let response = Self::ensure_success(response).await?;
 
         let body = response
             .text()
@@ -430,11 +399,7 @@ impl LangdbCloudFinetuneClient {
             .await
             .map_err(|e| format!("Failed to call cloud API: {}", e))?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(format!("API error {}: {}", status, body));
-        }
+        let response = Self::ensure_success(response).await?;
 
         let text = response
             .text()
@@ -466,18 +431,8 @@ impl LangdbCloudFinetuneClient {
             .await
             .map_err(|e| format!("Failed to call cloud API: {}", e))?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(format!("API error {}: {}", status, body));
-        }
-
-        let body: FinetuneJobStatusResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
-
-        Ok(body)
+        let response = Self::ensure_success(response).await?;
+        Self::parse_json_response(response).await
     }
 
     pub async fn cancel_finetune_job(&self, job_id: &str) -> Result<(), String> {
@@ -490,11 +445,7 @@ impl LangdbCloudFinetuneClient {
             .await
             .map_err(|e| format!("Failed to call cloud API: {}", e))?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(format!("API error {}: {}", status, body));
-        }
+        Self::ensure_success(response).await?;
 
         Ok(())
     }
@@ -525,19 +476,23 @@ impl LangdbCloudFinetuneClient {
             .send()
             .await
             .map_err(|e| format!("Failed to call cloud API: {}", e))?;
+        Self::parse_json_response(response).await
+    }
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(format!("API error {}: {}", status, body));
-        }
+    /// Get infrastructure metrics for a finetune job (e.g. Vertex GPU utilization from Cloud Monitoring).
+    pub async fn get_finetune_job_infra_metrics(
+        &self,
+        job_id: &str,
+    ) -> Result<FinetuneJobInfraMetricsResponse, String> {
+        let url = format!("{}/finetune/jobs/{}/infra-metrics", self.api_url, job_id);
 
-        let body: FinetuneJobMetricsResponse = response
-            .json()
+        let req = self.client.get(&url);
+
+        let response = req
+            .send()
             .await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
-
-        Ok(body)
+            .map_err(|e| format!("Failed to call cloud API: {}", e))?;
+        Self::parse_json_response(response).await
     }
 
     pub async fn report_finetune_job_checkpoint_step(
@@ -554,11 +509,7 @@ impl LangdbCloudFinetuneClient {
             .await
             .map_err(|e| format!("Failed to call cloud API: {}", e))?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(format!("API error {}: {}", status, body));
-        }
+        Self::ensure_success(response).await?;
 
         Ok(())
     }
@@ -575,19 +526,7 @@ impl LangdbCloudFinetuneClient {
             .send()
             .await
             .map_err(|e| format!("Failed to call cloud API: {}", e))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(format!("API error {}: {}", status, body));
-        }
-
-        let body: FinetuneJobModelsResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
-
-        Ok(body)
+        Self::parse_json_response(response).await
     }
 
     /// List fine-tuning jobs
@@ -616,18 +555,8 @@ impl LangdbCloudFinetuneClient {
             .await
             .map_err(|e| format!("Failed to call cloud API: {}", e))?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(format!("API error {}: {}", status, body));
-        }
-
-        let body: Vec<FinetuningJobResponse> = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
-
-        Ok(body)
+        let response = Self::ensure_success(response).await?;
+        Self::parse_json_response(response).await
     }
 
     /// Get evaluation results for a given evaluation run
@@ -668,18 +597,8 @@ impl LangdbCloudFinetuneClient {
             .await
             .map_err(|e| format!("Failed to call cloud API: {}", e))?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(format!("API error {}: {}", status, body));
-        }
-
-        let body: EvaluationResultResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
-
-        Ok(body)
+        let response = Self::ensure_success(response).await?;
+        Self::parse_json_response(response).await
     }
 
     /// Get aggregated metrics for all evaluation runs of a workflow
@@ -699,11 +618,7 @@ impl LangdbCloudFinetuneClient {
             .await
             .map_err(|e| format!("Failed to call cloud API: {}", e))?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(format!("API error {}: {}", status, body));
-        }
+        let response = Self::ensure_success(response).await?;
 
         response
             .json::<Vec<EvaluationRunMetrics>>()
@@ -728,18 +643,8 @@ impl LangdbCloudFinetuneClient {
             .await
             .map_err(|e| format!("Failed to call cloud API: {}", e))?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(format!("API error {}: {}", status, body));
-        }
-
-        let body: DatasetAnalyticsResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
-
-        Ok(body)
+        let response = Self::ensure_success(response).await?;
+        Self::parse_json_response(response).await
     }
 
     /// Compute analytics for an in-memory dataset (not uploaded).
@@ -756,18 +661,8 @@ impl LangdbCloudFinetuneClient {
             .await
             .map_err(|e| format!("Failed to call cloud API: {}", e))?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(format!("API error {}: {}", status, body));
-        }
-
-        let body: DryRunDatasetAnalyticsResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
-
-        Ok(body)
+        let response = Self::ensure_success(response).await?;
+        Self::parse_json_response(response).await
     }
 
     /// Run a workflow evaluator script immediately without saving it.
@@ -801,18 +696,8 @@ impl LangdbCloudFinetuneClient {
             .await
             .map_err(|e| format!("Failed to call cloud API: {}", e))?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(format!("API error {}: {}", status, body));
-        }
-
-        let body: DryRunEvaluatorResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
-
-        Ok(body)
+        let response = Self::ensure_success(response).await?;
+        Self::parse_json_response(response).await
     }
 
     /// Deploy a fine-tuned model
@@ -829,18 +714,8 @@ impl LangdbCloudFinetuneClient {
             .await
             .map_err(|e| format!("Failed to call cloud API: {}", e))?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(format!("API error {}: {}", status, body));
-        }
-
-        let body: DeploymentResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
-
-        Ok(body)
+        let response = Self::ensure_success(response).await?;
+        Self::parse_json_response(response).await
     }
 
     /// Delete a deployment
@@ -854,11 +729,7 @@ impl LangdbCloudFinetuneClient {
             .await
             .map_err(|e| format!("Failed to call cloud API: {}", e))?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(format!("API error {}: {}", status, body));
-        }
+        Self::ensure_success(response).await?;
 
         Ok(())
     }
@@ -880,17 +751,7 @@ impl LangdbCloudFinetuneClient {
             .await
             .map_err(|e| format!("Failed to call cloud API: {}", e))?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(format!("API error {}: {}", status, body));
-        }
-
-        let body: WeightsDownloadUrlResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
-
-        Ok(body)
+        let response = Self::ensure_success(response).await?;
+        Self::parse_json_response(response).await
     }
 }

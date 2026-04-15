@@ -412,6 +412,22 @@ pub struct FinetuneJobMetricsResponse {
     pub metrics: Vec<FinetuneJobMetricPoint>,
 }
 
+/// Vertex / provider infrastructure metrics (GPU utilization, memory, etc.) from Cloud Monitoring.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FinetuneJobInfraMetricPoint {
+    pub metric_type: String,
+    pub metric_time: chrono::DateTime<chrono::Utc>,
+    pub metric_value: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FinetuneJobInfraMetricsResponse {
+    pub provider_job_id: uuid::Uuid,
+    pub metrics: Vec<FinetuneJobInfraMetricPoint>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FinetuneJobModelsResponse {
     pub provider_job_id: uuid::Uuid,

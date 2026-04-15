@@ -580,6 +580,12 @@ impl ApiServer {
                                                         ),
                                                     )
                                                     .route(
+                                                        "/infra-metrics",
+                                                        web::get().to(
+                                                            finetune::get_finetune_job_infra_metrics,
+                                                        ),
+                                                    )
+                                                    .route(
                                                         "/checkpoint_step",
                                                         web::post().to(
                                                             finetune::report_finetune_job_checkpoint_step,
