@@ -47,10 +47,7 @@ impl TraceBundleService {
     }
 
     #[allow(dead_code)]
-    pub fn list_by_workflow(
-        &self,
-        workflow_id: &str,
-    ) -> Result<Vec<TraceBundle>, DatabaseError> {
+    pub fn list_by_workflow(&self, workflow_id: &str) -> Result<Vec<TraceBundle>, DatabaseError> {
         let mut conn = self.db_pool.get()?;
         let rows = dsl::trace_bundles
             .filter(dsl::workflow_id.eq(workflow_id))

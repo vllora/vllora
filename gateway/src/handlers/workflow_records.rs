@@ -118,7 +118,11 @@ pub async fn list_records(
         };
         Ok(HttpResponse::Ok().json(PaginatedResult::new(
             records,
-            Pagination { offset, limit, total },
+            Pagination {
+                offset,
+                limit,
+                total,
+            },
         )))
     } else {
         let records = service.list(&workflow_id).map_err(map_db_error)?;
@@ -170,7 +174,9 @@ pub async fn counts_by_topic(
 ) -> Result<HttpResponse> {
     let workflow_id = workflow_id.into_inner();
     let service = WorkflowRecordService::new(db_pool.get_ref().clone());
-    let counts = service.counts_by_topic(&workflow_id).map_err(map_db_error)?;
+    let counts = service
+        .counts_by_topic(&workflow_id)
+        .map_err(map_db_error)?;
     Ok(HttpResponse::Ok().json(serde_json::json!({ "counts": counts })))
 }
 

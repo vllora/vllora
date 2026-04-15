@@ -110,9 +110,7 @@ pub async fn create_knowledge_source(
     let reference_id = reference_id
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty());
-    let kind = kind
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty());
+    let kind = kind.map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
     let trace_bundle_id = trace_bundle_id
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty());

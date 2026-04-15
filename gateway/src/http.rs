@@ -6,8 +6,7 @@ use crate::finetune_state_tracker::FinetuneJobStateTracker;
 use crate::guardrails::GuardrailsService;
 use crate::handlers::{
     agents, debug, eval_jobs, finetune, knowledge_sources, models, projects, session, threads,
-    trace_analysis, trace_bundles,
-    workflow_logs, workflow_records, workflow_topics, workflows,
+    trace_analysis, trace_bundles, workflow_logs, workflow_records, workflow_topics, workflows,
 };
 use crate::knowledge_embeddings::start_embedding_backfill_job;
 use crate::metrics_writer::SqliteMetricsWriterAdapter;
@@ -578,6 +577,18 @@ impl ApiServer {
                                                         "/metrics",
                                                         web::get().to(
                                                             finetune::get_finetune_job_metrics,
+                                                        ),
+                                                    )
+                                                    .route(
+                                                        "/infra-metrics",
+                                                        web::get().to(
+                                                            finetune::get_finetune_job_infra_metrics,
+                                                        ),
+                                                    )
+                                                    .route(
+                                                        "/checkpoint_step",
+                                                        web::post().to(
+                                                            finetune::report_finetune_job_checkpoint_step,
                                                         ),
                                                     )
                                                     .route(

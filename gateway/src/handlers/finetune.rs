@@ -29,8 +29,9 @@ use vllora_finetune::types::{
     DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse, DryRunEvaluatorRequest,
     EstimateJobResponse, EvaluationResultQuery, EvaluationResultResponse, EvaluationRunMetrics,
     Evaluator, FinetuneEvalJobMetrics, FinetuneEvalResultsResponse, FinetuneInferenceParameters,
-    FinetuneJobEvalMetrics, FinetuneJobMetricsResponse, FinetuneJobModelsResponse,
-    FinetuneJobQuery, FinetuneTrainingConfig, JobType, UpdateEvaluatorResponse,
+    FinetuneJobEvalMetrics, FinetuneJobInfraMetricsResponse, FinetuneJobMetricsResponse,
+    FinetuneJobModelsResponse, FinetuneJobQuery, FinetuneTrainingConfig, JobType,
+    ReportFinetuneJobCheckpointStepRequest, UpdateEvaluatorResponse,
 };
 use vllora_finetune::{
     CreateDeploymentRequest, CreateFinetuneJobRequest, LangdbCloudFinetuneClient,
@@ -924,6 +925,41 @@ pub async fn get_finetune_job_metrics(
     Ok(HttpResponse::Ok().json(response))
 }
 
+pub async fn get_finetune_job_infra_metrics(
+    path: web::Path<JobRequestPath>,
+    project: web::ReqData<vllora_core::types::metadata::project::Project>,
+    key_storage: web::Data<Box<dyn KeyStorage>>,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let path = path.into_inner();
+
+    // Resolve provider_job_id from local DB (FE passes local job UUID)
+    let finetune_job_service = FinetuneJobService::new(db_pool.get_ref().clone());
+    let provider_job_id = finetune_job_service
+        .get_by_id(&path.job_id.to_string(), &project.id.to_string())
+        .ok()
+        .flatten()
+        .map(|db_job| db_job.provider_job_id)
+        .unwrap_or_else(|| path.job_id.to_string());
+
+    let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
+    let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
+    })?;
+
+    let response: FinetuneJobInfraMetricsResponse = client
+        .get_finetune_job_infra_metrics(&provider_job_id)
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!(
+                "Failed to get finetune job infra metrics: {}",
+                e
+            ))
+        })?;
+
+    Ok(HttpResponse::Ok().json(response))
+}
+
 pub async fn get_finetune_job_models(
     path: web::Path<JobRequestPath>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
@@ -957,6 +993,41 @@ pub async fn get_finetune_job_models(
         })?;
 
     Ok(HttpResponse::Ok().json(response))
+}
+
+pub async fn report_finetune_job_checkpoint_step(
+    path: web::Path<JobRequestPath>,
+    request: web::Json<ReportFinetuneJobCheckpointStepRequest>,
+    project: web::ReqData<vllora_core::types::metadata::project::Project>,
+    key_storage: web::Data<Box<dyn KeyStorage>>,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let path = path.into_inner();
+
+    let finetune_job_service = FinetuneJobService::new(db_pool.get_ref().clone());
+    let provider_job_id = finetune_job_service
+        .get_by_id(&path.job_id.to_string(), &project.id.to_string())
+        .ok()
+        .flatten()
+        .map(|db_job| db_job.provider_job_id)
+        .unwrap_or_else(|| path.job_id.to_string());
+
+    let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
+    let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
+    })?;
+
+    client
+        .report_finetune_job_checkpoint_step(&provider_job_id, request.into_inner())
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!(
+                "Failed to report finetune job checkpoint step: {}",
+                e
+            ))
+        })?;
+
+    Ok(HttpResponse::NoContent().finish())
 }
 
 pub async fn list_finetune_jobs(

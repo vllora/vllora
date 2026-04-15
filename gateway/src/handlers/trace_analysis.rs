@@ -21,9 +21,7 @@ pub async fn get_trace_analysis(
 
     match service.get_by_workflow(&workflow_id) {
         Ok(Some(analysis)) => Ok(HttpResponse::Ok().json(analysis)),
-        Ok(None) => Err(error::ErrorNotFound(
-            "No trace analysis for this workflow",
-        )),
+        Ok(None) => Err(error::ErrorNotFound("No trace analysis for this workflow")),
         Err(e) => Err(error::ErrorInternalServerError(e)),
     }
 }
