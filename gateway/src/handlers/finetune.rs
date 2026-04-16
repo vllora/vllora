@@ -1407,3 +1407,71 @@ pub async fn adjust_topic_hierarchy(
         })))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::record_to_training_line;
+
+    #[test]
+    fn record_to_training_line_conversation_with_tool_call_and_tool_response() {
+        let input = r##"{
+            "input": {
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "# Retail agent policy\n\n- You can only help one user per conversation (but you can handle multiple requests from the same user), and must deny any requests for tasks related to any other user.\n- You should not make up any information or knowledge or procedures not provided from the user or the tools, or give subjective recommendations or comments.\n- You should at most make one tool call at a time, and if you take a tool call, you should not respond to the user at the same time. If you respond ..."
+                    },
+                    {
+                        "role": "user",
+                        "content": "I'd like to change the address on my order #W5056519."
+                    },
+                    {
+                        "role": "assistant",
+                        "content": "To assist you with changing the address on your order, I first need to authenticate your identity. Could you please provide your email address?"
+                    },
+                    {
+                        "role": "user",
+                        "content": "Sure, my email is yara.muller9246@example.com."
+                    },
+                    {
+                        "role": "assistant",
+                        "content": null,
+                        "tool_calls": [
+                            {
+                                "id": "1234abcd",
+                                "type": "function",
+                                "function": {
+                                    "name": "find_user_id_by_email",
+                                    "arguments": "{\"email\": \"yara.muller9246@example.com\"}"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "role": "tool",
+                        "tool_call_id": "1234abcd",
+                        "content": "yara_muller_8652"
+                    }
+                ]
+            }
+        }"##;
+
+        let converted = record_to_training_line("rec_123", input).expect("conversion should work");
+        let messages = converted
+            .get("messages")
+            .and_then(|m| m.as_array())
+            .expect("messages should be an array");
+
+        assert_eq!(
+            converted.get("id").and_then(|id| id.as_str()),
+            Some("rec_123")
+        );
+        assert_eq!(messages.len(), 6);
+        assert_eq!(messages[4]["role"], "assistant");
+        assert!(messages[4]["content"].is_null());
+        assert_eq!(messages[4]["tool_calls"][0]["id"], "1234abcd");
+        assert_eq!(messages[5]["role"], "tool");
+        assert_eq!(messages[5]["tool_call_id"], "1234abcd");
+        assert_eq!(messages[5]["content"], "yara_muller_8652");
+    }
+}
