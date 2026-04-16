@@ -66,13 +66,31 @@ impl LangdbCloudFinetuneClient {
         })
     }
 
-    /// Upload a dataset file (JSONL format)
+    /// Upload a dataset file (JSONL format).
+    /// Use `append_mode=true` + `row_index_offset` for chunked uploads —
+    /// first batch uses default (replace), subsequent batches append.
     pub async fn upload_dataset(
         &self,
         jsonl_data: Vec<u8>,
         topic_hierarchy: Option<String>,
         evaluator: Option<String>,
         dataset_id: Option<uuid::Uuid>,
+    ) -> Result<UploadDatasetResponse, String> {
+        self.upload_dataset_chunked(jsonl_data, topic_hierarchy, evaluator, dataset_id, false, 0)
+            .await
+    }
+
+    /// Upload a dataset chunk. When `append_mode` is true, rows are upserted
+    /// without deleting existing rows. `row_index_offset` shifts indices so
+    /// appended batches get correct ordering.
+    pub async fn upload_dataset_chunked(
+        &self,
+        jsonl_data: Vec<u8>,
+        topic_hierarchy: Option<String>,
+        evaluator: Option<String>,
+        dataset_id: Option<uuid::Uuid>,
+        append_mode: bool,
+        row_index_offset: usize,
     ) -> Result<UploadDatasetResponse, String> {
         let mut form = reqwest::multipart::Form::new();
 
@@ -101,6 +119,14 @@ impl LangdbCloudFinetuneClient {
                 .mime_str("text/plain")
                 .map_err(|e| format!("Failed to create dataset_id part: {}", e))?;
             form = form.part("dataset_id", dataset_id_part);
+        }
+
+        if append_mode {
+            form = form.part("append", reqwest::multipart::Part::text("true"));
+            form = form.part(
+                "row_index_offset",
+                reqwest::multipart::Part::text(row_index_offset.to_string()),
+            );
         }
 
         let url = format!("{}/finetune/workflows", self.api_url);

@@ -570,6 +570,15 @@ pub struct EvaluationSummary {
     pub passed_count: i32,
     #[serde(default)]
     pub failed_count: i32,
+    /// Number of rows with a non-null score (scored_count <= completed_rows)
+    #[serde(default)]
+    pub scored_count: i32,
+    /// Rows with score < 0.01 — detects broken graders that can't parse model output
+    #[serde(default)]
+    pub zero_score_count: i32,
+    /// Rows with score >= 0.99 — detects overly lenient graders
+    #[serde(default)]
+    pub perfect_score_count: i32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -2,8 +2,12 @@ use actix_multipart::Multipart;
 use actix_web::{web, HttpResponse, Result};
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+
+/// Per-workflow lock to prevent concurrent chunked uploads from corrupting data.
+static UPLOAD_LOCKS: std::sync::LazyLock<tokio::sync::Mutex<HashSet<uuid::Uuid>>> =
+    std::sync::LazyLock::new(|| tokio::sync::Mutex::new(HashSet::new()));
 use vllora_core::credentials::KeyStorage;
 use vllora_core::credentials::ProviderCredentialsId;
 use vllora_core::executor::context::ExecutorContext;
@@ -748,6 +752,32 @@ async fn ensure_dataset_and_evaluator_uploaded(
     client: &LangdbCloudFinetuneClient,
     db_pool: &DbPool,
 ) -> Result<vllora_finetune::types::UploadDatasetResponse, actix_web::Error> {
+    // Per-workflow lock: prevent concurrent chunked uploads from racing.
+    {
+        let mut locks = UPLOAD_LOCKS.lock().await;
+        if locks.contains(&wf_id) {
+            return Err(actix_web::error::ErrorConflict(
+                "Dataset upload already in progress for this workflow",
+            ));
+        }
+        locks.insert(wf_id);
+    }
+
+    // Run the upload, ensuring the lock is released on ALL exit paths.
+    let result = do_dataset_upload(wf_id, client, db_pool).await;
+
+    // Always release the lock
+    UPLOAD_LOCKS.lock().await.remove(&wf_id);
+
+    result
+}
+
+/// Inner upload logic — separated so the caller can wrap with lock acquire/release.
+async fn do_dataset_upload(
+    wf_id: uuid::Uuid,
+    client: &LangdbCloudFinetuneClient,
+    db_pool: &DbPool,
+) -> Result<vllora_finetune::types::UploadDatasetResponse, actix_web::Error> {
     let wf_id_str = wf_id.to_string();
 
     // Read workflow (for eval_script)
@@ -780,8 +810,6 @@ async fn ensure_dataset_and_evaluator_uploaded(
         ));
     }
 
-    let jsonl_data = jsonl_lines.join("\n").into_bytes();
-
     // Read topics and build hierarchy JSON
     let topic_service = WorkflowTopicService::new(db_pool.clone());
     let topics = topic_service.list(&wf_id_str).unwrap_or_default();
@@ -791,18 +819,62 @@ async fn ensure_dataset_and_evaluator_uploaded(
         Some(build_topic_hierarchy_json(&topics).to_string())
     };
 
-    // Upload to cloud (upsert: dataset_id = workflow_id)
-    client
-        .upload_dataset(
-            jsonl_data,
-            topic_hierarchy,
-            workflow.eval_script,
-            Some(wf_id),
-        )
-        .await
-        .map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!("Failed to upload dataset: {}", e))
-        })
+    // Upload to cloud in chunks of 100 records to avoid 413 Payload Too Large.
+    // First chunk: replace mode (includes topics + evaluator).
+    // Subsequent chunks: append mode (rows only).
+    // Each chunk retries up to 2 times on failure.
+    const CHUNK_SIZE: usize = 100;
+    const MAX_RETRIES: usize = 2;
+    let chunks: Vec<&[String]> = jsonl_lines.chunks(CHUNK_SIZE).collect();
+    let mut last_response = None;
+
+    for (i, chunk) in chunks.iter().enumerate() {
+        let chunk_data = chunk.join("\n").into_bytes();
+        let is_first = i == 0;
+        let row_offset = i * CHUNK_SIZE;
+
+        let mut last_err = None;
+        for attempt in 0..=MAX_RETRIES {
+            match client
+                .upload_dataset_chunked(
+                    chunk_data.clone(),
+                    if is_first { topic_hierarchy.clone() } else { None },
+                    if is_first { workflow.eval_script.clone() } else { None },
+                    Some(wf_id),
+                    !is_first,
+                    row_offset,
+                )
+                .await
+            {
+                Ok(response) => {
+                    last_response = Some(response);
+                    last_err = None;
+                    break;
+                }
+                Err(e) => {
+                    last_err = Some(e);
+                    if attempt < MAX_RETRIES {
+                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                    }
+                }
+            }
+        }
+
+        if let Some(e) = last_err {
+            return Err(actix_web::error::ErrorInternalServerError(format!(
+                "Failed to upload dataset chunk {}/{} after {} retries: {}",
+                i + 1,
+                chunks.len(),
+                MAX_RETRIES,
+                e
+            )));
+        }
+    }
+
+    last_response.ok_or_else(|| {
+        actix_web::error::ErrorInternalServerError("No chunks uploaded")
+            .into()
+    })
 }
 
 #[allow(dead_code)]
