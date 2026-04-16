@@ -615,6 +615,7 @@ pub struct EvaluationRunMetrics {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EvaluationResultQuery {
     pub limit: Option<usize>,
+    pub offset: Option<usize>,
     pub sort: Option<String>,
     pub order: Option<String>,
     // Backward compatibility for older clients using score_asc/score_desc

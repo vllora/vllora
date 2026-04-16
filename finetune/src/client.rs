@@ -575,6 +575,9 @@ impl LangdbCloudFinetuneClient {
             if let Some(limit) = query.limit {
                 query_params.push(("limit", limit.to_string()));
             }
+            if let Some(offset) = query.offset {
+                query_params.push(("offset", offset.to_string()));
+            }
             if let Some(sort) = query.sort {
                 query_params.push(("sort", sort));
             }

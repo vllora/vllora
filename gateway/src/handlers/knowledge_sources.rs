@@ -254,14 +254,24 @@ pub async fn download_knowledge_source_file(
         .body(bytes))
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ListKnowledgeSourcesQuery {
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
+
 pub async fn list_knowledge_sources(
     workflow_id: web::Path<String>,
+    query: web::Query<ListKnowledgeSourcesQuery>,
     db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
     let workflow_id = workflow_id.into_inner();
+    let query = query.into_inner();
     let service = KnowledgeSourceService::new(db_pool.get_ref().clone());
 
-    let sources = service.list_typed(&workflow_id).map_err(map_db_error)?;
+    let sources = service
+        .list_typed_paged(&workflow_id, query.limit, query.offset)
+        .map_err(map_db_error)?;
     Ok(HttpResponse::Ok().json(serde_json::json!({ "knowledge_sources": sources })))
 }
 

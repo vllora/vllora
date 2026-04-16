@@ -156,13 +156,31 @@ impl KnowledgeSourceService {
     }
 
     pub fn list_typed(&self, workflow_id: &str) -> Result<Vec<KnowledgeSource>, DatabaseError> {
+        self.list_typed_paged(workflow_id, None, None)
+    }
+
+    pub fn list_typed_paged(
+        &self,
+        workflow_id: &str,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> Result<Vec<KnowledgeSource>, DatabaseError> {
         let mut conn = self.db_pool.get()?;
-        let sources = dsl::knowledge_sources
+        let mut query = dsl::knowledge_sources
             .filter(dsl::workflow_id.eq(workflow_id))
             .filter(dsl::deleted_at.is_null())
             .order(dsl::created_at.desc())
             .select(DbKnowledgeSource::as_select())
-            .load::<DbKnowledgeSource>(&mut conn)?;
+            .into_boxed();
+
+        if let Some(l) = limit {
+            query = query.limit(l);
+        }
+        if let Some(o) = offset {
+            query = query.offset(o);
+        }
+
+        let sources = query.load::<DbKnowledgeSource>(&mut conn)?;
 
         let mut out = Vec::with_capacity(sources.len());
         for source in sources {
