@@ -730,6 +730,18 @@ fn record_to_training_line(record_id: &str, data: &str) -> Option<serde_json::Va
         }
     }
 
+    // Promote `input.tools` → top-level `tools` so cloud eval sees the tool
+    // schema (cloud's extract_tools_from_row reads row_data["tools"] at root).
+    // Without this, the base model runs tool-free text completion and hits
+    // the grader floor on every row.
+    if row.get("tools").map(|v| v.is_null()).unwrap_or(true) {
+        if let Some(tools) = parsed.get("input").and_then(|i| i.get("tools")) {
+            if !tools.is_null() {
+                row.insert("tools".to_string(), tools.clone());
+            }
+        }
+    }
+
     if row.get("ground_truth").map(|v| v.is_null()).unwrap_or(true) {
         if let Some(ground_truth) = parsed
             .get("output")
