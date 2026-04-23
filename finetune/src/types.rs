@@ -114,6 +114,14 @@ impl std::fmt::Display for BaseModel {
 pub struct CreateJobRequest {
     pub job_type: JobType,
 
+    /// Optional caller-provided idempotency key (redesign §2.4). When set,
+    /// the server dedups by `(workflow_id, key, payload_hash)` — replaying
+    /// the same request returns the original `job_id`. Different payloads
+    /// under the same key return `409 CONFLICT`. Absent keys cause the
+    /// server to generate one and echo it in the response.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub idempotency_key: Option<String>,
+
     // Provider finetune payload
     #[serde(skip_serializing_if = "Option::is_none")]
     pub evaluator_version: Option<i32>,
@@ -724,4 +732,181 @@ pub struct CompletionModelParams {
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct JsConfig {
     pub script: Option<String>,
+}
+
+// =============================================================================
+// Canonical Layer B job-lifecycle shapes
+// (specs/001-job-based-cli-api/contracts/jobs.openapi.yaml)
+// =============================================================================
+
+/// Every Layer B operation surfaced by the workflow-scoped jobs route.
+/// SCREAMING_SNAKE on the wire matches the OpenAPI `OperationKey` enum.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum OperationKey {
+    KnowledgeAdd,
+    RecordsImport,
+    RecordsGenerate,
+    GraderImport,
+    GraderGenerate,
+    GraderDryrun,
+    EvalRun,
+    TrainRun,
+    TestJob,
+}
+
+/// Job lifecycle states matching OpenAPI `JobState`. Same semantics as the
+/// `JobState` used by the GatewayClient trait; kept separate so the wire
+/// format (lowercase strings) stays fixed even if the internal trait's
+/// variants drift.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum JobLifecycleState {
+    Queued,
+    Running,
+    Succeeded,
+    Failed,
+    Cancelled,
+}
+
+/// Who initiated the job. OpenAPI contract: required `{type, id}` plus
+/// optional `display_name`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Initiator {
+    #[serde(rename = "type")]
+    pub initiator_type: String,
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+}
+
+/// `POST /v1/finetune/workflows/{workflowId}/jobs` request body. This is
+/// the spec-canonical shape; the existing `CreateJobRequest` remains the
+/// concrete payload, carried in `input` so callers that already built
+/// against it can adapt incrementally.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JobStartRequest {
+    pub operation: OperationKey,
+    /// Optional operation-specific payload. Provisional per the OpenAPI
+    /// spec — currently accepted but not semantically validated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input: Option<serde_json::Value>,
+    pub initiator: Initiator,
+    /// Optional caller-provided deduplication key. If omitted, the server
+    /// generates one and returns it via `idempotency_key` in the response.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idempotency_key: Option<String>,
+}
+
+/// Snapshot of job progress. Optional fields per OpenAPI.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JobProgressSnapshot {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub percent: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event_time: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// `202 Accepted` response from `POST /jobs` — matches OpenAPI
+/// `JobStartResponse`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JobStartResponse {
+    pub job_id: String,
+    pub workflow_id: String,
+    pub operation: OperationKey,
+    pub idempotency_key: String,
+    /// `true` once the row is committed to the DB (so callers can
+    /// distinguish accepted-but-not-persisted from fully durable).
+    pub persisted: bool,
+    pub state: JobLifecycleState,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub progress: Option<JobProgressSnapshot>,
+}
+
+#[cfg(test)]
+mod canonical_job_tests {
+    use super::*;
+
+    #[test]
+    fn operation_key_wire_strings_match_openapi() {
+        // Must exactly match `jobs.openapi.yaml § OperationKey`.
+        let matrix = [
+            (OperationKey::KnowledgeAdd, "\"knowledge-add\""),
+            (OperationKey::RecordsImport, "\"records-import\""),
+            (OperationKey::RecordsGenerate, "\"records-generate\""),
+            (OperationKey::GraderImport, "\"grader-import\""),
+            (OperationKey::GraderGenerate, "\"grader-generate\""),
+            (OperationKey::GraderDryrun, "\"grader-dryrun\""),
+            (OperationKey::EvalRun, "\"eval-run\""),
+            (OperationKey::TrainRun, "\"train-run\""),
+            (OperationKey::TestJob, "\"test-job\""),
+        ];
+        for (variant, wire) in matrix {
+            let json = serde_json::to_string(&variant).unwrap();
+            assert_eq!(json, wire, "wire mismatch for {variant:?}");
+        }
+    }
+
+    #[test]
+    fn job_lifecycle_state_wire_strings_match_openapi() {
+        let matrix = [
+            (JobLifecycleState::Queued, "\"queued\""),
+            (JobLifecycleState::Running, "\"running\""),
+            (JobLifecycleState::Succeeded, "\"succeeded\""),
+            (JobLifecycleState::Failed, "\"failed\""),
+            (JobLifecycleState::Cancelled, "\"cancelled\""),
+        ];
+        for (variant, wire) in matrix {
+            let json = serde_json::to_string(&variant).unwrap();
+            assert_eq!(json, wire, "wire mismatch for {variant:?}");
+        }
+    }
+
+    #[test]
+    fn job_start_request_parses_canonical_body() {
+        // Body shape from `jobs.openapi.yaml § JobStartRequest`.
+        let raw = r#"{
+            "operation": "eval-run",
+            "input": {"model": "qwen-4b"},
+            "initiator": {
+                "type": "user",
+                "id": "u-123",
+                "display_name": "Daisy"
+            },
+            "idempotency_key": "eval-run-2026-04-23"
+        }"#;
+        let req: JobStartRequest = serde_json::from_str(raw).unwrap();
+        assert_eq!(req.operation, OperationKey::EvalRun);
+        assert_eq!(req.initiator.initiator_type, "user");
+        assert_eq!(req.initiator.id, "u-123");
+        assert_eq!(req.initiator.display_name.as_deref(), Some("Daisy"));
+        assert_eq!(req.idempotency_key.as_deref(), Some("eval-run-2026-04-23"));
+    }
+
+    #[test]
+    fn job_start_response_round_trips_through_json() {
+        let ts = chrono::Utc::now();
+        let resp = JobStartResponse {
+            job_id: "job-xyz".into(),
+            workflow_id: "wf-abc".into(),
+            operation: OperationKey::TrainRun,
+            idempotency_key: "idem-1".into(),
+            persisted: true,
+            state: JobLifecycleState::Queued,
+            created_at: ts,
+            updated_at: ts,
+            progress: None,
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        let decoded: JobStartResponse = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded.operation, OperationKey::TrainRun);
+        assert_eq!(decoded.state, JobLifecycleState::Queued);
+        assert!(decoded.persisted);
+    }
 }

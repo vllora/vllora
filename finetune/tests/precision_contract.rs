@@ -17,6 +17,7 @@
 //! public crate surface only. Any regression in the state layer fails
 //! CI, permanently locking in the Feature 002 precision contract.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -28,6 +29,15 @@ use vllora_finetune::state::{
     lock,
     Journal,
 };
+
+/// Helper: build a `BTreeMap<String, Value>` from JSON object literal so
+/// tests read closer to the spec (§5 per-verb field examples).
+fn fields(value: Value) -> BTreeMap<String, Value> {
+    match value {
+        Value::Object(map) => map.into_iter().collect(),
+        other => panic!("fields() expects an object literal, got: {other}"),
+    }
+}
 
 /// Unique scratch dir per test so the package can run with multiple threads.
 fn scratch(label: &str) -> PathBuf {
@@ -120,12 +130,12 @@ fn single_writer_refuses_when_another_process_holds_lock() {
     fs::write(&lock_path, child_pid.to_string()).unwrap();
 
     // From our PID, acquire must refuse because the child is alive.
-    let result = lock::acquire(&dir);
-    assert!(
-        result.is_err(),
-        "second acquire must fail while other PID holds the lock"
-    );
-    let msg = format!("{}", result.unwrap_err());
+    // (LockGuard doesn't implement Debug so we destructure the Result
+    // manually rather than use `unwrap_err()`.)
+    let msg = match lock::acquire(&dir) {
+        Ok(_) => panic!("second acquire must fail while other PID holds the lock"),
+        Err(e) => format!("{e}"),
+    };
     assert!(
         msg.contains(&format!("PID {child_pid}")),
         "error should name the holding PID; got: {msg}"
@@ -151,23 +161,38 @@ fn journal_phase_writes_preserve_prior_entries() {
     // Simulate two phases completing sequentially.
     journal.write_step_start("init", std::process::id()).unwrap();
     journal
-        .write_step_done("init", json!({"workflow_id": workflow_id}))
+        .write_step_done("init", fields(json!({"workflow_id": workflow_id})))
         .unwrap();
 
     journal.write_step_start("sources", std::process::id()).unwrap();
     journal
-        .write_step_done("sources", json!({"pdf_count": 3}))
+        .write_step_done("sources", fields(json!({"pdf_count": 3})))
         .unwrap();
 
     let snapshot = journal.read().unwrap();
-    let phases = snapshot.phases;
+    let phases = snapshot
+        .get("phases")
+        .and_then(|v| v.as_object())
+        .expect("journal has phases object");
     // Both phases must be present, init untouched after sources wrote.
     assert!(phases.contains_key("init"), "init phase lost");
     assert!(phases.contains_key("sources"), "sources phase missing");
-    let init_entry = phases.get("init").unwrap();
-    assert_eq!(init_entry.status, "done");
-    let sources_entry = phases.get("sources").unwrap();
-    assert_eq!(sources_entry.status, "done");
+    assert_eq!(
+        phases["init"].get("status").and_then(|v| v.as_str()),
+        Some("done")
+    );
+    assert_eq!(
+        phases["sources"].get("status").and_then(|v| v.as_str()),
+        Some("done")
+    );
+    // init's fields must survive sources' write — append-only invariant.
+    assert_eq!(
+        phases["init"]
+            .get("fields")
+            .and_then(|v| v.get("workflow_id"))
+            .and_then(|v| v.as_str()),
+        Some(workflow_id)
+    );
 
     fs::remove_dir_all(&dir).ok();
 }
@@ -237,11 +262,14 @@ fn crash_recovery_reclaims_dead_pid_lock_and_preserves_running_state() {
     // to see it to diagnose the crash.
     let snapshot = journal.read().unwrap();
     let plan = snapshot
-        .phases
-        .get("plan")
+        .get("phases")
+        .and_then(|v| v.get("plan"))
         .expect("plan phase preserved across reclaim");
-    assert_eq!(plan.status, "running");
-    assert_eq!(plan.pid, Some(999_999));
+    assert_eq!(
+        plan.get("status").and_then(|v| v.as_str()),
+        Some("running")
+    );
+    assert_eq!(plan.get("pid").and_then(|v| v.as_u64()), Some(999_999));
 
     drop(guard);
     fs::remove_dir_all(&dir).ok();

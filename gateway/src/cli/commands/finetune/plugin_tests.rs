@@ -160,6 +160,110 @@ fn thin_verbs_shell_to_matching_cli_verb() {
     }
 }
 
+/// Reverse-direction parity: the `FinetuneCommand` enum's Layer A variants
+/// must ALL be accounted for — either plugin-surfaced (in
+/// `EXPECTED_THIN_VERBS`) or explicitly terminal-only (in
+/// `EXPECTED_TERMINAL_ONLY`). Adding a new Layer A verb without touching this
+/// list fails the test — forcing a deliberate choice about plugin surfacing.
+///
+/// We drive the check off the source text of `mod.rs` to avoid pulling clap's
+/// reflection in as a test dep. This is brittle to formatting but intentional:
+/// it surfaces whenever a new verb is added.
+#[test]
+fn every_cli_verb_is_plugin_surfaced_or_explicitly_terminal_only() {
+    // Terminal-only Layer A verbs — intentionally NOT plugin-surfaced. Keep
+    // this in sync with the comment block at EXPECTED_THIN_VERBS above.
+    const EXPECTED_TERMINAL_ONLY: &[&str] = &[
+        "auto", // autonomous loop; needs pre-flight shell setup the plugin can't provide.
+    ];
+    // Layer B lives under the `Jobs` subcommand and is explicitly terminal-
+    // only (§2.4 of the redesign). `Jobs` is NOT a Layer A verb, so we skip
+    // it from the parity check — represented by its own `JobsCommand` enum.
+    const SKIP_VARIANTS: &[&str] = &["Jobs"];
+
+    let mod_rs = std::fs::read_to_string(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("src/cli/commands/finetune/mod.rs"),
+    )
+    .expect("mod.rs readable");
+
+    // Parse clap variant lines like:  `ImportDataset(import_dataset::Args),`
+    // preceded by an optional `#[command(name = "import-dataset")]` line that
+    // overrides the derived name.
+    let mut variants: Vec<String> = Vec::new();
+    let mut next_name_override: Option<String> = None;
+    let mut in_enum = false;
+    for line in mod_rs.lines() {
+        let t = line.trim();
+        if t.starts_with("pub enum FinetuneCommand") {
+            in_enum = true;
+            continue;
+        }
+        if !in_enum {
+            continue;
+        }
+        if t == "}" {
+            break;
+        }
+        if let Some(rest) = t.strip_prefix("#[command(name = \"") {
+            if let Some(end) = rest.find('"') {
+                next_name_override = Some(rest[..end].to_string());
+            }
+            continue;
+        }
+        // Skip any other attribute lines (`#[command(subcommand)]`, etc.).
+        if t.starts_with("#[") {
+            continue;
+        }
+        // A variant line looks like `Init(init::Args),` — grab the text
+        // before the first `(`.
+        if let Some(paren) = t.find('(') {
+            let variant = &t[..paren];
+            if variant.is_empty() || variant.starts_with("//") {
+                continue;
+            }
+            let cli_name = next_name_override
+                .take()
+                .unwrap_or_else(|| pascal_to_kebab(variant));
+            variants.push(cli_name);
+        }
+    }
+
+    assert!(
+        !variants.is_empty(),
+        "parser failed to find any FinetuneCommand variants — test is broken"
+    );
+
+    for cli_name in &variants {
+        if SKIP_VARIANTS.iter().any(|s| pascal_to_kebab(s) == *cli_name) {
+            continue;
+        }
+        let surfaced = EXPECTED_THIN_VERBS.contains(&cli_name.as_str());
+        let terminal_only = EXPECTED_TERMINAL_ONLY.contains(&cli_name.as_str());
+        assert!(
+            surfaced || terminal_only,
+            "CLI verb `{cli_name}` is neither plugin-surfaced nor in \
+             EXPECTED_TERMINAL_ONLY. Add it to one of those lists (and write \
+             the plugin command if you want it surfaced)."
+        );
+    }
+}
+
+fn pascal_to_kebab(name: &str) -> String {
+    let mut out = String::with_capacity(name.len() + 4);
+    for (i, ch) in name.chars().enumerate() {
+        if ch.is_ascii_uppercase() {
+            if i != 0 {
+                out.push('-');
+            }
+            out.push(ch.to_ascii_lowercase());
+        } else {
+            out.push(ch);
+        }
+    }
+    out
+}
+
 #[test]
 fn plugin_files_do_not_read_credentials() {
     // FR-013: plugin never reads ~/.claude/.credentials.json or the env var.

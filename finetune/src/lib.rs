@@ -1,5 +1,7 @@
 pub mod client;
 pub mod gateway_client;
+pub mod idempotency;
+pub mod job_error;
 pub mod types;
 
 pub mod sources_adapters;
