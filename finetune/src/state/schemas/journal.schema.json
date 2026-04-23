@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vllora.ai/schemas/pipeline-journal.schema.json",
+  "title": "PipelineJournal",
+  "description": "Atomic, single-writer checkpoint file tracking per-phase pipeline status. Mirrored server-side in workflows.pipeline_journal (TEXT). Parent design: §4.7.",
+  "type": "object",
+  "required": ["schema_version", "workflow_id", "created_at", "updated_at", "phases"],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Bumped only for non-backward-compatible shape changes. Forward-migration only; no downgrades."
+    },
+    "workflow_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Gateway-assigned workflow ID this journal belongs to."
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "current_phase": {
+      "type": ["string", "null"],
+      "enum": ["init", "sources", "import-records", "plan", "generate", "eval", "train", null],
+      "description": "Name of the phase currently running, or null when idle."
+    },
+    "phases": {
+      "type": "object",
+      "description": "One entry per phase the pipeline has started. Keys are phase names.",
+      "additionalProperties": { "$ref": "#/$defs/PhaseEntry" }
+    }
+  },
+  "$defs": {
+    "PhaseEntry": {
+      "type": "object",
+      "required": ["status", "started_at"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["pending", "running", "iterating", "done", "failed"]
+        },
+        "pid": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "PID of the writing process while status is 'running'. Dead-PID detection enables crash recovery (FR-005)."
+        },
+        "started_at": { "type": "string", "format": "date-time" },
+        "completed_at": { "type": "string", "format": "date-time" },
+        "iteration": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "1-based iteration counter for phases that loop (eval, train). Append-only via write_step_iteration."
+        },
+        "error": { "type": "string" },
+        "fields": {
+          "type": "object",
+          "description": "Phase-specific payload (e.g., records_count, grader_version). Free-form; specific phases validate their own shape downstream.",
+          "additionalProperties": true
+        }
+      }
+    }
+  }
+}

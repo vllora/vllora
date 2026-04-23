@@ -73,4 +73,19 @@ pub enum Commands {
         #[arg(short, long, default_value = "models_data.json")]
         output: String,
     },
+
+    // ─── Finetune pipeline subcommands (Features 002-005) ───
+
+    /// Finetune pipeline commands (init, sources, plan, generate, eval, train, status, quickstart, auto, import-records, jobs).
+    #[command(subcommand)]
+    Finetune(commands::finetune::FinetuneCommand),
+
+    /// Diagnostic report — setup status + remediation (Feature 005).
+    Doctor(commands::doctor::Args),
+
+    /// Print CLI + gateway + plugin versions.
+    Version,
+
+    /// Get or set configuration values in ~/.vllora/config.yaml.
+    Config(commands::config::Args),
 }

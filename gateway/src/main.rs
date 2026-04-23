@@ -29,6 +29,7 @@ mod ports;
 mod run;
 mod seed;
 mod session;
+mod setup; // Feature 005 — idempotent plugin symlink + Claude auth readiness
 mod threads;
 mod tracing;
 mod usage;
@@ -89,8 +90,32 @@ async fn main() -> Result<(), CliError> {
 
     let db_pool = get_db_pool()?;
 
+    // Feature 005: idempotent machine-level setup — runs on every invocation, matches seed_* pattern.
+    // Non-fatal: a missing plugin symlink or missing Claude auth shouldn't block `vllora list` etc.
+    if let Err(e) = setup::ensure_plugin_symlink() {
+        eprintln!("Warning: plugin symlink setup failed: {}", e);
+    }
+    // claude_readiness() is consumed by `vllora doctor` — no action here, just populate status.
+    let _claude_status = setup::claude_readiness();
+
+    // Commands that skip the full server-context setup below.
     if let Some(cli::Commands::Traces(traces_cmd)) = cli.command {
         cli::commands::traces::handle_traces(db_pool, traces_cmd).await?;
+        return Ok(());
+    }
+
+    if let Some(cli::Commands::Version) = cli.command {
+        cli::commands::version::handle_version().await?;
+        return Ok(());
+    }
+
+    if let Some(cli::Commands::Doctor(ref args)) = cli.command {
+        cli::commands::doctor::handle_doctor(db_pool, args.clone()).await?;
+        return Ok(());
+    }
+
+    if let Some(cli::Commands::Config(ref args)) = cli.command {
+        cli::commands::config::handle_config(db_pool, args.clone()).await?;
         return Ok(());
     }
 
@@ -129,6 +154,14 @@ async fn main() -> Result<(), CliError> {
         }
         Some(cli::Commands::GenerateModelsJson { output }) => {
             cli::commands::generate_models_json::handle_generate_models_json(output).await
+        }
+        // Features 002-005 early-exit commands handled before this match block:
+        Some(cli::Commands::Version) | Some(cli::Commands::Doctor(_)) | Some(cli::Commands::Config(_)) => {
+            unreachable!()
+        }
+        // Feature 003: finetune pipeline subcommand tree.
+        Some(cli::Commands::Finetune(cmd)) => {
+            cli::commands::finetune::handle_finetune(db_pool, cmd).await
         }
         Some(cli::Commands::Serve(subcommand_args)) => {
             cli::commands::serve::handle_serve(

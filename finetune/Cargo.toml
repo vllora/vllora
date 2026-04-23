@@ -8,7 +8,7 @@ name = "vllora_finetune"
 path = "src/lib.rs"
 
 [dependencies]
-reqwest = { workspace = true }
+reqwest = { workspace = true, features = ["multipart"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }

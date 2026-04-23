@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vllora.ai/schemas/analysis.schema.json",
+  "title": "PipelineAnalysis",
+  "description": "Append-only running diary of reasoning + decisions across phases. Mirrored server-side in workflows.iteration_state (TEXT). Worker reasoning propagates through this file between phases so each step can consult prior context. Parent design: §4.7, §9 invariant: 'Artifacts are context carriers'.",
+  "type": "object",
+  "required": ["schema_version", "workflow_id", "phases"],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Bumped only for non-backward-compatible shape changes. Forward-migration only."
+    },
+    "workflow_id": { "type": "string", "format": "uuid" },
+    "phases": {
+      "type": "object",
+      "description": "Append-only map of phase-name → PhaseAnalysis. Once a phase key exists, its value MUST NOT be overwritten — only augmented via additive fields.",
+      "additionalProperties": { "$ref": "#/$defs/PhaseAnalysis" }
+    }
+  },
+  "$defs": {
+    "PhaseAnalysis": {
+      "type": "object",
+      "required": ["written_at"],
+      "properties": {
+        "written_at": { "type": "string", "format": "date-time" },
+        "reasoning": {
+          "type": "string",
+          "description": "Free-form narrative the phase's workers emit — what they tried, what they observed, what they recommend for downstream phases."
+        },
+        "decisions": {
+          "type": "array",
+          "description": "Discrete decision records. Downstream phases consult these to avoid re-deciding or contradicting.",
+          "items": {
+            "type": "object",
+            "required": ["label", "choice", "rationale"],
+            "properties": {
+              "label": { "type": "string" },
+              "choice": { "type": "string" },
+              "rationale": { "type": "string" },
+              "evidence": { "type": "string" }
+            }
+          }
+        },
+        "iterations": {
+          "type": "array",
+          "description": "Per-iteration append-only log for phases that loop (eval, train). Indexed by position.",
+          "items": {
+            "type": "object",
+            "required": ["iteration", "written_at", "outcome"],
+            "properties": {
+              "iteration": { "type": "integer", "minimum": 1 },
+              "written_at": { "type": "string", "format": "date-time" },
+              "outcome": {
+                "type": "string",
+                "enum": ["pass", "fail", "inconclusive"]
+              },
+              "root_cause": { "type": "string" },
+              "metrics": {
+                "type": "object",
+                "description": "Free-form metrics snapshot (readiness_score, avg_score, etc.).",
+                "additionalProperties": true
+              },
+              "next_action": { "type": "string" }
+            }
+          }
+        },
+        "artifacts": {
+          "type": "array",
+          "description": "Cross-references to persisted artifacts produced in this phase (filenames, DB IDs, URIs).",
+          "items": { "type": "string" }
+        },
+        "augmentations": {
+          "type": "array",
+          "description": "Additive-only corrections or clarifications to this phase's reasoning. Written via augment_phase() — never overwrites prior content.",
+          "items": {
+            "type": "object",
+            "required": ["written_at", "note"],
+            "properties": {
+              "written_at": { "type": "string", "format": "date-time" },
+              "note": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,5 +1,9 @@
 pub mod client;
+pub mod gateway_client;
 pub mod types;
+
+pub mod sources_adapters;
+pub mod state;
 
 pub use client::LangdbCloudFinetuneClient;
 pub use types::{

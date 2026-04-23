@@ -1,0 +1,14 @@
+{
+  "$schema": "https://claude.com/schemas/plugin.json",
+  "name": "vllora-finetune",
+  "version": "0.1.0",
+  "description": "Fine-tune small LLMs from PDFs, OTel traces, or pre-built records using GRPO.",
+  "author": { "name": "vllora", "url": "https://vllora.dev" },
+  "homepage": "https://vllora.dev",
+  "commands": ["commands/*.md"],
+  "skills":   ["skills/*/SKILL.md"],
+  "requires": {
+    "cli":         "vllora >= 0.1.0",
+    "claude-code": ">= 1.2.0"
+  }
+}
