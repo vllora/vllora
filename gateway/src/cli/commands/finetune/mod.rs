@@ -22,6 +22,9 @@ pub mod auto;
 pub mod jobs;
 pub mod workers;
 
+#[cfg(test)]
+mod plugin_tests;
+
 #[derive(Subcommand, Debug)]
 pub enum FinetuneCommand {
     /// Scaffold finetune-project/ + create gateway workflow.
