@@ -11,7 +11,7 @@ use vllora_core::metadata::pool::DbPool;
 
 pub mod init;
 pub mod sources;
-pub mod import_records;
+pub mod import_dataset;
 pub mod plan;
 pub mod generate;
 pub mod eval;
@@ -29,8 +29,8 @@ pub enum FinetuneCommand {
     /// Ingest sources (PDFs, OTel traces) from local paths or URIs.
     Sources(sources::Args),
     /// Import pre-built records (skips sources+plan+generate).
-    #[command(name = "import-records")]
-    ImportRecords(import_records::Args),
+    #[command(name = "import-dataset")]
+    ImportDataset(import_dataset::Args),
     /// Build topic hierarchy + grader draft + plan.md.
     Plan(plan::Args),
     /// Generate training records + finalize grader + quality gate.
@@ -57,7 +57,7 @@ pub async fn handle_finetune(
     match cmd {
         FinetuneCommand::Init(args)          => init::handle(db_pool, args).await,
         FinetuneCommand::Sources(args)       => sources::handle(db_pool, args).await,
-        FinetuneCommand::ImportRecords(args) => import_records::handle(db_pool, args).await,
+        FinetuneCommand::ImportDataset(args) => import_dataset::handle(db_pool, args).await,
         FinetuneCommand::Plan(args)          => plan::handle(db_pool, args).await,
         FinetuneCommand::Generate(args)      => generate::handle(db_pool, args).await,
         FinetuneCommand::Eval(args)          => eval::handle(db_pool, args).await,

@@ -20,7 +20,7 @@
     "updated_at": { "type": "string", "format": "date-time" },
     "current_phase": {
       "type": ["string", "null"],
-      "enum": ["init", "sources", "import-records", "plan", "generate", "eval", "train", null],
+      "enum": ["init", "sources", "import-dataset", "plan", "generate", "eval", "train", null],
       "description": "Name of the phase currently running, or null when idle."
     },
     "phases": {

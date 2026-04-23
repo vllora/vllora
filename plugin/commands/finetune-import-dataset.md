@@ -6,7 +6,7 @@ description: |
 allowed-tools: Bash
 ---
 
-# /finetune-import-records
+# /finetune-import-dataset
 
 Track: C | Feature: 004-claude-code-plugin | Parent design: §7.3.2 thin-command template
 
@@ -17,7 +17,7 @@ skips sources+plan+generate; imports pre-built records. Preconditions: init done
 
 ## Steps
 1. Verify preconditions via `vllora finetune status`.
-2. Shell out: `vllora finetune import-records <path-or-URI>`
+2. Shell out: `vllora finetune import-dataset <path-or-URI>`
 3. Stream stdout to user (worker progress events).
 4. Interpret final output:
    - Success → echo "Next: /finetune-<next-verb>" from CLI.

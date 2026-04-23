@@ -15,5 +15,5 @@ pub async fn handle(_db_pool: DbPool, _args: Args) -> Result<(), crate::CliError
     //          + spawn workers via workers::claude_client (claude -p subprocess)
     //          + write local state via vllora_finetune::state::{Journal, Analysis, ChangeLog}
     //          + mirror state to gateway via workflows.pipeline_journal + .iteration_state
-    unimplemented!("TODO Track B — 003-cli-pipeline-verbs — import_records");
+    unimplemented!("TODO Track B — 003-cli-pipeline-verbs — import_dataset");
 }

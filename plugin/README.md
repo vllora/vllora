@@ -29,7 +29,7 @@ plugin/
 │   ├── finetune-quickstart.md     thin — /finetune-quickstart
 │   ├── finetune-init.md
 │   ├── finetune-sources.md
-│   ├── finetune-import-records.md
+│   ├── finetune-import-dataset.md
 │   ├── finetune-plan.md
 │   ├── finetune-generate.md
 │   ├── finetune-eval.md

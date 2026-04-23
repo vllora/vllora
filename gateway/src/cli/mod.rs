@@ -76,7 +76,7 @@ pub enum Commands {
 
     // ─── Finetune pipeline subcommands (Features 002-005) ───
 
-    /// Finetune pipeline commands (init, sources, plan, generate, eval, train, status, quickstart, auto, import-records, jobs).
+    /// Finetune pipeline commands (init, sources, plan, generate, eval, train, status, quickstart, auto, import-dataset, jobs).
     #[command(subcommand)]
     Finetune(commands::finetune::FinetuneCommand),
 
