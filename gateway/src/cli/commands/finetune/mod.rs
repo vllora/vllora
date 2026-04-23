@@ -21,9 +21,12 @@ pub mod quickstart;
 pub mod auto;
 pub mod jobs;
 pub mod workers;
+pub mod shared;
 
 #[cfg(test)]
 mod plugin_tests;
+#[cfg(test)]
+mod pipeline_integration_tests;
 
 #[derive(Subcommand, Debug)]
 pub enum FinetuneCommand {

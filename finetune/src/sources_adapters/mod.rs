@@ -31,3 +31,73 @@ pub trait SourceAdapter: Send + Sync {
         uri: &'a str,
     ) -> Pin<Box<dyn Future<Output = Result<PathBuf>> + Send + 'a>>;
 }
+
+/// Parse the scheme portion of a URI. Returns `"file"` for bare paths so the
+/// `LocalAdapter` is picked by default.
+pub fn parse_scheme(uri: &str) -> &'static str {
+    if let Some(pos) = uri.find("://") {
+        match &uri[..pos] {
+            "file" => "file",
+            "hf" => "hf",
+            "s3" => "s3",
+            "gs" => "gs",
+            "azblob" => "azblob",
+            "https" => "https",
+            "http" => "https", // treat http:// as https-class for simplicity
+            _ => "file",
+        }
+    } else {
+        "file"
+    }
+}
+
+/// Resolve a URI to a local path by dispatching to the right adapter. MVP:
+/// only `file://` / bare paths succeed; remote schemes return a clear
+/// "not implemented" error from their adapter.
+pub async fn resolve_uri(uri: &str) -> Result<PathBuf> {
+    let scheme = parse_scheme(uri);
+    match scheme {
+        "file" => local::LocalAdapter::new().resolve(uri).await,
+        "hf" => hf::HfAdapter::new().resolve(uri).await,
+        "s3" => s3::S3Adapter::new().resolve(uri).await,
+        "gs" => gs::GsAdapter::new().resolve(uri).await,
+        "azblob" => azblob::AzblobAdapter::new().resolve(uri).await,
+        "https" => https::HttpsAdapter::new().resolve(uri).await,
+        other => Err(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+            "unsupported URI scheme: {}",
+            other
+        ))),
+    }
+}
+
+#[cfg(test)]
+mod dispatch_tests {
+    use super::*;
+
+    #[test]
+    fn parses_scheme() {
+        assert_eq!(parse_scheme("file:///tmp/x"), "file");
+        assert_eq!(parse_scheme("/tmp/x"), "file");
+        assert_eq!(parse_scheme("hf://org/name"), "hf");
+        assert_eq!(parse_scheme("s3://bucket/key"), "s3");
+        assert_eq!(parse_scheme("https://example.com"), "https");
+        assert_eq!(parse_scheme("http://example.com"), "https");
+        assert_eq!(parse_scheme("unknown://blah"), "file");
+    }
+
+    #[tokio::test]
+    async fn local_uri_resolves_to_existing_file() {
+        let tmp = std::env::temp_dir().join(format!("resolve-{}.txt", std::process::id()));
+        std::fs::write(&tmp, "x").unwrap();
+        let resolved = resolve_uri(tmp.to_str().unwrap()).await.unwrap();
+        assert_eq!(resolved, tmp);
+        let _ = std::fs::remove_file(&tmp);
+    }
+
+    #[tokio::test]
+    async fn hf_uri_returns_not_implemented_error() {
+        let err = resolve_uri("hf://anthropic/hh-rlhf").await;
+        assert!(err.is_err());
+        assert!(format!("{}", err.unwrap_err()).contains("not implemented"));
+    }
+}
