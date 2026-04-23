@@ -1,0 +1,2 @@
+-- SQLite doesn't support DROP COLUMN until 3.35. We leave the columns in
+-- place on rollback; they just stop being referenced.

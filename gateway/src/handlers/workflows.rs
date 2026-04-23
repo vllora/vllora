@@ -364,6 +364,88 @@ pub async fn put_iteration_state_blob(
     })))
 }
 
+/// PUT /finetune/workflows/{workflow_id}/change-log
+///
+/// Feature 002 mirror endpoint for `finetune-project/change-log.md`.
+/// Body is raw Markdown (`text/markdown` or `text/plain`). Replaces the
+/// stored snapshot — callers are expected to upload the whole file since
+/// it is append-only on disk.
+pub async fn put_change_log_md(
+    workflow_id: web::Path<String>,
+    body: web::Bytes,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let workflow_id = workflow_id.into_inner();
+    let md = std::str::from_utf8(&body)
+        .map_err(|e| error::ErrorBadRequest(format!("body is not valid UTF-8: {e}")))?;
+
+    let service = WorkflowService::new(db_pool.get_ref().clone());
+    let update = DbUpdateWorkflow::new().with_change_log_md(Some(md.to_string()));
+    let updated = service.update(&workflow_id, update).map_err(map_db_error)?;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "workflow_id": updated.id,
+        "bytes": md.len(),
+    })))
+}
+
+/// GET /finetune/workflows/{workflow_id}/change-log
+///
+/// Returns the stored change-log markdown as `text/markdown`. 404 when the
+/// workflow exists but no change-log has been uploaded yet (nullable column).
+pub async fn get_change_log_md(
+    workflow_id: web::Path<String>,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let workflow_id = workflow_id.into_inner();
+    let workflow = WorkflowService::new(db_pool.get_ref().clone())
+        .get_by_id(&workflow_id)
+        .map_err(map_db_error)?;
+    match workflow.change_log_md {
+        Some(md) => Ok(HttpResponse::Ok()
+            .insert_header(("content-type", "text/markdown; charset=utf-8"))
+            .body(md)),
+        None => Err(error::ErrorNotFound("change-log not uploaded yet")),
+    }
+}
+
+/// PUT /finetune/workflows/{workflow_id}/execution-log
+pub async fn put_execution_log_md(
+    workflow_id: web::Path<String>,
+    body: web::Bytes,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let workflow_id = workflow_id.into_inner();
+    let md = std::str::from_utf8(&body)
+        .map_err(|e| error::ErrorBadRequest(format!("body is not valid UTF-8: {e}")))?;
+
+    let service = WorkflowService::new(db_pool.get_ref().clone());
+    let update = DbUpdateWorkflow::new().with_execution_log_md(Some(md.to_string()));
+    let updated = service.update(&workflow_id, update).map_err(map_db_error)?;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "workflow_id": updated.id,
+        "bytes": md.len(),
+    })))
+}
+
+/// GET /finetune/workflows/{workflow_id}/execution-log
+pub async fn get_execution_log_md(
+    workflow_id: web::Path<String>,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let workflow_id = workflow_id.into_inner();
+    let workflow = WorkflowService::new(db_pool.get_ref().clone())
+        .get_by_id(&workflow_id)
+        .map_err(map_db_error)?;
+    match workflow.execution_log_md {
+        Some(md) => Ok(HttpResponse::Ok()
+            .insert_header(("content-type", "text/markdown; charset=utf-8"))
+            .body(md)),
+        None => Err(error::ErrorNotFound("execution-log not uploaded yet")),
+    }
+}
+
 fn placeholder(endpoint: &str, method: &str, workspace_id: &str) -> HttpResponse {
     HttpResponse::NotImplemented().json(serde_json::json!({
         "message": "Placeholder endpoint not implemented yet",

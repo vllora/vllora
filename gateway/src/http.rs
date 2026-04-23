@@ -456,6 +456,25 @@ impl ApiServer {
                                         "/iteration-state",
                                         web::put().to(workflows::put_iteration_state_blob),
                                     )
+                                    // Feature 002 markdown mirrors. Body is
+                                    // raw text/markdown; GETs return the
+                                    // stored snapshot with the same content-type.
+                                    .route(
+                                        "/change-log",
+                                        web::put().to(workflows::put_change_log_md),
+                                    )
+                                    .route(
+                                        "/change-log",
+                                        web::get().to(workflows::get_change_log_md),
+                                    )
+                                    .route(
+                                        "/execution-log",
+                                        web::put().to(workflows::put_execution_log_md),
+                                    )
+                                    .route(
+                                        "/execution-log",
+                                        web::get().to(workflows::get_execution_log_md),
+                                    )
                                     // Topics CRUD
                                     .route("/topics", web::get().to(workflow_topics::list_topics))
                                     .route("/topics", web::post().to(workflow_topics::create_topics))

@@ -188,6 +188,8 @@ diesel::table! {
         state -> Nullable<Text>,
         iteration_state -> Nullable<Text>,
         pipeline_journal -> Nullable<Text>,
+        change_log_md -> Nullable<Text>,
+        execution_log_md -> Nullable<Text>,
     }
 }
 

@@ -19,6 +19,12 @@ pub struct DbWorkflow {
     pub state: Option<String>,
     pub iteration_state: Option<String>,
     pub pipeline_journal: Option<String>,
+    /// Feature 002 mirror: raw Markdown of `finetune-project/change-log.md`.
+    /// UI reads this when the user has no local checkout. Nullable for
+    /// workflows that predate the mirror.
+    pub change_log_md: Option<String>,
+    /// Feature 002 mirror: raw Markdown of `finetune-project/execution-log.md`.
+    pub execution_log_md: Option<String>,
 }
 
 #[derive(Debug, Insertable, Clone)]
@@ -49,6 +55,8 @@ pub struct DbUpdateWorkflow {
     pub state: Option<Option<String>>,
     pub iteration_state: Option<Option<String>>,
     pub pipeline_journal: Option<Option<String>>,
+    pub change_log_md: Option<Option<String>>,
+    pub execution_log_md: Option<Option<String>>,
 }
 
 impl DbUpdateWorkflow {
@@ -91,6 +99,18 @@ impl DbUpdateWorkflow {
 
     pub fn with_pipeline_journal(mut self, pipeline_journal: Option<String>) -> Self {
         self.pipeline_journal = Some(pipeline_journal);
+        self.updated_at = Some(chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string());
+        self
+    }
+
+    pub fn with_change_log_md(mut self, change_log_md: Option<String>) -> Self {
+        self.change_log_md = Some(change_log_md);
+        self.updated_at = Some(chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string());
+        self
+    }
+
+    pub fn with_execution_log_md(mut self, execution_log_md: Option<String>) -> Self {
+        self.execution_log_md = Some(execution_log_md);
         self.updated_at = Some(chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string());
         self
     }
