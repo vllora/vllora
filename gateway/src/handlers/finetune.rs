@@ -13,11 +13,15 @@ use vllora_core::credentials::ProviderCredentialsId;
 use vllora_core::executor::context::ExecutorContext;
 use vllora_core::handler::CallbackHandlerFn;
 use vllora_core::metadata::models::finetune_job::DbNewFinetuneJob;
+use vllora_core::metadata::models::job::{DbNewJob, DbUpdateJob, JobState};
+use vllora_core::metadata::models::job_log::DbNewJobLog;
 use vllora_core::metadata::models::workflow::DbUpdateWorkflow;
 use vllora_core::metadata::models::workflow_topic::DbWorkflowTopic;
 use vllora_core::metadata::pool::DbPool;
 use vllora_core::metadata::services::eval_job::EvalJobService;
 use vllora_core::metadata::services::finetune_job::FinetuneJobService;
+use vllora_core::metadata::services::job::JobService;
+use vllora_core::metadata::services::job_log::JobLogService;
 use vllora_core::metadata::services::workflow::WorkflowService;
 use vllora_core::metadata::services::workflow_record::WorkflowRecordService;
 use vllora_core::metadata::services::workflow_topic::WorkflowTopicService;
@@ -29,7 +33,7 @@ use vllora_core::types::metadata::project::Project;
 use vllora_core::types::metadata::services::model::ModelService;
 use vllora_core::GatewayApiError;
 use vllora_finetune::types::{
-    CreateEvaluationRequest, CreateJobRequest, DatasetAnalyticsResponse,
+    CreateEvaluationRequest, CreateJobRequest, CreateJobResponse, DatasetAnalyticsResponse,
     DryRunDatasetAnalyticsRequest, DryRunDatasetAnalyticsResponse, DryRunEvaluatorRequest,
     EstimateJobResponse, EvaluationResultQuery, EvaluationResultResponse, EvaluationRunMetrics,
     Evaluator, FinetuneEvalJobMetrics, FinetuneEvalResultsResponse, FinetuneInferenceParameters,
@@ -43,6 +47,8 @@ use vllora_finetune::{
 use vllora_llm::types::credentials::Credentials;
 use vllora_llm::types::gateway::ChatCompletionMessage;
 use vllora_llm::types::gateway::CostCalculator;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 
 /// Response type for list_finetune_jobs which reads from local SQLite DB.
 /// Uses String types to match the SQLite model without conversion overhead.
@@ -95,6 +101,79 @@ pub struct JobIdPath {
 #[derive(Debug, Deserialize)]
 pub struct GetJobStatusQuery {
     pub job_type: Option<JobType>,
+}
+
+fn job_type_str(job_type: &JobType) -> &'static str {
+    match job_type {
+        JobType::Finetune => "finetune",
+        JobType::EvaluationRun => "evaluation_run",
+        JobType::TestJob => "test_job",
+    }
+}
+
+fn payload_fingerprint(request: &CreateJobRequest) -> Result<String, actix_web::Error> {
+    let mut value = serde_json::to_value(request).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!(
+            "Failed to serialize create job request for idempotency: {}",
+            e
+        ))
+    })?;
+    if let Some(obj) = value.as_object_mut() {
+        obj.remove("idempotency_key");
+    }
+    let canonical = serde_json::to_string(&value).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!(
+            "Failed to canonicalize create job request for idempotency: {}",
+            e
+        ))
+    })?;
+    let mut h = DefaultHasher::new();
+    canonical.hash(&mut h);
+    Ok(format!("{:016x}", h.finish()))
+}
+
+fn to_uuid(job_id: &str) -> Result<uuid::Uuid, actix_web::Error> {
+    uuid::Uuid::parse_str(job_id).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Stored job ID is not a UUID: {}", e))
+    })
+}
+
+async fn run_dummy_job(db_pool: DbPool, job_id: String) {
+    let job_service = JobService::new(db_pool.clone());
+    let log_service = JobLogService::new(db_pool.clone());
+    let now = chrono::Utc::now().to_rfc3339();
+
+    let _ = job_service.update(
+        &job_id,
+        DbUpdateJob::new()
+            .with_state(JobState::Running)
+            .with_started_at(Some(now))
+            .with_progress_json(Some(serde_json::json!({ "phase": "running", "percent": 50 }).to_string())),
+    );
+    let _ = log_service.create(DbNewJobLog::new(
+        job_id.clone(),
+        "info".to_string(),
+        "dummy_started".to_string(),
+        Some(serde_json::json!({ "message": "Dummy execution started" }).to_string()),
+    ));
+
+    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+
+    let finished_at = chrono::Utc::now().to_rfc3339();
+    let _ = job_service.update(
+        &job_id,
+        DbUpdateJob::new()
+            .with_state(JobState::Completed)
+            .with_progress_json(Some(serde_json::json!({ "phase": "completed", "percent": 100 }).to_string()))
+            .with_result_ref(Some(serde_json::json!({ "kind": "dummy", "status": "ok" }).to_string()))
+            .with_finished_at(Some(finished_at)),
+    );
+    let _ = log_service.create(DbNewJobLog::new(
+        job_id,
+        "info".to_string(),
+        "dummy_completed".to_string(),
+        Some(serde_json::json!({ "message": "Dummy execution completed" }).to_string()),
+    ));
 }
 
 pub async fn get_langdb_api_key(
@@ -207,6 +286,90 @@ pub async fn create_job(
         }
     }
 
+    if request_body.job_type == JobType::TestJob {
+        let workflow_id_str = workflow_id.to_string();
+        let idempotency_key = request_body
+            .idempotency_key
+            .clone()
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let fingerprint = payload_fingerprint(&request_body)?;
+
+        let job_service = JobService::new(db_pool.get_ref().clone());
+        let log_service = JobLogService::new(db_pool.get_ref().clone());
+
+        if let Some(existing) = job_service
+            .get_by_idempotency(&workflow_id_str, &idempotency_key)
+            .map_err(|e| {
+                actix_web::error::ErrorInternalServerError(format!(
+                    "Failed to check idempotent test job replay: {}",
+                    e
+                ))
+            })?
+        {
+            if existing.request_fingerprint.as_deref() != Some(fingerprint.as_str()) {
+                return Ok(HttpResponse::Conflict().json(serde_json::json!({
+                    "error": format!(
+                        "idempotency_key `{}` was previously used with a different payload",
+                        idempotency_key
+                    )
+                })));
+            }
+
+            return Ok(HttpResponse::Created().json(CreateJobResponse {
+                job_id: to_uuid(&existing.id)?,
+                job_type: JobType::TestJob,
+                status: existing.state,
+                total_rows: None,
+            }));
+        }
+
+        let new_job = DbNewJob::new(
+            project.id.to_string(),
+            workflow_id_str,
+            job_type_str(&JobType::TestJob).to_string(),
+            "test_job".to_string(),
+            JobState::Queued,
+        );
+        let new_job_id = new_job.id.clone();
+        let created = job_service
+            .create(DbNewJob {
+                idempotency_key: Some(idempotency_key.clone()),
+                request_fingerprint: Some(fingerprint),
+                ..new_job
+            })
+            .map_err(|e| {
+                actix_web::error::ErrorInternalServerError(format!(
+                    "Failed to create local test job: {}",
+                    e
+                ))
+            })?;
+
+        let _ = log_service.create(DbNewJobLog::new(
+            new_job_id.clone(),
+            "info".to_string(),
+            "queued".to_string(),
+            Some(
+                serde_json::json!({
+                    "job_type": "test_job",
+                    "idempotency_key": idempotency_key
+                })
+                .to_string(),
+            ),
+        ));
+
+        let db_pool_for_task = db_pool.get_ref().clone();
+        tokio::spawn(async move {
+            run_dummy_job(db_pool_for_task, new_job_id).await;
+        });
+
+        return Ok(HttpResponse::Created().json(CreateJobResponse {
+            job_id: to_uuid(&created.id)?,
+            job_type: JobType::TestJob,
+            status: created.state,
+            total_rows: None,
+        }));
+    }
+
     let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
     let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
@@ -286,15 +449,52 @@ pub async fn get_job_status(
     query: web::Query<GetJobStatusQuery>,
     project: web::ReqData<vllora_core::types::metadata::project::Project>,
     key_storage: web::Data<Box<dyn KeyStorage>>,
+    db_pool: web::Data<DbPool>,
 ) -> Result<HttpResponse> {
     let job_id = path.into_inner().job_id.to_string();
+    let query = query.into_inner();
+
+    let job_service = JobService::new(db_pool.get_ref().clone());
+    if let Some(local_job) = job_service.get_by_id(&job_id).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!(
+            "Failed to query local jobs table: {}",
+            e
+        ))
+    })? {
+        if local_job.job_type == "test_job" || query.job_type == Some(JobType::TestJob) {
+            return Ok(HttpResponse::Ok().json(vllora_finetune::types::UnifiedJobStatusResponse {
+                job_id: to_uuid(&local_job.id)?,
+                job_type: JobType::TestJob,
+                status: local_job.state,
+                fine_tuned_model: None,
+                error_message: local_job.error_message,
+                metrics: local_job
+                    .progress_json
+                    .as_ref()
+                    .and_then(|s| serde_json::from_str(s).ok()),
+                request: local_job
+                    .result_ref
+                    .as_ref()
+                    .and_then(|s| serde_json::from_str(s).ok()),
+                total_rows: None,
+                completed_rows: None,
+                failed_rows: None,
+            }));
+        }
+    }
+    if query.job_type == Some(JobType::TestJob) {
+        return Ok(HttpResponse::NotFound().json(serde_json::json!({
+            "error": "NOT_FOUND",
+            "message": format!("test_job `{}` not found", job_id)
+        })));
+    }
 
     let api_key = get_langdb_api_key(key_storage.get_ref().as_ref(), Some(&project.slug)).await?;
     let client = LangdbCloudFinetuneClient::new(api_key).map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to create client: {}", e))
     })?;
 
-    let status_result = if let Some(job_type) = query.into_inner().job_type {
+    let status_result = if let Some(job_type) = query.job_type {
         client.get_job_status(&job_id, job_type).await
     } else {
         // Backward compatible fallback when caller does not pass job_type.

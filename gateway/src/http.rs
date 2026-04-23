@@ -8,6 +8,7 @@ use crate::handlers::{
     agents, debug, eval_jobs, finetune, knowledge_sources, models, projects, session, threads,
     trace_analysis, trace_bundles, workflow_logs, workflow_records, workflow_topics, workflows,
 };
+use crate::job_queue_runner::JobQueueRunner;
 use crate::knowledge_embeddings::start_embedding_backfill_job;
 use crate::metrics_writer::SqliteMetricsWriterAdapter;
 use crate::middleware::lucy_project::LucyProjectMiddleware;
@@ -271,6 +272,14 @@ impl ApiServer {
         // Start background embedding backfill/resume loop for knowledge source parts.
         let _embedding_backfill_handle =
             start_embedding_backfill_job(server_config.db_pool.clone());
+
+        // Start queue runner for queued Layer B jobs.
+        if JobQueueRunner::enabled() {
+            let job_queue_runner = JobQueueRunner::new(server_config.db_pool.clone());
+            let _job_queue_runner_handle = job_queue_runner.start();
+        } else {
+            tracing::info!("Job queue runner disabled by JOB_QUEUE_RUNNER_ENABLED");
+        }
 
         // Print useful info after servers are bound and ready
         self.print_useful_info();

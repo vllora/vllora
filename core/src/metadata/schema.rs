@@ -1,6 +1,38 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
+    jobs (id) {
+        id -> Text,
+        project_id -> Text,
+        workflow_id -> Text,
+        job_type -> Text,
+        operation -> Text,
+        state -> Text,
+        idempotency_key -> Nullable<Text>,
+        request_fingerprint -> Nullable<Text>,
+        progress_json -> Nullable<Text>,
+        result_ref -> Nullable<Text>,
+        error_code -> Nullable<Text>,
+        error_message -> Nullable<Text>,
+        created_at -> Text,
+        updated_at -> Text,
+        started_at -> Nullable<Text>,
+        finished_at -> Nullable<Text>,
+    }
+}
+
+diesel::table! {
+    jobs_logs (id) {
+        id -> Text,
+        job_id -> Text,
+        level -> Text,
+        event -> Text,
+        payload_json -> Nullable<Text>,
+        created_at -> Text,
+    }
+}
+
+diesel::table! {
     knowledge (id) {
         id -> Text,
         name -> Text,
@@ -329,10 +361,14 @@ diesel::table! {
 
 diesel::joinable!(provider_credentials -> projects (project_id));
 diesel::joinable!(finetune_jobs -> projects (project_id));
+diesel::joinable!(jobs -> projects (project_id));
+diesel::joinable!(jobs_logs -> jobs (job_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     eval_jobs,
     finetune_jobs,
+    jobs,
+    jobs_logs,
     knowledge,
     knowledge_source_parts,
     knowledge_sources,

@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS jobs_logs;
+DROP TABLE IF EXISTS jobs;

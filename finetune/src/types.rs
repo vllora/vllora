@@ -79,6 +79,8 @@ pub enum JobType {
     #[serde(alias = "provider_finetune")]
     Finetune,
     EvaluationRun,
+    #[serde(alias = "dummy")]
+    TestJob,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

@@ -344,6 +344,10 @@ impl LangdbCloudFinetuneClient {
                     total_rows: Some(response.total_rows),
                 })
             }
+            JobType::TestJob => Err(
+                "test_job is a local gateway bootstrap operation; cloud create_job is not supported"
+                    .to_string(),
+            ),
         }
     }
 
@@ -405,6 +409,10 @@ impl LangdbCloudFinetuneClient {
                     failed_rows: Some(result.failed_rows),
                 })
             }
+            JobType::TestJob => Err(
+                "test_job is a local gateway bootstrap operation; cloud status is not supported"
+                    .to_string(),
+            ),
         }
     }
 

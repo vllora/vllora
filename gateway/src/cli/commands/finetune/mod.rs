@@ -54,6 +54,9 @@ pub enum FinetuneCommand {
     /// Layer B job operations (direct gateway job invocation).
     #[command(subcommand)]
     Jobs(jobs::JobsCommand),
+    /// Create and run a local dummy job lifecycle (bootstrap).
+    #[command(name = "test-job")]
+    TestJob(jobs::test_job::Args),
 }
 
 pub async fn handle_finetune(
@@ -72,5 +75,6 @@ pub async fn handle_finetune(
         FinetuneCommand::Quickstart(args)    => quickstart::handle(db_pool, args).await,
         FinetuneCommand::Auto(args)          => auto::handle(db_pool, args).await,
         FinetuneCommand::Jobs(cmd)           => jobs::handle_jobs(db_pool, cmd).await,
+        FinetuneCommand::TestJob(args)       => jobs::test_job::handle(db_pool, args).await,
     }
 }

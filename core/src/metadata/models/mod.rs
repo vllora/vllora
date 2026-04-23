@@ -1,5 +1,7 @@
 pub mod eval_job;
 pub mod finetune_job;
+pub mod job;
+pub mod job_log;
 pub mod knowledge;
 pub mod knowledge_source;
 pub mod knowledge_source_part;

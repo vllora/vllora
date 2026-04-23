@@ -23,6 +23,7 @@ mod guardrails;
 mod handlers;
 mod http;
 mod knowledge_embeddings;
+mod job_queue_runner;
 mod metrics_writer;
 mod middleware;
 mod ports;
