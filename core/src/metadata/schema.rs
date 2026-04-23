@@ -212,6 +212,8 @@ diesel::table! {
         source_record_id -> Nullable<Text>,
         metadata -> Nullable<Text>,
         created_at -> Text,
+        origin_uri -> Nullable<Text>,
+        origin_source_id -> Nullable<Text>,
     }
 }
 

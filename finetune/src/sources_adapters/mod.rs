@@ -15,6 +15,7 @@ pub mod s3;
 pub mod gs;
 pub mod azblob;
 pub mod https;
+pub mod http_fetch;
 
 /// Placeholder error alias used by the skeleton. Track B replaces with a
 /// dedicated `AdapterError` enum when wiring real adapters.
@@ -95,9 +96,11 @@ mod dispatch_tests {
     }
 
     #[tokio::test]
-    async fn hf_uri_returns_not_implemented_error() {
+    async fn malformed_hf_uri_surfaces_parse_error() {
+        // Missing the file-path segment — adapter should refuse before any
+        // network call.
         let err = resolve_uri("hf://anthropic/hh-rlhf").await;
         assert!(err.is_err());
-        assert!(format!("{}", err.unwrap_err()).contains("not implemented"));
+        assert!(format!("{}", err.unwrap_err()).contains("missing"));
     }
 }

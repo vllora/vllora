@@ -16,6 +16,14 @@ pub struct DbWorkflowRecord {
     pub source_record_id: Option<String>,
     pub metadata: Option<String>,
     pub created_at: String,
+    /// Source URI the record was derived from (file://, hf://, s3://, etc.).
+    /// Populated by `vllora finetune import-records` and the `record_generator`
+    /// worker. Feature 001 traceability field; nullable for pre-migration rows.
+    pub origin_uri: Option<String>,
+    /// Source-system identifier (e.g., HuggingFace dataset name). Kept separate
+    /// from `origin_uri` so queries like "all records from source X" work
+    /// across URI revisions.
+    pub origin_source_id: Option<String>,
 }
 
 #[derive(Debug, Insertable, Clone, Deserialize)]
@@ -30,6 +38,10 @@ pub struct DbNewWorkflowRecord {
     pub is_generated: i32,
     pub source_record_id: Option<String>,
     pub metadata: Option<String>,
+    #[serde(default)]
+    pub origin_uri: Option<String>,
+    #[serde(default)]
+    pub origin_source_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Queryable, Selectable, Identifiable, Clone, PartialEq)]

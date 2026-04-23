@@ -375,6 +375,10 @@ impl GatewayClient for MockGatewayClient {
 //     `create_finetune_job` / `get_*_status` methods with type translation.
 
 use crate::client::LangdbCloudFinetuneClient;
+use crate::types::{
+    BaseModel, CompletionParams, CreateEvaluationRequest, CreateFinetuneJobRequest,
+    FinetuneTrainingConfig,
+};
 
 /// Real adapter wrapping `LangdbCloudFinetuneClient`. Constructed from an
 /// API key; the underlying client points at `LANGDB_API_URL`.
@@ -390,17 +394,47 @@ impl LangdbGatewayClient {
     }
 }
 
+fn boxed_err<E: std::fmt::Display>(e: E) -> Box<dyn std::error::Error + Send + Sync> {
+    e.to_string().into()
+}
+
+/// Map the cloud's `BaseModel` string (e.g., "Qwen3.5-2B") to the typed enum.
+fn parse_base_model(model: &str) -> Result<BaseModel> {
+    match model {
+        "Qwen3.5-0.8B" | "unsloth/Qwen3.5-0.8B" => Ok(BaseModel::Qwen35_0_8B),
+        "Qwen3.5-2B" | "unsloth/Qwen3.5-2B" => Ok(BaseModel::Qwen35_2B),
+        "Qwen3.5-4B" | "unsloth/Qwen3.5-4B" => Ok(BaseModel::Qwen35_4B),
+        "gemma-4-E2B" => Ok(BaseModel::Gemma4E2B),
+        other => Err(format!("unsupported base model: {}", other).into()),
+    }
+}
+
+/// Map a cloud `status` string ("queued" / "running" / "succeeded" / "failed" /
+/// "cancelled" / "completed" / "stopped", etc.) to the trait's `JobState`.
+fn parse_job_state(status: &str) -> JobState {
+    match status.to_lowercase().as_str() {
+        "queued" | "pending" | "scheduled" => JobState::Queued,
+        "running" | "in_progress" | "started" => JobState::Running,
+        "succeeded" | "success" | "completed" | "complete" => JobState::Succeeded,
+        "cancelled" | "canceled" | "stopped" => JobState::Cancelled,
+        _ => JobState::Failed,
+    }
+}
+
 impl GatewayClient for LangdbGatewayClient {
     fn create_workflow<'a>(
         &'a self,
-        _objective: &'a str,
+        objective: &'a str,
         _base_model: &'a str,
     ) -> BoxFuture<'a, Result<Uuid>> {
+        // Workflow is language-agnostic — base_model is attached at training-job
+        // time, not at workflow creation. We use the objective as both the
+        // workflow name and objective; callers can PUT a friendlier name later.
         Box::pin(async move {
-            // TODO [Feature 001]: cloud has no POST /workflows yet. Client-side
-            // UUID lets the pipeline progress locally; real impl will call the
-            // cloud route and return the authoritative ID.
-            Ok(Uuid::new_v4())
+            self.inner
+                .create_workflow(objective, objective)
+                .await
+                .map_err(boxed_err)
         })
     }
 
@@ -410,8 +444,11 @@ impl GatewayClient for LangdbGatewayClient {
         _docs: Vec<SourceDocument>,
     ) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move {
-            // TODO: translate SourceDocument → multipart/form-data + call
-            // inner.upload_documents (no such method yet — needs cloud route).
+            // TODO: source documents flow through the trace-bundles / knowledge
+            // endpoints, not a single bulk upload. Wiring that shape requires
+            // splitting SourceDocument payloads into per-KS multipart uploads —
+            // out of scope until the workers that call this route start
+            // producing populated SourceDocument lists.
             Ok(())
         })
     }
@@ -422,7 +459,7 @@ impl GatewayClient for LangdbGatewayClient {
         _parts: Vec<KnowledgePart>,
     ) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move {
-            // TODO: cloud route not yet implemented; stub success.
+            // TODO: gated on the same knowledge-ingest path as upload_source_documents.
             Ok(())
         })
     }
@@ -433,124 +470,300 @@ impl GatewayClient for LangdbGatewayClient {
         topics: Vec<Topic>,
     ) -> BoxFuture<'a, Result<Vec<Uuid>>> {
         Box::pin(async move {
-            // TODO: cloud route not yet implemented; return fresh UUIDs.
+            // TODO: wire to POST /finetune/workflows/{id}/topics. Caller code
+            // currently treats returned IDs as opaque so fresh UUIDs are safe.
             Ok(topics.iter().map(|_| Uuid::new_v4()).collect())
         })
     }
 
     fn upload_records<'a>(
         &'a self,
-        _workflow_id: Uuid,
-        _records: Vec<Record>,
+        workflow_id: Uuid,
+        records: Vec<Record>,
     ) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move {
-            // TODO: translate Record → inner's `UploadDatasetRequest` shape
-            // and call `inner.upload_dataset_chunked(...)`. Needs a
-            // type-translation helper that isn't yet written; stubbing to Ok
-            // so the pipeline progresses. The mock path still exercises the
-            // full event emission and journal semantics.
+            if records.is_empty() {
+                return Ok(());
+            }
+            // Serialise each Record as one JSONL line conforming to the
+            // cloud dataset schema. Fields:
+            //   messages      — the conversation (parsed from messages_json)
+            //   ground_truth  — the expected output (parsed from ground_truth_json)
+            //   tools         — optional tool schema array
+            //   origin_uri    — per-record traceability (Feature 001 column)
+            //   origin_source_id — ditto
+            //   topic_id      — gateway-assigned topic UUID
+            let mut buf: Vec<u8> = Vec::with_capacity(records.len() * 256);
+            for (i, r) in records.iter().enumerate() {
+                let messages: serde_json::Value = serde_json::from_str(&r.messages_json)
+                    .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+                        format!("record {}: messages_json invalid: {}", i, e).into()
+                    })?;
+                let ground_truth: serde_json::Value =
+                    serde_json::from_str(&r.ground_truth_json).unwrap_or(serde_json::Value::Null);
+                let mut row = serde_json::json!({
+                    "messages": messages,
+                    "ground_truth": ground_truth,
+                    "topic_id": r.topic_id.to_string(),
+                });
+                if let Some(origin_uri) = &r.origin_uri {
+                    row["origin_uri"] = serde_json::Value::String(origin_uri.clone());
+                }
+                if let Some(origin_source_id) = &r.origin_source_id {
+                    row["origin_source_id"] = serde_json::Value::String(origin_source_id.clone());
+                }
+                if let Some(tools_json) = &r.tools_json {
+                    if let Ok(tools) = serde_json::from_str::<serde_json::Value>(tools_json) {
+                        row["tools"] = tools;
+                    }
+                }
+                let line = serde_json::to_string(&row)?;
+                buf.extend_from_slice(line.as_bytes());
+                buf.push(b'\n');
+            }
+
+            self.inner
+                .upload_dataset(buf, None, None, Some(workflow_id))
+                .await
+                .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })?;
             Ok(())
         })
     }
 
     fn upload_grader<'a>(
         &'a self,
-        _workflow_id: Uuid,
-        _source_js: &'a str,
+        workflow_id: Uuid,
+        source_js: &'a str,
         _change_reason: &'a str,
     ) -> BoxFuture<'a, Result<i32>> {
         Box::pin(async move {
-            // TODO: delegate to inner.update_workflow_evaluator once the
-            // signature is reconciled.
-            Ok(1)
+            // Delegates to `update_workflow_evaluator` (PATCH). Cloud auto-assigns
+            // the new evaluator_version; we return 0 and let the caller re-query
+            // via `get_workflow_evaluator_versions` if the version number matters.
+            // TODO: thread `change_reason` through once the cloud route accepts it.
+            self.inner
+                .update_workflow_evaluator(&workflow_id.to_string(), source_js.to_string())
+                .await
+                .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })?;
+            Ok(0)
         })
     }
 
     fn create_eval_run<'a>(
         &'a self,
-        _workflow_id: Uuid,
-        _model: &'a str,
+        workflow_id: Uuid,
+        model: &'a str,
         _grader_version: i32,
     ) -> BoxFuture<'a, Result<Uuid>> {
         Box::pin(async move {
-            // TODO: delegate to inner.create_evaluation (needs type mapping).
-            Ok(Uuid::new_v4())
+            let request = CreateEvaluationRequest {
+                workflow_id,
+                rollout_model_params: CompletionParams {
+                    model: Some(model.to_string()),
+                    temperature: None,
+                    extra: Default::default(),
+                },
+                offset: None,
+                limit: None,
+            };
+            let response = self
+                .inner
+                .create_evaluation(request)
+                .await
+                .map_err(boxed_err)?;
+            Ok(response.evaluation_run_id)
         })
     }
 
     fn poll_eval_run<'a>(&'a self, run_id: Uuid) -> BoxFuture<'a, Result<EvalRunStatus>> {
         Box::pin(async move {
-            // TODO: delegate to inner.get_evaluation_result. For now the
-            // adapter returns a canned "pass" so downstream verbs keep
-            // working against the real client until the full mapping ships.
+            let result = self
+                .inner
+                .get_evaluation_result(&run_id.to_string(), None)
+                .await
+                .map_err(boxed_err)?;
+
+            let state = parse_job_state(&result.status);
+            let progress_pct = if result.total_rows > 0 {
+                let pct = (result.completed_rows as f64 / result.total_rows as f64 * 100.0) as u8;
+                Some(pct.min(100))
+            } else {
+                None
+            };
+
+            let (readiness_score, avg_score, scored_count, zero_score_count, perfect_score_count) =
+                if let Some(summary) = result.summary {
+                    let avg = summary.average_score.map(|v| v as f32);
+                    // Readiness proxy: fraction of non-zero scored rows. Cloud
+                    // doesn't ship a dedicated readiness field yet, so derive
+                    // from the histogram counts that are already returned.
+                    let readiness = if summary.scored_count > 0 {
+                        let non_zero = (summary.scored_count - summary.zero_score_count).max(0);
+                        Some(non_zero as f32 / summary.scored_count as f32)
+                    } else {
+                        None
+                    };
+                    (
+                        readiness,
+                        avg,
+                        Some(summary.scored_count as u64),
+                        Some(summary.zero_score_count as u64),
+                        Some(summary.perfect_score_count as u64),
+                    )
+                } else {
+                    (None, None, None, None, None)
+                };
+
             Ok(EvalRunStatus {
                 run_id,
-                state: JobState::Succeeded,
-                progress_pct: Some(100),
-                readiness_score: Some(0.82),
-                avg_score: Some(0.71),
-                scored_count: Some(40),
-                zero_score_count: Some(2),
-                perfect_score_count: Some(8),
+                state,
+                progress_pct,
+                readiness_score,
+                avg_score,
+                scored_count,
+                zero_score_count,
+                perfect_score_count,
             })
         })
     }
 
-    fn cancel_eval<'a>(&'a self, _run_id: Uuid) -> BoxFuture<'a, Result<()>> {
-        Box::pin(async move { Ok(()) })
+    fn cancel_eval<'a>(&'a self, run_id: Uuid) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async move {
+            self.inner
+                .cancel_evaluation(&run_id.to_string())
+                .await
+                .map_err(boxed_err)
+        })
     }
 
     fn create_training_job<'a>(
         &'a self,
-        _workflow_id: Uuid,
-        _model: &'a str,
-        _grader_version: i32,
-        _config: serde_json::Value,
+        workflow_id: Uuid,
+        model: &'a str,
+        grader_version: i32,
+        config: serde_json::Value,
     ) -> BoxFuture<'a, Result<Uuid>> {
         Box::pin(async move {
-            // TODO: delegate to inner.create_finetune_job (needs type mapping).
-            Ok(Uuid::new_v4())
+            let base_model = parse_base_model(model)?;
+            // `config` is a JSON blob owned by the caller — we try to parse it
+            // into `FinetuneTrainingConfig` (only the fields the cloud
+            // recognises are surfaced; extras are dropped).
+            let training_config: Option<FinetuneTrainingConfig> = if config.is_null() {
+                None
+            } else {
+                serde_json::from_value(config).map_err(boxed_err)?
+            };
+
+            let request = CreateFinetuneJobRequest {
+                evaluator_version: Some(grader_version),
+                base_model,
+                output_model: None,
+                evaluation_dataset: None,
+                display_name: None,
+                training_config,
+                inference_parameters: None,
+                chunk_size: None,
+                node_count: None,
+                resume_mode: None,
+            };
+
+            let response = self
+                .inner
+                .create_finetune_job(request, &workflow_id)
+                .await
+                .map_err(boxed_err)?;
+            Ok(response.id)
         })
     }
 
     fn poll_training_metrics<'a>(
         &'a self,
-        _job_id: Uuid,
-        _since_step: u64,
+        job_id: Uuid,
+        since_step: u64,
     ) -> BoxFuture<'a, Result<Vec<TrainingMetricPoint>>> {
         Box::pin(async move {
-            // TODO: delegate to inner.get_finetune_job_metrics (needs type mapping).
-            Ok(Vec::new())
+            let response = self
+                .inner
+                .get_finetune_job_metrics(&job_id.to_string())
+                .await
+                .map_err(boxed_err)?;
+
+            // The cloud returns `metrics: Vec<FinetuneJobMetricPoint>` where
+            // each point carries a free-form `metrics: serde_json::Value`.
+            // We extract the conventional GRPO keys; missing values default
+            // to NaN so downstream code can decide whether to skip.
+            let points: Vec<TrainingMetricPoint> = response
+                .metrics
+                .into_iter()
+                .filter_map(|p| {
+                    let m = p.metrics.as_object()?;
+                    let step = m.get("step").and_then(|v| v.as_u64()).unwrap_or(0);
+                    if step < since_step {
+                        return None;
+                    }
+                    let loss = m.get("loss").and_then(|v| v.as_f64()).unwrap_or(f64::NAN) as f32;
+                    let kl = m.get("kl").and_then(|v| v.as_f64()).unwrap_or(f64::NAN) as f32;
+                    let reward_mean = m
+                        .get("reward_mean")
+                        .or_else(|| m.get("reward"))
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(f64::NAN) as f32;
+                    let reward_std = m
+                        .get("reward_std")
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(f64::NAN) as f32;
+                    let clipped_frac = m
+                        .get("clipped_frac")
+                        .or_else(|| m.get("clip_ratio"))
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(f64::NAN) as f32;
+                    Some(TrainingMetricPoint {
+                        step,
+                        loss,
+                        kl,
+                        reward_mean,
+                        reward_std,
+                        clipped_frac,
+                        emitted_at: p.created_at,
+                    })
+                })
+                .collect();
+            Ok(points)
         })
     }
 
-    fn cancel_training<'a>(&'a self, _job_id: Uuid) -> BoxFuture<'a, Result<()>> {
+    fn cancel_training<'a>(&'a self, job_id: Uuid) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move {
-            // TODO: delegate to inner.cancel_finetune_job.
-            Ok(())
+            self.inner
+                .cancel_finetune_job(&job_id.to_string())
+                .await
+                .map_err(boxed_err)
         })
     }
 
     fn put_pipeline_journal<'a>(
         &'a self,
-        _workflow_id: Uuid,
-        _journal_json: &'a str,
+        workflow_id: Uuid,
+        journal_json: &'a str,
     ) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move {
-            // TODO [Feature 001]: needs PUT /v1/finetune/workflows/{id}/pipeline-journal.
-            // Verbs call this best-effort; Ok keeps the pipeline moving.
-            Ok(())
+            self.inner
+                .put_pipeline_journal(workflow_id, journal_json)
+                .await
+                .map_err(boxed_err)
         })
     }
 
     fn put_iteration_state<'a>(
         &'a self,
-        _workflow_id: Uuid,
-        _analysis_json: &'a str,
+        workflow_id: Uuid,
+        analysis_json: &'a str,
     ) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move {
-            // TODO [Feature 001]: needs PUT /v1/finetune/workflows/{id}/iteration-state.
-            Ok(())
+            self.inner
+                .put_iteration_state(workflow_id, analysis_json)
+                .await
+                .map_err(boxed_err)
         })
     }
 }
@@ -584,36 +797,58 @@ mod tests {
         assert_eq!(b, fixed);
     }
 
-    // Real adapter: verify it can be constructed + every trait method is
-    // wired (returning stub Ok). The concrete LangdbCloudFinetuneClient
-    // constructor needs a valid-ish API key but doesn't talk to the network
-    // until a method is called.
+    // Real adapter: construct + exercise the handful of methods that still
+    // short-circuit before hitting the network. Every other method (create_*,
+    // poll_*, cancel_*, put_*, non-empty upload_records / upload_grader) goes
+    // to `api.langdb.cloud` — those are covered by an out-of-band integration
+    // test that needs `LANGDB_API_KEY` + `LANGDB_API_URL=http://localhost:...`
+    // to be set, not by unit tests.
     #[tokio::test]
-    async fn langdb_adapter_constructs_and_stub_methods_return_ok() {
+    async fn langdb_adapter_constructs_and_stubbed_methods_work() {
         let client = LangdbGatewayClient::new("test-api-key".into())
             .expect("adapter should construct with any api key");
 
-        // create_workflow returns a fresh UUID.
-        let wf = client.create_workflow("obj", "qwen-3.5-2b").await.unwrap();
-        assert_ne!(wf, Uuid::nil());
-
-        // Stubbed-Ok methods don't panic.
-        client.upload_knowledge_parts(wf, Vec::new()).await.unwrap();
-        client.upload_records(wf, Vec::new()).await.unwrap();
-        client.upload_topics(wf, Vec::new()).await.unwrap();
-        client.upload_grader(wf, "/* g */", "initial").await.unwrap();
-        client.put_pipeline_journal(wf, "{}").await.unwrap();
-        client.put_iteration_state(wf, "{}").await.unwrap();
-
-        let eval_run = client.create_eval_run(wf, "qwen-3.5-4b", 1).await.unwrap();
-        let status = client.poll_eval_run(eval_run).await.unwrap();
-        assert_eq!(status.run_id, eval_run);
-        assert!(matches!(status.state, JobState::Succeeded));
-
-        let train_job = client
-            .create_training_job(wf, "qwen-3.5-4b", 1, serde_json::json!({}))
+        // All of these return Ok without hitting the network.
+        let fake_wf = Uuid::new_v4();
+        client
+            .upload_source_documents(fake_wf, Vec::new())
             .await
             .unwrap();
-        assert_ne!(train_job, Uuid::nil());
+        client
+            .upload_knowledge_parts(fake_wf, Vec::new())
+            .await
+            .unwrap();
+        // `upload_topics` never hits the network in the current stub — returns
+        // fresh UUIDs so callers can proceed locally.
+        let topic_ids = client.upload_topics(fake_wf, Vec::new()).await.unwrap();
+        assert!(topic_ids.is_empty());
+
+        // Empty records short-circuit before any network call.
+        client.upload_records(fake_wf, Vec::new()).await.unwrap();
+    }
+
+    /// `parse_base_model` is used by the adapter — verify the string
+    /// round-trips cleanly for the canonical names we accept.
+    #[test]
+    fn parse_base_model_accepts_canonical_and_unsloth_aliases() {
+        assert!(matches!(
+            parse_base_model("Qwen3.5-2B").unwrap(),
+            BaseModel::Qwen35_2B
+        ));
+        assert!(matches!(
+            parse_base_model("unsloth/Qwen3.5-0.8B").unwrap(),
+            BaseModel::Qwen35_0_8B
+        ));
+        assert!(parse_base_model("not-a-model").is_err());
+    }
+
+    #[test]
+    fn parse_job_state_maps_known_strings() {
+        assert!(matches!(parse_job_state("queued"), JobState::Queued));
+        assert!(matches!(parse_job_state("running"), JobState::Running));
+        assert!(matches!(parse_job_state("completed"), JobState::Succeeded));
+        assert!(matches!(parse_job_state("cancelled"), JobState::Cancelled));
+        assert!(matches!(parse_job_state("failed"), JobState::Failed));
+        assert!(matches!(parse_job_state("garbage"), JobState::Failed));
     }
 }

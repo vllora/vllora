@@ -444,6 +444,18 @@ impl ApiServer {
                                                     .to(workflows::append_journal_entries),
                                             ),
                                     )
+                                    // Feature 001 canonical mirror endpoints —
+                                    // replace-entire-blob PUTs, kept separate
+                                    // from the append-style `/journal/entries`
+                                    // route above.
+                                    .route(
+                                        "/pipeline-journal",
+                                        web::put().to(workflows::put_pipeline_journal_blob),
+                                    )
+                                    .route(
+                                        "/iteration-state",
+                                        web::put().to(workflows::put_iteration_state_blob),
+                                    )
                                     // Topics CRUD
                                     .route("/topics", web::get().to(workflow_topics::list_topics))
                                     .route("/topics", web::post().to(workflow_topics::create_topics))

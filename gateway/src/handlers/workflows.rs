@@ -310,6 +310,60 @@ pub async fn append_journal_entries(
     }))
 }
 
+/// PUT /finetune/workflows/{workflow_id}/pipeline-journal
+///
+/// Canonical Feature 001 mirror endpoint. Replaces the entire pipeline-journal
+/// blob on the server. Body is raw JSON (the full journal document). Clients
+/// use this best-effort — local `pipeline-journal.json` remains source of truth.
+pub async fn put_pipeline_journal_blob(
+    workflow_id: web::Path<String>,
+    body: web::Bytes,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let workflow_id = workflow_id.into_inner();
+
+    let journal_str = std::str::from_utf8(&body)
+        .map_err(|e| error::ErrorBadRequest(format!("body is not valid UTF-8: {e}")))?;
+    // Validate the body parses as JSON before we store it.
+    serde_json::from_str::<serde_json::Value>(journal_str)
+        .map_err(|e| error::ErrorBadRequest(format!("body is not valid JSON: {e}")))?;
+
+    let service = WorkflowService::new(db_pool.get_ref().clone());
+    let update = DbUpdateWorkflow::new().with_pipeline_journal(Some(journal_str.to_string()));
+    let updated = service.update(&workflow_id, update).map_err(map_db_error)?;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "workflow_id": updated.id,
+        "bytes": journal_str.len(),
+    })))
+}
+
+/// PUT /finetune/workflows/{workflow_id}/iteration-state
+///
+/// Canonical Feature 001 mirror endpoint. Replaces the entire analysis.json
+/// blob on the server. Body is raw JSON (the full iteration-state document).
+pub async fn put_iteration_state_blob(
+    workflow_id: web::Path<String>,
+    body: web::Bytes,
+    db_pool: web::Data<DbPool>,
+) -> Result<HttpResponse> {
+    let workflow_id = workflow_id.into_inner();
+
+    let analysis_str = std::str::from_utf8(&body)
+        .map_err(|e| error::ErrorBadRequest(format!("body is not valid UTF-8: {e}")))?;
+    serde_json::from_str::<serde_json::Value>(analysis_str)
+        .map_err(|e| error::ErrorBadRequest(format!("body is not valid JSON: {e}")))?;
+
+    let service = WorkflowService::new(db_pool.get_ref().clone());
+    let update = DbUpdateWorkflow::new().with_iteration_state(Some(analysis_str.to_string()));
+    let updated = service.update(&workflow_id, update).map_err(map_db_error)?;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "workflow_id": updated.id,
+        "bytes": analysis_str.len(),
+    })))
+}
+
 fn placeholder(endpoint: &str, method: &str, workspace_id: &str) -> HttpResponse {
     HttpResponse::NotImplemented().json(serde_json::json!({
         "message": "Placeholder endpoint not implemented yet",

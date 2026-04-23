@@ -41,6 +41,11 @@ impl RecordInput {
             is_generated: if self.is_generated { 1 } else { 0 },
             source_record_id: self.source_record_id,
             metadata: self.metadata,
+            // Feature 001 traceability columns — populated by callers that
+            // know the origin (import-records verb, record_generator worker).
+            // Left None here so existing callers still compile.
+            origin_uri: None,
+            origin_source_id: None,
         }
     }
 }

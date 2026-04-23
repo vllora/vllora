@@ -190,6 +190,104 @@ impl LangdbCloudFinetuneClient {
         Ok(())
     }
 
+    /// Create a new workflow. Returns the authoritative server-assigned UUID.
+    /// Feature 001: `POST /finetune/workflows` with `{name, objective}` body.
+    pub async fn create_workflow(
+        &self,
+        name: &str,
+        objective: &str,
+    ) -> Result<uuid::Uuid, String> {
+        let url = format!("{}/finetune/workflows", self.api_url);
+        let body = serde_json::json!({ "name": name, "objective": objective });
+
+        let response = self
+            .client
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to call cloud API: {}", e))?;
+
+        let response = Self::ensure_success(response).await?;
+        let workflow: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+        workflow
+            .get("id")
+            .and_then(|v| v.as_str())
+            .and_then(|s| uuid::Uuid::parse_str(s).ok())
+            .ok_or_else(|| format!("create_workflow: missing/invalid id in response: {}", workflow))
+    }
+
+    /// Mirror the local pipeline-journal state to the server. Best-effort write;
+    /// the local file remains the source of truth.
+    /// Feature 001: `PUT /finetune/workflows/{id}/pipeline-journal` — body is raw JSON.
+    pub async fn put_pipeline_journal(
+        &self,
+        workflow_id: uuid::Uuid,
+        journal_json: &str,
+    ) -> Result<(), String> {
+        let url = format!(
+            "{}/finetune/workflows/{}/pipeline-journal",
+            self.api_url, workflow_id
+        );
+        let response = self
+            .client
+            .put(&url)
+            .header("content-type", "application/json")
+            .body(journal_json.to_string())
+            .send()
+            .await
+            .map_err(|e| format!("Failed to call cloud API: {}", e))?;
+
+        Self::ensure_success(response).await?;
+        Ok(())
+    }
+
+    /// Mirror the local iteration-state (analysis.json) to the server.
+    /// Feature 001: `PUT /finetune/workflows/{id}/iteration-state` — body is raw JSON.
+    pub async fn put_iteration_state(
+        &self,
+        workflow_id: uuid::Uuid,
+        analysis_json: &str,
+    ) -> Result<(), String> {
+        let url = format!(
+            "{}/finetune/workflows/{}/iteration-state",
+            self.api_url, workflow_id
+        );
+        let response = self
+            .client
+            .put(&url)
+            .header("content-type", "application/json")
+            .body(analysis_json.to_string())
+            .send()
+            .await
+            .map_err(|e| format!("Failed to call cloud API: {}", e))?;
+
+        Self::ensure_success(response).await?;
+        Ok(())
+    }
+
+    /// Cancel an in-progress evaluation run.
+    /// `POST /finetune/workflows/evaluations/{id}/cancel`.
+    pub async fn cancel_evaluation(&self, evaluation_run_id: &str) -> Result<(), String> {
+        let url = format!(
+            "{}/finetune/workflows/evaluations/{}/cancel",
+            self.api_url, evaluation_run_id
+        );
+        let response = self
+            .client
+            .post(&url)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to call cloud API: {}", e))?;
+
+        Self::ensure_success(response).await?;
+        Ok(())
+    }
+
     /// Unified API: create either a provider finetune or evaluation job.
     pub async fn create_job(
         &self,
