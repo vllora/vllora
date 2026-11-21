@@ -55,6 +55,35 @@ pub enum ModelError {
 
     #[error("Cannot calculate input tokens")]
     CannotCalculateInputTokens,
+
+    #[error("Provider returned HTTP {status}: {message}")]
+    ProviderHttp { status: u16, message: String },
+}
+
+impl ModelError {
+    /// The HTTP status the provider answered with, when the error carries one.
+    pub fn http_status(&self) -> Option<u16> {
+        match self {
+            ModelError::ProviderHttp { status, .. } => Some(*status),
+            ModelError::CredentialsError(_) | ModelError::AuthorizationError(_) => Some(401),
+            ModelError::Bedrock(e) => e.http_status(),
+            _ => None,
+        }
+    }
+}
+
+impl BedrockError {
+    /// The HTTP status behind a Bedrock error, when one is known.
+    pub fn http_status(&self) -> Option<u16> {
+        match self {
+            BedrockError::ValidationError(_) => Some(400),
+            BedrockError::AuthenticationError(_) => Some(401),
+            BedrockError::TimeoutError(_) => Some(408),
+            BedrockError::ConverseError(e) => e.raw_response().map(|r| r.status().as_u16()),
+            BedrockError::ResponseError(e) => e.raw_response().map(|r| r.status().as_u16()),
+            BedrockError::CustomError(_) | BedrockError::SmithyError(_) => None,
+        }
+    }
 }
 
 impl From<OpenAIError> for ModelError {

@@ -80,6 +80,80 @@ pub enum ModelFinishError {
     Custom(String),
 }
 
+impl LLMError {
+    /// Whether sending the same request again can succeed.
+    ///
+    /// A provider answer with an HTTP status is classified by
+    /// [`llm_resilience::retryable_status`]: 408, 409, 425, 429, 5xx and 529
+    /// are transient, every other 4xx (bad request, bad key, no access,
+    /// context too long) fails the same way on the next attempt. Errors
+    /// without a status (transport failures, stream decode errors) keep the
+    /// previous behaviour and are retried.
+    pub fn is_retryable(&self) -> bool {
+        match self {
+            LLMError::InvalidCredentials => false,
+            LLMError::ModelError(e) => e.http_status().is_none_or(llm_resilience::retryable_status),
+            LLMError::ReqwestError(e) => e
+                .status()
+                .is_none_or(|s| llm_resilience::retryable_status(s.as_u16())),
+            _ => true,
+        }
+    }
+}
+
+/// Delay before retry number `attempt` (0-based): 250ms doubled per attempt,
+/// capped at 8s, so a 429 or 529 is not re-sent back to back.
+pub(crate) fn retry_backoff(attempt: u32) -> std::time::Duration {
+    std::time::Duration::from_millis(250u64.saturating_mul(1u64 << attempt.min(5)))
+}
+
+#[cfg(test)]
+mod retry_tests {
+    use super::*;
+
+    fn http(status: u16) -> LLMError {
+        ModelError::ProviderHttp {
+            status,
+            message: String::new(),
+        }
+        .into()
+    }
+
+    #[test]
+    fn client_errors_are_not_retried() {
+        for status in [400, 401, 403, 404, 413, 422] {
+            assert!(!http(status).is_retryable(), "{status} must not retry");
+        }
+        assert!(!LLMError::InvalidCredentials.is_retryable());
+        assert!(!LLMError::from(ModelError::CredentialsError("anthropic".into())).is_retryable());
+    }
+
+    #[test]
+    fn transient_errors_are_retried() {
+        for status in [408, 429, 500, 502, 503, 504, 529] {
+            assert!(http(status).is_retryable(), "{status} must retry");
+        }
+        assert!(LLMError::from(ModelError::StreamError("reset".into())).is_retryable());
+    }
+
+    #[test]
+    fn bedrock_validation_is_not_retried() {
+        let e: LLMError = ModelError::Bedrock(Box::new(
+            crate::client::error::BedrockError::ValidationError("too long".into()),
+        ))
+        .into();
+        assert!(!e.is_retryable());
+    }
+
+    #[test]
+    fn backoff_grows_and_caps() {
+        assert_eq!(retry_backoff(0).as_millis(), 250);
+        assert_eq!(retry_backoff(1).as_millis(), 500);
+        assert_eq!(retry_backoff(5).as_millis(), 8000);
+        assert_eq!(retry_backoff(40).as_millis(), 8000);
+    }
+}
+
 impl From<ModelError> for LLMError {
     fn from(value: ModelError) -> Self {
         LLMError::ModelError(Box::new(value))
