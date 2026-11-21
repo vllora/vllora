@@ -2507,6 +2507,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4ee93343901ab17bd981295f2cf0026d4ad018c7c31ba84549a4ddbb47a45104"
 
 [[package]]
+name = "llm-resilience"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4fafca5201b2933a00b87b97c03a73d0e577e504cd53a50781b05be9d119b3c"
+dependencies = [
+ "parking_lot",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "local-channel"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4770,6 +4781,7 @@ dependencies = [
  "chrono",
  "futures",
  "langdb_clust",
+ "llm-resilience",
  "minijinja",
  "opentelemetry",
  "rand 0.9.2",

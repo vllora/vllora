@@ -4,6 +4,7 @@ use crate::client::error::AuthorizationError;
 use crate::client::error::ModelError;
 use crate::client::tools::handler::handle_tool_call;
 use crate::client::DEFAULT_MAX_RETRIES;
+use crate::error::retry_backoff;
 use crate::error::{LLMError, LLMResult, ModelFinishError};
 use crate::types::credentials::ApiKeyCredentials;
 use crate::types::credentials_ident::CredentialsIdent;
@@ -63,6 +64,18 @@ enum InnerExecutionResult {
 
 fn custom_err(e: impl ToString) -> ModelError {
     ModelError::CustomError(e.to_string())
+}
+
+/// Keeps the HTTP status of an Anthropic API error so the retry loop can
+/// tell a 429/529 from a 400/401.
+fn messages_err(e: clust::messages::MessagesError) -> ModelError {
+    match &e {
+        clust::messages::MessagesError::ApiError(api) => ModelError::ProviderHttp {
+            status: api.status.as_u16(),
+            message: e.to_string(),
+        },
+        _ => custom_err(e),
+    }
 }
 
 pub fn anthropic_client(
@@ -546,7 +559,7 @@ impl AnthropicModel {
                 .as_ref()
                 .map(JsonValue)
                 .record();
-            let response = result.map_err(custom_err)?;
+            let response = result.map_err(messages_err)?;
 
             let span = Span::current();
             span.record("output", serde_json::to_string(&response)?);
@@ -826,10 +839,11 @@ impl AnthropicModel {
         tags: HashMap<String, String>,
     ) -> LLMResult<ChatCompletionMessageWithFinishReason> {
         let mut calls = vec![(system_message, input_messages)];
-        let mut retries_left = self
+        let max_retries = self
             .execution_options
             .max_retries
             .unwrap_or(DEFAULT_MAX_RETRIES);
+        let mut retries_left = max_retries;
         while let Some((system_message, input_messages)) = calls.pop() {
             let input = serde_json::to_string(&input_messages)?;
             let call_span = create_model_span!(
@@ -862,11 +876,11 @@ impl AnthropicModel {
                 }
                 Err(e) => {
                     call_span.record("error", e.to_string());
-                    if retries_left == 0 {
+                    if retries_left == 0 || !e.is_retryable() {
                         return Err(e);
-                    } else {
-                        calls.push((system_message, input_messages));
                     }
+                    tokio::time::sleep(retry_backoff(max_retries - retries_left)).await;
+                    calls.push((system_message, input_messages));
                     retries_left -= 1;
                 }
             }
@@ -884,10 +898,11 @@ impl AnthropicModel {
         tags: HashMap<String, String>,
     ) -> LLMResult<()> {
         let mut calls = vec![(system_message, input_messages)];
-        let mut retries_left = self
+        let max_retries = self
             .execution_options
             .max_retries
             .unwrap_or(DEFAULT_MAX_RETRIES);
+        let mut retries_left = max_retries;
         while let Some((system_message, input_messages)) = calls.pop() {
             let input = serde_json::to_string(&input_messages)?;
             let call_span = create_model_span!(
@@ -920,11 +935,11 @@ impl AnthropicModel {
                 }
                 Err(e) => {
                     call_span.record("error", e.to_string());
-                    if retries_left == 0 {
+                    if retries_left == 0 || !e.is_retryable() {
                         return Err(e);
-                    } else {
-                        calls.push((system_message, input_messages));
                     }
+                    tokio::time::sleep(retry_backoff(max_retries - retries_left)).await;
+                    calls.push((system_message, input_messages));
                     retries_left -= 1;
                 }
             }
@@ -1001,7 +1016,7 @@ impl AnthropicModel {
             .client
             .create_a_message_stream(request, self.endpoint.clone())
             .await
-            .map_err(custom_err)?;
+            .map_err(messages_err)?;
         let (stop_reason, tool_calls, usage, response) = self
             .process_stream(stream, tx, tx_response, started_at)
             .instrument(span.clone())

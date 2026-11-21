@@ -4,6 +4,7 @@ use crate::client::error::ModelError;
 use crate::client::tools::handler::handle_tool_call;
 use crate::client::ModelInstance;
 use crate::client::DEFAULT_MAX_RETRIES;
+use crate::error::retry_backoff;
 use crate::error::{LLMError, LLMResult, ModelFinishError};
 use crate::types::credentials::aws::{get_shared_config, get_user_shared_config};
 use crate::types::credentials::BedrockCredentials;
@@ -360,10 +361,11 @@ impl BedrockModel {
     ) -> LLMResult<ChatCompletionMessageWithFinishReason> {
         let mut calls = vec![input_messages];
 
-        let mut retries_left = self
+        let max_retries = self
             .execution_options
             .max_retries
             .unwrap_or(DEFAULT_MAX_RETRIES);
+        let mut retries_left = max_retries;
         while let Some(input_messages) = calls.pop() {
             let input = serde_json::json!({
                 "initial_messages": format!("{input_messages:?}"),
@@ -390,11 +392,11 @@ impl BedrockModel {
                 }
                 Err(e) => {
                     span.record("error", e.to_string());
-                    if retries_left == 0 {
+                    if retries_left == 0 || !e.is_retryable() {
                         return Err(e);
-                    } else {
-                        calls.push(input_messages);
                     }
+                    tokio::time::sleep(retry_backoff(max_retries - retries_left)).await;
+                    calls.push(input_messages);
                     retries_left -= 1;
                 }
             }
@@ -879,10 +881,11 @@ impl BedrockModel {
     ) -> LLMResult<()> {
         let mut calls = vec![input_messages];
 
-        let mut retries_left = self
+        let max_retries = self
             .execution_options
             .max_retries
             .unwrap_or(DEFAULT_MAX_RETRIES);
+        let mut retries_left = max_retries;
         while let Some(input_messages) = calls.pop() {
             let input = serde_json::json!({
                 "initial_messages": format!("{input_messages:?}"),
@@ -918,11 +921,11 @@ impl BedrockModel {
                 }
                 Err(e) => {
                     span.record("error", e.to_string());
-                    if retries_left == 0 {
+                    if retries_left == 0 || !e.is_retryable() {
                         return Err(e);
-                    } else {
-                        calls.push(input_messages);
                     }
+                    tokio::time::sleep(retry_backoff(max_retries - retries_left)).await;
+                    calls.push(input_messages);
                     retries_left -= 1;
                 }
             }
